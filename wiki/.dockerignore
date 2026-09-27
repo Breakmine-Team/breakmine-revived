@@ -1,0 +1,22 @@
+# Legacy Node prototype - not shipped, the container runs app.py
+server.js
+package.json
+package-lock.json
+cert.pem
+key.pem
+cloudflare-ca.pem
+
+node_modules/
+__pycache__/
+*.pyc
+.env
+.env.example
+data/
+temp_mods/
+.git/
+.gitignore
+Dockerfile
+docker-compose.yml
+README.md
+wiki.db-wal
+wiki.db-shm

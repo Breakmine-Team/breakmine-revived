@@ -1,0 +1,22 @@
+# Pinned so the project/volume names do not depend on the checkout directory name.
+name: breakmine-wiki
+
+services:
+  wiki:
+    build: .
+    image: breakmine-wiki:latest
+    restart: unless-stopped
+    ports:
+      - "${WIKI_HOST_PORT:-8001}:8001"
+      - "${MODS_HOST_PORT:-8004}:8004"
+    environment:
+      WIKI_DATA_DIR: /data
+      # Source of truth for the 'kai' login. Set this in .env (see .env.example).
+      WIKI_ADMIN_PASSWORD: "${WIKI_ADMIN_PASSWORD:-}"
+      WIKI_SECRET_KEY: "${WIKI_SECRET_KEY:-}"
+    volumes:
+      - wiki_data:/data
+
+volumes:
+  wiki_data:
+    name: breakmine-wiki-data

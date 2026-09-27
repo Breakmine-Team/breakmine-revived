@@ -6,17 +6,25 @@ import sys
 import getpass
 import uuid
 import threading
+import time
 from datetime import datetime
 import urllib.request
 from flask import Flask, Blueprint, Response, request, redirect, url_for, session, render_template, send_file, current_app
 from werkzeug.serving import run_simple
 
-SECRET_KEY = 'wikipedia_style_minimal_css_secret_key'
-UPLOAD_FOLDER = 'mod_files'
-TEMP_UPLOAD_FOLDER = 'temp_mods'
+SECRET_KEY = os.environ.get('WIKI_SECRET_KEY') or 'wikipedia_style_minimal_css_secret_key'
+# Everything that must survive a restart lives in DATA_DIR. In Docker this is a volume.
+DATA_DIR = os.environ.get('WIKI_DATA_DIR') or '.'
+DB_PATH = os.path.join(DATA_DIR, 'wiki.db')
+UPLOAD_FOLDER = os.path.join(DATA_DIR, 'mod_files')
+TEMP_UPLOAD_FOLDER = os.path.join(DATA_DIR, 'temp_mods')
+# Password for the 'kai' admin account. Unset means "prompt if interactive, otherwise skip".
+ADMIN_PASSWORD = os.environ.get('WIKI_ADMIN_PASSWORD') or None
+DEBUG = os.environ.get('WIKI_DEBUG', '').strip().lower() in ('1', 'true', 'yes', 'on')
 ALLOWED_EXTENSIONS = {'zip'}
 MAX_FILE_SIZE = 50 * 1024 * 1024
 
+os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(TEMP_UPLOAD_FOLDER, exist_ok=True)
 
@@ -39,6 +47,22 @@ def verify_password(stored_salt, stored_key, provided_password):
     _, new_key = hash_password(provided_password, salt.hex())
     return new_key == stored_key
 
+def save_admin_password(cursor, conn, password):
+    salt, pwd_hash = hash_password(password)
+    cursor.execute('INSERT INTO users (username, salt, password_hash) VALUES (?, ?, ?) ON CONFLICT(username) DO UPDATE SET salt=excluded.salt, password_hash=excluded.password_hash', ('kai', salt, pwd_hash))
+    conn.commit()
+
+def prompt_admin_password(exists):
+    """Ask for the admin password on a terminal. Returns None if there is no TTY to ask on."""
+    if not sys.stdin.isatty(): return None
+    print("\n--- 'kai' Account Setup ---")
+    prompt = "Set NEW password for 'kai': " if exists else "Set password for 'kai': "
+    pwd = getpass.getpass(prompt)
+    while not pwd:
+        print("Password cannot be empty!")
+        pwd = getpass.getpass(prompt)
+    return pwd
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -48,15 +72,17 @@ def format_file_size(size_bytes):
     else: return f"{size_bytes / (1024 * 1024):.1f} MB"
 
 def get_db():
-    conn = sqlite3.connect('wiki.db', timeout=10.0)
+    conn = sqlite3.connect(DB_PATH, timeout=10.0)
     conn.row_factory = sqlite3.Row
+    conn.execute('PRAGMA journal_mode = WAL')
     conn.execute('PRAGMA foreign_keys = ON')
     return conn
 
 # --- DATABASE SETUP ---
 def init_db(force_reset_password=False):
-    conn = sqlite3.connect('wiki.db', timeout=10.0)
+    conn = sqlite3.connect(DB_PATH, timeout=10.0)
     cursor = conn.cursor()
+    cursor.execute('PRAGMA journal_mode = WAL')
     cursor.execute('''CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, salt TEXT NOT NULL, password_hash TEXT NOT NULL)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS pages (slug TEXT PRIMARY KEY, title TEXT NOT NULL, content TEXT NOT NULL, last_edited_by TEXT NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS revisions (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT NOT NULL, content TEXT NOT NULL, edited_by TEXT NOT NULL, summary TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (slug) REFERENCES pages (slug))''')
@@ -84,17 +110,19 @@ def init_db(force_reset_password=False):
 
     cursor.execute('SELECT username FROM users WHERE username = ?', ('kai',))
     kai_exists = cursor.fetchone() is not None
-    if not kai_exists or force_reset_password:
-        print("\n--- 'kai' Account Setup ---")
-        prompt = "Set password for 'kai': " if not kai_exists else "Set NEW password for 'kai': "
-        pwd = getpass.getpass(prompt)
-        while not pwd:
-            print("Password cannot be empty!")
-            pwd = getpass.getpass(prompt)
-        salt, pwd_hash = hash_password(pwd)
-        cursor.execute('INSERT INTO users (username, salt, password_hash) VALUES (?, ?, ?) ON CONFLICT(username) DO UPDATE SET salt=excluded.salt, password_hash=excluded.password_hash', ('kai', salt, pwd_hash))
-        conn.commit()
-        print("Password saved successfully for 'kai'.\n")
+    if ADMIN_PASSWORD:
+        # Env var wins so containers can be provisioned unattended and stay reproducible.
+        save_admin_password(cursor, conn, ADMIN_PASSWORD)
+        if not kai_exists: print("Password for 'kai' set from WIKI_ADMIN_PASSWORD.\n")
+    elif not kai_exists or force_reset_password:
+        pwd = prompt_admin_password(exists=kai_exists)
+        if pwd:
+            save_admin_password(cursor, conn, pwd)
+            print("Password saved successfully for 'kai'.\n")
+        else:
+            print("WARNING: no password set for 'kai' - wiki editing and mod uploads are locked.\n"
+                  "         Set WIKI_ADMIN_PASSWORD in the environment and restart, or run:\n"
+                  "         python3 app.py --reset-kai-password --init-only\n")
 
     if cursor.execute('SELECT COUNT(*) FROM pages').fetchone()[0] == 0:
         cursor.execute('INSERT INTO pages (slug, title, content, last_edited_by) VALUES (?, ?, ?, ?)', ('Main_Page', 'Main Page', "Welcome to the Wiki!\n\nCheck out the [[Main Page]] or read about [[Rules]].", 'kai'))
@@ -659,21 +687,39 @@ def wiki_cors(response):
 def mods_cors(response):
     return add_cors_headers(response)
 
+WIKI_PORT = int(os.environ.get('WIKI_PORT', 8001))
+MODS_PORT = int(os.environ.get('MODS_PORT', 8004))
+
+def serve(app, port, name):
+    """Serve one app. Uses waitress when installed, otherwise falls back to werkzeug."""
+    try:
+        from waitress import serve as waitress_serve
+        print(f"Starting {name} on http://0.0.0.0:{port} (waitress)")
+        waitress_serve(app, host='0.0.0.0', port=port, threads=8, ident=f'breakmine-{name}')
+    except ImportError:
+        print(f"Starting {name} on http://0.0.0.0:{port} (werkzeug)")
+        run_simple('0.0.0.0', port, app, threaded=True, use_debugger=DEBUG, use_reloader=False)
+
 if __name__ == '__main__':
     reset_pw = '--reset-kai-password' in sys.argv
     init_db(force_reset_password=reset_pw)
-    
-    print("Starting Wiki on http://0.0.0.0:8001")
-    print("Starting Mods on http://0.0.0.0:8004")
-    
-    def start_wiki(): run_simple('0.0.0.0', 8001, wiki_app, use_debugger=True, use_reloader=False)
-    def start_mods(): run_simple('0.0.0.0', 8004, mods_app, use_debugger=True, use_reloader=False)
-    
-    t1 = threading.Thread(target=start_wiki)
-    t2 = threading.Thread(target=start_mods)
-    
+    if '--init-only' in sys.argv:
+        print("Database initialized. Exiting (--init-only).")
+        sys.exit(0)
+
+    failures = []
+    def run(app, port, name):
+        try: serve(app, port, name)
+        except Exception as e:
+            failures.append(name)
+            print(f"ERROR: {name} server stopped: {e}", file=sys.stderr)
+
+    t1 = threading.Thread(target=run, args=(wiki_app, WIKI_PORT, 'Wiki'), daemon=True)
+    t2 = threading.Thread(target=run, args=(mods_app, MODS_PORT, 'Mods'), daemon=True)
     t1.start(); t2.start()
-    
+
     try:
-        while True: t1.join(timeout=1.0); t2.join(timeout=1.0)
+        while not failures and (t1.is_alive() or t2.is_alive()): time.sleep(0.5)
     except KeyboardInterrupt: print("\nShutting down...")
+    if failures: sys.exit(1)
+
