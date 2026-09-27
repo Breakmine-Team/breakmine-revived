@@ -7,4 +7,4 @@ NIXPACKS_NODE_VERSION = "22"
 nixPkgs = ["nodejs_22", "python3", "gcc", "gnumake"]
 
 [start]
-cmd = "npx serve -s dist -l 3000"
+cmd = "npx concurrently \"node cors.js\" \"node tunnel.js\" \"npx serve -s dist -l 3000\""

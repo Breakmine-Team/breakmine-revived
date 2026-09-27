@@ -43,7 +43,7 @@ const PORT = 6006;
 const JWT_EXPIRES_IN = '7d';
 const BCRYPT_ROUNDS = 12;
 const MAX_SKIN_SIZE = 256 * 1024;
-const UPLOAD_DIR = path.resolve(__dirname, '..', '..', '..', '..', '..', 'data', 'skins');
+const UPLOAD_DIR = path.resolve(__dirname, 'data', 'skins');
 
 const db = new Database('./data/auth.db');
 db.pragma('journal_mode = WAL');
