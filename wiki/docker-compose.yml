@@ -6,9 +6,10 @@ services:
     build: .
     image: breakmine-wiki:latest
     restart: unless-stopped
-    ports:
-      - "${WIKI_HOST_PORT:-8001}:8001"
-      - "${MODS_HOST_PORT:-8004}:8004"
+    # Not published to the host - Traefik reaches these over the Docker network.
+    expose:
+      - "8001"
+      - "8004"
     environment:
       WIKI_DATA_DIR: /data
       # Source of truth for the 'kai' login. Set this in .env (see .env.example).
@@ -16,6 +17,16 @@ services:
       WIKI_SECRET_KEY: "${WIKI_SECRET_KEY:-}"
     volumes:
       - wiki_data:/data
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.wiki.rule=Host(`${WIKI_HOSTNAME:-wiki.example.com}`)
+      - traefik.http.routers.wiki.entrypoints=websecure
+      - traefik.http.routers.wiki.tls.certresolver=letsencrypt
+      - traefik.http.services.wiki.loadbalancer.server.port=8001
+      - traefik.http.routers.mods.rule=Host(`${MODS_HOSTNAME:-mods.example.com}`)
+      - traefik.http.routers.mods.entrypoints=websecure
+      - traefik.http.routers.mods.tls.certresolver=letsencrypt
+      - traefik.http.services.mods.loadbalancer.server.port=8004
 
 volumes:
   wiki_data:

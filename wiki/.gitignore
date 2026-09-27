@@ -3,3 +3,4 @@ data/
 __pycache__/
 wiki.db-wal
 wiki.db-shm
+wiki.db

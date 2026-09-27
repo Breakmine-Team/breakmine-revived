@@ -17,10 +17,21 @@ docker compose -f wiki/docker-compose.yml up -d --build
 
 Add that as an alias if you use it often, e.g. `alias wikiup='docker compose -f wiki/docker-compose.yml'` from the repo root. Running `docker compose up -d` from inside `wiki/` works too and picks up the same file and `.env`.
 
-- Wiki: http://localhost:8001
-- Mods: http://localhost:8004
+- Wiki: `https://$WIKI_HOSTNAME` (container port 8001)
+- Mods: `https://$MODS_HOSTNAME` (container port 8004)
 - Logs: `docker compose logs -f wiki`
 - Stop: `docker compose down`  (**keeps data**)
+
+Ports are only `expose`d, not published: Traefik routes to them over the Docker
+network, so nothing is bound on the host. Set the two hostnames in `.env` to
+match your `Host(...)` rules.
+
+For a quick local check without Traefik, publish a port on the fly:
+
+```sh
+docker run --rm -p 8001:8001 -e WIKI_ADMIN_PASSWORD=dev -v breakmine-wiki-data:/data \
+  breakmine-wiki:latest
+```
 
 ### Data persistence
 
