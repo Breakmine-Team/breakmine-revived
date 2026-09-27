@@ -231,7 +231,7 @@ def page_history(slug):
     return render_template(
         'wiki/history.html',
         page_title=f"History: {page['title']}",
-        header_title=f"History: {page['title']}",
+        header_title=f"{page['title']}",
         current_slug=slug,
         page=page,
         revisions=revisions,
@@ -248,7 +248,7 @@ def edit_page(slug):
     return render_template(
         'wiki/edit.html',
         page_title=f"Editing {page['title']}",
-        header_title=f"Editing: {page['title']}",
+        header_title=f"{page['title']}",
         current_slug=slug,
         page=page,
         is_new=False,

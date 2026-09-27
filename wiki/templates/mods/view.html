@@ -39,11 +39,10 @@
   </div>
 
   <div style="margin-top: 20px;">
-    <a href="{{ url_for('mods.edit', mod_id=mod['id']) }}" class="btn waves-effect waves-light teal btn-small">Edit Info</a>
     {% if can_delete %}
+      <a href="{{ url_for('mods.edit', mod_id=mod['id']) }}" class="btn waves-effect waves-light teal btn-small">Edit Info</a>
       <a href="{{ url_for('mods.delete', mod_id=mod['id']) }}" class="btn waves-effect waves-light red lighten-1 btn-small">Delete Mod</a>
     {% endif %}
-    <a href="{{ url_for('mods.index') }}" class="btn-flat">Back to Mods</a>
   </div>
 
   <div class="divider" style="margin: 25px 0;"></div>
@@ -51,27 +50,31 @@
   <h6>Comments</h6>
   {% if session.get('user') %}
     <form action="{{ url_for('mods.add_comment', mod_id=mod['id']) }}" method="post" style="margin-bottom: 20px;">
-      <div class="input-field">
+      <div class="input-field" style="display: flex; align-items: center; gap: 10px;">
         <textarea name="content" class="materialize-textarea" rows="3" data-length="120" placeholder="Leave a comment..." required></textarea>
+        <button type="submit" class="btn-floating waves-effect waves-light teal">
+          <i class="material-icons">send</i>
+        </button>
       </div>
-      <button type="submit" class="btn waves-effect waves-light teal btn-small">Post Comment</button>
     </form>
   {% else %}
-    <p><small><a href="{{ url_for('auth.login') }}">Log in</a> to comment.</small></p>
+    <p><a href="#modal-login" class="modal-trigger">Log in</a> to comment.</p>
   {% endif %}
 
   {% if comments %}
+    <ul class="collection">
     {% for c in comments %}
-      <div class="comment-box">
+      <li class="collection-item">
         <div style="font-size: 0.85em;" class="grey-text text-darken-1">
           <strong>{{ c['author'] | e }}</strong> at {{ c['created_at'] }}
           {% if can_delete or c['author'] == session.get('user') %}
-            <a href="{{ url_for('mods.delete_comment', mod_id=mod['id'], comment_id=c['id']) }}" class="red-text text-lighten-1 right" onclick="return confirm('Delete?');">Delete</a>
+            <a href="{{ url_for('mods.delete_comment', mod_id=mod['id'], comment_id=c['id']) }}" class="grey-text right" onclick="return confirm('Delete?');"><i class="material-icons">delete</i></a>
           {% endif %}
         </div>
         <div style="white-space: pre-wrap; margin-top: 5px;">{{ c['content'] | e }}</div>
-      </div>
+      </li>
     {% endfor %}
+    </ul>
   {% else %}
     <p><em class="grey-text">No comments yet.</em></p>
   {% endif %}

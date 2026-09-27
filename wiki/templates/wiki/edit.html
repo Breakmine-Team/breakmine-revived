@@ -4,19 +4,19 @@
   <form action="{{ url_for('wiki.save_page') }}" method="post">
     <div class="input-field">
       {% if is_new %}
-        <input type="text" id="title" name="title" required>
+        <input type="text" id="title" name="title" style="font-family: monospace;" required>
         <label for="title">Article Title</label>
       {% else %}
-        <input type="text" id="title_display" value="{{ page['title'] }}" disabled>
+        <input type="text" id="title_display" value="{{ page['title'] }}" style="font-family: monospace;" disabled>
         <input type="hidden" id="title" name="title" value="{{ page['title'] }}">
       {% endif %}
     </div>
     <div class="input-field">
-      <textarea id="content" name="content" class="materialize-textarea" rows="18" required>{{ page['content'] if page else '' }}</textarea>
+      <textarea id="content" name="content" class="materialize-textarea" rows="18" style="font-family: monospace;" required>{{ page['content'] if page else '' }}</textarea>
       <label for="content" class="active">Article Text (Use [[Page Title]] for wiki links)</label>
     </div>
     <div class="input-field">
-      <input type="text" id="summary" name="summary" placeholder="Describe changes">
+      <input type="text" id="summary" name="summary" placeholder="Describe changes" style="font-family: monospace;">
       <label for="summary" class="active">Edit Summary</label>
     </div>
     <button type="submit" class="btn waves-effect waves-light teal">Save Changes</button>

@@ -1,45 +1,17 @@
 {% extends "layouts/mods_base.html" %}
 
 {% block content %}
-  <div style="margin-bottom: 15px;">
-    {% if session.get('user') %}
-      <a href="{{ url_for('mods.upload') }}" class="btn waves-effect waves-light teal">Upload New Mod</a>
-    {% else %}
-      <a href="{{ url_for('auth.register') }}">Log in</a> to upload mods.
-    {% endif %}
-  </div>
-
-  <form action="{{ url_for('mods.index') }}" method="get" class="row">
-    <div class="input-field col s12 m6">
-      <input type="text" name="q" id="mod_q" value="{{ search_query | e }}">
-      <label for="mod_q" class="active">Search mods...</label>
-    </div>
-    <div class="input-field col s12 m4">
-      <select name="cat" class="browser-default" style="margin-top: 10px;">
-        <option value="">All Categories</option>
-        <option value="mod" {% if search_cat == 'mod' %}selected{% endif %}>Mod</option>
-        <option value="texture pack" {% if search_cat == 'texture pack' %}selected{% endif %}>Texture Pack</option>
-      </select>
-    </div>
-    <div class="col s12 m2" style="margin-top: 15px;">
-      <button type="submit" class="btn waves-effect waves-light teal btn-small">Search</button>
-      {% if search_query or search_cat %}
-        <a href="{{ url_for('mods.index') }}" class="btn-flat btn-small">Clear</a>
-      {% endif %}
-    </div>
-  </form>
-
   {% if mods %}
     <table class="striped responsive-table">
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Category</th>
-          <th>Version</th>
-          <th>Author</th>
-          <th>Size</th>
-          <th>Downloads</th>
-          <th>Actions</th>
+          <th><i class="material-icons tiny" style="transform: translateY(2px);">badge</i> Name</th>
+          <th><i class="material-icons tiny" style="transform: translateY(2px);">category</i> Category</th>
+          <th><i class="material-icons tiny" style="transform: translateY(2px);">history</i> Version</th>
+          <th><i class="material-icons tiny" style="transform: translateY(2px);">person</i> Author</th>
+          <th><i class="material-icons tiny" style="transform: translateY(2px);">folder_zip</i> Size</th>
+          <th><i class="material-icons tiny" style="transform: translateY(2px);">download</i> Downloads</th>
+          <th><i class="material-icons tiny" style="transform: translateY(2px);">rule</i> Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -52,9 +24,9 @@
           <td>{{ mod['file_size_formatted'] }}</td>
           <td>{{ mod['download_count'] }}</td>
           <td>
-            <a href="{{ url_for('mods.download_version', mod_id=mod['id'], ver_id=mod['latest_ver_id']) }}" class="btn waves-effect waves-light teal btn-small">Download</a>
+            <a href="{{ url_for('mods.download_version', mod_id=mod['id'], ver_id=mod['latest_ver_id']) }}" class="btn btn-floating waves-effect waves-light teal btn-small" style="margin-right: 3px;"><i class="material-icons">download</i></a>
             {% if mod['can_delete'] %}
-              <a href="{{ url_for('mods.delete', mod_id=mod['id']) }}" class="btn waves-effect waves-light red lighten-1 btn-small">Delete</a>
+              <a href="{{ url_for('mods.delete', mod_id=mod['id']) }}" class="btn btn-floating waves-effect waves-light red lighten-1 btn-small"><i class="material-icons">delete</i></a>
             {% endif %}
           </td>
         </tr>

@@ -59,41 +59,180 @@
     .comment-box { padding: 12px; margin-bottom: 12px; border-radius: 4px; background-color: #ffffff; border: 1px solid #e0e0e0; }
     .sidenav-padding { padding: 20px; }
   </style>
+  <script>
+    (function () {
+  // Ensure Materialize JS is loaded
+  if (typeof M === 'undefined') {
+    console.error('Materialize JS is required for this polyfill.');
+    return;
+  }
+
+  // Inject modal markup container into the DOM
+  const modalHTML = `
+    <div id="m-polyfill-modal" class="modal">
+      <div class="modal-content">
+        <h4 id="m-polyfill-title">Notice</h4>
+        <p id="m-polyfill-message"></p>
+        <div id="m-polyfill-input-container" class="input-field" style="display:none; margin-top: 20px;">
+          <input id="m-polyfill-input" type="text" class="validate">
+          <label id="m-polyfill-label" for="m-polyfill-input"></label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <a id="m-polyfill-cancel" href="#!" class="modal-close waves-effect waves-secondary btn-flat" style="display:none;">Cancel</a>
+        <a id="m-polyfill-ok" href="#!" class="waves-effect waves-green btn">OK</a>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+  // Cache DOM references
+  const modalEl = document.getElementById('m-polyfill-modal');
+  const titleEl = document.getElementById('m-polyfill-title');
+  const messageEl = document.getElementById('m-polyfill-message');
+  const inputContainerEl = document.getElementById('m-polyfill-input-container');
+  const inputEl = document.getElementById('m-polyfill-input');
+  const labelEl = document.getElementById('m-polyfill-label');
+  const okBtn = document.getElementById('m-polyfill-ok');
+  const cancelBtn = document.getElementById('m-polyfill-cancel');
+
+  // Initialize Materialize Modal instance
+  const modalInstance = M.Modal.init(modalEl, {
+    dismissible: false // Prevent closing via backdrop click or ESC without trigger
+  });
+
+  // Store original dialog implementations
+  const nativeAlert = window.alert;
+  const nativeConfirm = window.confirm;
+  const nativePrompt = window.prompt;
+
+  // Generic helper to trigger the Materialize modal
+  function showModal({ title, message, isPrompt = false, defaultValue = '', isConfirm = false }) {
+    return new Promise((resolve) => {
+      titleEl.textContent = title;
+      messageEl.textContent = message || '';
+
+      // Reset UI states
+      inputContainerEl.style.display = isPrompt ? 'block' : 'none';
+      cancelBtn.style.display = (isConfirm || isPrompt) ? 'inline-block' : 'none';
+
+      if (isPrompt) {
+        inputEl.value = defaultValue;
+        labelEl.textContent = message || '';
+        labelEl.classList.toggle('active', Boolean(defaultValue));
+      }
+
+      // Cleanup listeners function
+      const cleanup = () => {
+        okBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+        inputEl.removeEventListener('keyup', onEnter);
+      };
+
+      // Handler definitions
+      const onOk = () => {
+        cleanup();
+        modalInstance.close();
+        if (isPrompt) resolve(inputEl.value);
+        else if (isConfirm) resolve(true);
+        else resolve();
+      };
+
+      const onCancel = () => {
+        cleanup();
+        modalInstance.close();
+        if (isPrompt) resolve(null);
+        else if (isConfirm) resolve(false);
+        else resolve();
+      };
+
+      const onEnter = (e) => {
+        if (e.key === 'Enter') onOk();
+      };
+
+      // Attach handlers
+      okBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+      if (isPrompt) {
+        inputEl.addEventListener('keyup', onEnter);
+      }
+
+      modalInstance.open();
+
+      if (isPrompt) {
+        setTimeout(() => inputEl.focus(), 100);
+      }
+    });
+  }
+
+  // Override window.alert
+  window.alert = function (message) {
+    return showModal({
+      title: 'Alert',
+      message: String(message ?? '')
+    });
+  };
+
+  // Override window.confirm
+  window.confirm = function (message) {
+    return showModal({
+      title: 'Confirm',
+      message: String(message ?? ''),
+      isConfirm: true
+    });
+  };
+
+  // Override window.prompt
+  window.prompt = function (message, defaultValue = '') {
+    return showModal({
+      title: 'Prompt',
+      message: String(message ?? ''),
+      defaultValue: String(defaultValue),
+      isPrompt: true
+    });
+  };
+
+  // Expose originals in case native behavior is needed
+  window.nativeDialogs = {
+    alert: nativeAlert,
+    confirm: nativeConfirm,
+    prompt: nativePrompt
+  };
+})();
+</script>
 </head>
 <body>
   <div class="navbar-sticky">
-    <nav class="teal darken-3" style="padding: 0 20px;">
+    <nav class="teal darken-2" style="padding: 0 0 0 20px;">
       <div class="nav-wrapper">
         <a href="{{ url_for('mods.index') }}" class="brand-logo left">Breakmine Mods</a>
+
+        <ul class="right">
+          {% if session.get('user') %}
+            <li>
+              <form id="logout-form" action="{{ url_for('auth.logout') }}" method="post" style="display: none;"></form>
+              <a href="#!" onclick="document.getElementById('logout-form').submit(); return false;">Logout {{ session['user'] }}</a>
+            </li>
+          {% else %}
+            <li><a href="#modal-login" class="modal-trigger">Login</a></li>
+            <li><a href="#modal-register" class="modal-trigger">Register</a></li>
+          {% endif %}
+        </ul>
+
+        <form action="{{ url_for('mods.index') }}" method="get" class="right hide-on-small-only">
+          <div class="input-field">
+            <input id="search" type="search" name="q" value="{{ search_query | e }}" placeholder="Search mods..." required>
+            <label class="label-icon" for="search"><i class="material-icons">search</i></label>
+            <i class="material-icons">close</i>
+          </div>
+        </form>
       </div>
     </nav>
   </div>
 
   <ul id="slide-out" class="sidenav sidenav-fixed">
     <li class="sidenav-padding">
-      <h5>Controls</h5>
-      {% if session.get('user') %}
-        <p>Logged in as: <strong>{{ session['user'] }}</strong></p>
-        <form action="{{ url_for('auth.logout') }}" method="post" style="margin-top: 10px;">
-          <button class="btn waves-effect waves-light red lighten-1 btn-small" type="submit">Log Out</button>
-        </form>
-      {% else %}
-        <form action="{{ url_for('auth.login') }}" method="post">
-          <div class="input-field">
-            <input type="text" id="username" name="username" required>
-            <label for="username">User</label>
-          </div>
-          <div class="input-field">
-            <input type="password" id="password" name="password" required>
-            <label for="password">Pass</label>
-          </div>
-          <button class="btn waves-effect waves-light teal btn-small" type="submit">Login</button>
-        </form>
-        <div style="margin-top: 10px;"><a href="{{ url_for('auth.register') }}">Register</a></div>
-      {% endif %}
-
-      <div class="divider" style="margin: 15px 0;"></div>
-
       <p><strong>Navigation</strong></p>
       <div class="collection" style="border: none;">
         <a href="{{ url_for('mods.index') }}" class="collection-item">Mods List</a>
@@ -120,11 +259,122 @@
     </div>
   </main>
 
+  {% if not session.get('user') %}
+    <div id="modal-login" class="modal">
+      <form action="{{ url_for('auth.login') }}" method="post">
+        <div class="modal-content">
+          <h4>Login</h4>
+          {% if error %}
+            <p class="error-msg">{{ error }}</p>
+          {% endif %}
+          <div class="input-field">
+            <input type="text" id="login-username" name="username" required>
+            <label for="login-username">Username</label>
+          </div>
+          <div class="input-field">
+            <input type="password" id="login-password" name="password" required>
+            <label for="login-password">Password</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <a href="#!" class="modal-close btn-flat">Cancel</a>
+          <button class="btn waves-effect waves-light teal" type="submit">Login</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="modal-register" class="modal">
+      <form id="register-form" action="{{ url_for('auth.register') }}" method="post" novalidate>
+        <div class="modal-content">
+          <h4>Register</h4>
+          {% if error %}
+            <p class="error-msg red-text">{{ error }}</p>
+          {% endif %}
+          <div class="input-field">
+            <input 
+              type="text" 
+              id="reg-username" 
+              name="username" 
+              required 
+              class="validate"
+              pattern="^[a-zA-Z0-9_]{2,32}$"
+            >
+            <label for="reg-username">Username</label>
+            <span class="helper-text" data-error="Username must be 2-32 characters (letters, numbers, underscores only)">
+              2-32 characters, alphanumeric/underscores
+            </span>
+          </div>
+          <div class="input-field">
+            <input type="password" id="reg-password" name="password" required minlength="4" class="validate">
+            <label for="reg-password">Password</label>
+          </div>
+          <div class="input-field">
+            <input type="password" id="reg-confirm" name="confirm" required minlength="4">
+            <label for="reg-confirm">Confirm Password</label>
+            <span id="confirm-error" class="helper-text" data-error="Passwords do not match."></span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <a href="#!" class="modal-close btn-flat">Cancel</a>
+          <button type="submit" id="reg-submit-btn" class="btn waves-effect waves-light teal" disabled>Register</button>
+        </div>
+      </form>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const form = document.getElementById('register-form');
+      const usernameInput = document.getElementById('reg-username');
+      const passwordInput = document.getElementById('reg-password');
+      const confirmInput = document.getElementById('reg-confirm');
+      const submitBtn = document.getElementById('reg-submit-btn');
+
+      function checkFormValidity() {
+        const isUsernameValid = usernameInput.checkValidity();
+        const isPasswordValid = passwordInput.checkValidity();
+        const passwordsMatch = confirmInput.value.length >= 4 && confirmInput.value === passwordInput.value;
+
+        // Handle Confirm Password Materialize state visually
+        if (confirmInput.value.length > 0) {
+          if (passwordsMatch) {
+            confirmInput.classList.remove('invalid');
+            confirmInput.classList.add('valid');
+          } else {
+            confirmInput.classList.remove('valid');
+            confirmInput.classList.add('invalid');
+          }
+        } else {
+          confirmInput.classList.remove('valid', 'invalid');
+        }
+
+        // Enable button only if all checks pass
+        if (isUsernameValid && isPasswordValid && passwordsMatch) {
+          submitBtn.removeAttribute('disabled');
+          submitBtn.classList.remove('disabled');
+        } else {
+          submitBtn.setAttribute('disabled', 'disabled');
+          submitBtn.classList.add('disabled');
+        }
+      }
+
+      usernameInput.addEventListener('input', checkFormValidity);
+      passwordInput.addEventListener('input', checkFormValidity);
+      confirmInput.addEventListener('input', checkFormValidity);
+
+      // Initial check on load
+      checkFormValidity();
+    });
+    </script>
+  {% endif %}
+
   <script src="/static/js/materialize.min.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
-      var elems = document.querySelectorAll('.sidenav');
-      M.Sidenav.init(elems);
+      var sidenavElems = document.querySelectorAll('.sidenav');
+      M.Sidenav.init(sidenavElems);
+
+      var modalElems = document.querySelectorAll('.modal');
+      M.Modal.init(modalElems);
     });
   </script>
 </body>
