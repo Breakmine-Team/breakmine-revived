@@ -18,7 +18,7 @@ const commandHandler = new CommandHandler(null);
 
 // Commands that mutate shared state or affect other players. Non-ops get a
 // permission error instead of the command executing.
-const OP_ONLY_COMMANDS = new Set(['tp', 'gamemode', 'heal', 'give', 'setblock', 'place', 'util']);
+const OP_ONLY_COMMANDS = new Set(['tp', 'gamemode', 'heal', 'give', 'setblock', 'place', 'summon', 'util']);
 
 function requireOp(player) {
     if (isOp(player)) {

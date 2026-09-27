@@ -3,6 +3,8 @@ import PlayerEntity from "../../entity/PlayerEntity.js";
 import PlayerEntityMultiplayer from "../../entity/PlayerEntityMultiplayer.js";
 import ItemEntity from "../../entity/ItemEntity.js";
 import ItemRenderer from "./entity/ItemRenderer.js";
+import CreeperEntity from "../../entity/CreeperEntity.js";
+import CreeperRenderer from "./entity/CreeperRenderer.js";
 
 export default class EntityRenderManager {
 
@@ -13,6 +15,7 @@ export default class EntityRenderManager {
         this.push(PlayerEntity, PlayerRenderer);
         this.push(PlayerEntityMultiplayer, PlayerRenderer);
         this.push(ItemEntity, ItemRenderer);
+        this.push(CreeperEntity, CreeperRenderer);
     }
 
     push(entityType, entityRenderer) {

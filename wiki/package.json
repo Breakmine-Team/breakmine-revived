@@ -1,0 +1,9 @@
+{
+  "name": "breakmine-wiki",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "server.js",
+  "dependencies": {
+    "better-sqlite3": "^11.0.0"
+  }
+}

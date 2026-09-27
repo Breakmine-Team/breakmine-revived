@@ -38,18 +38,19 @@ export default class SetBlockCommand extends Command {
             return false;
         }
 
-        //BlockRegistry.create();
-        let typeId = BlockRegistry.getBlockByName(args[3]);
+        let typeId;
 
         if (args[3].toUpperCase() === "AIR") {
             typeId = 0;
-        }
-        
-        if (!typeId) {
-            return false;
+        } else {
+            let block = BlockRegistry.getBlockByName(args[3]);
+            if (!block) {
+                return false;
+            }
+            typeId = block.id;
         }
 
-        minecraft.world.setBlockAt(x, y, z, typeId.getId());
+        minecraft.world.setBlockAt(x, y, z, typeId);
 
         return true;
     }

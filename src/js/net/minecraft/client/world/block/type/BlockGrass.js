@@ -43,14 +43,14 @@ export default class BlockGrass extends Block {
         return EnumBlockFace.NORTH;
     }
 
-    getTextureForFace(face) {
+    getTextureForFace(face, data, x, y, z, world) {
         switch (face) {
             case EnumBlockFace.TOP:
                 return 'grass_top';
             case EnumBlockFace.BOTTOM:
                 return 'dirt';
             default:
-                return 'grass_side';
+                return (world && world.getBlockAt(x, y + 1, z) === BlockRegistry.SNOW.getId()) ? 'grass_block_snow' : 'grass_side';
         }
     }
 

@@ -8,7 +8,7 @@ import {
     sendBlockChange,
     sendTimeUpdate
 } from './packets.js';
-import { getPlayers, isSpectator, savePlayerData } from './players.js';
+import { getPlayers, isSpectator, savePlayerData, findPlayerByUsername } from './players.js';
 import { getWorldTime, setWorldTime, addWorldChange, getBlockAt as getServerBlockAt } from './world.js';
 import { makePacket, writeString } from './protocol.js';
 import config from './config.js';
@@ -238,6 +238,29 @@ export function createCommandContext(player, commandHandler) {
         commandHandler,
         addMessageToChat: (message) => sendChatMessageToPlayer(player, message),
         isSingleplayer: () => false,
+        findPlayerByName: (username) => {
+            const target = findPlayerByUsername(username);
+            if (target) {
+                return createPlayerAdapter(target);
+            }
+            return null;
+        },
+        broadcastEntitySpawn: (entity) => {
+            const msg = JSON.stringify({
+                type: 'spawnEntity',
+                entityType: entity.type,
+                x: entity.x,
+                y: entity.y,
+                z: entity.z,
+                yaw: entity.yaw || 0,
+                pitch: entity.pitch || 0
+            });
+            for (const [eid, p] of getPlayers()) {
+                if (p.ws.readyState === 1) {
+                    p.ws.send(msg);
+                }
+            }
+        },
         musicManager: {
             switchWhenReady: () => {}
         },

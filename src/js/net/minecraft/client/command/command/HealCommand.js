@@ -21,8 +21,8 @@ export default class HealCommand extends Command {
         let target = null;
         if (targetName === "@s" || targetName === minecraft.player.username) {
             target = minecraft.player;
-        } else if (minecraft.isSingleplayer()) {
-            target = minecraft.player;
+        } else if (minecraft.findPlayerByName) {
+            target = minecraft.findPlayerByName(targetName);
         }
 
         if (!target) {

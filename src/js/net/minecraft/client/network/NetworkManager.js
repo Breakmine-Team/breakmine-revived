@@ -5,6 +5,7 @@ import {require} from "../../../../Start.js";
 import MissingPackets from "../../util/MissingPackets.js";
 import InventoryBasic from "../inventory/inventory/InventoryBasic.js";
 import IsomorphicWebSocket from "../../util/IsomorphicWebSocket.js";
+import CreeperEntity from "../entity/CreeperEntity.js";
 
 export default class NetworkManager {
 
@@ -290,6 +291,19 @@ export default class NetworkManager {
                     if (payload.damage) {
                         entity.damageEntity(payload.damage, payload.attacker);
                     }
+                }
+            } else if (payload.type === 'spawnEntity' && this.minecraft?.world) {
+                const world = this.minecraft.world;
+                const entityType = payload.entityType;
+                const x = payload.x;
+                const y = payload.y;
+                const z = payload.z;
+                let entity = null;
+                if (entityType === 'Creeper' || entityType === 'creeper') {
+                    entity = new CreeperEntity(this.minecraft, world, -2, x, y, z);
+                    if (payload.yaw) entity.rotationYaw = payload.yaw;
+                    if (payload.pitch) entity.rotationPitch = payload.pitch;
+                    world.addEntity(entity);
                 }
             }
         } catch (error) {

@@ -8,6 +8,7 @@ export const uiTextures = [
     "terrain/sun.png",
     "terrain/moon.png",
     "char.png",
+    "creeper.png",
     "gui/title/minecraft.png",
     "gui/title/background/panorama_0.png",
     "gui/title/background/panorama_1.png",
@@ -116,7 +117,7 @@ export const atlasBlockTextures = [
     "bluestoneObserverFront.png", "bluestoneObserverBackOn.png",
     "bluestoneObserverBackOff.png", "oak_planks_green.png", "oak_planks_sticky.png",
     "bluestoneRepeaterTopOff.png", "bluestoneRepeaterTopOn.png", "lever.png",
-    "cobblestone_lever_base.png"
+    "cobblestone_lever_base.png", "snow.png", "grass_block_snow.png"
 ];
 
 const toolMaterials = ['wooden', 'stone', 'iron', 'diamond', 'golden'];
@@ -165,18 +166,7 @@ export const musicTracks = {
         "sound/music/game/creative/creative4.ogg",
         "sound/music/game/creative/creative5.ogg",
         "sound/music/game/creative/creative6.ogg",
-    ],
-    nether: [
-        "sound/music/game/nether/nether1.ogg",
-        "sound/music/game/nether/nether2.ogg",
-        "sound/music/game/nether/nether3.ogg",
-        "sound/music/game/nether/nether4.ogg",
-    ],
-    end: [
-        "sound/music/game/end/boss.ogg",
-        "sound/music/game/end/credits.ogg",
-        "sound/music/game/end/end.ogg",
-    ],
+    ]
 };
 
 // ---------------------------------------------------------------------------
