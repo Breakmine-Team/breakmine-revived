@@ -6,27 +6,21 @@ services:
     build: .
     image: breakmine-wiki:latest
     restart: unless-stopped
-    # Not published to the host - Traefik reaches these over the Docker network.
+    # Not published to the host - the Traefik proxy reaches these over the Docker network.
     expose:
       - "8001"
       - "8004"
     environment:
       WIKI_DATA_DIR: /data
+      # Set explicitly so an injected PORT cannot move the wiki off 8001: the
+      # proxy routes each hostname to a fixed container port.
+      WIKI_PORT: "8001"
+      MODS_PORT: "8004"
       # Source of truth for the 'kai' login. Set this in .env (see .env.example).
       WIKI_ADMIN_PASSWORD: "${WIKI_ADMIN_PASSWORD:-}"
       WIKI_SECRET_KEY: "${WIKI_SECRET_KEY:-}"
     volumes:
       - wiki_data:/data
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.wiki.rule=Host(`${WIKI_HOSTNAME:-wiki.example.com}`)
-      - traefik.http.routers.wiki.entrypoints=websecure
-      - traefik.http.routers.wiki.tls.certresolver=letsencrypt
-      - traefik.http.services.wiki.loadbalancer.server.port=8001
-      - traefik.http.routers.mods.rule=Host(`${MODS_HOSTNAME:-mods.example.com}`)
-      - traefik.http.routers.mods.entrypoints=websecure
-      - traefik.http.routers.mods.tls.certresolver=letsencrypt
-      - traefik.http.services.mods.loadbalancer.server.port=8004
 
 volumes:
   wiki_data:

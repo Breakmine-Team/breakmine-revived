@@ -29,6 +29,6 @@ VOLUME ["/data"]
 EXPOSE 8001 8004
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD python3 -c "import os,urllib.request as r,sys;p=[(os.getenv('WIKI_PORT','8001'),'/all'),(os.getenv('MODS_PORT','8004'),'/')];sys.exit(0 if all(r.urlopen('http://127.0.0.1:'+a+b,timeout=3).status==200 for a,b in p) else 1)"
+  CMD python3 -c "import os,urllib.request as r,sys;w=os.getenv('WIKI_PORT') or os.getenv('PORT') or '8001';m=os.getenv('MODS_PORT') or '8004';sys.exit(0 if all(r.urlopen('http://127.0.0.1:'+p+q,timeout=3).status==200 for p,q in ((w,'/all'),(m,'/'))) else 1)"
 
 CMD ["python3", "app.py"]

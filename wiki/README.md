@@ -17,14 +17,33 @@ docker compose -f wiki/docker-compose.yml up -d --build
 
 Add that as an alias if you use it often, e.g. `alias wikiup='docker compose -f wiki/docker-compose.yml'` from the repo root. Running `docker compose up -d` from inside `wiki/` works too and picks up the same file and `.env`.
 
-- Wiki: `https://$WIKI_HOSTNAME` (container port 8001)
-- Mods: `https://$MODS_HOSTNAME` (container port 8004)
+- Wiki: `https://wiki.breakmine.com` (container port 8001)
+- Mods: `https://mods.breakmine.com` (container port 8004)
 - Logs: `docker compose logs -f wiki`
 - Stop: `docker compose down`  (**keeps data**)
 
-Ports are only `expose`d, not published: Traefik routes to them over the Docker
-network, so nothing is bound on the host. Set the two hostnames in `.env` to
-match your `Host(...)` rules.
+### Routing (Dokploy / Coolify / Traefik)
+
+Ports are only `expose`d, not published - Traefik reaches them over the Docker
+network. Routing is **not** configured in `docker-compose.yml`: on Dokploy and
+Coolify the proxy is driven by the Domains field in the panel, and hand-written
+`traefik.*` labels are ignored (file provider) or collide with the routers the
+panel generates (docker provider).
+
+In the panel, add a domain per site, pointing at the container port:
+
+| Domain                   | Port | Serves            |
+| ------------------------ | ---- | ----------------- |
+| `wiki.breakmine.com`     | 8001 | wiki articles     |
+| `mods.breakmine.com`    | 8004 | mods / downloads  |
+
+A `404` from Traefik means no router matched that hostname - the domain is
+missing from the panel, or its port does not match the table above. Point the
+DNS for both names at the proxy host and let the panel issue the certificate.
+
+The container ports are pinned to 8001/8004 in `docker-compose.yml` on purpose:
+platforms inject their own `PORT` variable, and if the app followed it the wiki
+would move off 8001 and stop matching the router.
 
 For a quick local check without Traefik, publish a port on the fly:
 

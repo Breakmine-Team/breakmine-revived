@@ -687,8 +687,10 @@ def wiki_cors(response):
 def mods_cors(response):
     return add_cors_headers(response)
 
-WIKI_PORT = int(os.environ.get('WIKI_PORT', 8001))
-MODS_PORT = int(os.environ.get('MODS_PORT', 8004))
+# WIKI_PORT/MODS_PORT win; PORT is what PaaS proxies (Dokploy, Coolify, Render...)
+# inject, so honour it as the fallback or the reverse proxy hits a closed port.
+WIKI_PORT = int(os.environ.get('WIKI_PORT') or os.environ.get('PORT') or 8001)
+MODS_PORT = int(os.environ.get('MODS_PORT') or 8004)
 
 def serve(app, port, name):
     """Serve one app. Uses waitress when installed, otherwise falls back to werkzeug."""
