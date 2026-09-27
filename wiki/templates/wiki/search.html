@@ -1,0 +1,16 @@
+{% extends "layouts/wiki_base.html" %}
+
+{% block content %}
+  <h5>Results for "{{ query }}"</h5>
+  {% if results %}
+    <ul class="collection">
+      {% for item in results %}
+        <li class="collection-item">
+          <a href="{{ url_for('wiki.view_page', slug=item['slug']) }}">{{ item['title'] }}</a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No matching articles found.</p>
+  {% endif %}
+{% endblock %}

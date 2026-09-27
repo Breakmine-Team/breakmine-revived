@@ -1,0 +1,10 @@
+{% extends "layouts/mods_base.html" %}
+
+{% block content %}
+  <p>Delete <strong>{{ mod_name | e }}</strong> and all files/comments?</p>
+  <p class="red-text"><em>This cannot be undone.</em></p>
+  <form action="{{ url_for('mods.delete', mod_id=mod_id) }}" method="post">
+    <button type="submit" class="btn waves-effect waves-light red lighten-1">Yes, Delete</button>
+    <a href="{{ url_for('mods.index') }}" class="btn-flat">Cancel</a>
+  </form>
+{% endblock %}

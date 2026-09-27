@@ -1,0 +1,26 @@
+{% extends "layouts/mods_base.html" %}
+
+{% block content %}
+  {% if error %}
+    <p class="error-msg">{{ error }}</p>
+  {% endif %}
+
+  <form action="{{ url_for('mods.edit', mod_id=mod_id) }}" method="post">
+    <div class="input-field">
+      <input type="text" id="name" name="name" value="{{ mod['name'] | e }}" required>
+      <label for="name" class="active">Name</label>
+    </div>
+    <div class="input-field">
+      <select id="category" name="category" class="browser-default">
+        <option value="mod" {% if mod['category'] == 'mod' %}selected{% endif %}>Mod</option>
+        <option value="texture pack" {% if mod['category'] == 'texture pack' %}selected{% endif %}>Texture Pack</option>
+      </select>
+    </div>
+    <div class="input-field">
+      <textarea id="description" name="description" class="materialize-textarea" rows="6">{{ mod['description'] | e }}</textarea>
+      <label for="description" class="active">Description</label>
+    </div>
+    <button type="submit" class="btn waves-effect waves-light teal">Save</button>
+    <a href="{{ url_for('mods.view', mod_id=mod_id) }}" class="btn-flat">Cancel</a>
+  </form>
+{% endblock %}

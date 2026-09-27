@@ -1,0 +1,78 @@
+{% extends "layouts/mods_base.html" %}
+
+{% block content %}
+  <table class="striped" style="margin-bottom: 20px;">
+    <tr><th><i class="material-icons tiny" style="transform: translateY(2px);">category</i> Category</th><td>{{ mod['category'] | e }}</td></tr>
+    <tr><th><i class="material-icons tiny" style="transform: translateY(2px);">person</i> Author</th><td>{{ mod['uploaded_by'] | e }}</td></tr>
+    <tr><th><i class="material-icons tiny" style="transform: translateY(2px);">history</i> Current Version</th><td>{{ mod['version'] | e }}</td></tr>
+    <tr><th><i class="material-icons tiny" style="transform: translateY(2px);">download</i> Downloads</th><td>{{ mod['download_count'] }}</td></tr>
+    <tr><th><i class="material-icons tiny" style="transform: translateY(2px);">calendar_today</i> Uploaded</th><td>{{ mod['created_at'] }}</td></tr>
+    <tr><th><i class="material-icons tiny" style="transform: translateY(2px);">description</i> Description</th><td>{% if mod['description'] %}<pre style="white-space: pre-wrap; margin:0; font-family: inherit;">{{ mod['description'] | e }}</pre>{% else %}<em class="grey-text">No description.</em>{% endif %}</td></tr>
+  </table>
+
+  <div>
+    <h6>Versions</h6>
+    <ul class="collection">
+    {% for ver in versions %}
+    <li class="collection-item avatar">
+        <i class="material-icons circle teal">folder_zip</i>
+        <span class="title"><strong>{{ ver['version'] | e }}</strong></span>
+        <p>{{ ver['file_size_formatted'] }} <br>
+          <small class="grey-text">{{ ver['created_at'] }}</small>
+        </p>
+        <div style="display: flex; gap: 10px;" class="secondary-content">
+          {% if can_edit %}
+            <a class="btn-floating btn-large waves-effect red lighten-1" href="{{ url_for('mods.delete_version', mod_id=mod['id'], ver_id=ver['id']) }}">
+                <i class="material-icons">delete</i>
+            </a>
+          {% endif %}
+          <a class="btn-floating btn-large waves-effect teal" href="{{ url_for('mods.download_version', mod_id=mod['id'], ver_id=ver['id']) }}">
+            <i class="material-icons">file_download</i>
+        </a>
+        </div>
+    </li>
+    {% endfor %}
+    </ul>
+    {% if can_edit %}
+      <a href="{{ url_for('mods.upload_version', mod_id=mod['id']) }}" class="btn waves-effect waves-light teal btn-small">Upload New Version</a>
+    {% endif %}
+  </div>
+
+  <div style="margin-top: 20px;">
+    <a href="{{ url_for('mods.edit', mod_id=mod['id']) }}" class="btn waves-effect waves-light teal btn-small">Edit Info</a>
+    {% if can_delete %}
+      <a href="{{ url_for('mods.delete', mod_id=mod['id']) }}" class="btn waves-effect waves-light red lighten-1 btn-small">Delete Mod</a>
+    {% endif %}
+    <a href="{{ url_for('mods.index') }}" class="btn-flat">Back to Mods</a>
+  </div>
+
+  <div class="divider" style="margin: 25px 0;"></div>
+
+  <h6>Comments</h6>
+  {% if session.get('user') %}
+    <form action="{{ url_for('mods.add_comment', mod_id=mod['id']) }}" method="post" style="margin-bottom: 20px;">
+      <div class="input-field">
+        <textarea name="content" class="materialize-textarea" rows="3" data-length="120" placeholder="Leave a comment..." required></textarea>
+      </div>
+      <button type="submit" class="btn waves-effect waves-light teal btn-small">Post Comment</button>
+    </form>
+  {% else %}
+    <p><small><a href="{{ url_for('auth.login') }}">Log in</a> to comment.</small></p>
+  {% endif %}
+
+  {% if comments %}
+    {% for c in comments %}
+      <div class="comment-box">
+        <div style="font-size: 0.85em;" class="grey-text text-darken-1">
+          <strong>{{ c['author'] | e }}</strong> at {{ c['created_at'] }}
+          {% if can_delete or c['author'] == session.get('user') %}
+            <a href="{{ url_for('mods.delete_comment', mod_id=mod['id'], comment_id=c['id']) }}" class="red-text text-lighten-1 right" onclick="return confirm('Delete?');">Delete</a>
+          {% endif %}
+        </div>
+        <div style="white-space: pre-wrap; margin-top: 5px;">{{ c['content'] | e }}</div>
+      </div>
+    {% endfor %}
+  {% else %}
+    <p><em class="grey-text">No comments yet.</em></p>
+  {% endif %}
+{% endblock %}

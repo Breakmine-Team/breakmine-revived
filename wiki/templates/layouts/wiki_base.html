@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="{{ meta_description | e }}">
+  <meta name="robots" content="index, follow">
+  <meta property="og:title" content="{{ page_title | e }} | Breakmine Wiki">
+  <meta property="og:description" content="{{ meta_description | e }}">
+  <meta property="og:type" content="website">
+  <title>{{ page_title | e }} | Breakmine Wiki</title>
+  <link rel="stylesheet" href="/static/css/materialize.min.css">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      background-color: #f5f5f5;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    .navbar-sticky {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+    }
+
+    .sidenav.sidenav-fixed {
+      top: 64px;
+      height: calc(100vh - 64px);
+      width: 300px;
+      box-shadow: 1px 0 5px rgba(0,0,0,0.1);
+      z-index: 997;
+    }
+
+    .main-wrapper {
+      flex: 1 0 auto;
+      margin-top: 64px;
+      padding: 20px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    @media only screen and (min-width: 993px) {
+      .main-wrapper {
+        padding-left: 320px;
+      }
+    }
+
+    .card .card-content { padding: 16px 20px; }
+    .error-msg { color: #d32f2f; font-weight: bold; }
+    .sidenav-padding { padding: 20px; }
+  </style>
+</head>
+<body>
+  <div class="navbar-sticky">
+    <nav class="teal darken-2" style="padding: 0 20px;">
+      <div class="nav-wrapper">
+        <a href="{{ url_for('wiki.view_page', slug='Main_Page') }}" class="brand-logo left">Breakmine Wiki</a>
+      </div>
+    </nav>
+  </div>
+
+  <ul id="slide-out" class="sidenav sidenav-fixed">
+    <li class="sidenav-padding">
+      <h5>Controls</h5>
+      {% if session.get('user') %}
+        <p>Logged in as: <strong>{{ session['user'] }}</strong></p>
+        <form action="{{ url_for('auth.logout') }}" method="post" style="margin-top: 10px;">
+          <button class="btn waves-effect waves-light red lighten-1 btn-small" type="submit">Log Out</button>
+        </form>
+      {% else %}
+        <form action="{{ url_for('auth.login') }}" method="post">
+          <div class="input-field">
+            <input type="text" id="username" name="username" required>
+            <label for="username">User</label>
+          </div>
+          <div class="input-field">
+            <input type="password" id="password" name="password" required>
+            <label for="password">Pass</label>
+          </div>
+          <button class="btn waves-effect waves-light teal btn-small" type="submit">Login</button>
+        </form>
+        <div style="margin-top: 10px;"><a href="{{ url_for('auth.register') }}">Register</a></div>
+      {% endif %}
+
+      <div class="divider" style="margin: 15px 0;"></div>
+
+      <form action="{{ url_for('wiki.search') }}" method="get">
+        <div class="input-field">
+          <input type="text" id="q" name="q" value="{{ search_query or '' }}" required>
+          <label for="q">Find Article</label>
+        </div>
+        <button class="btn waves-effect waves-light teal btn-small" type="submit">Search</button>
+      </form>
+
+      <div class="divider" style="margin: 15px 0;"></div>
+
+      <p><strong>Navigation</strong></p>
+      <div class="collection" style="border: none;">
+        <a href="{{ url_for('wiki.view_page', slug='Main_Page') }}" class="collection-item">Main Page</a>
+        <a href="{{ url_for('wiki.view_page', slug='Patchwork') }}" class="collection-item">Patchwork API</a>
+        <a href="{{ url_for('wiki.all_pages') }}" class="collection-item">All Pages</a>
+      </div>
+
+      {% if session.get('user') == 'kai' %}
+        <div class="divider" style="margin: 15px 0;"></div>
+        <p><strong>Admin Actions</strong></p>
+        <div class="collection" style="border: none;">
+          <a href="{{ url_for('wiki.new_page') }}" class="collection-item">New Page</a>
+        </div>
+      {% endif %}
+    </li>
+  </ul>
+
+  <main class="main-wrapper">
+    <div class="card" style="min-height: calc(100vh - 104px); margin: 0;">
+      <div class="card-content">
+        <span class="card-title">
+          {{ header_title }}
+          {% if page %}<small style="font-size: 0.6em;" class="grey-text text-darken-1">Last modified: {{ page['updated_at'] }}</small>{% endif %}
+        </span>
+
+        {% if current_slug %}
+          <div style="margin-bottom: 15px;">
+            <a href="{{ url_for('wiki.view_page', slug=current_slug) }}" class="btn-flat teal-text">Article</a>
+            <a href="{{ url_for('wiki.page_history', slug=current_slug) }}" class="btn-flat teal-text">View History</a>
+            {% if session.get('user') == 'kai' %}
+              <a href="{{ url_for('wiki.edit_page', slug=current_slug) }}" class="btn-flat teal-text">Edit</a>
+            {% endif %}
+          </div>
+          <div class="divider"></div>
+        {% endif %}
+
+        <div style="margin-top: 15px;">
+          {% block content %}{% endblock %}
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/static/js/materialize.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      var elems = document.querySelectorAll('.sidenav');
+      M.Sidenav.init(elems);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+{% extends "layouts/mods_base.html" %}
+
+{% block content %}
+  {% if error %}
+    <p class="error-msg">{{ error }}</p>
+  {% endif %}
+
+  <form action="{{ url_for('mods.upload') }}" method="post" enctype="multipart/form-data">
+    <div class="input-field">
+      <input type="text" id="name" name="name" required>
+      <label for="name">Mod Name</label>
+    </div>
+    <div class="input-field">
+      <select id="category" name="category" class="browser-default">
+        <option value="mod">Mod</option>
+        <option value="texture pack">Texture Pack</option>
+      </select>
+    </div>
+    <div class="input-field">
+      <input type="text" id="version" name="version" value="1.0.0">
+      <label for="version" class="active">Version</label>
+    </div>
+    <div class="input-field">
+      <textarea id="description" name="description" class="materialize-textarea" rows="6"></textarea>
+      <label for="description">Description</label>
+    </div>
+    <div class="file-field input-field">
+      <div class="btn teal">
+        <span>File (.zip)</span>
+        <input type="file" id="file" name="file" accept=".zip" required>
+      </div>
+      <div class="file-path-wrapper">
+        <input class="file-path validate" type="text" placeholder="Upload zip file (Max 50 MB)">
+      </div>
+    </div>
+    <button type="submit" class="btn waves-effect waves-light teal">Upload</button>
+    <a href="{{ url_for('mods.index') }}" class="btn-flat">Cancel</a>
+  </form>
+{% endblock %}

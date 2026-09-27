@@ -1,0 +1,25 @@
+{% extends "layouts/wiki_base.html" %}
+
+{% block content %}
+  <form action="{{ url_for('wiki.save_page') }}" method="post">
+    <div class="input-field">
+      {% if is_new %}
+        <input type="text" id="title" name="title" required>
+        <label for="title">Article Title</label>
+      {% else %}
+        <input type="text" id="title_display" value="{{ page['title'] }}" disabled>
+        <input type="hidden" id="title" name="title" value="{{ page['title'] }}">
+      {% endif %}
+    </div>
+    <div class="input-field">
+      <textarea id="content" name="content" class="materialize-textarea" rows="18" required>{{ page['content'] if page else '' }}</textarea>
+      <label for="content" class="active">Article Text (Use [[Page Title]] for wiki links)</label>
+    </div>
+    <div class="input-field">
+      <input type="text" id="summary" name="summary" placeholder="Describe changes">
+      <label for="summary" class="active">Edit Summary</label>
+    </div>
+    <button type="submit" class="btn waves-effect waves-light teal">Save Changes</button>
+    <a href="{{ url_for('wiki.view_page', slug=page['slug']) if page else url_for('wiki.index') }}" class="btn-flat">Cancel</a>
+  </form>
+{% endblock %}

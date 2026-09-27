@@ -1,0 +1,17 @@
+{% extends "layouts/wiki_base.html" %}
+
+{% block content %}
+  <p>Revision history for <strong>{{ page['title'] }}</strong>:</p>
+  <ul class="collection">
+    {% for rev in revisions %}
+      <li class="collection-item">
+        <strong>{{ rev['created_at'] }}</strong> - 
+        {% if rev['summary'] %}
+          {{ rev['summary'] }}
+        {% else %}
+          <em class="grey-text">no summary</em>
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+{% endblock %}
