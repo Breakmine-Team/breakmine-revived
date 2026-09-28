@@ -22,4 +22,10 @@
     <button type="submit" class="btn waves-effect waves-light teal">Register</button>
     <a href="/" class="btn-flat">Cancel</a>
   </form>
+
+  {% if discord_enabled %}
+    <div style="margin-top: 20px;">
+      <a href="{{ url_for('auth.discord_login') }}" class="btn waves-effect" style="background:#5865F2">Sign up with Discord</a>
+    </div>
+  {% endif %}
 {% endblock %}

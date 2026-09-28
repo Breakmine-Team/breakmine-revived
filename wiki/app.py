@@ -844,6 +844,7 @@ def serve(app, port, name):
 if __name__ == '__main__':
     reset_pw = '--reset-kai-password' in sys.argv
     init_db(force_reset_password=reset_pw)
+    print("Discord login: enabled" if discord_configured() else "Discord login: disabled (set DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET)")
     if '--init-only' in sys.argv:
         print("Database initialized. Exiting (--init-only).")
         sys.exit(0)
