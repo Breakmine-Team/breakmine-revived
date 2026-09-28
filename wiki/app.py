@@ -5,6 +5,7 @@ import os
 import sys
 import getpass
 import json
+import traceback
 import uuid
 import threading
 import time
@@ -302,6 +303,7 @@ def discord_callback():
         profile = discord_api('https://discord.com/api/v10/users/@me', token=token['access_token'])
         username = user_for_discord(str(profile['id']), profile.get('username') or 'discord')
     except Exception as e:
+        traceback.print_exc()
         return fail(f"Discord login failed: {e}", 502)
     session['user'] = username
     target = session.pop('discord_next', '/')
