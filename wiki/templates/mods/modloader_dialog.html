@@ -1,0 +1,106 @@
+<div id="modloader-dialog" class="modal" style="width: 550px;">
+  <div class="modal-content">
+    <h4>Select Version & Modloader</h4>
+    <div id="version-selector-container" style="margin-bottom: 20px;">
+      <label>Version</label>
+      <select id="version-select" class="browser-default">
+        <!-- Versions will be populated by JavaScript -->
+      </select>
+    </div>
+    <p>
+      <label>
+        <input class="with-gap" name="modloader" type="radio" value="Patchwork" checked />
+        <span class="black-text" id="modloader-dialog-text">Patchwork</span>
+      </label>
+    </p>
+    <p>
+      <label>
+        <input class="with-gap" name="modloader-codegraft" type="radio" value="CodeGraft" disabled />
+        <span class="black-text" id="modloader-dialog-text-off">CodeGraft (coming soon)</span>
+      </label>
+    </p>
+  </div>
+  <div class="modal-footer">
+    <a href="#!" class="modal-close btn-flat">Cancel</a>
+    <button type="button" class="btn waves-effect waves-light teal" onclick="confirmDownload()">Download</button>
+  </div>
+</div>
+
+<script>
+  let versions = [];
+  let downloadBaseUrl = null;
+
+  function openModloaderDialogFromData(button) {
+    const url = button.getAttribute('data-download-url');
+    const versionsScript = document.getElementById('mod-versions-data');
+    let availableVersions = null;
+    
+    if (versionsScript) {
+      try {
+        availableVersions = JSON.parse(versionsScript.textContent);
+      } catch (e) {
+        console.error('Failed to parse versions data:', e);
+        availableVersions = null;
+      }
+    }
+    
+    openModloaderDialog(url, availableVersions);
+  }
+
+  function openModloaderDialog(url, availableVersions) {
+    downloadBaseUrl = url;
+    versions = availableVersions || [];
+    
+    // Populate version selector
+    const versionSelect = document.getElementById('version-select');
+    const versionContainer = document.getElementById('version-selector-container');
+    versionSelect.innerHTML = '';
+    
+    if (versions.length > 0) {
+      versionContainer.style.display = 'block';
+      versions.forEach((ver, index) => {
+        const option = document.createElement('option');
+        option.value = ver.id;
+        option.textContent = `${ver.version} (${ver.file_size_formatted})`;
+        if (index === 0) option.selected = true;
+        versionSelect.appendChild(option);
+      });
+    } else {
+      versionContainer.style.display = 'none';
+    }
+    
+    // Reset radio buttons
+    document.querySelectorAll('input[name="modloader"]').forEach(radio => radio.checked = true);
+    
+    var modal = document.getElementById('modloader-dialog');
+    var instance = M.Modal.getInstance(modal);
+    if (!instance) { M.Modal.init(modal); instance = M.Modal.getInstance(modal); }
+    instance.open();
+  }
+
+  function confirmDownload() {
+    const selectedModloader = document.querySelector('input[name="modloader"]:checked');
+    if (!selectedModloader) {
+      alert('Please select a modloader');
+      return;
+    }
+    
+    let downloadUrl = downloadBaseUrl;
+    
+    // Only replace version ID if versions are available
+    if (versions.length > 0) {
+      const selectedVersionId = document.getElementById('version-select').value;
+      if (!selectedVersionId) {
+        alert('Please select a version');
+        return;
+      }
+      downloadUrl = downloadBaseUrl.replace(/\/v\/\d+$/, `/v/${selectedVersionId}`);
+    }
+    
+    window.location.href = downloadUrl;
+    
+    var modal = document.getElementById('modloader-dialog');
+    var instance = M.Modal.getInstance(modal);
+    if (instance) { instance.close(); }
+  }
+</script>

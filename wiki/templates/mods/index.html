@@ -26,7 +26,11 @@
           <td>{{ mod['file_size_formatted'] }}</td>
           <td>{{ mod['download_count'] }}</td>
           <td>
-            <a href="{{ url_for('mods.download_version', mod_id=mod['id'], ver_id=mod['latest_ver_id']) }}" class="btn btn-floating waves-effect waves-light teal btn-small" style="margin-right: 3px;"><i class="material-icons">download</i></a>
+            <button type="button" class="btn btn-floating waves-effect waves-light teal btn-small" style="margin-right: 3px;" 
+                    data-download-url="{{ url_for('mods.download_version', mod_id=mod['id'], ver_id=mod['latest_ver_id']) }}"
+                    onclick="openModloaderDialogFromData(this)">
+              <i class="material-icons">download</i>
+            </button>
             {% if mod['can_delete'] %}
               <a href="{{ url_for('mods.delete', mod_id=mod['id']) }}" class="btn btn-floating waves-effect waves-light red lighten-1 btn-small"><i class="material-icons">delete</i></a>
             {% endif %}
@@ -38,4 +42,6 @@
   {% else %}
     <p>No mods found.</p>
   {% endif %}
+
+  {% include "mods/modloader_dialog.html" %}
 {% endblock %}

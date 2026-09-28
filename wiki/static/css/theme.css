@@ -77,6 +77,26 @@ html[data-theme="dark"] .modal .modal-footer {
   border-top: 1px solid var(--divider);
 }
 
+html[data-theme="dark"] #modloader-dialog-text {
+  color: #fff !important;
+}
+
+html[data-theme="dark"] #modloader-dialog-text-off {
+  color: #555454 !important;
+  cursor: default !important;
+}
+
+html[data-theme="light"] #modloader-dialog-text-off {
+  color: #555454 !important;
+  cursor: default !important;
+}
+
+html[data-theme="dark"] [type="radio"]:not(:checked)[disabled]+span:before, 
+html[data-theme="dark"] [type="radio"]:not(:checked)[disabled]+span:after {
+  border: 2px solid #414040 !important;
+  cursor: default !important;
+}
+
 /* --- Navigation --------------------------------------------------------- */
 
 html[data-theme="dark"] .sidenav,
@@ -240,6 +260,10 @@ html[data-theme="dark"] table.highlight > tbody > tr:hover {
    surface, and both shades are !important. */
 html[data-theme="dark"] .grey-text.text-darken-1 {
   color: #b0b0b0 !important;
+}
+
+html[data-theme="dark"] .modal-footer .btn {
+  color: #fff !important;
 }
 
 html[data-theme="dark"] .card-content a {

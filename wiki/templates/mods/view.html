@@ -11,40 +11,29 @@
     <tr><th><i class="material-icons tiny" style="transform: translateY(2px);">description</i> Description</th><td>{% if mod['description'] %}<pre style="white-space: pre-wrap; margin:0; font-family: inherit;">{{ mod['description'] | e }}</pre>{% else %}<em class="grey-text">No description.</em>{% endif %}</td></tr>
   </table>
 
-  <div>
-    <h6>Versions</h6>
-    <ul class="collection">
-    {% for ver in versions %}
-    <li class="collection-item avatar">
-        <i class="material-icons circle teal">folder_zip</i>
-        <span class="title"><strong>{{ ver['version'] | e }}</strong></span>
-        <p>{{ ver['file_size_formatted'] }} <br>
-          <small class="grey-text">{{ ver['created_at'] }}</small>
-        </p>
-        <div style="display: flex; gap: 10px;" class="secondary-content">
-          {% if can_edit %}
-            <button type="button" class="btn-floating btn-large waves-effect red lighten-1" onclick="askDelete('{{ url_for('mods.delete_version', mod_id=mod['id'], ver_id=ver['id']) }}', 'Delete this version? Uploads of it will stop working.')">
-                <i class="material-icons">delete</i>
-            </button>
-          {% endif %}
-          <a class="btn-floating btn-large waves-effect teal" href="{{ url_for('mods.download_version', mod_id=mod['id'], ver_id=ver['id']) }}">
-            <i class="material-icons">file_download</i>
-        </a>
-        </div>
-    </li>
-    {% endfor %}
-    </ul>
+  {% if versions %}
+  <script type="application/json" id="mod-versions-data">{{ versions | tojson | safe }}</script>
+  <div style="position: fixed; top: 80px; right: 20px; display: flex; flex-direction: column; align-items: center; gap: 10px; z-index: 998;">
+    <button type="button" class="btn-floating btn-large green" 
+            data-download-url="{{ url_for('mods.download_version', mod_id=mod['id'], ver_id=versions[0]['id']) }}" 
+            onclick="openModloaderDialogFromData(this)">
+      <i class="material-icons">file_download</i>
+    </button>
     {% if can_edit %}
-      <a href="{{ url_for('mods.upload_version', mod_id=mod['id']) }}" class="btn waves-effect waves-light teal btn-small">Upload New Version</a>
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <a href="{{ url_for('mods.upload_version', mod_id=mod['id']) }}" class="btn-floating blue">
+        <i class="material-icons">add_box</i>
+      </a>
+      <a href="{{ url_for('mods.edit', mod_id=mod['id']) }}" class="btn-floating orange">
+        <i class="material-icons">edit</i>
+      </a>
+      <button type="button" class="btn-floating red" onclick="askDelete('{{ url_for('mods.delete', mod_id=mod['id']) }}', 'Delete this mod? This cannot be undone.')">
+        <i class="material-icons">delete</i>
+      </button>
+    </div>
     {% endif %}
   </div>
-
-  <div style="margin-top: 20px;">
-    {% if can_delete %}
-      <a href="{{ url_for('mods.edit', mod_id=mod['id']) }}" class="btn waves-effect waves-light teal btn-small">Edit Info</a>
-      <a href="{{ url_for('mods.delete', mod_id=mod['id']) }}" class="btn waves-effect waves-light red lighten-1 btn-small">Delete Mod</a>
-    {% endif %}
-  </div>
+  {% endif %}
 
   <div class="divider" style="margin: 25px 0;"></div>
 
@@ -92,6 +81,9 @@
       </div>
     </form>
   </div>
+
+  {% include "mods/modloader_dialog.html" %}
+
   <script>
     function askDelete(action, message) {
       var modal = document.getElementById('confirm-delete-modal');

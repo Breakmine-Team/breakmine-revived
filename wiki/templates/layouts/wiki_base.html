@@ -8,7 +8,9 @@
   <meta property="og:title" content="{{ page_title | e }} | Breakmine Wiki">
   <meta property="og:description" content="{{ meta_description | e }}">
   <meta property="og:type" content="website">
-  <title>{{ page_title | e }} | Breakmine Wiki</title>
+  <title>Wiki: {{ page_title | e }}</title>
+  <link rel="icon" type="image/x-icon" href="https://breakmine.com/src/resources/favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://breakmine.com/src/resources/favicon.ico">
   <script>
     // Runs before the first paint so the stored theme is already applied and
     // there is no light flash on a dark page. Mirrors the logic in theme.js.
@@ -37,6 +39,7 @@
       display: flex;
       flex-direction: column;
       min-height: 100vh;
+      overflow: hidden;
     }
 
     .navbar-sticky {
@@ -61,6 +64,8 @@
       padding: 20px;
       width: 100%;
       box-sizing: border-box;
+      overflow-y: auto;
+      height: calc(100vh - 64px);
     }
 
     @media only screen and (min-width: 993px) {
@@ -254,7 +259,7 @@
   </ul>
 
   <main class="main-wrapper">
-  <div class="card" style="min-height: calc(100vh - 104px); margin: 0;">
+  <div class="card" style="margin: 0;">
     <div class="card-content">
       <span class="card-title">
         {{ header_title }}
