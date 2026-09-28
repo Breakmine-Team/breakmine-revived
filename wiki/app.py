@@ -28,6 +28,8 @@ DEBUG = os.environ.get('WIKI_DEBUG', '').strip().lower() in ('1', 'true', 'yes',
 DISCORD_CLIENT_ID = os.environ.get('DISCORD_CLIENT_ID') or None
 DISCORD_CLIENT_SECRET = os.environ.get('DISCORD_CLIENT_SECRET') or None
 DISCORD_SCOPE = 'identify email'
+# Only for running the flow on http://localhost without a proxy in front.
+DISCORD_REDIRECT_BASE = os.environ.get('DISCORD_REDIRECT_BASE') or None
 ALLOWED_EXTENSIONS = {'zip'}
 MAX_FILE_SIZE = 50 * 1024 * 1024
 
@@ -74,9 +76,11 @@ def discord_configured():
     return bool(DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET)
 
 def discord_redirect_uri():
-    # Absolute URL on whichever host started the flow, so the same code serves
-    # both wiki.breakmine.com and mods.breakmine.com. Needs ProxyFix to see https.
-    return url_for('auth.discord_callback', _external=True)
+    # Discord only accepts https redirect URIs. Do not trust a proxy that still
+    # reports http (e.g. TLS not switched on yet) - that produces a URI Discord
+    # rejects outright. Override with DISCORD_REDIRECT_BASE for local testing.
+    if DISCORD_REDIRECT_BASE: return DISCORD_REDIRECT_BASE.rstrip('/') + '/callback'
+    return url_for('auth.discord_callback', _external=True, _scheme='https')
 
 def discord_api(url, data=None, token=None):
     body = urllib.parse.urlencode(data).encode() if data else None
