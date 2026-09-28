@@ -1,50 +1,38 @@
-# Root stack for the game: the auth/skin server (cors.js) plus the built client.
+# The whole breakmine site: the game client (nginx, :8000) and the auth/skin
+# API (cors.js, :6006) in a single container, with user data on a volume.
 #
 # This replaces the old Nixpacks deploy. Differences worth knowing:
 #   - tunnel.js (dev WebSocket tunnel on 6007) is no longer started.
 #   - the client is served statically from index.html; no vite build.
-#   - auth state persists in the auth_data volume; Nixpacks had no volume at all.
+#   - user data persists in the app_data volume. Nixpacks had no volume at all,
+#     so every redeploy used to regenerate the JWT secret and orphan auth.db.
 #
-# Routing: the game keeps its original host port 8080 (container 8000); the auth
-# server is reachable on container port 6006 only. No traefik labels on purpose --
-# both Dokploy and Coolify route by domain, so point each domain at the container
-# port and let the panel own TLS:
-#   <game domain>  -> 8000  (client, published on host 8080)
-#   <auth domain>  -> 6006  (cors.js API)
+# Routing: no traefik labels on purpose -- both Dokploy and Coolify route by
+# domain, so point each domain at the container port and let the panel own TLS:
+#   breakmine.com   -> 8000  (game client, published on host 8080)
+#   api.breakmine.com -> 6006 (cors.js API)
 
 name: breakmine
 
 services:
-  auth:
+  app:
     build:
       context: .
       dockerfile: Dockerfile
-    image: breakmine-auth:latest
+    image: breakmine:latest
     restart: unless-stopped
     environment:
       DATA_DIR: /data
       PORT: "6006"
     volumes:
       # Accounts (auth.db), the JWT secret and uploaded skins live here.
-      # Losing this volume signs everyone out and orphans every skin.
-      - auth_data:/data
-    expose:
-      - "6006"
-
-  web:
-    # Plain static hosting: index.html + src/ + libraries/, no vite build.
-    # src/resources.js is generated in-image because it is gitignored.
-    build:
-      context: .
-      dockerfile: Dockerfile.client
-    image: breakmine-client:latest
-    restart: unless-stopped
-    # nginx listens on 8000 from the image's own config; no runtime patching.
+      - app_data:/data
     ports:
       - "8080:8000"
     expose:
       - "8000"
+      - "6006"
 
 volumes:
-  auth_data:
-    name: breakmine-auth-data
+  app_data:
+    name: breakmine-data
