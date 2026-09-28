@@ -8,6 +8,7 @@
           <th><i class="material-icons tiny" style="transform: translateY(2px);">badge</i> Name</th>
           <th><i class="material-icons tiny" style="transform: translateY(2px);">category</i> Category</th>
           <th><i class="material-icons tiny" style="transform: translateY(2px);">history</i> Version</th>
+          <th><i class="material-icons tiny" style="transform: translateY(2px);">extension</i> Min Patchwork</th>
           <th><i class="material-icons tiny" style="transform: translateY(2px);">person</i> Author</th>
           <th><i class="material-icons tiny" style="transform: translateY(2px);">folder_zip</i> Size</th>
           <th><i class="material-icons tiny" style="transform: translateY(2px);">download</i> Downloads</th>
@@ -20,6 +21,7 @@
           <td><a href="{{ url_for('mods.view', mod_id=mod['id']) }}"><strong>{{ mod['name'] | e }}</strong></a></td>
           <td>{{ mod['category'] | e }}</td>
           <td>{{ mod['version'] | e }}</td>
+          <td>{% if mod['min_patchwork'] %}{{ mod['min_patchwork'] }}{% else %}<span class="grey-text">any</span>{% endif %}</td>
           <td>{{ mod['uploaded_by'] | e }}</td>
           <td>{{ mod['file_size_formatted'] }}</td>
           <td>{{ mod['download_count'] }}</td>

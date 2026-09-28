@@ -5,6 +5,7 @@
     <tr><th><i class="material-icons tiny" style="transform: translateY(2px);">category</i> Category</th><td>{{ mod['category'] | e }}</td></tr>
     <tr><th><i class="material-icons tiny" style="transform: translateY(2px);">person</i> Author</th><td>{{ mod['uploaded_by'] | e }}</td></tr>
     <tr><th><i class="material-icons tiny" style="transform: translateY(2px);">history</i> Current Version</th><td>{{ mod['version'] | e }}</td></tr>
+    <tr><th><i class="material-icons tiny" style="transform: translateY(2px);">extension</i> Min Patchwork</th><td>{% if mod['min_patchwork'] %}{{ mod['min_patchwork'] }}{% else %}<em class="grey-text">Any version</em>{% endif %}</td></tr>
     <tr><th><i class="material-icons tiny" style="transform: translateY(2px);">download</i> Downloads</th><td>{{ mod['download_count'] }}</td></tr>
     <tr><th><i class="material-icons tiny" style="transform: translateY(2px);">calendar_today</i> Uploaded</th><td>{{ mod['created_at'] }}</td></tr>
     <tr><th><i class="material-icons tiny" style="transform: translateY(2px);">description</i> Description</th><td>{% if mod['description'] %}<pre style="white-space: pre-wrap; margin:0; font-family: inherit;">{{ mod['description'] | e }}</pre>{% else %}<em class="grey-text">No description.</em>{% endif %}</td></tr>
@@ -22,11 +23,9 @@
         </p>
         <div style="display: flex; gap: 10px;" class="secondary-content">
           {% if can_edit %}
-            <form action="{{ url_for('mods.delete_version', mod_id=mod['id'], ver_id=ver['id']) }}" method="post" onsubmit="return confirm('Delete this version?');">
-              <button type="submit" class="btn-floating btn-large waves-effect red lighten-1">
-                  <i class="material-icons">delete</i>
-              </button>
-            </form>
+            <button type="button" class="btn-floating btn-large waves-effect red lighten-1" onclick="askDelete('{{ url_for('mods.delete_version', mod_id=mod['id'], ver_id=ver['id']) }}', 'Delete this version? Uploads of it will stop working.')">
+                <i class="material-icons">delete</i>
+            </button>
           {% endif %}
           <a class="btn-floating btn-large waves-effect teal" href="{{ url_for('mods.download_version', mod_id=mod['id'], ver_id=ver['id']) }}">
             <i class="material-icons">file_download</i>
@@ -70,36 +69,37 @@
         <div style="font-size: 0.85em;" class="grey-text text-darken-1">
           <strong>{{ c['author'] | e }}</strong> at {{ c['created_at'] }}
           {% if can_delete or c['author'] == session.get('user') %}
-            <button type="button" class="grey-text right" style="background: none; border: none; padding: 0; cursor: pointer;" onclick="askDeleteComment('{{ url_for('mods.delete_comment', mod_id=mod['id'], comment_id=c['id']) }}')"><i class="material-icons">delete</i></button>
+            <button type="button" class="grey-text right" style="background: none; border: none; padding: 0; cursor: pointer;" onclick="askDelete('{{ url_for('mods.delete_comment', mod_id=mod['id'], comment_id=c['id']) }}', 'Delete this comment? This cannot be undone.')"><i class="material-icons">delete</i></button>
           {% endif %}
         </div>
         <div style="white-space: pre-wrap; margin-top: 5px;">{{ c['content'] | e }}</div>
       </li>
     {% endfor %}
     </ul>
-
-    <div id="delete-comment-modal" class="modal">
-      <form id="delete-comment-form" method="post">
-        <div class="modal-content">
-          <h4>Delete comment</h4>
-          <p>Delete this comment? This cannot be undone.</p>
-        </div>
-        <div class="modal-footer">
-          <a href="#!" class="modal-close btn-flat">Cancel</a>
-          <button type="submit" class="btn waves-effect waves-light red">Delete</button>
-        </div>
-      </form>
-    </div>
-    <script>
-      function askDeleteComment(action) {
-        var modal = document.getElementById('delete-comment-modal');
-        document.getElementById('delete-comment-form').action = action;
-        var instance = M.Modal.getInstance(modal);
-        if (!instance) { M.Modal.init(modal); instance = M.Modal.getInstance(modal); }
-        instance.open();
-      }
-    </script>
   {% else %}
     <p><em class="grey-text">No comments yet.</em></p>
   {% endif %}
+
+  <div id="confirm-delete-modal" class="modal">
+    <form id="confirm-delete-form" method="post">
+      <div class="modal-content">
+        <h4>Are you sure?</h4>
+        <p id="confirm-delete-message">This cannot be undone.</p>
+      </div>
+      <div class="modal-footer">
+        <a href="#!" class="modal-close btn-flat">Cancel</a>
+        <button type="submit" class="btn waves-effect waves-light red">Delete</button>
+      </div>
+    </form>
+  </div>
+  <script>
+    function askDelete(action, message) {
+      var modal = document.getElementById('confirm-delete-modal');
+      document.getElementById('confirm-delete-form').action = action;
+      document.getElementById('confirm-delete-message').textContent = message;
+      var instance = M.Modal.getInstance(modal);
+      if (!instance) { M.Modal.init(modal); instance = M.Modal.getInstance(modal); }
+      instance.open();
+    }
+  </script>
 {% endblock %}

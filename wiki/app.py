@@ -71,6 +71,13 @@ def format_file_size(size_bytes):
     elif size_bytes < 1024 * 1024: return f"{size_bytes / 1024:.1f} KB"
     else: return f"{size_bytes / (1024 * 1024):.1f} MB"
 
+MAX_MIN_PATCHWORK_LEN = 20
+
+def clean_min_patchwork(value):
+    """Minimum Patchwork version string, e.g. 1.3.2-beta. Blank means no minimum; None means too long."""
+    value = (value or '').strip()
+    return value if len(value) <= MAX_MIN_PATCHWORK_LEN else None
+
 def get_db():
     conn = sqlite3.connect(DB_PATH, timeout=10.0)
     conn.row_factory = sqlite3.Row
@@ -106,6 +113,11 @@ def init_db(force_reset_password=False):
     try: cursor.execute("SELECT category FROM mods LIMIT 0")
     except sqlite3.OperationalError:
         cursor.execute("ALTER TABLE mods ADD COLUMN category TEXT DEFAULT 'mod'")
+        conn.commit()
+
+    try: cursor.execute("SELECT min_patchwork FROM mods LIMIT 0")
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE mods ADD COLUMN min_patchwork TEXT DEFAULT ''")
         conn.commit()
 
     cursor.execute('SELECT username FROM users WHERE username = ?', ('kai',))
@@ -380,7 +392,7 @@ def index():
     db = get_db()
     rows = db.execute(sql, params).fetchall(); db.close()
     user = session.get('user')
-    mods = [{'id':r['id'], 'name':r['name'], 'category':r['category'], 'version':r['version'], 'uploaded_by':r['uploaded_by'], 'file_size_formatted':format_file_size(r['file_size']), 'download_count':r['download_count'], 'latest_ver_id':r['latest_ver_id'], 'can_delete':_can_manage(user, r['uploaded_by'])} for r in rows]
+    mods = [{'id':r['id'], 'name':r['name'], 'category':r['category'], 'version':r['version'], 'min_patchwork':r['min_patchwork'], 'uploaded_by':r['uploaded_by'], 'file_size_formatted':format_file_size(r['file_size']), 'download_count':r['download_count'], 'latest_ver_id':r['latest_ver_id'], 'can_delete':_can_manage(user, r['uploaded_by'])} for r in rows]
     meta_desc = "Browse and download community mods and texture packs for Breakmine: Revived."
     if q: meta_desc = f"Search results for '{q}' in Breakmine mods."
     return render_template(
@@ -407,10 +419,12 @@ def upload():
     name = request.form.get('name', '').strip()
     category = 'mod' if request.form.get('category') != 'texture pack' else 'texture pack'
     version = request.form.get('version', '1.0.0').strip() or '1.0.0'
+    min_patchwork = clean_min_patchwork(request.form.get('min_patchwork'))
     desc = request.form.get('description', '').strip()
     file = request.files.get('file')
     error = None
     if not name: error = "Name required."
+    elif min_patchwork is None: error = "Minimum Patchwork version must be 20 characters or fewer."
     elif not file or file.filename == '': error = "No file."
     elif not allowed_file(file.filename): error = "Only .zip allowed."
     else:
@@ -421,7 +435,7 @@ def upload():
             fname = f"{uuid.uuid4().hex}.zip"
             with open(os.path.join(UPLOAD_FOLDER, fname), 'wb') as f: f.write(data)
             db = get_db()
-            mid = db.execute('INSERT INTO mods (name, category, version, description, uploaded_by) VALUES (?, ?, ?, ?, ?)', (name, category, version, desc, session['user'])).lastrowid
+            mid = db.execute('INSERT INTO mods (name, category, version, min_patchwork, description, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)', (name, category, version, min_patchwork, desc, session['user'])).lastrowid
             db.execute('INSERT INTO mod_versions (mod_id, version, filename, original_filename, file_size, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)', (mid, version, fname, file.filename, len(data), session['user']))
             db.commit(); db.close()
             return redirect(url_for('mods.index'))
@@ -484,10 +498,12 @@ def edit(mod_id):
         )
     name = request.form.get('name', '').strip()
     category = 'mod' if request.form.get('category') != 'texture pack' else 'texture pack'
+    min_patchwork = clean_min_patchwork(request.form.get('min_patchwork'))
     desc = request.form.get('description', '').strip()
     error = None if name else "Name required."
+    if not error and min_patchwork is None: error = "Minimum Patchwork version must be 20 characters or fewer."
     if not error:
-        db.execute('UPDATE mods SET name=?, category=?, description=? WHERE id=?', (name, category, desc, mod_id))
+        db.execute('UPDATE mods SET name=?, category=?, min_patchwork=?, description=? WHERE id=?', (name, category, min_patchwork, desc, mod_id))
         db.commit(); db.close()
         return redirect(url_for('mods.view', mod_id=mod_id))
     db.close()
