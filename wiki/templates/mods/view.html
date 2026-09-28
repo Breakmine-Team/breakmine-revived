@@ -70,15 +70,35 @@
         <div style="font-size: 0.85em;" class="grey-text text-darken-1">
           <strong>{{ c['author'] | e }}</strong> at {{ c['created_at'] }}
           {% if can_delete or c['author'] == session.get('user') %}
-            <form action="{{ url_for('mods.delete_comment', mod_id=mod['id'], comment_id=c['id']) }}" method="post" onsubmit="return confirm('Delete?');" class="right">
-              <button type="submit" class="grey-text" style="background: none; border: none; padding: 0; cursor: pointer;"><i class="material-icons">delete</i></button>
-            </form>
+            <button type="button" class="grey-text right" style="background: none; border: none; padding: 0; cursor: pointer;" onclick="askDeleteComment('{{ url_for('mods.delete_comment', mod_id=mod['id'], comment_id=c['id']) }}')"><i class="material-icons">delete</i></button>
           {% endif %}
         </div>
         <div style="white-space: pre-wrap; margin-top: 5px;">{{ c['content'] | e }}</div>
       </li>
     {% endfor %}
     </ul>
+
+    <div id="delete-comment-modal" class="modal">
+      <form id="delete-comment-form" method="post">
+        <div class="modal-content">
+          <h4>Delete comment</h4>
+          <p>Delete this comment? This cannot be undone.</p>
+        </div>
+        <div class="modal-footer">
+          <a href="#!" class="modal-close btn-flat">Cancel</a>
+          <button type="submit" class="btn waves-effect waves-light red">Delete</button>
+        </div>
+      </form>
+    </div>
+    <script>
+      function askDeleteComment(action) {
+        var modal = document.getElementById('delete-comment-modal');
+        document.getElementById('delete-comment-form').action = action;
+        var instance = M.Modal.getInstance(modal);
+        if (!instance) { M.Modal.init(modal); instance = M.Modal.getInstance(modal); }
+        instance.open();
+      }
+    </script>
   {% else %}
     <p><em class="grey-text">No comments yet.</em></p>
   {% endif %}
