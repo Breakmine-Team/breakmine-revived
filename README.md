@@ -1,7 +1,7 @@
 # Minecraft recode in JavaScript (Breakmine: Revived)
 
 ### IMPORTANT
-Before running the game, *make sure* you type: `node scripts/build-assets.js`!!!
+Before running the game, *make sure* you type: `node scripts/build-assets.js`!
 
 ### Licensing
 - The main rendering library is [three.js](https://github.com/mrdoob/three.js/)
