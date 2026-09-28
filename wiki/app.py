@@ -142,9 +142,20 @@ wiki_bp = Blueprint('wiki', __name__)
 mods_bp = Blueprint('mods', __name__)
 tempmod_bp = Blueprint('tempmod', __name__)
 
-@auth_bp.route('/login', methods=['POST'])
+@auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     base_layout = 'layouts/mods_base.html' if current_app.config.get('IS_MODS_APP') else 'layouts/wiki_base.html'
+    if request.method == 'GET':
+        # Reached by redirect from the login-gated routes, so it has to answer GET.
+        return render_template(
+            'auth/login.html',
+            page_title="Login",
+            header_title="Login",
+            current_slug=None,
+            page=None,
+            meta_description="Log in to Breakmine.",
+            error=None
+        )
     username = request.form.get('username', '').strip()
     password = request.form.get('password', '')
     if not username or not password:
