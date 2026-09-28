@@ -1,0 +1,27 @@
+# Game client, served as plain static files.
+#
+# index.html is already a native-ESM entry point (<script type="module"
+# src="src/js/Start.js">) and the source tree has no bare npm imports, so no
+# bundler is required. Skip the vite build entirely.
+
+# ---- asset generation stage --------------------------------------------------
+FROM node:24-slim AS assets
+
+WORKDIR /app
+
+# src/resources.js (7 MB) and src/js/assetManifest.js are generated from the
+# source tree by scripts/build-assets.js and are gitignored, so a fresh checkout
+# cannot serve the client without this step. The script uses only node builtins,
+# so no npm install is needed here.
+COPY scripts/ ./scripts/
+COPY src/ ./src/
+RUN node scripts/build-assets.js
+
+# ---- serve stage -------------------------------------------------------------
+FROM nginx:1.27-alpine
+
+COPY --from=assets /app/src/ /usr/share/nginx/html/src/
+COPY index.html style.css /usr/share/nginx/html/
+COPY libraries/ /usr/share/nginx/html/libraries/
+
+EXPOSE 80

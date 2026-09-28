@@ -1,10 +1,15 @@
 # Root stack for the game: the auth/skin server (cors.js) plus the built client.
 #
+# This replaces the old Nixpacks deploy. Differences worth knowing:
+#   - tunnel.js (dev WebSocket tunnel on 6007) is no longer started.
+#   - the client is served statically from index.html; no vite build.
+#   - auth state persists in the auth_data volume; Nixpacks had no volume at all.
+#
 # Routing: the game keeps its original host port 8080 (container 8000); the auth
 # server is reachable on container port 6006 only. No traefik labels on purpose --
 # both Dokploy and Coolify route by domain, so point each domain at the container
 # port and let the panel own TLS:
-#   <game domain>  -> 8000  (built client in dist/, published on host 8080)
+#   <game domain>  -> 8000  (client, published on host 8080)
 #   <auth domain>  -> 6006  (cors.js API)
 
 name: breakmine
@@ -27,12 +32,13 @@ services:
       - "6006"
 
   web:
-    # Serves the built client only. The previous config ran http.server over the
-    # whole repo, which published data/secrets.json and data/auth.db.
-    image: nginx:1.27-alpine
+    # Plain static hosting: index.html + src/ + libraries/, no vite build.
+    # src/resources.js is generated in-image because it is gitignored.
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    image: breakmine-client:latest
     restart: unless-stopped
-    volumes:
-      - ./dist:/usr/share/nginx/html:ro
     # nginx listens on 8000, the port the old http.server used, so existing
     # domain -> 8000 routing keeps working. Host mapping stays 8080:8000.
     command: >
