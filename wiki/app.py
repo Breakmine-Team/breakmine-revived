@@ -13,7 +13,7 @@ from datetime import datetime
 import urllib.error
 import urllib.parse
 import urllib.request
-from flask import Flask, Blueprint, Response, request, redirect, url_for, session, render_template, send_file, current_app
+from flask import Flask, Blueprint, Response, request, redirect, url_for, session, render_template, send_file, current_app, jsonify
 from markupsafe import escape
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.serving import run_simple
@@ -753,6 +753,115 @@ def delete_comment(mod_id, comment_id):
     db.execute('DELETE FROM mod_comments WHERE id=?', (comment_id,)); db.commit(); db.close()
     return redirect(url_for('mods.view', mod_id=mod_id))
 
+# --- PUBLIC JSON API ---
+# Read-only and unauthenticated, so the game client (and anyone else) can read
+# the catalogue without a session. Registered on the mods app only, so these
+# live on the same host as the download URLs they hand out. Errors come back as
+# JSON too, so a client never has to parse Flask's default HTML error page.
+api_bp = Blueprint('api', __name__)
+
+# Newest version of each mod. Same join the HTML index uses, so the API and the
+# page never disagree about which version is current. Mods always have at least
+# one version (the last one cannot be deleted), so this drops nothing.
+_LATEST_JOIN = '''FROM mods m JOIN mod_versions v ON m.id = v.mod_id
+                 WHERE v.id = (SELECT id FROM mod_versions WHERE mod_id = m.id ORDER BY created_at DESC LIMIT 1)'''
+
+CATEGORIES = ('mod', 'texture pack')
+
+def _api_error(message, status):
+    return jsonify({'error': message}), status
+
+def _mod_summary(r):
+    """One row of the _LATEST_JOIN query, as used by list and search."""
+    return {
+        'id': r['id'],
+        'name': r['name'],
+        'category': r['category'],
+        'version': r['version'],
+        'min_patchwork': r['min_patchwork'] or None,
+        'description': r['description'] or '',
+        'author': r['uploaded_by'],
+        'downloads': r['download_count'],
+        'file_size': r['file_size'],
+        'file_size_formatted': format_file_size(r['file_size']),
+        'created_at': r['created_at'],
+        'url': url_for('mods.view', mod_id=r['id'], _external=True),
+        'download_url': url_for('mods.download_version', mod_id=r['id'], ver_id=r['latest_ver_id'], _external=True),
+    }
+
+def _mods_json(q, cat):
+    sql = 'SELECT m.*, v.id as latest_ver_id, v.file_size ' + _LATEST_JOIN
+    params = []
+    if cat:
+        if cat not in CATEGORIES:
+            return _api_error(f"Unknown category '{cat}'. Expected 'mod' or 'texture pack'.", 400)
+        sql += " AND m.category = ?"; params.append(cat)
+    if q:
+        sql += " AND (m.name LIKE ? OR m.description LIKE ?)"; params.extend([f'%{q}%', f'%{q}%'])
+    sql += " ORDER BY m.created_at DESC"
+    db = get_db()
+    rows = db.execute(sql, params).fetchall(); db.close()
+    mods = [_mod_summary(r) for r in rows]
+    return jsonify({'count': len(mods), 'mods': mods})
+
+@api_bp.route('/api/mods')
+def mods_list():
+    # Same optional filters as the HTML index, so a client can page through
+    # everything or through one category with the same URL shape.
+    return _mods_json(request.args.get('q', '').strip(), request.args.get('cat', '').strip())
+
+@api_bp.route('/api/mods/search')
+def mods_search():
+    q = request.args.get('q', '').strip()
+    if not q: return _api_error('Missing required query parameter: q', 400)
+    return _mods_json(q, request.args.get('cat', '').strip())
+
+@api_bp.route('/api/mods/<int:mod_id>/files')
+def mod_files(mod_id):
+    db = get_db()
+    mod = db.execute('SELECT id, name, version FROM mods WHERE id=?', (mod_id,)).fetchone()
+    if not mod:
+        db.close()
+        return _api_error('Mod not found', 404)
+    rows = db.execute('SELECT * FROM mod_versions WHERE mod_id=? ORDER BY created_at DESC', (mod_id,)).fetchall()
+    db.close()
+    latest_id = rows[0]['id'] if rows else None
+    files = [{
+        'version': v['version'],
+        'url': url_for('mods.download_version', mod_id=mod_id, ver_id=v['id'], _external=True),
+        'filename': v['original_filename'],
+        'file_size': v['file_size'],
+        'file_size_formatted': format_file_size(v['file_size']),
+        'created_at': v['created_at'],
+        'latest': v['id'] == latest_id,
+    } for v in rows]
+    return jsonify({
+        'mod': {'id': mod['id'], 'name': mod['name'], 'version': mod['version']},
+        'count': len(files),
+        'files': files,
+    })
+
+@api_bp.route('/api/mods/<int:mod_id>/comments')
+def mod_comments(mod_id):
+    db = get_db()
+    mod = db.execute('SELECT id, name FROM mods WHERE id=?', (mod_id,)).fetchone()
+    if not mod:
+        db.close()
+        return _api_error('Mod not found', 404)
+    rows = db.execute('SELECT id, author, content, created_at FROM mod_comments WHERE mod_id=? ORDER BY created_at ASC', (mod_id,)).fetchall()
+    db.close()
+    comments = [{
+        'id': r['id'],
+        'author': r['author'],
+        'content': r['content'],
+        'created_at': r['created_at'],
+    } for r in rows]
+    return jsonify({
+        'mod': {'id': mod['id'], 'name': mod['name']},
+        'count': len(comments),
+        'comments': comments,
+    })
+
 # --- TEMP MOD ROUTES ---
 
 @tempmod_bp.route('/tempmod/upload/<id>', methods=['POST', 'OPTIONS'])
@@ -829,9 +938,13 @@ mods_app.config['IS_MODS_APP'] = True
 mods_app.wsgi_app = behind_proxy(mods_app.wsgi_app)
 mods_app.jinja_env.globals['discord_enabled'] = discord_configured()
 mods_app.jinja_env.globals['theme_asset_version'] = THEME_ASSET_VERSION
+# Mod names and comments are user-typed, so send them as real UTF-8 rather
+# than \uXXXX escapes.
+mods_app.json.ensure_ascii = False
 mods_app.register_blueprint(auth_bp)
 mods_app.register_blueprint(mods_bp)
 mods_app.register_blueprint(tempmod_bp)
+mods_app.register_blueprint(api_bp)
 
 # --- CORS HANDLERS ---
 def add_cors_headers(response):

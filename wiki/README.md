@@ -150,6 +150,34 @@ How accounts work:
   the wiki, point its `discord_id` at the `kai` row or keep using the password.
 - The `email` scope is requested but not stored - there is no email column.
 
+## Public JSON API
+
+Read-only and unauthenticated, on the mods host only (`mods.breakmine.com`), so
+the game client and anything else can read the catalogue without a session. CORS
+is open like the rest of the mods app. Errors are JSON too - `{"error": "..."}`
+with a matching status - so a client never has to parse an HTML error page.
+
+| Endpoint                    | Returns                                    |
+| --------------------------- | ------------------------------------------ |
+| `GET /api/mods`             | `{"count", "mods"}` - newest first         |
+| `GET /api/mods/search`      | same, but `q` is required (400 without it) |
+| `GET /api/mods/<id>/files`  | `{"mod", "count", "files"}` - per version   |
+| `GET /api/mods/<id>/comments` | `{"mod", "count", "comments"}`           |
+
+`/api/mods` and `/api/mods/search` both take optional `cat` (`mod` or
+`texture pack`, 400 on anything else) and `q` (matched against name and
+description). Each entry in `mods` carries `url` and `download_url` as absolute
+URLs; `/files` gives one `url` per version with `latest: true` on the current
+one. Fetching a `download_url` is what increments `downloads` - reading the API
+does not.
+
+```sh
+curl https://mods.breakmine.com/api/mods
+curl 'https://mods.breakmine.com/api/mods/search?q=zoom'
+curl https://mods.breakmine.com/api/mods/1/files
+curl https://mods.breakmine.com/api/mods/1/comments
+```
+
 ## Run without Docker
 
 ```sh
