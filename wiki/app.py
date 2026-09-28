@@ -10,6 +10,7 @@ import uuid
 import threading
 import time
 from datetime import datetime
+import urllib.error
 import urllib.parse
 import urllib.request
 from flask import Flask, Blueprint, Response, request, redirect, url_for, session, render_template, send_file, current_app
@@ -86,9 +87,16 @@ def discord_redirect_uri():
 def discord_api(url, data=None, token=None):
     body = urllib.parse.urlencode(data).encode() if data else None
     req = urllib.request.Request(url, data=body)
+    # Discord's edge returns 403 for the default Python-urllib agent.
+    req.add_header('User-Agent', 'Breakmine-Wiki (+https://wiki.breakmine.com)')
     if token: req.add_header('Authorization', f'Bearer {token}')
-    with urllib.request.urlopen(req, timeout=10) as resp:
-        return json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        # Surface Discord's own error body, otherwise it is just "403 Forbidden".
+        detail = e.read().decode('utf-8', 'replace')[:300]
+        raise RuntimeError(f"Discord API {e.code} {e.reason}: {detail}") from None
 
 def user_for_discord(discord_id, discord_username):
     """Local account for a Discord identity, created on first login.
