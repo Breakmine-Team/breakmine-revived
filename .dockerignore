@@ -1,0 +1,29 @@
+# Keep the build context small: these are large and none of them are needed to
+# build or run the auth server.
+node_modules
+.git
+.gitignore
+
+# Runtime state. Never bake this into an image -- it holds auth.db (password
+# hashes) and secrets.json (the JWT signing secret).
+data
+
+# Game client build output and unrelated project trees.
+dist
+dist-single
+example_mods
+objects
+players
+repo
+scripts
+studio
+worlds
+wiki
+
+# Local config and noise.
+.env
+*.log
+npm-debug.log*
+.DS_Store
+.vscode
+.idea

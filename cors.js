@@ -14,11 +14,14 @@ const { v4: uuidv4 } = require('uuid');
 const sharp = require('sharp');
 const Logger = require('./src/js/net/minecraft/server/logger.js').default;
 
-const SECRETS_FILE = './data/secrets.json';
+// All runtime state lives here: auth.db, secrets.json and uploaded skins.
+// Docker mounts a volume over DATA_DIR so accounts and sessions survive rebuilds.
+const DATA_DIR = process.env.DATA_DIR || path.resolve(__dirname, 'data');
+const SECRETS_FILE = path.join(DATA_DIR, 'secrets.json');
 
 function loadOrCreateSecrets() {
-    fs.mkdirSync('./data', { recursive: true });
-    fs.mkdirSync('./data/skins', { recursive: true });
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.mkdirSync(path.join(DATA_DIR, 'skins'), { recursive: true });
 
     if (fs.existsSync(SECRETS_FILE)) {
         const secrets = JSON.parse(fs.readFileSync(SECRETS_FILE, 'utf8'));
@@ -39,13 +42,13 @@ function loadOrCreateSecrets() {
 
 const secrets = loadOrCreateSecrets();
 
-const PORT = 6006;
+const PORT = Number(process.env.PORT) || 6006;
 const JWT_EXPIRES_IN = '7d';
 const BCRYPT_ROUNDS = 12;
 const MAX_SKIN_SIZE = 256 * 1024;
-const UPLOAD_DIR = path.resolve(__dirname, 'data', 'skins');
+const UPLOAD_DIR = path.join(DATA_DIR, 'skins');
 
-const db = new Database('./data/auth.db');
+const db = new Database(path.join(DATA_DIR, 'auth.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('busy_timeout = 5000');
 

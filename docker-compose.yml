@@ -1,9 +1,48 @@
+# Root stack for the game: the auth/skin server (cors.js) plus the built client.
+#
+# Routing: the game keeps its original host port 8080 (container 8000); the auth
+# server is reachable on container port 6006 only. No traefik labels on purpose --
+# both Dokploy and Coolify route by domain, so point each domain at the container
+# port and let the panel own TLS:
+#   <game domain>  -> 8000  (built client in dist/, published on host 8080)
+#   <auth domain>  -> 6006  (cors.js API)
+
+name: breakmine
+
 services:
+  auth:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: breakmine-auth:latest
+    restart: unless-stopped
+    environment:
+      DATA_DIR: /data
+      PORT: "6006"
+    volumes:
+      # Accounts (auth.db), the JWT secret and uploaded skins live here.
+      # Losing this volume signs everyone out and orphans every skin.
+      - auth_data:/data
+    expose:
+      - "6006"
+
   web:
-    image: python:3.11-alpine
+    # Serves the built client only. The previous config ran http.server over the
+    # whole repo, which published data/secrets.json and data/auth.db.
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./dist:/usr/share/nginx/html:ro
+    # nginx listens on 8000, the port the old http.server used, so existing
+    # domain -> 8000 routing keeps working. Host mapping stays 8080:8000.
+    command: >
+      sh -c "sed -i 's/80;/8000;/g' /etc/nginx/conf.d/default.conf &&
+      exec nginx -g 'daemon off;'"
     ports:
       - "8080:8000"
-    volumes:
-      - .:/app
-    working_dir: /app
-    command: python3 -m http.server 8000
+    expose:
+      - "8000"
+
+volumes:
+  auth_data:
+    name: breakmine-auth-data
