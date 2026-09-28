@@ -1,38 +1,45 @@
-# The whole breakmine site: the game client (nginx, :8000) and the auth/skin
-# API (cors.js, :6006) in a single container, with user data on a volume.
+# The game client plus the auth/skin API.
 #
-# This replaces the old Nixpacks deploy. Differences worth knowing:
-#   - tunnel.js (dev WebSocket tunnel on 6007) is no longer started.
-#   - the client is served statically from index.html; no vite build.
-#   - user data persists in the app_data volume. Nixpacks had no volume at all,
-#     so every redeploy used to regenerate the JWT secret and orphan auth.db.
+#   web   :8000  the client, served from the checkout (published on host 8080)
+#   auth  :6006  cors.js, with user data on a volume
 #
-# Routing: no traefik labels on purpose -- both Dokploy and Coolify route by
-# domain, so point each domain at the container port and let the panel own TLS:
-#   breakmine.com   -> 8000  (game client, published on host 8080)
-#   api.breakmine.com -> 6006 (cors.js API)
+# No traefik labels on purpose -- both Dokploy and Coolify route by domain, so
+# point each domain at the container port and let the panel own TLS:
+#   breakmine.com     -> 8000
+#   api.breakmine.com -> 6006
+#
+# One caveat on `web`: it serves the whole checkout, so /data (auth.db and
+# secrets.json) is reachable over HTTP on port 8080. Serve only the client
+# directory if that port is ever exposed publicly.
 
 name: breakmine
 
 services:
-  app:
+  web:
+    image: python:3.11-alpine
+    ports:
+      - "8080:8000"
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: python3 -m http.server 8000
+
+  auth:
     build:
       context: .
       dockerfile: Dockerfile
-    image: breakmine:latest
+    image: breakmine-auth:latest
     restart: unless-stopped
     environment:
       DATA_DIR: /data
       PORT: "6006"
     volumes:
-      # Accounts (auth.db), the JWT secret and uploaded skins live here.
-      - app_data:/data
-    ports:
-      - "8080:8000"
+      # Accounts (auth.db), the JWT secret and uploaded skins. Losing this
+      # volume signs everyone out and orphans every uploaded skin.
+      - auth_data:/data
     expose:
-      - "8000"
       - "6006"
 
 volumes:
-  app_data:
-    name: breakmine-data
+  auth_data:
+    name: breakmine-auth-data
