@@ -16,8 +16,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --no-audit --no-fund \
+# package-lock.json is gitignored, so it is often missing from a fresh checkout
+# and `npm ci` refuses to run without it. Prefer the lock when it is there.
+COPY package*.json ./
+RUN if [ -f package-lock.json ]; then \
+        npm ci --omit=dev --no-audit --no-fund; \
+    else \
+        npm install --omit=dev --no-audit --no-fund; \
+    fi \
     && npm cache clean --force
 
 COPY cors.js ./
