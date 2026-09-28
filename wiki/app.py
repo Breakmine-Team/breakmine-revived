@@ -4,12 +4,15 @@ import hashlib
 import os
 import sys
 import getpass
+import json
 import uuid
 import threading
 import time
 from datetime import datetime
+import urllib.parse
 import urllib.request
 from flask import Flask, Blueprint, Response, request, redirect, url_for, session, render_template, send_file, current_app
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.serving import run_simple
 
 SECRET_KEY = os.environ.get('WIKI_SECRET_KEY') or 'wikipedia_style_minimal_css_secret_key'
@@ -21,6 +24,10 @@ TEMP_UPLOAD_FOLDER = os.path.join(DATA_DIR, 'temp_mods')
 # Password for the 'kai' admin account. Unset means "prompt if interactive, otherwise skip".
 ADMIN_PASSWORD = os.environ.get('WIKI_ADMIN_PASSWORD') or None
 DEBUG = os.environ.get('WIKI_DEBUG', '').strip().lower() in ('1', 'true', 'yes', 'on')
+# Discord OAuth. The secret must come from the environment - never commit it.
+DISCORD_CLIENT_ID = os.environ.get('DISCORD_CLIENT_ID') or None
+DISCORD_CLIENT_SECRET = os.environ.get('DISCORD_CLIENT_SECRET') or None
+DISCORD_SCOPE = 'identify email'
 ALLOWED_EXTENSIONS = {'zip'}
 MAX_FILE_SIZE = 50 * 1024 * 1024
 
@@ -62,6 +69,45 @@ def prompt_admin_password(exists):
         print("Password cannot be empty!")
         pwd = getpass.getpass(prompt)
     return pwd
+
+def discord_configured():
+    return bool(DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET)
+
+def discord_redirect_uri():
+    # Absolute URL on whichever host started the flow, so the same code serves
+    # both wiki.breakmine.com and mods.breakmine.com. Needs ProxyFix to see https.
+    return url_for('auth.discord_callback', _external=True)
+
+def discord_api(url, data=None, token=None):
+    body = urllib.parse.urlencode(data).encode() if data else None
+    req = urllib.request.Request(url, data=body)
+    if token: req.add_header('Authorization', f'Bearer {token}')
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        return json.loads(resp.read().decode())
+
+def user_for_discord(discord_id, discord_username):
+    """Local account for a Discord identity, created on first login.
+
+    Always matched on discord_id, never on the display name, so a Discord login
+    cannot take over an existing password account such as 'kai'.
+    """
+    db = get_db()
+    try:
+        row = db.execute('SELECT username FROM users WHERE discord_id = ?', (discord_id,)).fetchone()
+        if row: return row['username']
+        base = re.sub(r'[^a-zA-Z0-9_]', '', discord_username)[:32].strip('_') or 'discord'
+        if len(base) < 2: base = (base + 'user')[:32]
+        username, n = base, 1
+        while db.execute('SELECT 1 FROM users WHERE username = ?', (username,)).fetchone():
+            suffix = str(n); n += 1
+            username = f"{base[:32 - len(suffix)]}{suffix}"
+        # Unreachable random password: this row is for Discord logins only.
+        salt, pwd_hash = hash_password(uuid.uuid4().hex + uuid.uuid4().hex)
+        db.execute('INSERT INTO users (username, salt, password_hash, discord_id) VALUES (?, ?, ?, ?)', (username, salt, pwd_hash, discord_id))
+        db.commit()
+        return username
+    finally:
+        db.close()
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -118,6 +164,12 @@ def init_db(force_reset_password=False):
     try: cursor.execute("SELECT min_patchwork FROM mods LIMIT 0")
     except sqlite3.OperationalError:
         cursor.execute("ALTER TABLE mods ADD COLUMN min_patchwork TEXT DEFAULT ''")
+        conn.commit()
+
+    try: cursor.execute("SELECT discord_id FROM users LIMIT 0")
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE users ADD COLUMN discord_id TEXT")
+        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_discord_id ON users (discord_id)")
         conn.commit()
 
     cursor.execute('SELECT username FROM users WHERE username = ?', ('kai',))
@@ -200,6 +252,57 @@ def login():
 def logout():
     session.pop('user', None)
     return redirect(request.referrer or '/')
+
+@auth_bp.route('/login/discord')
+def discord_login():
+    if not discord_configured(): return "Discord login is not configured on this server.", 503
+    session['discord_state'] = uuid.uuid4().hex
+    # Remember where to land afterwards. The callback's own Referer is discord.com.
+    target = request.referrer or '/'
+    session['discord_next'] = target if target.startswith('/') else '/'
+    return redirect('https://discord.com/oauth2/authorize?' + urllib.parse.urlencode({
+        'client_id': DISCORD_CLIENT_ID,
+        'response_type': 'code',
+        'redirect_uri': discord_redirect_uri(),
+        'scope': DISCORD_SCOPE,
+        'state': session['discord_state'],
+    }))
+
+@auth_bp.route('/callback')
+def discord_callback():
+    base_layout = 'layouts/mods_base.html' if current_app.config.get('IS_MODS_APP') else 'layouts/wiki_base.html'
+    def fail(message, status):
+        return render_template(
+            base_layout,
+            page_title="Login",
+            header_title="Login",
+            current_slug=None,
+            page=None,
+            meta_description="Discord login on Breakmine.",
+            body_content=f'<p class="error-msg">{message}</p>'
+        ), status
+    if request.args.get('error'): return fail("Discord login was cancelled or denied.", 401)
+    expected = session.pop('discord_state', None)
+    if not request.args.get('code'): return fail("No authorization code from Discord.", 400)
+    if not expected or request.args.get('state') != expected:
+        return fail("Login session expired or was tampered with. Try again.", 400)
+    if not discord_configured(): return fail("Discord login is not configured on this server.", 503)
+    try:
+        token = discord_api('https://discord.com/api/oauth2/token', data={
+            'client_id': DISCORD_CLIENT_ID,
+            'client_secret': DISCORD_CLIENT_SECRET,
+            'grant_type': 'authorization_code',
+            'code': request.args['code'],
+            'redirect_uri': discord_redirect_uri(),
+        })
+        profile = discord_api('https://discord.com/api/v10/users/@me', token=token['access_token'])
+        username = user_for_discord(str(profile['id']), profile.get('username') or 'discord')
+    except Exception as e:
+        return fail(f"Discord login failed: {e}", 502)
+    session['user'] = username
+    target = session.pop('discord_next', '/')
+    if not (target.startswith('/') and not target.startswith('//')): target = '/'
+    return redirect(target)
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
 def register():
@@ -686,15 +789,24 @@ def temp_download(id):
     return send_file(filepath, as_attachment=True, download_name=f"{safe_id}.zip")
 
 # --- APP INSTANTIATION & DUAL RUNNING ---
+# Trust Traefik's forwarding headers so url_for(_external=True) and request.is_secure
+# see https. Safe because the container only exposes ports to the proxy network.
+def behind_proxy(app):
+    return ProxyFix(app, x_for=1, x_proto=1, x_host=1)
+
 wiki_app = Flask(__name__, static_folder='static', static_url_path='/static', template_folder='templates')
 wiki_app.secret_key = SECRET_KEY
 wiki_app.config['IS_MODS_APP'] = False
+wiki_app.wsgi_app = behind_proxy(wiki_app.wsgi_app)
+wiki_app.jinja_env.globals['discord_enabled'] = discord_configured()
 wiki_app.register_blueprint(auth_bp)
 wiki_app.register_blueprint(wiki_bp)
 
 mods_app = Flask(__name__, static_folder='static', static_url_path='/static', template_folder='templates')
 mods_app.secret_key = SECRET_KEY
 mods_app.config['IS_MODS_APP'] = True
+mods_app.wsgi_app = behind_proxy(mods_app.wsgi_app)
+mods_app.jinja_env.globals['discord_enabled'] = discord_configured()
 mods_app.register_blueprint(auth_bp)
 mods_app.register_blueprint(mods_bp)
 mods_app.register_blueprint(tempmod_bp)

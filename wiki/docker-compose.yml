@@ -19,6 +19,9 @@ services:
       # Source of truth for the 'kai' login. Set this in .env (see .env.example).
       WIKI_ADMIN_PASSWORD: "${WIKI_ADMIN_PASSWORD:-}"
       WIKI_SECRET_KEY: "${WIKI_SECRET_KEY:-}"
+      # Discord OAuth. Optional: without both, the Discord button is hidden.
+      DISCORD_CLIENT_ID: "${DISCORD_CLIENT_ID:-}"
+      DISCORD_CLIENT_SECRET: "${DISCORD_CLIENT_SECRET:-}"
     volumes:
       - wiki_data:/data
 

@@ -109,6 +109,47 @@ docker compose run --rm -e WIKI_ADMIN_PASSWORD='new-password' \
   wiki python3 app.py --reset-kai-password --init-only
 ```
 
+### Discord login
+
+Optional. Set both in `.env` and the "Login with Discord" button appears on the
+login page and in the login modals on both sites:
+
+```
+DISCORD_CLIENT_ID=...
+DISCORD_CLIENT_SECRET=...
+```
+
+The client secret is a credential: it is read from the environment only and is
+never stored in the repo. `.env` is gitignored. If it is ever pasted into a
+chat, issue or commit, reset it in the Discord developer portal.
+
+Register these exact redirect URIs in the Discord portal - one per host, since
+the app is served from two:
+
+```
+https://wiki.breakmine.com/callback
+https://mods.breakmine.com/callback
+```
+
+The callback URL is built from the host that started the flow, so both hosts
+work from the same code. This relies on the proxy forwarding `X-Forwarded-Proto`
+and `X-Forwarded-Host`, which Traefik does by default; the app trusts exactly
+one hop of those headers, which is safe because container ports are only
+reachable on the proxy network.
+
+How accounts work:
+
+- First Discord login creates a local user row with that Discord username, a
+  random unusable password, and the Discord ID in `users.discord_id`.
+- Later logins match on the Discord ID, so renaming your Discord username does
+  not create a second account.
+- A Discord login can never take over an existing password account. If the
+  Discord username is already taken, the new row gets a numeric suffix
+  (`kai2`), which matters because the `kai` account can edit the wiki.
+- The `kai` account is not linked to Discord. To let a Discord user administer
+  the wiki, point its `discord_id` at the `kai` row or keep using the password.
+- The `email` scope is requested but not stored - there is no email column.
+
 ## Run without Docker
 
 ```sh

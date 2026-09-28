@@ -18,4 +18,10 @@
     <button type="submit" class="btn waves-effect waves-light teal">Login</button>
     <a href="{{ url_for('auth.register') }}" class="btn-flat">Register</a>
   </form>
+
+  {% if discord_enabled %}
+    <div style="margin-top: 20px;">
+      <a href="{{ url_for('auth.discord_login') }}" class="btn waves-effect" style="background:#5865F2">Login with Discord</a>
+    </div>
+  {% endif %}
 {% endblock %}
