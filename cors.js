@@ -48,6 +48,23 @@ const BCRYPT_ROUNDS = 12;
 const MAX_SKIN_SIZE = 256 * 1024;
 const UPLOAD_DIR = path.join(DATA_DIR, 'skins');
 
+// Serving the client from this process too: the game client is just static
+// files, so on its own hostname this serves the site and everywhere else it
+// stays a pure JSON API. That lets one container answer both domains.
+const SITE_DIR = process.env.SITE_DIR || __dirname;
+const SITE_HOSTNAMES = new Set(
+    (process.env.SITE_HOSTNAMES || 'breakmine.com')
+        .split(',')
+        .map((h) => h.trim().toLowerCase())
+        .filter(Boolean)
+);
+
+function hostnameOf(req) {
+    // Traefik keeps the original Host and also sets X-Forwarded-Host.
+    const raw = req.headers['x-forwarded-host'] || req.headers.host || '';
+    return raw.split(',')[0].trim().toLowerCase();
+}
+
 const db = new Database(path.join(DATA_DIR, 'auth.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('busy_timeout = 5000');
@@ -88,6 +105,16 @@ const app = express();
 
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 app.use(cors({ origin: true, methods: ['GET', 'POST'], allowedHeaders: ['Content-Type', 'Authorization'] }));
+
+// Mounted before the rate limiter on purpose: the limiter caps everything at
+// 100 requests per 15 minutes, which a page load's worth of assets blows
+// through instantly. Only the API is rate limited.
+const serveSite = express.static(SITE_DIR, { index: 'index.html', fallthrough: true });
+app.use((req, res, next) => {
+    if (!SITE_HOSTNAMES.has(hostnameOf(req))) return next();
+    return serveSite(req, res, next);
+});
+
 app.use(rateLimit({ windowMs: 900000, max: 100 }));
 app.use(express.json({ limit: '1mb' }));
 
