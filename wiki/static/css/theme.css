@@ -1,0 +1,246 @@
+/* Breakmine wiki/mods theming.
+   Loaded after materialize.css. The active theme is a data-theme attribute on
+   <html>, set before first paint by the inline script in the base layouts, so
+   these variables can be relied on from the very first frame.
+
+   Light mode is Materialize's stock look and needs no overrides at all, so
+   every component rule below is scoped to html[data-theme="dark"]. The
+   attribute selector also lifts specificity one level above Materialize's
+   plain class rules, which keeps these overrides from depending on stylesheet
+   order. Anything Materialize marks !important (the .teal-text tab links, the
+   .grey-text shades) needs !important here too, to match. */
+
+:root {
+  --bg: #f5f5f5;
+  --surface: #ffffff;
+  --surface-alt: #f2f2f2;
+  --text: rgba(0, 0, 0, 0.87);
+  --text-muted: rgba(0, 0, 0, 0.54);
+  --border: #e0e0e0;
+  --divider: rgba(0, 0, 0, 0.12);
+  --hover: rgba(0, 0, 0, 0.05);
+  --shadow: 1px 0 5px rgba(0, 0, 0, 0.1);
+  --striped: rgba(242, 242, 242, 0.5);
+  --accent: #009688;
+  --error: #d32f2f;
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  --bg: #121417;
+  --surface: #1b1f24;
+  --surface-alt: #232830;
+  --text: #e4e7eb;
+  --text-muted: #9aa4b2;
+  --border: #3a4149;
+  --divider: rgba(255, 255, 255, 0.12);
+  --hover: rgba(255, 255, 255, 0.07);
+  --shadow: 1px 0 5px rgba(0, 0, 0, 0.55);
+  --striped: rgba(255, 255, 255, 0.04);
+  --accent: #26a69a;
+  --error: #ef5350;
+  color-scheme: dark;
+}
+
+/* --- Base surfaces ------------------------------------------------------ */
+
+html[data-theme="dark"] {
+  color: var(--text);
+}
+
+html[data-theme="dark"] body,
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .card .card-content,
+html[data-theme="dark"] .card-title,
+html[data-theme="dark"] pre,
+html[data-theme="dark"] .modal,
+html[data-theme="dark"] .modal .modal-content h4 {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .modal,
+html[data-theme="dark"] .sidenav {
+  background-color: var(--surface);
+}
+
+html[data-theme="dark"] .card-reveal {
+  background-color: var(--surface-alt);
+}
+
+html[data-theme="dark"] .divider {
+  background-color: var(--divider);
+}
+
+html[data-theme="dark"] .modal .modal-footer {
+  border-top: 1px solid var(--divider);
+}
+
+/* --- Navigation --------------------------------------------------------- */
+
+html[data-theme="dark"] .sidenav,
+html[data-theme="dark"] .sidenav li > a,
+html[data-theme="dark"] .sidenav .collection-item {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .sidenav li > a:hover,
+html[data-theme="dark"] .sidenav .collection-item:hover,
+html[data-theme="dark"] .sidenav li.active {
+  background-color: var(--hover);
+}
+
+/* --- Tabs --------------------------------------------------------------- */
+
+/* Materialize paints the whole tab bar white (materialize.css .tabs). */
+html[data-theme="dark"] .tabs {
+  background-color: var(--surface);
+}
+
+html[data-theme="dark"] .tabs .tab a {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .tabs .tab a:hover {
+  color: var(--text);
+}
+
+/* The tab links carry .teal-text (!important) in the markup, so the theme
+   accent has to be applied at the same or higher specificity. */
+html[data-theme="dark"] .tabs .tab a.teal-text {
+  color: var(--accent) !important;
+}
+
+html[data-theme="dark"] .tabs .indicator {
+  background-color: var(--accent);
+}
+
+/* --- Forms -------------------------------------------------------------- */
+
+html[data-theme="dark"] .input-field input[type="text"],
+html[data-theme="dark"] .input-field input[type="password"],
+html[data-theme="dark"] .input-field input[type="email"],
+html[data-theme="dark"] .input-field input[type="number"],
+html[data-theme="dark"] .input-field textarea.materialize-textarea,
+html[data-theme="dark"] .file-path,
+html[data-theme="dark"] select.browser-default {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .input-field input[type="text"],
+html[data-theme="dark"] .input-field input[type="password"],
+html[data-theme="dark"] .input-field input[type="email"],
+html[data-theme="dark"] .input-field input[type="number"] {
+  border-bottom-color: var(--border);
+}
+
+html[data-theme="dark"] .input-field input[type="text"]:focus,
+html[data-theme="dark"] .input-field input[type="password"]:focus,
+html[data-theme="dark"] .input-field input[type="email"]:focus,
+html[data-theme="dark"] .input-field input[type="number"]:focus,
+html[data-theme="dark"] .input-field textarea.materialize-textarea:focus,
+html[data-theme="dark"] .file-path:focus {
+  border-bottom-color: var(--accent);
+  box-shadow: 0 1px 0 0 var(--accent);
+}
+
+html[data-theme="dark"] .input-field input:disabled,
+html[data-theme="dark"] .input-field input[readonly] {
+  color: var(--text-muted);
+  background-color: transparent;
+}
+
+html[data-theme="dark"] .input-field label,
+html[data-theme="dark"] .input-field .helper-text,
+html[data-theme="dark"] .materialize-textarea::placeholder,
+html[data-theme="dark"] input::placeholder {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .materialize-textarea::placeholder,
+html[data-theme="dark"] input::placeholder {
+  opacity: 1;
+}
+
+html[data-theme="dark"] .input-field input.active + label,
+html[data-theme="dark"] .input-field textarea.active + label,
+html[data-theme="dark"] .input-field input:focus + label,
+html[data-theme="dark"] .input-field textarea:focus + label {
+  color: var(--accent);
+}
+
+html[data-theme="dark"] select.browser-default {
+  background-color: var(--surface);
+}
+
+html[data-theme="dark"] select.browser-default:focus {
+  outline: 1px solid var(--accent);
+}
+
+html[data-theme="dark"] .btn-flat {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .btn-flat:hover,
+html[data-theme="dark"] .btn-flat:focus {
+  background-color: var(--hover);
+}
+
+/* --- Lists and tables --------------------------------------------------- */
+
+/* Materialize paints the whole collection and every item in it white
+   (materialize.css .collection, .collection .collection-item), which is what
+   mod lists, version lists, comments and search results are built from. */
+html[data-theme="dark"] .collection {
+  border-color: var(--border);
+  background-color: var(--surface);
+}
+
+html[data-theme="dark"] .collection .collection-item,
+html[data-theme="dark"] .collection .collection-item .title {
+  background-color: var(--surface);
+  border-bottom-color: var(--divider);
+  color: var(--text);
+}
+
+/* Hover only for real links, matching Materialize, which tints
+   a.collection-item on hover but leaves li.collection-item alone. Comments
+   and mod versions are li's - they are not clickable rows, so they get no
+   hover tint in either theme. */
+html[data-theme="dark"] .collection a.collection-item:hover {
+  background-color: var(--hover);
+}
+
+html[data-theme="dark"] tr,
+html[data-theme="dark"] td,
+html[data-theme="dark"] th,
+html[data-theme="dark"] td a {
+  border-bottom-color: var(--divider);
+  color: var(--text);
+}
+
+html[data-theme="dark"] th {
+  color: var(--text);
+}
+
+html[data-theme="dark"] table.striped > tbody > tr:nth-child(odd) {
+  background-color: var(--striped);
+}
+
+html[data-theme="dark"] table.responsive-table thead {
+  border-right-color: var(--divider);
+}
+
+html[data-theme="dark"] table.highlight > tbody > tr:hover {
+  background-color: var(--hover);
+}
+
+/* Materialize's .grey-text.text-darken-1 is #757575, unreadable on the dark
+   surface, and both shades are !important. */
+html[data-theme="dark"] .grey-text.text-darken-1 {
+  color: #b0b0b0 !important;
+}
+
+html[data-theme="dark"] .card-content a {
+  color: var(--accent);
+}

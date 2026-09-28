@@ -9,13 +9,28 @@
   <meta property="og:description" content="{{ meta_description | e }}">
   <meta property="og:type" content="website">
   <title>{{ page_title | e }} | Breakmine Wiki</title>
+  <script>
+    // Runs before the first paint so the stored theme is already applied and
+    // there is no light flash on a dark page. Mirrors the logic in theme.js.
+    (function () {
+      var theme = null;
+      try {
+        theme = localStorage.getItem('breakmine-theme');
+      } catch (e) { /* storage disabled, fall through to the system preference */ }
+      if (theme !== 'dark' && theme !== 'light') {
+        theme = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+      }
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
   <link rel="stylesheet" href="/static/css/materialize.min.css">
+  <link rel="stylesheet" href="/static/css/theme.css?v={{ theme_asset_version }}">
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
   <style>
     html, body {
       height: 100%;
       margin: 0;
-      background-color: #f5f5f5;
+      background-color: var(--bg, #f5f5f5);
     }
 
     body {
@@ -36,7 +51,7 @@
       top: 64px;
       height: calc(100vh - 64px);
       width: 300px;
-      box-shadow: 1px 0 5px rgba(0,0,0,0.1);
+      box-shadow: var(--shadow, 1px 0 5px rgba(0,0,0,0.1));
       z-index: 997;
     }
 
@@ -55,7 +70,7 @@
     }
 
     .card .card-content { padding: 16px 20px; }
-    .error-msg { color: #d32f2f; font-weight: bold; }
+    .error-msg { color: var(--error, #d32f2f); font-weight: bold; }
     .sidenav-padding { padding: 20px; }
   </style>
   <script>
@@ -203,6 +218,9 @@
             <li><a href="#modal-login" class="modal-trigger">Login</a></li>
             <li><a href="#modal-register" class="modal-trigger">Register</a></li>
           {% endif %}
+          <li>
+            <a href="#!" id="theme-toggle" role="button" aria-label="Switch theme"><i class="material-icons" id="theme-toggle-icon">dark_mode</i></a>
+          </li>
         </ul>
 
         <form action="{{ url_for('wiki.search') }}" method="get" class="right hide-on-small-only">
@@ -245,7 +263,7 @@
       {% if current_slug %}
         <style>
           .tabs .tab a.active {
-            border-bottom: 3px solid #009688;
+            border-bottom: 3px solid var(--accent, #009688);
           }
         </style>
 
@@ -277,6 +295,7 @@
 
       <div style="margin-top: 15px;">
         {% block content %}{% endblock %}
+        {% if body_content %}{{ body_content | safe }}{% endif %}
       </div>
     </div>
   </div>
@@ -394,6 +413,7 @@
   {% endif %}
 
   <script src="/static/js/materialize.min.js"></script>
+  <script src="/static/js/theme.js?v={{ theme_asset_version }}"></script>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       var sidenavElems = document.querySelectorAll('.sidenav');

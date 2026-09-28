@@ -14,6 +14,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from flask import Flask, Blueprint, Response, request, redirect, url_for, session, render_template, send_file, current_app
+from markupsafe import escape
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.serving import run_simple
 
@@ -473,7 +474,7 @@ def all_pages():
     db = get_db()
     pages = db.execute('SELECT slug, title FROM pages ORDER BY title ASC').fetchall()
     db.close()
-    list_items = "".join([f'<a href="/wiki/{p["slug"]}" class="collection-item">{p["title"]}</a>' for p in pages])
+    list_items = "".join([f'<a href="/wiki/{escape(p["slug"])}" class="collection-item">{escape(p["title"])}</a>' for p in pages])
     body = f"<h5>All Articles ({len(pages)})</h5><div class=\"collection\">{list_items}</div>"
     return render_template(
         'layouts/wiki_base.html',
@@ -808,11 +809,17 @@ def temp_download(id):
 def behind_proxy(app):
     return ProxyFix(app, x_for=1, x_proto=1, x_host=1)
 
+# Flask caches static files for SEND_FILE_MAX_AGE_DEFAULT (12h by default), so
+# a theme tweak would not reach visitors until the cache expired. The theme
+# assets are versioned instead: bump this when you edit theme.css or theme.js.
+THEME_ASSET_VERSION = 1
+
 wiki_app = Flask(__name__, static_folder='static', static_url_path='/static', template_folder='templates')
 wiki_app.secret_key = SECRET_KEY
 wiki_app.config['IS_MODS_APP'] = False
 wiki_app.wsgi_app = behind_proxy(wiki_app.wsgi_app)
 wiki_app.jinja_env.globals['discord_enabled'] = discord_configured()
+wiki_app.jinja_env.globals['theme_asset_version'] = THEME_ASSET_VERSION
 wiki_app.register_blueprint(auth_bp)
 wiki_app.register_blueprint(wiki_bp)
 
@@ -821,6 +828,7 @@ mods_app.secret_key = SECRET_KEY
 mods_app.config['IS_MODS_APP'] = True
 mods_app.wsgi_app = behind_proxy(mods_app.wsgi_app)
 mods_app.jinja_env.globals['discord_enabled'] = discord_configured()
+mods_app.jinja_env.globals['theme_asset_version'] = THEME_ASSET_VERSION
 mods_app.register_blueprint(auth_bp)
 mods_app.register_blueprint(mods_bp)
 mods_app.register_blueprint(tempmod_bp)
