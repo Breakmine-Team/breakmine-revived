@@ -35,14 +35,14 @@
     {% endfor %}
     </ul>
     {% if can_edit %}
-      <a href="{{ url_for('mods.upload_version', mod_id=mod['id']) }}" class="btn waves-effect waves-light teal">Upload New Version</a>
+      <a href="{{ url_for('mods.upload_version', mod_id=mod['id']) }}" class="btn waves-effect waves-light teal btn-small">Upload New Version</a>
     {% endif %}
   </div>
 
   <div style="margin-top: 20px;">
     {% if can_delete %}
-      <a href="{{ url_for('mods.edit', mod_id=mod['id']) }}" class="btn waves-effect waves-light teal">Edit Info</a>
-      <a href="{{ url_for('mods.delete', mod_id=mod['id']) }}" class="btn waves-effect waves-light red lighten-1">Delete Mod</a>
+      <a href="{{ url_for('mods.edit', mod_id=mod['id']) }}" class="btn waves-effect waves-light teal btn-small">Edit Info</a>
+      <a href="{{ url_for('mods.delete', mod_id=mod['id']) }}" class="btn waves-effect waves-light red lighten-1 btn-small">Delete Mod</a>
     {% endif %}
   </div>
 
