@@ -21,7 +21,14 @@
       <label for="version" class="active">Version</label>
     </div>
     <div class="input-field">
-      <input type="text" id="min_patchwork" name="min_patchwork" maxlength="20" placeholder="e.g. 1.3.2-beta">
+      <select id="min_patchwork" name="min_patchwork" class="browser-default">
+        <option value="unknown" selected>Unknown</option>
+        <option value="1.0.0-beta">1.0.0-beta</option>
+        <option value="1.1.0-beta">1.1.0-beta</option>
+        <option value="1.2.0-beta">1.2.0-beta</option>
+        <option value="1.3.0-beta">1.3.0-beta</option>
+        <option value="1.3.2-beta">1.3.2-beta</option>
+      </select>
       <label for="min_patchwork" class="active">Minimum Patchwork Version</label>
     </div>
     <div class="input-field">
