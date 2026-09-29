@@ -1,9 +1,10 @@
 <div id="modloader-dialog" class="modal" style="width: 550px;">
   <div class="modal-content">
-    <h4>Select Version & Modloader</h4>
+    <h4>Download Version</h4>
     <div id="version-selector-container" style="margin-bottom: 20px;">
       <label>Version</label>
-      <select id="version-select" class="browser-default">
+      <!-- Removed 'browser-default' class here -->
+      <select id="version-select">
         <!-- Versions will be populated by JavaScript -->
       </select>
     </div>
@@ -74,8 +75,15 @@
     
     var modal = document.getElementById('modloader-dialog');
     var instance = M.Modal.getInstance(modal);
-    if (!instance) { M.Modal.init(modal); instance = M.Modal.getInstance(modal); }
+    if (!instance) { 
+      M.Modal.init(modal); 
+      instance = M.Modal.getInstance(modal); 
+    }
     instance.open();
+
+    // Initialize Materialize select elements after populating options
+    var selects = document.querySelectorAll('select');
+    M.FormSelect.init(selects);
   }
 
   function confirmDownload() {

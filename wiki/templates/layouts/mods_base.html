@@ -270,9 +270,11 @@
   </ul>
 
   <main class="main-wrapper">
-    <div class="card" style="margin: 0;">
-      <div class="card-content">
+    <div class="card" style="margin: 0; min-height: 100%;">
+      <div class="card-content" style="min-height: 100%;">
+        {% if show_header is not defined or show_header %}
         <span class="card-title">{{ header_title }}</span>
+        {% endif %}
         <div>
           {% block content %}{% endblock %}
           {% if body_content %}{{ body_content | safe }}{% endif %}

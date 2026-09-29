@@ -929,6 +929,7 @@ wiki_app.config['IS_MODS_APP'] = False
 wiki_app.wsgi_app = behind_proxy(wiki_app.wsgi_app)
 wiki_app.jinja_env.globals['discord_enabled'] = discord_configured()
 wiki_app.jinja_env.globals['theme_asset_version'] = THEME_ASSET_VERSION
+wiki_app.jinja_env.filters['regex_replace'] = lambda s, find, replace: re.sub(find, replace, str(s))
 wiki_app.register_blueprint(auth_bp)
 wiki_app.register_blueprint(wiki_bp)
 
@@ -938,6 +939,7 @@ mods_app.config['IS_MODS_APP'] = True
 mods_app.wsgi_app = behind_proxy(mods_app.wsgi_app)
 mods_app.jinja_env.globals['discord_enabled'] = discord_configured()
 mods_app.jinja_env.globals['theme_asset_version'] = THEME_ASSET_VERSION
+mods_app.jinja_env.filters['regex_replace'] = lambda s, find, replace: re.sub(find, replace, str(s))
 # Mod names and comments are user-typed, so send them as real UTF-8 rather
 # than \uXXXX escapes.
 mods_app.json.ensure_ascii = False
@@ -984,19 +986,73 @@ if __name__ == '__main__':
         print("Database initialized. Exiting (--init-only).")
         sys.exit(0)
 
-    failures = []
-    def run(app, port, name):
-        try: serve(app, port, name)
-        except Exception as e:
-            failures.append(name)
-            print(f"ERROR: {name} server stopped: {e}", file=sys.stderr)
+    # Simple auto-reload implementation using subprocess
+    import os
+    import subprocess
+    from datetime import datetime
 
-    t1 = threading.Thread(target=run, args=(wiki_app, WIKI_PORT, 'Wiki'), daemon=True)
-    t2 = threading.Thread(target=run, args=(mods_app, MODS_PORT, 'Mods'), daemon=True)
-    t1.start(); t2.start()
+    def get_mtime():
+        """Get the most recent modification time of relevant files."""
+        paths = ['app.py', 'templates/', 'static/']
+        max_mtime = 0
+        for path in paths:
+            if os.path.isfile(path):
+                max_mtime = max(max_mtime, os.path.getmtime(path))
+            elif os.path.isdir(path):
+                for root, dirs, files in os.walk(path):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        max_mtime = max(max_mtime, os.path.getmtime(file_path))
+        return max_mtime
 
-    try:
-        while not failures and (t1.is_alive() or t2.is_alive()): time.sleep(0.5)
-    except KeyboardInterrupt: print("\nShutting down...")
-    if failures: sys.exit(1)
+    # If this is a child process (auto-reload), just run the servers
+    if '--no-reload' in sys.argv:
+        failures = []
+        def run(app, port, name):
+            try: serve(app, port, name)
+            except Exception as e:
+                failures.append(name)
+                print(f"ERROR: {name} server stopped: {e}", file=sys.stderr)
+
+        t1 = threading.Thread(target=run, args=(wiki_app, WIKI_PORT, 'Wiki'), daemon=True)
+        t2 = threading.Thread(target=run, args=(mods_app, MODS_PORT, 'Mods'), daemon=True)
+        t1.start(); t2.start()
+
+        try:
+            while not failures and (t1.is_alive() or t2.is_alive()): time.sleep(0.5)
+        except KeyboardInterrupt: print("\nShutting down...")
+        if failures: sys.exit(1)
+    else:
+        # Parent process with auto-reload
+        def run_child():
+            """Run the child process with auto-reload"""
+            while True:
+                # Remove --no-reload if present, then add it
+                args = [arg for arg in sys.argv if arg != '--no-reload']
+                args.append('--no-reload')
+                
+                process = subprocess.Popen([sys.executable] + args)
+                last_mtime = get_mtime()
+                
+                try:
+                    while process.poll() is None:
+                        time.sleep(1)
+                        current_mtime = get_mtime()
+                        if current_mtime > last_mtime:
+                            print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Files changed, restarting...")
+                            last_mtime = current_mtime
+                            process.terminate()
+                            process.wait(timeout=5)
+                            if process.poll() is None:
+                                process.kill()
+                            break
+                except KeyboardInterrupt:
+                    process.terminate()
+                    process.wait(timeout=5)
+                    if process.poll() is None:
+                        process.kill()
+                    print("\nShutting down...")
+                    break
+        
+        run_child()
 

@@ -1,74 +1,208 @@
 {% extends "layouts/mods_base.html" %}
 
-{% block content %}
-  <table class="striped" style="margin-bottom: 20px;">
-    <tr><th><i class="material-icons tiny" style="transform: translateY(2px);">category</i> Category</th><td>{{ mod['category'] | e }}</td></tr>
-    <tr><th><i class="material-icons tiny" style="transform: translateY(2px);">person</i> Author</th><td>{{ mod['uploaded_by'] | e }}</td></tr>
-    <tr><th><i class="material-icons tiny" style="transform: translateY(2px);">history</i> Current Version</th><td>{{ mod['version'] | e }}</td></tr>
-    <tr><th><i class="material-icons tiny" style="transform: translateY(2px);">extension</i> Min Patchwork</th><td>{% if mod['min_patchwork'] %}{{ mod['min_patchwork'] }}{% else %}<em class="grey-text">Any version</em>{% endif %}</td></tr>
-    <tr><th><i class="material-icons tiny" style="transform: translateY(2px);">download</i> Downloads</th><td>{{ mod['download_count'] }}</td></tr>
-    <tr><th><i class="material-icons tiny" style="transform: translateY(2px);">calendar_today</i> Uploaded</th><td>{{ mod['created_at'] }}</td></tr>
-    <tr><th><i class="material-icons tiny" style="transform: translateY(2px);">description</i> Description</th><td>{% if mod['description'] %}<pre style="white-space: pre-wrap; margin:0; font-family: inherit;">{{ mod['description'] | e }}</pre>{% else %}<em class="grey-text">No description.</em>{% endif %}</td></tr>
-  </table>
+{% set show_header = false %}
 
+{% block content %}
   {% if versions %}
-  <script type="application/json" id="mod-versions-data">{{ versions | tojson | safe }}</script>
-  <div style="position: fixed; top: 80px; right: 20px; display: flex; flex-direction: column; align-items: center; gap: 10px; z-index: 998;">
-    <button type="button" class="btn-floating btn-large green" 
-            data-download-url="{{ url_for('mods.download_version', mod_id=mod['id'], ver_id=versions[0]['id']) }}" 
-            onclick="openModloaderDialogFromData(this)">
-      <i class="material-icons">file_download</i>
-    </button>
-    {% if can_edit %}
-    <div style="display: flex; flex-direction: column; gap: 10px;">
-      <a href="{{ url_for('mods.upload_version', mod_id=mod['id']) }}" class="btn-floating blue">
-        <i class="material-icons">add_box</i>
-      </a>
-      <a href="{{ url_for('mods.edit', mod_id=mod['id']) }}" class="btn-floating orange">
-        <i class="material-icons">edit</i>
-      </a>
-      <button type="button" class="btn-floating red" onclick="askDelete('{{ url_for('mods.delete', mod_id=mod['id']) }}', 'Delete this mod? This cannot be undone.')">
-        <i class="material-icons">delete</i>
-      </button>
+    <script type="application/json" id="mod-versions-data">{{ versions | tojson | safe }}</script>
+  {% endif %}
+
+  <!-- Mod Header Section -->
+  <div class="mod-header" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 5px;">
+    <!-- Left Details Column -->
+    <div style="flex: 1;">
+      <h5 style="margin: 0 0 5px 0; font-weight: bold; display: flex; align-items: center; gap: 8px;">
+        <span>{{ mod['title'] if mod['title'] else mod['name'] | e }}</span>
+        {% if mod['category'] %}
+          <span class="chip" style="padding: 0 8px; height: 24px; line-height: 24px; margin: 0; font-size: 0.8rem; display: inline-flex; align-items: center;">
+            <i class="material-icons tiny" style="vertical-align: middle; margin-right: 2px;">category</i> {{ mod['category'] | e }}
+          </span>
+        {% endif %}
+      </h5>
+
+      <p>
+        <span style="display: flex; align-items: center; gap: 4px;">
+          <i class="material-icons tiny">person</i> {{ mod['uploaded_by'] | e }}
+        </span>
+      </p>
+      
+      <!-- Metadata Badges / Info Row -->
+      <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 15px;">
+        <span style="display: flex; align-items: center; gap: 4px;">
+          <i class="material-icons tiny">download</i> {{ mod['download_count'] }} downloads
+        </span>
+        <span style="color: var(--divider);">|</span>
+        <span style="display: flex; align-items: center; gap: 4px;">
+          <i class="material-icons tiny">history</i> v{{ mod['version'] | e }}
+        </span>
+      </div>
     </div>
+
+    <!-- Right Side: Horizontal FAB Action Group -->
+    <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+      {% if can_edit %}
+        <button type="button" class="btn-floating transparent waves-effect waves-dark" title="Delete Mod" onclick="askDelete('{{ url_for('mods.delete', mod_id=mod['id']) }}', 'Delete this mod? This cannot be undone.')">
+          <i class="material-icons">delete</i>
+        </button>
+        <a href="{{ url_for('mods.upload_version', mod_id=mod['id']) }}" class="btn-floating transparent waves-effect waves-dark" title="Upload New Version">
+          <i class="material-icons">add_box</i>
+        </a>
+        <a href="{{ url_for('mods.edit', mod_id=mod['id']) }}" class="btn-floating transparent waves-effect waves-dark" title="Edit Mod">
+          <i class="material-icons">edit</i>
+        </a>
+      {% endif %}
+      {% if versions %}
+        <button type="button" class="btn-floating btn-large waves-effect waves-light teal" 
+                title="Download Mod"
+                data-download-url="{{ url_for('mods.download_version', mod_id=mod['id'], ver_id=versions[0]['id']) }}" 
+                onclick="openModloaderDialogFromData(this)">
+          <i class="material-icons">file_download</i>
+        </button>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="divider" style="margin: 15px 0;"></div>
+
+  <!-- Wiki-style Tabs -->
+  <style>
+    .tabs {
+      background-color: transparent !important;
+    }
+    .tabs .tab {
+      background-color: transparent !important;
+    }
+    .tabs .tab a {
+      background-color: transparent !important;
+      color: var(--text-color, #9e9e9e);
+    }
+    .tabs .tab a:hover, .tabs .tab a.active {
+      background-color: transparent !important;
+      color: var(--accent, #009688);
+    }
+    .tabs .indicator {
+      background-color: var(--accent, #009688);
+    }
+  </style>
+
+  <div class="row" style="margin-bottom: 0;">
+    <div class="col s12" style="padding: 0;">
+      <ul class="tabs tabs-fixed-width">
+        <li class="tab col s4"><a class="active" href="#tab-description">Description</a></li>
+        <li class="tab col s4"><a href="#tab-comments">Comments</a></li>
+        <li class="tab col s4"><a href="#tab-files">Versions</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="divider" style="margin-bottom: 20px;"></div>
+
+  <!-- Tab 1: Description -->
+  <div id="tab-description" class="col s12" style="padding-top: 10px;">
+    {%- if mod['description'] -%}
+      <style>
+        .strongtext strong, 
+        .strongtext b {
+          font-weight: 700;
+        }
+        .strongtext h1, .strongtext h2, .strongtext h3, 
+        .strongtext h4, .strongtext h5, .strongtext h6 {
+          margin: 4px 0 2px 0;
+          line-height: 1.0;
+          font-weight: 700;
+        }
+        .strongtext h1 { font-size: 26pt; }
+        .strongtext h2 { font-size: 22pt; }
+        .strongtext h3 { font-size: 18pt; }
+        .strongtext h4 { font-size: 14pt; }
+        .strongtext h5 { font-size: 11pt; }
+        .strongtext h6 { font-size: 9pt; }
+      </style>
+      <div style="white-space: pre-wrap; margin:0; font-family: inherit;" class="strongtext">
+        {{- mod['description'] 
+            | e 
+            | regex_replace('(?m)^#\\s+(.*?)$', '<h1>\\1</h1>')
+            | regex_replace('(?m)^##\\s+(.*?)$', '<h2>\\1</h2>')
+            | regex_replace('(?m)^###\\s+(.*?)$', '<h3>\\1</h3>')
+            | regex_replace('(?m)^####\\s+(.*?)$', '<h4>\\1</h4>')
+            | regex_replace('(?m)^#####\\s+(.*?)$', '<h5>\\1</h5>')
+            | regex_replace('(?m)^######\\s+(.*?)$', '<h6>\\1</h6>')
+            | regex_replace('\*\*(.*?)\*\*', '<strong>\\1</strong>')
+            | regex_replace('\*(.*?)\*', '<em>\\1</em>')
+            | regex_replace('\[(.*?)\]\((.*?)\)', '<a href="\\2" target="_blank" rel="noopener">\\1</a>')
+            | safe -}}
+      </div>
+    {%- else -%}
+      <em class="grey-text">No description provided.</em>
+    {%- endif -%}
+  </div>
+
+  <!-- Tab 2: Comments -->
+  <div id="tab-comments" class="col s12">
+    {% if session.get('user') %}
+      <form action="{{ url_for('mods.add_comment', mod_id=mod['id']) }}" method="post" style="margin-bottom: 20px;">
+        <div class="input-field" style="display: flex; align-items: center; gap: 10px;">
+          <textarea name="content" class="materialize-textarea" rows="3" data-length="120" placeholder="Leave a comment..." required></textarea>
+          <button type="submit" class="btn-floating waves-effect waves-light teal">
+            <i class="material-icons">send</i>
+          </button>
+        </div>
+      </form>
+    {% else %}
+      <p><a href="#modal-login" class="modal-trigger">Log in</a> to comment.</p>
+    {% endif %}
+
+    {% if comments %}
+      <ul class="collection">
+      {% for c in comments %}
+        <li class="collection-item">
+          <div style="font-size: 0.85em;" class="grey-text text-darken-1">
+            <strong>{{ c['author'] | e }}</strong> at {{ c['created_at'] }}
+            {% if can_delete or c['author'] == session.get('user') %}
+              <button type="button" class="grey-text right" style="background: none; border: none; padding: 0; cursor: pointer;" onclick="askDelete('{{ url_for('mods.delete_comment', mod_id=mod['id'], comment_id=c['id']) }}', 'Delete this comment? This cannot be undone.')">
+                <i class="material-icons">delete</i>
+              </button>
+            {% endif %}
+          </div>
+          <div style="white-space: pre-wrap; margin-top: 5px;">{{ c['content'] | e }}</div>
+        </li>
+      {% endfor %}
+      </ul>
+    {% else %}
+      <p><em class="grey-text">No comments yet.</em></p>
     {% endif %}
   </div>
-  {% endif %}
 
-  <div class="divider" style="margin: 25px 0;"></div>
+  <!-- Tab 3: Files -->
+  <div id="tab-files" class="col s12">
+    {% if versions %}
+      <ul class="collection">
+        {% for ver in versions %}
+          <li class="collection-item avatar">
+              <i class="material-icons circle teal">folder_zip</i>
+              <span class="title"><strong>{{ ver['version'] | e }}</strong></span>
+              <p>{{ ver['file_size_formatted'] }} <br>
+                <small class="grey-text">{{ ver['created_at'] }}</small>
+              </p>
+              <div style="display: flex; gap: 10px;" class="secondary-content">
+                {% if can_edit %}
+                  <button type="button" class="btn-floating btn-large waves-effect red lighten-1" onclick="askDelete('{{ url_for('mods.delete_version', mod_id=mod['id'], ver_id=ver['id']) }}', 'Delete this version? Uploads of it will stop working.')">
+                      <i class="material-icons">delete</i>
+                  </button>
+                {% endif %}
+                <button type="button" class="btn-floating btn-large waves-effect teal" onclick="openModloaderDialog('{{ url_for('mods.download_version', mod_id=mod['id'], ver_id=ver['id']) }}')">
+                  <i class="material-icons">file_download</i>
+              </button>
+              </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p><em class="grey-text">No files available.</em></p>
+    {% endif %}
+  </div>
 
-  <h6>Comments</h6>
-  {% if session.get('user') %}
-    <form action="{{ url_for('mods.add_comment', mod_id=mod['id']) }}" method="post" style="margin-bottom: 20px;">
-      <div class="input-field" style="display: flex; align-items: center; gap: 10px;">
-        <textarea name="content" class="materialize-textarea" rows="3" data-length="120" placeholder="Leave a comment..." required></textarea>
-        <button type="submit" class="btn-floating waves-effect waves-light teal">
-          <i class="material-icons">send</i>
-        </button>
-      </div>
-    </form>
-  {% else %}
-    <p><a href="#modal-login" class="modal-trigger">Log in</a> to comment.</p>
-  {% endif %}
-
-  {% if comments %}
-    <ul class="collection">
-    {% for c in comments %}
-      <li class="collection-item">
-        <div style="font-size: 0.85em;" class="grey-text text-darken-1">
-          <strong>{{ c['author'] | e }}</strong> at {{ c['created_at'] }}
-          {% if can_delete or c['author'] == session.get('user') %}
-            <button type="button" class="grey-text right" style="background: none; border: none; padding: 0; cursor: pointer;" onclick="askDelete('{{ url_for('mods.delete_comment', mod_id=mod['id'], comment_id=c['id']) }}', 'Delete this comment? This cannot be undone.')"><i class="material-icons">delete</i></button>
-          {% endif %}
-        </div>
-        <div style="white-space: pre-wrap; margin-top: 5px;">{{ c['content'] | e }}</div>
-      </li>
-    {% endfor %}
-    </ul>
-  {% else %}
-    <p><em class="grey-text">No comments yet.</em></p>
-  {% endif %}
-
+  <!-- Delete Modal -->
   <div id="confirm-delete-modal" class="modal">
     <form id="confirm-delete-form" method="post">
       <div class="modal-content">
@@ -93,5 +227,11 @@
       if (!instance) { M.Modal.init(modal); instance = M.Modal.getInstance(modal); }
       instance.open();
     }
+
+    // Initialize Materialize Tabs
+    document.addEventListener('DOMContentLoaded', function() {
+      var el = document.querySelectorAll('.tabs');
+      M.Tabs.init(el);
+    });
   </script>
 {% endblock %}
