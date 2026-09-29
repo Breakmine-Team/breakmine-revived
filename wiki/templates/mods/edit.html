@@ -35,4 +35,11 @@
     <button type="submit" class="btn waves-effect waves-light teal">Save</button>
     <a href="{{ url_for('mods.view', mod_id=mod_id) }}" class="btn-flat">Cancel</a>
   </form>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      var elems = document.querySelectorAll('select');
+      M.FormSelect.init(elems, {});
+    });
+  </script>
 {% endblock %}

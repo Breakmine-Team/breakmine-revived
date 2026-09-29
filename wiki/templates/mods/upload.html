@@ -48,4 +48,11 @@
     <button type="submit" class="btn waves-effect waves-light teal">Upload</button>
     <a href="{{ url_for('mods.index') }}" class="btn-flat">Cancel</a>
   </form>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      var elems = document.querySelectorAll('select');
+      M.FormSelect.init(elems, {});
+    });
+  </script>
 {% endblock %}
