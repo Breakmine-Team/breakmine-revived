@@ -81,6 +81,53 @@ function migrateOldWorld(worldName) {
     return false;
 }
 
+// Try to read `data` as a world file in the given format, and report how well
+// it fits. Returns null when the file is too short to even hold a header.
+//
+//   old: numChanges(4) + changes*11 + numInventories(4) + inventories
+//   new: worldTime(8) + numChanges(4) + changes*11 + numInventories(4) + inventories
+//
+// `records` is how many whole 11-byte change records the file can actually
+// yield -- a declared count larger than that is treated as a partial write.
+// `exact` means the parse consumed the file to its last byte.
+function readLayout(data, hasWorldTime) {
+    // The change count sits before the records, so the records begin at
+    // offset 4 (old) or 12 (new).
+    let offset = hasWorldTime ? 8 : 0;
+    if (offset + 4 > data.length) return null;
+
+    const declared = data.readUInt32BE(offset);
+    offset += 4;
+
+    const available = Math.floor((data.length - offset) / 11);
+    const records = Math.min(declared, available);
+    offset += records * 11;
+
+    const layout = { declared, records, exact: false };
+    if (offset + 4 > data.length) return layout;
+
+    const numInventories = data.readUInt32BE(offset);
+    offset += 4;
+
+    for (let i = 0; i < numInventories; i++) {
+        if (offset + 2 > data.length) return layout;
+        const keyLength = data.readUInt16BE(offset);
+        offset += 2;
+
+        if (offset + keyLength + 4 > data.length) return layout;
+        offset += keyLength;
+
+        const stateLength = data.readUInt32BE(offset);
+        offset += 4;
+
+        if (offset + stateLength > data.length) return layout;
+        offset += stateLength;
+    }
+
+    layout.exact = offset === data.length;
+    return layout;
+}
+
 function initWorld(worldName = 'main') {
     // Clear current world data
     worldChanges.clear();
@@ -104,34 +151,48 @@ function initWorld(worldName = 'main') {
         const data = fs.readFileSync(worldFile);
         let offset = 0;
 
-        // Pick the format by checking which header the file actually satisfies,
-        // never by the file length. The old test was
-        // `(data.length - 4) % 11 !== 0`, which only holds while nothing
-        // follows the changes. Block inventories are appended after them, so
-        // any world holding a chest or a sign failed the test and was read as
-        // new format: the loader skipped 8 bytes it should not, read the
-        // change count out of the middle of a change record and then decoded
-        // every coordinate from a misaligned offset. That produced the
-        // "Expected 35385180304 bytes" warning, coordinates like
-        // -1123845905,191 and block ids nobody registered -- which the client
-        // renders as stone, so a world full of water came back as stone.
+        // Pick the format by actually parsing the file as one, not by
+        // arithmetic on its length.
         //
-        // Old format: numChanges(4) + changes*11
-        // New format: worldTime(8) + numChanges(4) + changes*11
-        // Prefer whichever header the file actually satisfies. saveWorld only
-        // ever writes the new format, so it wins any tie, and a new-format save
-        // that was cut short by an interrupted write is still read as new
-        // format (clamped to the whole records that made it) rather than being
-        // mistaken for a legacy file.
-        const oldCount = data.length >= 4 ? data.readUInt32BE(0) : Infinity;
-        const newCount = data.length >= 12 ? data.readUInt32BE(8) : Infinity;
-        const newShortfall = 12 + newCount * 11 - data.length;
-        const oldFits = 4 + oldCount * 11 <= data.length;
-        // A new-format save missing less than one record is a partial write,
-        // not a legacy file.
-        const hasWorldTime = 12 + newCount * 11 <= data.length ||
-            (newShortfall > 0 && newShortfall < 11) ||
-            !oldFits;
+        // Two past attempts were wrong:
+        //  - `(data.length - 4) % 11 !== 0` only holds while nothing follows
+        //    the changes. Block inventories are appended after them, so any
+        //    world holding a chest or a sign failed the test and was read as
+        //    new format: it skipped 8 bytes it should not, read the change
+        //    count out of the middle of a change record and decoded every
+        //    coordinate from a misaligned offset. That produced the
+        //    "Expected 35385180304 bytes" warning, coordinates like
+        //    -1123845905,191 and unregistered block ids that the client draws
+        //    as stone -- a world full of water came back as stone.
+        //  - Testing only the declared change count was worse: the high 4
+        //    bytes of the world-time field are 0 for any sane world, so a
+        //    truncated new-format file looked exactly like an old-format file
+        //    declaring "0 changes". It loaded as an EMPTY world, and the very
+        //    next save overwrote the player's world with nothing.
+        //
+        // So read the whole file under both interpretations and keep the one
+        // that consumes it cleanly, preferring whichever recovers more whole
+        // records. That keeps legacy worlds working, keeps truncated saves
+        // recoverable instead of empty, and never turns a non-empty file into
+        // an empty world.
+        const asNew = readLayout(data, true);
+        const asOld = readLayout(data, false);
+
+        let hasWorldTime;
+        if (!asOld) {
+            hasWorldTime = true;
+        } else if (!asNew) {
+            hasWorldTime = false;
+        } else if (asNew.exact && !asOld.exact) {
+            hasWorldTime = true;
+        } else if (asOld.exact && !asNew.exact) {
+            hasWorldTime = false;
+        } else {
+            // Neither consumed the file end to end (a partial write), so take
+            // whichever recovers more records. Ties go to the new format,
+            // which is the only one saveWorld ever writes.
+            hasWorldTime = asNew.records >= asOld.records;
+        }
 
         if (hasWorldTime && data.length >= 8) {
             // Read world time (new format)
@@ -283,7 +344,23 @@ function saveWorld() {
         offset += entry.stateBuffer.length;
     }
 
-    fs.writeFileSync(worldFile, buffer);
+    // Write to a sibling temp file and rename it into place. A rename within
+    // the same directory is atomic, so an interrupted save (tab closed, disk
+    // full, browser tab killed) can only ever leave the previous world intact
+    // -- writing straight to world_data.bin could truncate a good world to a
+    // partial file, which is exactly how a save becomes unrecoverable.
+    const tempFile = worldFile + '.tmp';
+    try {
+        fs.writeFileSync(tempFile, buffer);
+        fs.renameSync(tempFile, worldFile);
+    } catch (e) {
+        try {
+            if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+        } catch (cleanupError) {
+            // Nothing more we can do; the original world is still intact.
+        }
+        throw e;
+    }
     //log.info('World', `World saved (${currentWorldName})`);
 }
 

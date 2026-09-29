@@ -1,2 +1,4 @@
 Flask>=3.0,<4.0
 waitress>=3.0,<4.0
+# Gallery photos are re-encoded to WebP server-side.
+Pillow>=11.0,<13.0

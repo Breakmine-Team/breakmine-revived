@@ -13,10 +13,21 @@ from datetime import datetime
 import urllib.error
 import urllib.parse
 import urllib.request
+from io import BytesIO
 from flask import Flask, Blueprint, Response, request, redirect, url_for, session, render_template, send_file, current_app, jsonify
 from markupsafe import escape
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.serving import run_simple
+
+# Pillow does the gallery re-encoding. Guarded so the wiki and the mod library
+# still boot without it (a stale container that never reinstalled deps) - only
+# the gallery routes report the problem.
+try:
+    from PIL import Image, ImageOps
+    PIL_AVAILABLE = True
+except ImportError:
+    Image = ImageOps = None
+    PIL_AVAILABLE = False
 
 SECRET_KEY = os.environ.get('WIKI_SECRET_KEY') or 'wikipedia_style_minimal_css_secret_key'
 # Everything that must survive a restart lives in DATA_DIR. In Docker this is a volume.
@@ -24,6 +35,7 @@ DATA_DIR = os.environ.get('WIKI_DATA_DIR') or '.'
 DB_PATH = os.path.join(DATA_DIR, 'wiki.db')
 UPLOAD_FOLDER = os.path.join(DATA_DIR, 'mod_files')
 TEMP_UPLOAD_FOLDER = os.path.join(DATA_DIR, 'temp_mods')
+IMAGE_FOLDER = os.path.join(DATA_DIR, 'mod_images')
 # Password for the 'kai' admin account. Unset means "prompt if interactive, otherwise skip".
 ADMIN_PASSWORD = os.environ.get('WIKI_ADMIN_PASSWORD') or None
 DEBUG = os.environ.get('WIKI_DEBUG', '').strip().lower() in ('1', 'true', 'yes', 'on')
@@ -35,10 +47,24 @@ DISCORD_SCOPE = 'identify email'
 DISCORD_REDIRECT_BASE = os.environ.get('DISCORD_REDIRECT_BASE') or None
 ALLOWED_EXTENSIONS = {'zip'}
 MAX_FILE_SIZE = 50 * 1024 * 1024
+# Gallery photos. Uploads are re-encoded to WebP on the way in, so these are the
+# limits a user actually feels: what one file may weigh before we look at it, and
+# how much compressed data one mod's whole gallery may occupy.
+ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'}
+MAX_IMAGE_SIZE = 5 * 1024 * 1024
+MAX_GALLERY_SIZE = 5 * 1024 * 1024
+# Longest edge kept after downscaling, and the WebP encoder settings. Deliberately
+# aggressive: gallery shots are looked at inside a ~420px slider, so anything
+# beyond this is bytes nobody can see.
+GALLERY_MAX_EDGE = 1600
+GALLERY_QUALITY = 72
+GALLERY_METHOD = 6
+CAPTION_ALIGNMENTS = ('center', 'left', 'right')
 
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(TEMP_UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(IMAGE_FOLDER, exist_ok=True)
 
 temp_timers = {}
 
@@ -131,6 +157,58 @@ def format_file_size(size_bytes):
     elif size_bytes < 1024 * 1024: return f"{size_bytes / 1024:.1f} KB"
     else: return f"{size_bytes / (1024 * 1024):.1f} MB"
 
+# --- GALLERY PHOTOS ---
+def allowed_image_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_IMAGE_EXTENSIONS
+
+def image_path(filename):
+    """Absolute path of a stored photo. The name is a uuid we generated, and
+    basename() keeps it that way even if a database row is ever tampered with."""
+    return os.path.join(IMAGE_FOLDER, os.path.basename(filename))
+
+def remove_image_file(row):
+    fp = image_path(row['filename'])
+    if os.path.exists(fp):
+        try: os.remove(fp)
+        except OSError: pass
+
+def compress_to_webp(data):
+    """Re-encode an uploaded photo as a small WebP and return (bytes, width, height).
+
+    Everything is re-created from scratch, so EXIF (and with it GPS coordinates)
+    never reaches the stored file. Raises ValueError with a message meant for the
+    uploader when the bytes are not a readable image.
+    """
+    try:
+        with Image.open(BytesIO(data)) as src:
+            # Honour the camera's rotation, then flatten the mode: WebP wants
+            # RGB, or RGBA when the photo actually has transparency.
+            im = ImageOps.exif_transpose(src) or src
+            im.seek(0)
+            keep_alpha = im.mode in ('RGBA', 'LA') or (im.mode == 'P' and 'transparency' in im.info)
+            im = im.convert('RGBA' if keep_alpha else 'RGB')
+            im.thumbnail((GALLERY_MAX_EDGE, GALLERY_MAX_EDGE), Image.LANCZOS)
+            out = BytesIO()
+            im.save(out, 'WEBP', quality=GALLERY_QUALITY, method=GALLERY_METHOD)
+            return out.getvalue(), im.width, im.height
+    except Exception:
+        raise ValueError("Unsupported or corrupt image. Use PNG, JPEG, GIF, BMP or WebP.") from None
+
+def gallery_images(db, mod_id):
+    """Gallery rows in carousel order, with the byte size formatted for display."""
+    rows = db.execute('SELECT * FROM mod_images WHERE mod_id=? ORDER BY position ASC, id ASC', (mod_id,)).fetchall()
+    return [dict(r, file_size_formatted=format_file_size(r['file_size'])) for r in rows]
+
+def gallery_used(db, mod_id):
+    return db.execute('SELECT COALESCE(SUM(file_size), 0) FROM mod_images WHERE mod_id=?', (mod_id,)).fetchone()[0]
+
+def resequence_gallery(db, mod_id):
+    """Rewrite positions to a dense 0..n-1 so ordering stays stable after deletes."""
+    for i, row in enumerate(db.execute('SELECT id FROM mod_images WHERE mod_id=? ORDER BY position ASC, id ASC', (mod_id,)).fetchall()):
+        db.execute('UPDATE mod_images SET position=? WHERE id=?', (i, row['id']))
+
+def clean_caption(value, limit): return (value or '').strip()[:limit]
+
 MAX_MIN_PATCHWORK_LEN = 20
 
 def clean_min_patchwork(value):
@@ -156,6 +234,7 @@ def init_db(force_reset_password=False):
     cursor.execute('''CREATE TABLE IF NOT EXISTS mods (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, version TEXT DEFAULT '1.0.0', description TEXT DEFAULT '', uploaded_by TEXT NOT NULL, download_count INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (uploaded_by) REFERENCES users (username))''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS mod_versions (id INTEGER PRIMARY KEY AUTOINCREMENT, mod_id INTEGER NOT NULL, version TEXT NOT NULL, filename TEXT NOT NULL, original_filename TEXT NOT NULL, file_size INTEGER DEFAULT 0, uploaded_by TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (mod_id) REFERENCES mods (id) ON DELETE CASCADE, FOREIGN KEY (uploaded_by) REFERENCES users (username))''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS mod_comments (id INTEGER PRIMARY KEY AUTOINCREMENT, mod_id INTEGER NOT NULL, author TEXT NOT NULL, content TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (mod_id) REFERENCES mods (id) ON DELETE CASCADE, FOREIGN KEY (author) REFERENCES users (username))''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS mod_images (id INTEGER PRIMARY KEY AUTOINCREMENT, mod_id INTEGER NOT NULL, filename TEXT NOT NULL, original_filename TEXT NOT NULL, file_size INTEGER DEFAULT 0, width INTEGER DEFAULT 0, height INTEGER DEFAULT 0, position INTEGER DEFAULT 0, caption TEXT DEFAULT '', subtitle TEXT DEFAULT '', caption_align TEXT DEFAULT 'center', uploaded_by TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (mod_id) REFERENCES mods (id) ON DELETE CASCADE, FOREIGN KEY (uploaded_by) REFERENCES users (username))''')
 
     try:
         cursor.execute("SELECT filename FROM mods LIMIT 0")
@@ -580,6 +659,7 @@ def view(mod_id):
         ), 404
     versions = [dict(v, file_size_formatted=format_file_size(v['file_size'])) for v in db.execute('SELECT * FROM mod_versions WHERE mod_id = ? ORDER BY created_at DESC', (mod_id,)).fetchall()]
     comments = db.execute('SELECT * FROM mod_comments WHERE mod_id = ? ORDER BY created_at ASC', (mod_id,)).fetchall()
+    images = gallery_images(db, mod_id)
     db.close()
     user = session.get('user')
     ce = cd = _can_manage(user, mod['uploaded_by'])
@@ -591,6 +671,7 @@ def view(mod_id):
         mod=mod,
         versions=versions,
         comments=comments,
+        images=images,
         can_edit=ce,
         can_delete=cd,
         meta_description=meta_desc
@@ -693,6 +774,163 @@ def download_version(mod_id, ver_id):
     if not os.path.exists(fp): return "Missing file", 404
     return send_file(fp, as_attachment=True, download_name=ver['original_filename'])
 
+# --- MOD GALLERY ---
+def _manageable_mod(db, mod_id):
+    """(mod, response) - response is set when the mod is missing or off limits."""
+    mod = db.execute('SELECT * FROM mods WHERE id=?', (mod_id,)).fetchone()
+    if not mod: return None, ("Not found", 404)
+    if not _can_manage(session.get('user'), mod['uploaded_by']): return None, ("Unauthorized", 403)
+    return mod, None
+
+def _render_gallery(db, mod_id, mod, error=None):
+    used = gallery_used(db, mod_id)
+    return render_template(
+        'mods/gallery.html',
+        page_title="Gallery",
+        header_title="Gallery",
+        mod=mod,
+        mod_id=mod_id,
+        images=gallery_images(db, mod_id),
+        gallery_used=used,
+        gallery_used_formatted=format_file_size(used),
+        gallery_max=MAX_GALLERY_SIZE,
+        gallery_max_formatted=format_file_size(MAX_GALLERY_SIZE),
+        max_image_size=MAX_IMAGE_SIZE,
+        max_image_size_formatted=format_file_size(MAX_IMAGE_SIZE),
+        gallery_free=max(0, MAX_GALLERY_SIZE - used),
+        caption_alignments=CAPTION_ALIGNMENTS,
+        pil_available=PIL_AVAILABLE,
+        error=error,
+        meta_description=f"Managing gallery photos for {mod['name']}."
+    )
+
+@mods_bp.route('/image/<int:mod_id>/i/<int:img_id>')
+def mod_image(mod_id, img_id):
+    """Serve one stored photo. The on-disk name stays private; the row is the only
+    way in. Cached hard because a photo, once uploaded, never changes."""
+    db = get_db()
+    img = db.execute('SELECT filename FROM mod_images WHERE id=? AND mod_id=?', (img_id, mod_id)).fetchone()
+    db.close()
+    if not img: return "Not found", 404
+    fp = image_path(img['filename'])
+    if not os.path.exists(fp): return "Missing file", 404
+    return send_file(fp, mimetype='image/webp', max_age=60 * 60 * 24 * 30)
+
+@mods_bp.route('/gallery/<int:mod_id>')
+def gallery(mod_id):
+    if not session.get('user'): return redirect(url_for('auth.login'))
+    db = get_db()
+    mod, denied = _manageable_mod(db, mod_id)
+    if denied: db.close(); return denied
+    html = _render_gallery(db, mod_id, mod)
+    db.close()
+    return html
+
+@mods_bp.route('/gallery/<int:mod_id>/upload', methods=['POST'])
+def gallery_upload(mod_id):
+    if not session.get('user'): return redirect(url_for('auth.login'))
+    db = get_db()
+    mod, denied = _manageable_mod(db, mod_id)
+    if denied: db.close(); return denied
+    error = None
+    file = request.files.get('file')
+    if not PIL_AVAILABLE:
+        error = "Photo support is unavailable on this server (Pillow is not installed)."
+    elif not file or file.filename == '':
+        error = "No photo selected."
+    elif not allowed_image_file(file.filename):
+        error = "Only PNG, JPEG, GIF, BMP or WebP images are allowed."
+    else:
+        # Read one byte past the cap: enough to tell "too big" without ever
+        # holding a whole oversized upload in memory.
+        data = file.read(MAX_IMAGE_SIZE + 1)
+        if len(data) == 0: error = "Empty file."
+        elif len(data) > MAX_IMAGE_SIZE: error = f"Photo too large. Max {format_file_size(MAX_IMAGE_SIZE)}."
+        else:
+            try:
+                webp, width, height = compress_to_webp(data)
+            except ValueError as e:
+                error = str(e)
+            else:
+                used = gallery_used(db, mod_id)
+                if len(webp) > MAX_GALLERY_SIZE - used:
+                    free = max(0, MAX_GALLERY_SIZE - used)
+                    error = (f"No gallery space left - this photo needs {format_file_size(len(webp))} "
+                             f"but only {format_file_size(free)} is free.")
+                else:
+                    fname = f"{uuid.uuid4().hex}.webp"
+                    with open(image_path(fname), 'wb') as f: f.write(webp)
+                    position = db.execute('SELECT COALESCE(MAX(position), -1) + 1 FROM mod_images WHERE mod_id=?', (mod_id,)).fetchone()[0]
+                    db.execute(
+                        'INSERT INTO mod_images (mod_id, filename, original_filename, file_size, width, height, position, caption, subtitle, caption_align, uploaded_by)'
+                        ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                        (mod_id, fname, file.filename, len(webp), width, height, position,
+                         clean_caption(request.form.get('caption'), 120),
+                         clean_caption(request.form.get('subtitle'), 160),
+                         _clean_align(request.form.get('caption_align')),
+                         session['user'])
+                    )
+                    db.commit()
+                    resequence_gallery(db, mod_id); db.commit()
+                    db.close()
+                    return redirect(url_for('mods.gallery', mod_id=mod_id))
+    html = _render_gallery(db, mod_id, mod, error=error)
+    db.close()
+    return html
+
+def _clean_align(value):
+    return value if value in CAPTION_ALIGNMENTS else 'center'
+
+@mods_bp.route('/gallery/<int:mod_id>/i/<int:img_id>/update', methods=['POST'])
+def gallery_update(mod_id, img_id):
+    if not session.get('user'): return redirect(url_for('auth.login'))
+    db = get_db()
+    mod, denied = _manageable_mod(db, mod_id)
+    if denied: db.close(); return denied
+    if not db.execute('SELECT 1 FROM mod_images WHERE id=? AND mod_id=?', (img_id, mod_id)).fetchone():
+        db.close(); return "Not found", 404
+    db.execute('UPDATE mod_images SET caption=?, subtitle=?, caption_align=? WHERE id=?', (
+        clean_caption(request.form.get('caption'), 120),
+        clean_caption(request.form.get('subtitle'), 160),
+        _clean_align(request.form.get('caption_align')),
+        img_id))
+    db.commit(); db.close()
+    return redirect(url_for('mods.gallery', mod_id=mod_id))
+
+@mods_bp.route('/gallery/<int:mod_id>/i/<int:img_id>/move', methods=['POST'])
+def gallery_move(mod_id, img_id):
+    """Swap a photo with its neighbour in the carousel."""
+    if not session.get('user'): return redirect(url_for('auth.login'))
+    db = get_db()
+    mod, denied = _manageable_mod(db, mod_id)
+    if denied: db.close(); return denied
+    row = db.execute('SELECT id, position FROM mod_images WHERE id=? AND mod_id=?', (img_id, mod_id)).fetchone()
+    if not row: db.close(); return "Not found", 404
+    earlier = request.form.get('dir') != 'down'
+    if earlier:
+        other = db.execute('SELECT id, position FROM mod_images WHERE mod_id=? AND (position < ? OR (position = ? AND id < ?)) ORDER BY position DESC, id DESC LIMIT 1', (mod_id, row['position'], row['position'], img_id)).fetchone()
+    else:
+        other = db.execute('SELECT id, position FROM mod_images WHERE mod_id=? AND (position > ? OR (position = ? AND id > ?)) ORDER BY position ASC, id ASC LIMIT 1', (mod_id, row['position'], row['position'], img_id)).fetchone()
+    if other:
+        db.execute('UPDATE mod_images SET position=? WHERE id=?', (other['position'], row['id']))
+        db.execute('UPDATE mod_images SET position=? WHERE id=?', (row['position'], other['id']))
+    db.commit(); db.close()
+    return redirect(url_for('mods.gallery', mod_id=mod_id))
+
+@mods_bp.route('/gallery/<int:mod_id>/i/<int:img_id>/delete', methods=['POST'])
+def gallery_delete(mod_id, img_id):
+    if not session.get('user'): return redirect(url_for('auth.login'))
+    db = get_db()
+    mod, denied = _manageable_mod(db, mod_id)
+    if denied: db.close(); return denied
+    img = db.execute('SELECT * FROM mod_images WHERE id=? AND mod_id=?', (img_id, mod_id)).fetchone()
+    if not img: db.close(); return "Not found", 404
+    remove_image_file(img)
+    db.execute('DELETE FROM mod_images WHERE id=?', (img_id,))
+    resequence_gallery(db, mod_id)
+    db.commit(); db.close()
+    return redirect(url_for('mods.gallery', mod_id=mod_id))
+
 @mods_bp.route('/delete/<int:mod_id>', methods=['GET', 'POST'])
 def delete(mod_id):
     if not session.get('user'): return redirect(url_for('auth.login'))
@@ -703,6 +941,9 @@ def delete(mod_id):
         for v in db.execute('SELECT filename FROM mod_versions WHERE mod_id=?', (mod_id,)).fetchall():
             fp = os.path.join(UPLOAD_FOLDER, v['filename'])
             if os.path.exists(fp): os.remove(fp)
+        # The rows cascade with the mod, the files on disk do not.
+        for img in db.execute('SELECT * FROM mod_images WHERE mod_id=?', (mod_id,)).fetchall():
+            remove_image_file(img)
         db.execute('DELETE FROM mods WHERE id=?', (mod_id,)); db.commit(); db.close()
         return redirect(url_for('mods.index'))
     db.close()
@@ -921,7 +1162,7 @@ def behind_proxy(app):
 # Flask caches static files for SEND_FILE_MAX_AGE_DEFAULT (12h by default), so
 # a theme tweak would not reach visitors until the cache expired. The theme
 # assets are versioned instead: bump this when you edit theme.css or theme.js.
-THEME_ASSET_VERSION = 1
+THEME_ASSET_VERSION = 2
 
 wiki_app = Flask(__name__, static_folder='static', static_url_path='/static', template_folder='templates')
 wiki_app.secret_key = SECRET_KEY

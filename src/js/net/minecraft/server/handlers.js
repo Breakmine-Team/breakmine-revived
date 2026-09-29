@@ -61,12 +61,46 @@ let log = Logger;
 
 // A failed world save (disk full, sandboxed FS, ...) must never take down the
 // connection or interrupt gameplay — log it and continue.
-function safeSaveWorld() {
+function doSaveWorld() {
     try {
         saveWorld();
     } catch (e) {
         log.error('Server', 'Failed to save world: ' + (e && e.message));
     }
+}
+
+// saveWorld() rewrites the entire world file, and a single action triggers
+// several of them: placing a block also fires onBlockAdded, neighbour ticks
+// and the dig that follows, so a burst of activity wrote the whole world over
+// and over. On a world with ~1M changes that is tens of megabytes per block
+// placed, which is slow enough to look like the game has hung and leaves the
+// write open long enough to be interrupted.
+//
+// Coalesce a burst into one write. This is a throttle rather than a trailing
+// debounce: the first change schedules the write and later changes ride along
+// with it, so a continuous stream of edits can never starve the save.
+const SAVE_DEBOUNCE_MS = 2000;
+let pendingSaveTimer = null;
+
+function safeSaveWorld() {
+    if (pendingSaveTimer !== null) return;
+    pendingSaveTimer = setTimeout(() => {
+        pendingSaveTimer = null;
+        doSaveWorld();
+    }, SAVE_DEBOUNCE_MS);
+    // Never hold the process open just to write a world.
+    if (typeof pendingSaveTimer.unref === 'function') pendingSaveTimer.unref();
+}
+
+// A scheduled save that never fires would lose the last couple of seconds of
+// edits, so the shutdown path calls this to write immediately. Returns true if
+// there was something pending, so the caller can skip a redundant second write.
+function flushSaveWorld() {
+    if (pendingSaveTimer === null) return false;
+    clearTimeout(pendingSaveTimer);
+    pendingSaveTimer = null;
+    doSaveWorld();
+    return true;
 }
 
 function canSee(viewer, target) {
@@ -905,5 +939,6 @@ function respawnPlayer(player) {
 export {
     handlePacket,
     cleanupPlayerChunks,
-    respawnPlayer
+    respawnPlayer,
+    flushSaveWorld
 };

@@ -56,11 +56,12 @@ docker run --rm -p 8001:8001 -e WIKI_ADMIN_PASSWORD=dev -v breakmine-wiki-data:/
 
 Everything that must survive a restart lives in `/data` inside the container:
 
-| Path                | Contents                                    |
-| ------------------- | ------------------------------------------- |
-| `/data/wiki.db`     | users, pages, revisions, mods, comments     |
-| `/data/mod_files/`  | uploaded mod / texture pack `.zip` files    |
-| `/data/temp_mods/`  | 5-minute temp uploads (safe to lose)        |
+| Path                 | Contents                                    |
+| -------------------- | ------------------------------------------- |
+| `/data/wiki.db`      | users, pages, revisions, mods, comments     |
+| `/data/mod_files/`   | uploaded mod / texture pack `.zip` files    |
+| `/data/mod_images/`  | gallery photos, re-encoded to WebP          |
+| `/data/temp_mods/`   | 5-minute temp uploads (safe to lose)        |
 
 `/data` is the named volume `breakmine-wiki-data`, so data survives
 `docker compose down`, container recreation, image rebuilds and `up -d`. The
@@ -351,6 +352,25 @@ curl 'https://mods.breakmine.com/api/mods/999/files'    # 404
 { "error": "Mod not found" }
 ```
 
+## Mod gallery
+
+Each mod page has a **Gallery** tab with a Materialize slider, and a manage page
+at `/gallery/<mod id>` where the uploader (or `kai`) can add, caption, reorder and
+delete photos.
+
+Uploads are re-encoded server-side with Pillow, so the browser never gets to
+choose a format or a size:
+
+- Accepted input: PNG, JPEG, GIF, BMP, WebP, at most 5 MB per photo.
+- Stored as WebP (quality 72, method 6) downscaled to 1600px on the long edge,
+  which is well past what the 420px slider can show.
+- EXIF is dropped on the way through, so camera and GPS data never lands on disk.
+- A mod's whole gallery is capped at 5 MB of stored WebP. The manage page shows
+  how much is left; an upload that would not fit is rejected, not silently cropped.
+
+Tuning lives at the top of `app.py`: `MAX_IMAGE_SIZE`, `MAX_GALLERY_SIZE`,
+`GALLERY_MAX_EDGE`, `GALLERY_QUALITY`, `GALLERY_METHOD`.
+
 ## Run without Docker
 
 ```sh
@@ -360,8 +380,8 @@ python3 app.py
 
 Data defaults to the current directory. Useful flags/env:
 
-- `WIKI_DATA_DIR` — where `wiki.db`, `mod_files/` and `temp_mods/` live
-  (default `.`).
+- `WIKI_DATA_DIR` — where `wiki.db`, `mod_files/`, `mod_images/` and
+  `temp_mods/` live (default `.`).
 - `WIKI_ADMIN_PASSWORD` — set the `kai` password without an interactive prompt.
 - `WIKI_SECRET_KEY` — cookie signing key (default: built-in constant).
 - `WIKI_PORT` / `MODS_PORT` — listen ports (default 8001 / 8004).

@@ -1,7 +1,7 @@
 import { initWorld, saveWorld, getWorldChanges, loadCurrentWorld, getWorldTime, tickWorldTime, setBlockInventory, getBlockInventories, getCurrentWorldName } from './world.js';
 import { tickAllFurnaces, broadcastFurnaceChanges } from './Furnace.js';
 import { sendTimeUpdate, sendChatMessage, sendPlayerListEntry } from './packets.js';
-import { handlePacket, cleanupPlayerChunks, respawnPlayer } from './handlers.js';
+import { handlePacket, cleanupPlayerChunks, respawnPlayer, flushSaveWorld } from './handlers.js';
 import { addPlayer, removePlayer, getPlayerCount, getPlayers, savePlayerData, normalizeInventoryState } from './players.js';
 import Logger from './logger.js';
 import { BlockRegistry } from '../client/world/block/BlockRegistry.js';
@@ -192,6 +192,12 @@ export function stopServer() {
     tickInterval = null;
     autosaveInterval = null;
     playerSaveInterval = null;
+
+    // Block edits are persisted by a debounced save; if one is still queued it
+    // has to be written now or the last couple of seconds of changes are lost.
+    // If nothing was pending, fall through to the full save so anything the
+    // tick loop changed (time, entities) is still flushed.
+    if (flushSaveWorld()) return;
 
     try {
         saveWorld();

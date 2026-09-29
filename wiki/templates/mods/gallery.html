@@ -1,0 +1,227 @@
+{% extends "layouts/mods_base.html" %}
+
+{% set show_header = false %}
+
+{% block content %}
+  <!-- Mod header, same shape as the view page so the two read as one screen. -->
+  <div class="mod-header" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 5px;">
+    <div style="flex: 1;">
+      <h5 style="margin: 0 0 5px 0; font-weight: bold; display: flex; align-items: center; gap: 8px;">
+        <span>{{ mod['name'] | e }}</span>
+        <i class="material-icons tiny">photo_library</i>
+      </h5>
+      <p>
+        <span style="display: flex; align-items: center; gap: 4px;">
+          <i class="material-icons tiny">person</i> {{ mod['uploaded_by'] | e }}
+        </span>
+      </p>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+      <a href="{{ url_for('mods.view', mod_id=mod_id) }}" class="btn-floating transparent waves-effect waves-dark" title="Back to Mod">
+        <i class="material-icons">arrow_back</i>
+      </a>
+      <a href="{{ url_for('mods.edit', mod_id=mod_id) }}" class="btn-floating transparent waves-effect waves-dark" title="Edit Mod">
+        <i class="material-icons">edit</i>
+      </a>
+    </div>
+  </div>
+
+  <div class="divider" style="margin: 15px 0;"></div>
+
+  <!-- Tabs: the same set as the view page, but they are links here because this
+       page is all about the gallery. -->
+  <style>
+    .tabs { background-color: transparent !important; }
+    .tabs .tab { background-color: transparent !important; }
+    .tabs .tab a { background-color: transparent !important; color: var(--text-color, #9e9e9e); }
+    .tabs .tab a:hover, .tabs .tab a.active { background-color: transparent !important; color: var(--accent, #009688); }
+    .tabs .indicator { background-color: var(--accent, #009688); }
+
+    .gallery-meter {
+      height: 6px;
+      border-radius: 3px;
+      background-color: var(--surface-alt, #f2f2f2);
+      overflow: hidden;
+      margin: 6px 0 2px 0;
+    }
+    .gallery-meter > span {
+      display: block;
+      height: 100%;
+      background-color: var(--accent, #009688);
+    }
+    .gallery-meter.is-full > span { background-color: var(--error, #d32f2f); }
+
+    .gallery-item {
+      display: flex;
+      gap: 15px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+    .gallery-thumb {
+      width: 150px;
+      height: 96px;
+      object-fit: cover;
+      border-radius: 4px;
+      border: 1px solid var(--divider, rgba(0,0,0,0.12));
+      flex-shrink: 0;
+      background-color: var(--surface-alt, #f2f2f2);
+    }
+    .gallery-item .input-field { margin-bottom: 10px; }
+    .gallery-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+  </style>
+
+  <div class="row" style="margin-bottom: 0;">
+    <div class="col s12" style="padding: 0;">
+      <ul class="tabs tabs-fixed-width">
+        <li class="tab col s3"><a href="{{ url_for('mods.view', mod_id=mod_id) }}">Description</a></li>
+        <li class="tab col s3"><a href="{{ url_for('mods.view', mod_id=mod_id) }}">Comments</a></li>
+        <li class="tab col s3"><a href="{{ url_for('mods.view', mod_id=mod_id) }}">Versions</a></li>
+        <li class="tab col s3"><a class="active" href="#tab-gallery">Gallery</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="divider" style="margin-bottom: 20px;"></div>
+
+  <div id="tab-gallery" class="col s12">
+    {% if error %}
+      <p class="error-msg">{{ error }}</p>
+    {% endif %}
+
+    <p class="grey-text text-darken-1" style="margin-bottom: 2px;">
+      Photos are converted to WebP and shrunk on upload. Gallery space: {{ gallery_used_formatted }} of {{ gallery_max_formatted }} used.
+    </p>
+    <div class="gallery-meter {{ 'is-full' if gallery_free == 0 else '' }}">
+      <span style="width: {{ ((gallery_used / gallery_max) * 100) | round(2) if gallery_max else 0 }}%;"></span>
+    </div>
+    <p class="grey-text text-darken-1"><small>Up to {{ max_image_size_formatted }} per photo.</small></p>
+
+    <!-- Upload -->
+    {% if pil_available %}
+      <form action="{{ url_for('mods.gallery_upload', mod_id=mod_id) }}" method="post" enctype="multipart/form-data"
+            style="margin: 20px 0 25px 0; padding: 18px; border: 1px dashed var(--divider, rgba(0,0,0,0.12)); border-radius: 6px;">
+        <div class="file-field input-field" style="margin-top: 0;">
+          <div class="btn teal">
+            <span>Photo</span>
+            <input type="file" name="file" accept="image/png,image/jpeg,image/gif,image/bmp,image/webp" required>
+          </div>
+          <div class="file-path-wrapper">
+            <input class="file-path validate" type="text" placeholder="PNG, JPEG, GIF, BMP or WebP (max {{ max_image_size_formatted }})">
+          </div>
+        </div>
+        <div class="row" style="margin-bottom: 0;">
+          <div class="input-field col s12 m4">
+            <input type="text" id="new-caption" name="caption" maxlength="120">
+            <label for="new-caption" class="active">Caption</label>
+          </div>
+          <div class="input-field col s12 m5">
+            <input type="text" id="new-subtitle" name="subtitle" maxlength="160">
+            <label for="new-subtitle" class="active">Subtitle</label>
+          </div>
+          <div class="input-field col s12 m3">
+            <select id="new-caption-align" name="caption_align">
+              {% for a in caption_alignments %}
+                <option value="{{ a }}" {{ 'selected' if a == 'center' }}>{{ a | capitalize }} aligned</option>
+              {% endfor %}
+            </select>
+            <label for="new-caption-align">Caption position</label>
+          </div>
+        </div>
+        <button type="submit" class="btn waves-effect waves-light teal" style="margin-top: 10px;">
+          <i class="material-icons left">file_upload</i>Add photo
+        </button>
+      </form>
+    {% endif %}
+
+    <!-- List -->
+    {% if images %}
+      <ul class="collection">
+        {% for img in images %}
+          <li class="collection-item">
+            <div class="gallery-item">
+              <a href="{{ url_for('mods.mod_image', mod_id=mod_id, img_id=img['id']) }}" target="_blank" rel="noopener">
+                <img class="gallery-thumb" src="{{ url_for('mods.mod_image', mod_id=mod_id, img_id=img['id']) }}" alt="{{ img['original_filename'] | e }}">
+              </a>
+
+              <form action="{{ url_for('mods.gallery_update', mod_id=mod_id, img_id=img['id']) }}" method="post" style="flex: 1 1 260px; min-width: 240px;">
+                <div class="input-field">
+                  <input type="text" id="caption-{{ img['id'] }}" name="caption" value="{{ img['caption'] | e }}" maxlength="120">
+                  <label for="caption-{{ img['id'] }}" class="active">Caption</label>
+                </div>
+                <div class="input-field">
+                  <input type="text" id="subtitle-{{ img['id'] }}" name="subtitle" value="{{ img['subtitle'] | e }}" maxlength="160">
+                  <label for="subtitle-{{ img['id'] }}" class="active">Subtitle</label>
+                </div>
+                <div class="input-field">
+                  <select id="align-{{ img['id'] }}" name="caption_align">
+                    {% for a in caption_alignments %}
+                      <option value="{{ a }}" {{ 'selected' if a == img['caption_align'] }}>{{ a | capitalize }} aligned</option>
+                    {% endfor %}
+                  </select>
+                  <label for="align-{{ img['id'] }}">Caption position</label>
+                </div>
+                <p class="grey-text text-darken-1" style="margin: 0 0 8px 0;">
+                  <small>{{ img['file_size_formatted'] }} &middot; {{ img['width'] }}&times;{{ img['height'] }} &middot; added {{ img['created_at'] }}</small>
+                </p>
+                <button type="submit" class="btn-flat waves-effect waves-light teal" style="padding-left: 0;">
+                  <i class="material-icons left">save</i>Save
+                </button>
+              </form>
+
+              <div class="gallery-actions">
+                <form action="{{ url_for('mods.gallery_move', mod_id=mod_id, img_id=img['id']) }}" method="post">
+                  <input type="hidden" name="dir" value="up">
+                  <button type="submit" class="btn-floating waves-effect waves-light grey" title="Move earlier" {{ 'disabled' if loop.first else '' }}>
+                    <i class="material-icons">arrow_upward</i>
+                  </button>
+                </form>
+                <form action="{{ url_for('mods.gallery_move', mod_id=mod_id, img_id=img['id']) }}" method="post">
+                  <input type="hidden" name="dir" value="down">
+                  <button type="submit" class="btn-floating waves-effect waves-light grey" title="Move later" {{ 'disabled' if loop.last else '' }}>
+                    <i class="material-icons">arrow_downward</i>
+                  </button>
+                </form>
+                <button type="button" class="btn-floating waves-effect waves-light red lighten-1" title="Delete photo"
+                        onclick="askDelete('{{ url_for('mods.gallery_delete', mod_id=mod_id, img_id=img['id']) }}', 'Delete this photo? This cannot be undone.')">
+                  <i class="material-icons">delete</i>
+                </button>
+              </div>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p><em class="grey-text">No photos yet.</em></p>
+    {% endif %}
+  </div>
+
+  <!-- Delete Modal -->
+  <div id="confirm-delete-modal" class="modal">
+    <form id="confirm-delete-form" method="post">
+      <div class="modal-content">
+        <h4>Are you sure?</h4>
+        <p id="confirm-delete-message">This cannot be undone.</p>
+      </div>
+      <div class="modal-footer">
+        <a href="#!" class="modal-close btn-flat">Cancel</a>
+        <button type="submit" class="btn waves-effect waves-light red">Delete</button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    function askDelete(action, message) {
+      var modal = document.getElementById('confirm-delete-modal');
+      document.getElementById('confirm-delete-form').action = action;
+      document.getElementById('confirm-delete-message').textContent = message;
+      var instance = M.Modal.getInstance(modal);
+      if (!instance) { M.Modal.init(modal); instance = M.Modal.getInstance(modal); }
+      instance.open();
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      M.Tabs.init(document.querySelectorAll('.tabs'));
+      M.FormSelect.init(document.querySelectorAll('select'), {});
+    });
+  </script>
+{% endblock %}

@@ -20,7 +20,7 @@ COPY wiki.db /data/wiki.db
 COPY mod_files /data/mod_files
 
 RUN useradd --uid 1000 --create-home --shell /usr/sbin/nologin wiki \
- && mkdir -p /data/temp_mods \
+ && mkdir -p /data/temp_mods /data/mod_images \
  && chown -R wiki:wiki /data /app
 
 USER wiki

@@ -124,6 +124,26 @@ html[data-theme="dark"] .tabs .indicator {
   background-color: var(--accent);
 }
 
+/* --- Gallery slider --- */
+
+/* Materialize hardcodes a grey backdrop for the slide track, which reads as a
+   loading placeholder once a photo fails to load. */
+html[data-theme="dark"] .slider .slides {
+  background-color: var(--surface-alt);
+}
+
+html[data-theme="dark"] .slider .slides li .caption h5 {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .slider .indicators .indicator-item {
+  background-color: rgba(255, 255, 255, 0.4);
+}
+
+html[data-theme="dark"] .slider .indicators .indicator-item.active {
+  background-color: var(--accent);
+}
+
 /* --- Forms -------------------------------------------------------------- */
 
 html[data-theme="dark"] .input-field input[type="text"],

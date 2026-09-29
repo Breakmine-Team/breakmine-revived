@@ -54,6 +54,9 @@
         <a href="{{ url_for('mods.edit', mod_id=mod['id']) }}" class="btn-floating transparent waves-effect waves-dark" title="Edit Mod">
           <i class="material-icons">edit</i>
         </a>
+        <a href="{{ url_for('mods.gallery', mod_id=mod['id']) }}" class="btn-floating transparent waves-effect waves-dark" title="Gallery Photos">
+          <i class="material-icons">photo_library</i>
+        </a>
       {% endif %}
       {% if versions %}
         <button type="button" class="btn-floating btn-large waves-effect waves-light teal" 
@@ -92,9 +95,10 @@
   <div class="row" style="margin-bottom: 0;">
     <div class="col s12" style="padding: 0;">
       <ul class="tabs tabs-fixed-width">
-        <li class="tab col s4"><a class="active" href="#tab-description">Description</a></li>
-        <li class="tab col s4"><a href="#tab-comments">Comments</a></li>
-        <li class="tab col s4"><a href="#tab-files">Versions</a></li>
+        <li class="tab col s3"><a class="active" href="#tab-description">Description</a></li>
+        <li class="tab col s3"><a href="#tab-comments">Comments</a></li>
+        <li class="tab col s3"><a href="#tab-files">Versions</a></li>
+        <li class="tab col s3"><a href="#tab-gallery">Gallery</a></li>
       </ul>
     </div>
   </div>
@@ -206,6 +210,37 @@
     {% endif %}
   </div>
 
+  <!-- Tab 4: Gallery -->
+  <div id="tab-gallery" class="col s12">
+    {% if images %}
+      <div class="slider mod-gallery-slider">
+        <ul class="slides">
+          {% for img in images %}
+            <li>
+              <img src="{{ url_for('mods.mod_image', mod_id=mod['id'], img_id=img['id']) }}" alt="{{ img['caption'] or mod['name'] }}">
+              {% if img['caption'] or img['subtitle'] %}
+                <div class="caption {{ img['caption_align'] }}-align">
+                  {% if img['caption'] %}<h3>{{ img['caption'] | e }}</h3>{% endif %}
+                  {% if img['subtitle'] %}<h5 class="light grey-text text-lighten-3">{{ img['subtitle'] | e }}</h5>{% endif %}
+                </div>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+      <p style="margin-top: 12px;" class="grey-text text-darken-1">
+        <small>{{ images | length }} photo{{ '' if images | length == 1 else 's' }}.</small>
+        {% if can_edit %}
+          <a href="{{ url_for('mods.gallery', mod_id=mod['id']) }}" style="margin-left: 10px;">Manage photos</a>
+        {% endif %}
+      </p>
+    {% else %}
+      <p><em class="grey-text">No photos yet.</em>
+        {% if can_edit %}<a href="{{ url_for('mods.gallery', mod_id=mod['id']) }}">Add some</a>.{% endif %}
+      </p>
+    {% endif %}
+  </div>
+
   <!-- Delete Modal -->
   <div id="confirm-delete-modal" class="modal">
     <form id="confirm-delete-form" method="post">
@@ -236,6 +271,11 @@
     document.addEventListener('DOMContentLoaded', function() {
       var el = document.querySelectorAll('.tabs');
       M.Tabs.init(el);
+
+      // The slider is eager: it measures nothing off the (still hidden) tab, and
+      // the tab becomes visible long before anyone reaches the third slide.
+      var slider = document.querySelector('.mod-gallery-slider');
+      if (slider) M.Slider.init(slider, { indicators: true, height: 420, interval: 6000 });
     });
   </script>
 {% endblock %}
