@@ -33,10 +33,13 @@ export default class BlockLeave extends Block {
     
     getDrop(world, x, y, z) {
         const rnd = Math.random();
-        if (rnd < 0.5) {
-            return [BlockRegistry.ITEM_APPLE.getId(), 1];
-        } else {
-            return [BlockRegistry.ITEM_STICK.getId(), 1];
+        const rnd2 = Math.random();
+        if (rnd2 > 0.5) {
+            if (rnd < 0.4) {
+                return [BlockRegistry.ITEM_APPLE.getId(), 1];
+            } else {
+                return [BlockRegistry.ITEM_STICK.getId(), 1];
+            }
         }
     }
 

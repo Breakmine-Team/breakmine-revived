@@ -117,7 +117,8 @@ export const atlasBlockTextures = [
     "bluestoneObserverFront.png", "bluestoneObserverBackOn.png",
     "bluestoneObserverBackOff.png", "oak_planks_green.png", "oak_planks_sticky.png",
     "bluestoneRepeaterTopOff.png", "bluestoneRepeaterTopOn.png", "lever.png",
-    "cobblestone_lever_base.png", "snow.png", "grass_block_snow.png"
+    "cobblestone_lever_base.png", "snow.png", "grass_block_snow.png",
+    "tnt_side.png", "tnt_bottom.png", "tnt_top.png"
 ];
 
 const toolMaterials = ['wooden', 'stone', 'iron', 'diamond', 'golden'];
@@ -132,6 +133,7 @@ export const atlasItemTextures = [
     "yellow_dye.png", "lime_dye.png", "pink_dye.png", "gray_dye.png",
     "light_gray_dye.png", "cyan_dye.png", "purple_dye.png", "blue_dye.png",
     "brown_dye.png", "green_dye.png", "red_dye.png", "black_dye.png",
+    "flint.png", "flint_and_steel.png",
     ...toolMaterials.flatMap(mat => toolTypes.map(type => `${mat}_${type}.png`))
 ];
 

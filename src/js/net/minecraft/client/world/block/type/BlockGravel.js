@@ -1,5 +1,6 @@
 import Block from "../Block.js";
 import EnumCreativeInventoryTab from "../../../gui/EnumCreativeInventoryTab.js";
+import { BlockRegistry } from "../BlockRegistry.js";
 
 export default class BlockGravel extends Block {
 
@@ -19,6 +20,13 @@ export default class BlockGravel extends Block {
 
     getTextureForFace(face) {
         return 'gravel';
+    }
+    
+    getDrop(world, x, y, z) {
+        const rnd = Math.random();
+        if (rnd > 0.5) {
+            return [BlockRegistry.FLINT.getId(), 1];
+        }
     }
 
     onBlockPlaced(world, x, y, z, face) {

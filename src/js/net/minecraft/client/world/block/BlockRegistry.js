@@ -74,6 +74,9 @@ import BlockBluestoneLeverDust from "./type/BlockBluestoneLeverDust.js";
 import ItemBluestoneLeverPlacer from "./type/ItemBluestoneLeverPlacer.js";
 import ItemBluestoneDustPlacer from "./type/ItemBluestoneDustPlacer.js";
 import BlockSnow from "./type/BlockSnow.js";
+import ItemFlint from "./type/ItemFlint.js";
+import ItemFlintAndSteel from "./type/ItemFlintAndSteel.js";
+import BlockTNT from "./type/BlockTNT.js";
 
 export class BlockRegistry {
 
@@ -448,6 +451,9 @@ export class BlockRegistry {
         BlockRegistry.ITEM_BLUESTONE_LEVER_PLACER = new ItemBluestoneLeverPlacer(180, 0, "Bluestone Lever");
 
         BlockRegistry.SNOW = new BlockSnow(234, 0, "snow", "Snow");
+        BlockRegistry.FLINT = new ItemFlint(235, 0, "flint", "Flint");
+        BlockRegistry.FLINT_AND_STEEL = new ItemFlintAndSteel(236, 0, "flint_and_steel", "Flint and Steel");
+        BlockRegistry.TNT = new BlockTNT(237, 0, "tnt", "TNT");
 
         for (const [key, val] of Object.entries(BlockRegistry)) {
             if (val && typeof val === "object" && val.id !== undefined) {

@@ -509,8 +509,11 @@ function handlePlayerDigging(player, buffer, offset) {
     const [x, y, z] = readPosition(buffer, offset + 1);
     const face = buffer.readUInt8(offset + 9);
 
-    // Status 2 is sent when survival blocks break or creative blocks are hit once
-    if (status === 2 || status === 0) {
+    // Only "finished" (2) actually destroys the block. Treating "started" (0)
+    // as a break made the server delete the block the moment mining began, so
+    // an aborted dig could never be undone and the removal was saved and
+    // broadcast before the client had even decided to break anything.
+    if (status === 2) {
         const blockId = 0; // Air (broken block)
         const prevBlockId = getBlockAt(x, y, z);
         const serverWorld = getServerWorld();
@@ -636,8 +639,16 @@ function handleBlockPlacement(player, buffer, offset) {
             }
         }
 
-        // Use held item ID
-        let blockId = heldItemId > 0 ? heldItemId : 1;
+        // The client reports which block it placed. Only a real, placeable
+        // block may be written: an absent id, an id the registry doesn't know
+        // or a non-block item (bucket, flint, ...) must be dropped, because
+        // such an id survives the save file and is then decoded as an unknown
+        // block on the next chunk load, which the client renders as stone.
+        const heldBlock = heldItemId > 0 ? Block.getById(heldItemId) : null;
+        if (heldBlock === null || typeof heldBlock.isItem === 'function' && heldBlock.isItem()) {
+            return;
+        }
+        const blockId = heldItemId;
 
         // Custom Stair Block IDs registered in BlockRegistry:
         // 150: Oak, 151: Spruce, 152: Birch, 153: Jungle, 154: Acacia,

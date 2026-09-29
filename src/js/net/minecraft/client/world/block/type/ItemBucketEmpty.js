@@ -26,19 +26,19 @@ export default class ItemBucketEmpty extends ItemGeneric {
         world.setBlockAt(x, y, z, 0);
         itemstack.typeId = block === BlockRegistry.WATER ? BlockRegistry.ITEM_BUCKET_WATER.getId() : BlockRegistry.ITEM_BUCKET_LAVA.getId();
         itemstack.count = Math.max(1, itemstack.count || 1);
-        this.notifyServerPlacement(world, x, y, z, hitFace, block === BlockRegistry.WATER ? BlockRegistry.WATER.getId() : BlockRegistry.LAVA.getId());
+        this.notifyServerRemoval(world, x, y, z);
     }
 
-    notifyServerPlacement(world, x, y, z, hitFace, blockId) {
+    // Picking a liquid up *removes* the block. This used to send a placement
+    // packet carrying the liquid's id, which made the server put the very same
+    // liquid straight back, so an empty bucket could never scoop anything in
+    // multiplayer. A finished digging packet removes it authoritatively.
+    notifyServerRemoval(world, x, y, z) {
         const minecraft = world.minecraft;
         if (!minecraft || !minecraft.playerController ||
-            typeof minecraft.playerController.sendBlockPlacementPacket !== 'function') {
+            typeof minecraft.playerController.sendBlockDiggingPacket !== 'function') {
             return;
         }
-        minecraft.playerController.sendBlockPlacementPacket(
-            new BlockPosition(x - hitFace.x, y - hitFace.y, z - hitFace.z),
-            minecraft.getFaceValue(hitFace),
-            { id: blockId }
-        );
+        minecraft.playerController.sendBlockDiggingPacket(2, new BlockPosition(x, y, z), 0);
     }
 }

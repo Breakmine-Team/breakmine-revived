@@ -1742,10 +1742,16 @@ export default class Minecraft {
                         let prevBlock = Block.getById(prevTypeId);
                         let isReplaceable = (prevBlock && prevBlock.isReplaceable(this.world, x, y, z)) || prevTypeId === 0;
 
-                        if (typeId !== 0 && isReplaceable) {
+                        // Only real blocks can be placed. An empty hand or a
+                        // non-block item (bucket, flint, ...) has no block to put
+                        // in the world, and guessing one here would push an id the
+                        // server cannot resolve into the save file.
+                        let block = Block.getById(typeId);
+                        let placeable = typeId !== 0 && isReplaceable && block !== null && !block.isItem();
+
+                        if (placeable) {
                             // Calculate block data for rotation
                             let blockData = 0;
-                            let block = Block.getById(typeId);
 
                             // Set rotation data for logs based on placement face
                             if (block.constructor.name === 'BlockLog') {

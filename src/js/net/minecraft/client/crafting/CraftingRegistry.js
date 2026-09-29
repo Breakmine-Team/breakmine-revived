@@ -99,6 +99,9 @@ export default class CraftingRegistry {
             BlockRegistry.ITEM_CLAY_BALL.id, BlockRegistry.ITEM_CLAY_BALL.id,
             BlockRegistry.ITEM_CLAY_BALL.id, BlockRegistry.ITEM_CLAY_BALL.id
         ]);
+        this.registerShapelessRecipe(BlockRegistry.FLINT_AND_STEEL.id, 1, [
+            BlockRegistry.FLINT.id, BlockRegistry.ITEM_IRON.id,
+        ]);
         this.registerDyeRecipes();
         this.registerConcretePowderRecipes();
         this.registerWoodRecipes();

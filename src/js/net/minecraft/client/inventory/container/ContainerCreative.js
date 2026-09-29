@@ -1,5 +1,6 @@
 import Container from "../Container.js";
 import GuiContainerCreative from "../../gui/screens/container/GuiContainerCreative.js";
+import ItemStack from "../../item/ItemStack.js";
 import Slot from "../Slot.js";
 import Block from "../../world/block/Block.js";
 import Minecraft from "../../Minecraft.js";
@@ -61,7 +62,13 @@ export default class ContainerCreative extends Container {
             super.onSlotClick(slot, player, mouseButton);
         } else {
             let inventoryPlayer = player.inventory;
-            inventoryPlayer.itemInCursor = slot.inventory.getItemInSlot(slot.index);
+            // The creative palette is a single shared inventory, so the stack in
+            // the slot must never be handed out by reference: using the item
+            // (placing it, shrinking the count, or a bucket swapping its type)
+            // would otherwise mutate the palette entry itself and the block
+            // would disappear from the tab.
+            let slotItem = slot.inventory.getItemInSlot(slot.index);
+            inventoryPlayer.itemInCursor = slotItem.isEmpty() ? new ItemStack(0, 0) : slotItem.copy();
         }
         this.dirty = true;
     }

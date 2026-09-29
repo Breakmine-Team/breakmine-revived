@@ -104,10 +104,34 @@ function initWorld(worldName = 'main') {
         const data = fs.readFileSync(worldFile);
         let offset = 0;
 
-        // Check if file has world time (new format) or not (old format)
-        // Old format: numChanges(4) + changes*(11) -> (length - 4) % 11 === 0
-        // New format: worldTime(8) + numChanges(4) + changes*(11) -> (length - 4) % 11 === 8
-        const hasWorldTime = (data.length - 4) % 11 !== 0;
+        // Pick the format by checking which header the file actually satisfies,
+        // never by the file length. The old test was
+        // `(data.length - 4) % 11 !== 0`, which only holds while nothing
+        // follows the changes. Block inventories are appended after them, so
+        // any world holding a chest or a sign failed the test and was read as
+        // new format: the loader skipped 8 bytes it should not, read the
+        // change count out of the middle of a change record and then decoded
+        // every coordinate from a misaligned offset. That produced the
+        // "Expected 35385180304 bytes" warning, coordinates like
+        // -1123845905,191 and block ids nobody registered -- which the client
+        // renders as stone, so a world full of water came back as stone.
+        //
+        // Old format: numChanges(4) + changes*11
+        // New format: worldTime(8) + numChanges(4) + changes*11
+        // Prefer whichever header the file actually satisfies. saveWorld only
+        // ever writes the new format, so it wins any tie, and a new-format save
+        // that was cut short by an interrupted write is still read as new
+        // format (clamped to the whole records that made it) rather than being
+        // mistaken for a legacy file.
+        const oldCount = data.length >= 4 ? data.readUInt32BE(0) : Infinity;
+        const newCount = data.length >= 12 ? data.readUInt32BE(8) : Infinity;
+        const newShortfall = 12 + newCount * 11 - data.length;
+        const oldFits = 4 + oldCount * 11 <= data.length;
+        // A new-format save missing less than one record is a partial write,
+        // not a legacy file.
+        const hasWorldTime = 12 + newCount * 11 <= data.length ||
+            (newShortfall > 0 && newShortfall < 11) ||
+            !oldFits;
 
         if (hasWorldTime && data.length >= 8) {
             // Read world time (new format)
