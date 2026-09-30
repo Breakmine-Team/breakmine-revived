@@ -104,6 +104,38 @@ def prompt_admin_password(exists):
 def discord_configured():
     return bool(DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET)
 
+# Stands in for the pbkdf2 hash of a row that was only recreated so a stale
+# session could keep writing. Never a valid hash, so password login can never
+# match it, and it marks the row as adoptable by a later Discord login.
+PLACEHOLDER_HASH = '!placeholder'
+
+def ensure_user_row(db, username):
+    """Guarantee a users row for a session name so the mods foreign keys resolve.
+
+    The session cookie only carries a username, and WIKI_SECRET_KEY falls back to
+    a built-in constant, so a cookie can outlive the account it names: the data
+    volume got restored, the database was reseeded from the image, or the row was
+    dropped. Every upload/comment/gallery INSERT then dies with
+    'FOREIGN KEY constraint failed'. Recreating the row keeps the user logged in
+    with the name they already have instead of failing the request.
+    """
+    if db.execute('SELECT 1 FROM users WHERE username = ?', (username,)).fetchone(): return username
+    salt, _ = hash_password(uuid.uuid4().hex + uuid.uuid4().hex)
+    db.execute('INSERT INTO users (username, salt, password_hash, discord_id) VALUES (?, ?, ?, NULL)', (username, salt, PLACEHOLDER_HASH))
+    db.commit()
+    return username
+
+def keep_session_user_valid():
+    """before_request: a session name with no account row is re-provisioned."""
+    username = session.get('user')
+    if not username: return None
+    db = get_db()
+    try:
+        ensure_user_row(db, username)
+    finally:
+        db.close()
+    return None
+
 def discord_redirect_uri():
     # Discord only accepts https redirect URIs. Do not trust a proxy that still
     # reports http (e.g. TLS not switched on yet) - that produces a URI Discord
@@ -137,6 +169,13 @@ def user_for_discord(discord_id, discord_username):
         if row: return row['username']
         base = re.sub(r'[^a-zA-Z0-9_]', '', discord_username)[:32].strip('_') or 'discord'
         if len(base) < 2: base = (base + 'user')[:32]
+        # A row we only recreated for a stale cookie is this same person coming
+        # back: claim it instead of creating 'name1' next to their own account.
+        orphan = db.execute('SELECT username FROM users WHERE username = ? AND password_hash = ?', (base, PLACEHOLDER_HASH)).fetchone()
+        if orphan:
+            db.execute('UPDATE users SET discord_id = ? WHERE username = ?', (discord_id, orphan['username']))
+            db.commit()
+            return orphan['username']
         username, n = base, 1
         while db.execute('SELECT 1 FROM users WHERE username = ?', (username,)).fetchone():
             suffix = str(n); n += 1
@@ -1270,6 +1309,7 @@ wiki_app.jinja_env.globals['theme_asset_version'] = THEME_ASSET_VERSION
 wiki_app.jinja_env.filters['regex_replace'] = lambda s, find, replace: re.sub(find, replace, str(s))
 wiki_app.register_blueprint(auth_bp)
 wiki_app.register_blueprint(wiki_bp)
+wiki_app.before_request(keep_session_user_valid)
 
 mods_app = Flask(__name__, static_folder='static', static_url_path='/static', template_folder='templates')
 mods_app.secret_key = SECRET_KEY
@@ -1285,6 +1325,7 @@ mods_app.register_blueprint(auth_bp)
 mods_app.register_blueprint(mods_bp)
 mods_app.register_blueprint(tempmod_bp)
 mods_app.register_blueprint(api_bp)
+mods_app.before_request(keep_session_user_valid)
 
 # --- CORS HANDLERS ---
 def add_cors_headers(response):
