@@ -4,6 +4,7 @@ import fs from '../client/fs/ServerFs.js';
 import path from '../util/path.js';
 import Logger from './logger.js';
 import * as worldGen from './WorldGen.js';
+import { SubChunkStore, SECTION_DATA_BYTES } from './SubChunkStore.js';
 
 const log = Logger;
 
@@ -14,15 +15,21 @@ const DEFAULT_WORLD_DIR = PROJECT_ROOT;
 const DEFAULT_WORLD_FILE = path.join(PROJECT_ROOT, 'world_data.bin');
 const CURRENT_WORLD_FILE = path.join(PROJECT_ROOT, 'current_world.txt');
 
+// World file magic + version. v3 stores whole modified subchunks, DEFLATE
+// compressed. Files without the magic are the legacy per-block "change list"
+// layout, which is still read and transparently upgraded on the next save.
+const WORLD_MAGIC = 'BMW3';
+const WORLD_VERSION = 3;
+
+const subChunks = new SubChunkStore();
+const blockInventories = new Map();
+let currentWorldName = 'main';
+let worldTime = 0; // In-game time (0-24000 ticks)
+
 // Ensure worlds directory exists
 if (!fs.existsSync(WORLDS_DIR)) {
     fs.mkdirSync(WORLDS_DIR, { recursive: true });
 }
-
-const worldChanges = new Map();
-const blockInventories = new Map();
-let currentWorldName = 'main';
-let worldTime = 0; // In-game time (0-24000 ticks)
 
 // Every server owns a self-contained directory. The main server lives in the
 // project root (world_data.bin), additional servers live in worlds/<name>/
@@ -81,15 +88,17 @@ function migrateOldWorld(worldName) {
     return false;
 }
 
-// Try to read `data` as a world file in the given format, and report how well
-// it fits. Returns null when the file is too short to even hold a header.
+// ---------------------------------------------------------------------------
+//  Legacy format support
 //
-//   old: numChanges(4) + changes*11 + numInventories(4) + inventories
-//   new: worldTime(8) + numChanges(4) + changes*11 + numInventories(4) + inventories
-//
-// `records` is how many whole 11-byte change records the file can actually
-// yield -- a declared count larger than that is treated as a partial write.
-// `exact` means the parse consumed the file to its last byte.
+//  v1/v2 stored a flat list of individual block changes:
+//     old: numChanges(4) + changes*11 + numInventories(4) + inventories
+//     new: worldTime(8) + numChanges(4) + changes*11 + numInventories(4) + inventories
+//  Each change is x(int32) + y(uint8) + z(int32) + blockState(uint16).
+//  These are read once and folded into subchunks so the rest of the server only
+//  ever deals with one representation.
+// ---------------------------------------------------------------------------
+
 function readLayout(data, hasWorldTime) {
     // The change count sits before the records, so the records begin at
     // offset 4 (old) or 12 (new).
@@ -128,9 +137,159 @@ function readLayout(data, hasWorldTime) {
     return layout;
 }
 
+function readInventories(data, offset) {
+    let cursor = offset;
+    if (cursor + 4 > data.length) return cursor;
+
+    const numInventories = data.readUInt32BE(cursor);
+    cursor += 4;
+
+    for (let i = 0; i < numInventories; i++) {
+        if (cursor + 2 > data.length) break;
+        const keyLength = data.readUInt16BE(cursor);
+        cursor += 2;
+
+        if (cursor + keyLength + 4 > data.length) break;
+        const key = data.toString('utf8', cursor, cursor + keyLength);
+        cursor += keyLength;
+
+        const stateLength = data.readUInt32BE(cursor);
+        cursor += 4;
+
+        if (cursor + stateLength > data.length) break;
+        const stateStr = data.toString('utf8', cursor, cursor + stateLength);
+        cursor += stateLength;
+
+        try {
+            blockInventories.set(key, JSON.parse(stateStr));
+        } catch (e) {
+            log.warn('World', `Failed to parse inventory state for ${key}: ${e.message}`);
+        }
+    }
+    return cursor;
+}
+
+/**
+ * Loads a legacy change list into the subchunk store. Pick the interpretation
+ * that consumes the file cleanly, preferring whichever recovers more records,
+ * so a partially written old save still yields the changes it did contain
+ * instead of being read as an empty world.
+ */
+function loadLegacyWorld(data) {
+    const asNew = readLayout(data, true);
+    const asOld = readLayout(data, false);
+
+    let hasWorldTime;
+    if (!asOld) {
+        hasWorldTime = true;
+    } else if (!asNew) {
+        hasWorldTime = false;
+    } else if (asNew.exact && !asOld.exact) {
+        hasWorldTime = true;
+    } else if (asOld.exact && !asNew.exact) {
+        hasWorldTime = false;
+    } else {
+        hasWorldTime = asNew.records >= asOld.records;
+    }
+
+    let offset = 0;
+    if (hasWorldTime && data.length >= 8) {
+        worldTime = Number(readLongBE(data, offset));
+        offset += 8;
+    } else {
+        worldTime = 0;
+    }
+
+    if (offset + 4 <= data.length) {
+        let totalChanges = data.readUInt32BE(offset);
+        offset += 4;
+
+        const expectedDataSize = offset + (totalChanges * 11);
+        if (data.length < expectedDataSize) {
+            log.warn('World', `World file truncated. Expected ${expectedDataSize} bytes, got ${data.length}`);
+            totalChanges = Math.floor((data.length - offset) / 11);
+        }
+
+        let applied = 0;
+        for (let i = 0; i < totalChanges; i++) {
+            if (offset + 11 > data.length) break;
+            const x = data.readInt32BE(offset);
+            const y = data.readUInt8(offset + 4);
+            const z = data.readInt32BE(offset + 5);
+            let blockState = data.readUInt16BE(offset + 9);
+
+            // The oldest format stored just blockId, not a blockState.
+            if (!hasWorldTime) {
+                blockState = (blockState & 0xFF) << 4;
+            }
+
+            if (subChunks.writeBlockState(x, y, z, blockState)) applied++;
+            offset += 11;
+        }
+        log.info('World', `Upgraded legacy save: ${applied} block changes folded into ${subChunks.size} subchunks`);
+    }
+
+    readInventories(data, offset);
+}
+
+// ---------------------------------------------------------------------------
+//  v3 format
+// ---------------------------------------------------------------------------
+
+function loadV3World(data) {
+    let offset = 0;
+    const magic = data.toString('ascii', offset, offset + 4);
+    offset += 4;
+    const version = data.readUInt8(offset);
+    offset += 1;
+    if (magic !== WORLD_MAGIC) {
+        throw new Error('Not a v3 world file');
+    }
+
+    worldTime = Number(readLongBE(data, offset));
+    offset += 8;
+
+    const numSubChunks = data.readUInt32BE(offset);
+    offset += 4;
+
+    let loaded = 0;
+    let skipped = 0;
+    for (let i = 0; i < numSubChunks; i++) {
+        if (offset + 14 > data.length) {
+            log.warn('World', `World file truncated after ${loaded}/${numSubChunks} subchunks`);
+            break;
+        }
+        const cx = data.readInt32BE(offset);
+        const cz = data.readInt32BE(offset + 4);
+        const sy = data.readUInt8(offset + 8);
+        const dataLength = data.readUInt32BE(offset + 10);
+        offset += 14;
+
+        if (offset + dataLength > data.length) {
+            log.warn('World', `Subchunk ${i} payload is truncated, stopping`);
+            break;
+        }
+
+        const payload = new Uint8Array(data.buffer, data.byteOffset + offset, dataLength);
+        if (subChunks.loadSection(cx, cz, sy, payload)) {
+            loaded++;
+        } else {
+            // One corrupt entry must not cost the player the rest of the world.
+            skipped++;
+        }
+        offset += dataLength;
+    }
+
+    if (skipped > 0) {
+        log.warn('World', `Skipped ${skipped} unreadable subchunk(s)`);
+    }
+    log.info('World', `Loaded ${loaded} subchunks`);
+
+    readInventories(data, offset);
+}
+
 function initWorld(worldName = 'main') {
-    // Clear current world data
-    worldChanges.clear();
+    subChunks.clear();
     blockInventories.clear();
     currentWorldName = worldName;
 
@@ -146,130 +305,30 @@ function initWorld(worldName = 'main') {
 
     migrateOldWorld(worldName);
 
-    if (fs.existsSync(worldFile)) {
-        log.info('World', `Loading world (${worldName})...`);
-        const data = fs.readFileSync(worldFile);
-        let offset = 0;
-
-        // Pick the format by actually parsing the file as one, not by
-        // arithmetic on its length.
-        //
-        // Two past attempts were wrong:
-        //  - `(data.length - 4) % 11 !== 0` only holds while nothing follows
-        //    the changes. Block inventories are appended after them, so any
-        //    world holding a chest or a sign failed the test and was read as
-        //    new format: it skipped 8 bytes it should not, read the change
-        //    count out of the middle of a change record and decoded every
-        //    coordinate from a misaligned offset. That produced the
-        //    "Expected 35385180304 bytes" warning, coordinates like
-        //    -1123845905,191 and unregistered block ids that the client draws
-        //    as stone -- a world full of water came back as stone.
-        //  - Testing only the declared change count was worse: the high 4
-        //    bytes of the world-time field are 0 for any sane world, so a
-        //    truncated new-format file looked exactly like an old-format file
-        //    declaring "0 changes". It loaded as an EMPTY world, and the very
-        //    next save overwrote the player's world with nothing.
-        //
-        // So read the whole file under both interpretations and keep the one
-        // that consumes it cleanly, preferring whichever recovers more whole
-        // records. That keeps legacy worlds working, keeps truncated saves
-        // recoverable instead of empty, and never turns a non-empty file into
-        // an empty world.
-        const asNew = readLayout(data, true);
-        const asOld = readLayout(data, false);
-
-        let hasWorldTime;
-        if (!asOld) {
-            hasWorldTime = true;
-        } else if (!asNew) {
-            hasWorldTime = false;
-        } else if (asNew.exact && !asOld.exact) {
-            hasWorldTime = true;
-        } else if (asOld.exact && !asNew.exact) {
-            hasWorldTime = false;
-        } else {
-            // Neither consumed the file end to end (a partial write), so take
-            // whichever recovers more records. Ties go to the new format,
-            // which is the only one saveWorld ever writes.
-            hasWorldTime = asNew.records >= asOld.records;
-        }
-
-        if (hasWorldTime && data.length >= 8) {
-            // Read world time (new format)
-            worldTime = Number(readLongBE(data, offset));
-            offset += 8;
-        } else {
-            // Old format, no world time
-            worldTime = 0;
-        }
-
-        if (data.length >= offset + 4) {
-            let totalChanges = data.readUInt32BE(offset);
-            offset += 4;
-
-            // Validate that we have enough data for the declared number of changes
-            const expectedDataSize = offset + (totalChanges * 11);
-            if (data.length < expectedDataSize) {
-                log.warn('World', `World file corrupted or incomplete. Expected ${expectedDataSize} bytes, got ${data.length}`);
-                totalChanges = Math.floor((data.length - offset) / 11);
-            }
-
-            for (let i = 0; i < totalChanges; i++) {
-                if (offset + 11 > data.length) {
-                    log.warn('World', `Unexpected end of world file while reading changes`);
-                    break;
-                }
-                const x = data.readInt32BE(offset);
-                const y = data.readUInt8(offset + 4);
-                const z = data.readInt32BE(offset + 5);
-                let blockState = data.readUInt16BE(offset + 9);
-
-                // Convert old format (blockId only) to new format (blockState)
-                if (!hasWorldTime) {
-                    // Old format stored just blockId, convert to blockState (blockId << 4)
-                    blockState = (blockState & 0xFF) << 4;
-                }
-
-                worldChanges.set(`${x},${y},${z}`, blockState);
-                offset += 11;
-            }
-        }
-
-        // Read block inventories from binary file (if present)
-        if (offset + 4 <= data.length) {
-            const numInventories = data.readUInt32BE(offset);
-            offset += 4;
-
-            for (let i = 0; i < numInventories; i++) {
-                if (offset + 2 > data.length) break;
-                const keyLength = data.readUInt16BE(offset);
-                offset += 2;
-
-                if (offset + keyLength + 4 > data.length) break;
-                const key = data.toString('utf8', offset, offset + keyLength);
-                offset += keyLength;
-
-                const stateLength = data.readUInt32BE(offset);
-                offset += 4;
-
-                if (offset + stateLength > data.length) break;
-                const stateStr = data.toString('utf8', offset, offset + stateLength);
-                offset += stateLength;
-
-                try {
-                    const state = JSON.parse(stateStr);
-                    blockInventories.set(key, state);
-                } catch (e) {
-                    log.warn('World', `Failed to parse inventory state for ${key}: ${e.message}`);
-                }
-            }
-        }
-
-        log.info('World', `Finished loading world (${worldName})`);
-    } else {
+    if (!fs.existsSync(worldFile)) {
         log.info('World', `Creating new world (${worldName})...`);
-        worldTime = 0; // Reset time for new world
+        worldTime = 0;
+        return;
     }
+
+    log.info('World', `Loading world (${worldName})...`);
+    const data = fs.readFileSync(worldFile);
+
+    const isV3 = data.length >= 5 && data.toString('ascii', 0, 4) === WORLD_MAGIC;
+    try {
+        if (isV3) {
+            loadV3World(data);
+        } else {
+            loadLegacyWorld(data);
+        }
+    } catch (e) {
+        // A world that cannot be read must not be silently treated as empty:
+        // the next save would then overwrite it with a blank one. Report loudly
+        // and leave whatever was recovered in place.
+        log.error('World', `Failed to load world (${worldName}): ${e.message}`);
+    }
+
+    log.info('World', `Finished loading world (${worldName})`);
 }
 
 function loadCurrentWorld() {
@@ -301,8 +360,18 @@ function saveWorld() {
         inventoryEntries.push({ keyBuffer, stateBuffer });
     }
 
-    // Calculate total buffer size
-    let totalSize = 8 + 4 + (worldChanges.size * 11) + 4; // header + changes + numInventories
+    // Every modified subchunk, DEFLATE compressed. Compressing the section
+    // itself (rather than a list of edits) is what keeps this cheap: terrain is
+    // extremely repetitive, so a section with a handful of edited blocks
+    // compresses to a fraction of its 8 KB raw size.
+    const sections = subChunks.serializeSections();
+
+    // magic + version + worldTime + numSubChunks
+    let totalSize = 4 + 1 + 8 + 4;
+    for (const section of sections) {
+        totalSize += 14 + section.data.length;
+    }
+    totalSize += 4; // numInventories
     for (const entry of inventoryEntries) {
         totalSize += 2 + entry.keyBuffer.length + 4 + entry.stateBuffer.length;
     }
@@ -310,23 +379,26 @@ function saveWorld() {
     const buffer = Buffer.alloc(totalSize);
     let offset = 0;
 
-    // Write world time
+    buffer.write(WORLD_MAGIC, offset, 'ascii');
+    offset += 4;
+    buffer.writeUInt8(WORLD_VERSION, offset);
+    offset += 1;
+
     writeLongBE(worldTime, buffer, offset);
     offset += 8;
 
-    // Write number of block changes
-    buffer.writeUInt32BE(worldChanges.size, offset);
+    buffer.writeUInt32BE(sections.length, offset);
     offset += 4;
 
-    // Write block changes
-    for (const [coords, blockState] of worldChanges.entries()) {
-        const [x, y, z] = coords.split(',').map(Number);
-        const clampedY = Math.max(0, Math.min(255, y));
-        buffer.writeInt32BE(x, offset);
-        buffer.writeUInt8(clampedY, offset + 4);
-        buffer.writeInt32BE(z, offset + 5);
-        buffer.writeUInt16BE(blockState, offset + 9);
-        offset += 11;
+    for (const section of sections) {
+        buffer.writeInt32BE(section.cx, offset);
+        buffer.writeInt32BE(section.cz, offset + 4);
+        buffer.writeUInt8(section.sy, offset + 8);
+        buffer.writeUInt8(0, offset + 9); // reserved / flags
+        buffer.writeUInt32BE(section.data.length, offset + 10);
+        offset += 14;
+        buffer.set(section.data, offset);
+        offset += section.data.length;
     }
 
     // Write block inventories
@@ -365,31 +437,32 @@ function saveWorld() {
 }
 
 function addWorldChange(x, y, z, blockId, metadata = 0) {
-    // The world file stores y as a single unsigned byte and chunk generation
-    // only covers y 0-255. Clamp so a block placed/teleported outside that
-    // range can never make saveWorld() throw ERR_OUT_OF_RANGE. X/Z are stored
-    // as int32, so clamp those too to survive super-far /tp coordinates.
+    // The world only stores y 0-255. Clamp so a block placed/teleported outside
+    // that range can never throw. X/Z become int32 chunk coordinates, so clamp
+    // those too to survive super-far /tp coordinates.
     const clampedY = Math.max(0, Math.min(255, y));
     const clampedX = Math.max(-2147483648, Math.min(2147483647, x));
     const clampedZ = Math.max(-2147483648, Math.min(2147483647, z));
     const blockState = (blockId << 4) | (metadata & 0xF);
-    worldChanges.set(`${clampedX},${clampedY},${clampedZ}`, blockState);
+    return subChunks.writeBlockState(clampedX, clampedY, clampedZ, blockState);
 }
 
 function getWorldChanges() {
-    return worldChanges;
+    return subChunks;
+}
+
+function getSubChunkStore() {
+    return subChunks;
 }
 
 function getBlockAt(x, y, z) {
-    const key = `${x},${y},${z}`;
-    const blockState = worldChanges.get(key);
-    return blockState !== undefined ? (blockState >> 4) : worldGen.getBaseBlockAt(x, y, z);
+    const blockState = subChunks.readBlockState(x, y, z);
+    return blockState !== null ? (blockState >> 4) : worldGen.getBaseBlockAt(x, y, z);
 }
 
 function getBlockMetadata(x, y, z) {
-    const key = `${x},${y},${z}`;
-    const blockState = worldChanges.get(key);
-    return blockState !== undefined ? (blockState & 0xF) : 0;
+    const blockState = subChunks.readBlockState(x, y, z);
+    return blockState !== null ? (blockState & 0xF) : 0;
 }
 
 function getBlockInventories() {
@@ -467,8 +540,8 @@ function tickWorldTime() {
     worldTime = (worldTime + 1) % 24000;
 }
 
-function generateFlatChunkColumn(chunkX, chunkZ, worldChanges) {
-    return worldGen.generateChunkColumn(chunkX, chunkZ, worldChanges);
+function generateFlatChunkColumn(chunkX, chunkZ) {
+    return worldGen.generateChunkColumn(chunkX, chunkZ, subChunks);
 }
 
 // The configured world type ('flat', 'normal' or 'amplified').
@@ -487,6 +560,7 @@ export {
     saveWorld,
     addWorldChange,
     getWorldChanges,
+    getSubChunkStore,
     getWorldDir,
     getBlockInventories,
     setBlockInventory,

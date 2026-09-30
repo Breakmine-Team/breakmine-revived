@@ -2,7 +2,7 @@ import { Buffer } from '../../../../../libraries/buffer.js';
 import { writeLongBE } from './binary.js';
 import { makePacket, writeVarInt, writeString, broadcast, varIntSize } from './protocol.js';
 import { getPlayers, getPlayerCount } from './players.js';
-import { getWorldChanges, generateFlatChunkColumn, getWorldType, getSpawnPosition } from './world.js';
+import { generateFlatChunkColumn, getWorldType, getSpawnPosition } from './world.js';
 
 function createDisconnectPacket(reason) {
     const message = JSON.stringify({ text: reason || 'Disconnected from server' });
@@ -65,12 +65,10 @@ function sendSpawnPosition(player) {
 }
 
 function sendChunks(player) {
-    const worldChanges = getWorldChanges();
-
     // Send a 5x5 chunk area around spawn to give client enough terrain
     for (let cx = -2; cx <= 2; cx++) {
         for (let cz = -2; cz <= 2; cz++) {
-            sendSingleChunk(player, cx, cz, worldChanges);
+            sendSingleChunk(player, cx, cz);
         }
     }
 
@@ -78,8 +76,8 @@ function sendChunks(player) {
     sendPlayerPositionLook(player);
 }
 
-function sendSingleChunk(player, chunkX, chunkZ, worldChanges) {
-    const compressedData = generateFlatChunkColumn(chunkX, chunkZ, worldChanges);
+function sendSingleChunk(player, chunkX, chunkZ) {
+    const compressedData = generateFlatChunkColumn(chunkX, chunkZ);
     const bitmask = 0xFFFF; // Sections 0-15 present
     
     // Header: chunkX(4) + chunkZ(4) + groundUp(1) + bitmask(2) + sizeVarInt(max 5)

@@ -128,8 +128,16 @@ async function startServer(options) {
     initServer();
 
     if (options.migrateData) {
-        migrateLegacySave(options.migrateData, options.username);
-        serverWorld.saveWorld();
+        // Only import a legacy client save into a world the server has no data
+        // for. If world_data.bin already holds subchunks it is newer than the
+        // IndexedDB copy (which was only ever a partial, client-side view), and
+        // importing over it would silently discard those blocks.
+        if (serverWorld.getSubChunkStore().size > 0) {
+            console.log('[World] Server world already has saved data; discarding stale legacy save.');
+        } else {
+            migrateLegacySave(options.migrateData, options.username);
+            serverWorld.saveWorld();
+        }
     }
     accepting = true;
     currentServerName = serverName;

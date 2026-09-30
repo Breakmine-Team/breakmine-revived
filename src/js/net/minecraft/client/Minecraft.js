@@ -836,6 +836,15 @@ export default class Minecraft {
             }
         }
 
+        // Once a world lives in the server's world_data.bin, the server owns the
+        // blocks. Writing a second copy of the chunks into IndexedDB here is what
+        // made worlds "randomly" lose builds: the client copy is a partial view
+        // (only chunks the client happened to have loaded and marked dirty), and
+        // loadSavedWorld() fed it back in as migrateData on the next launch, so
+        // it silently overwrote newer server-side edits. The server now stores
+        // whole modified subchunks, so it is the only writer.
+        const isServerBacked = this._worldIsServerBacked;
+
         try {
             const seed = this.world.getSeed();
             const saveData = {
@@ -908,7 +917,11 @@ export default class Minecraft {
                 saveData.itemEntities = itemEntities;
             }
 
-            await this._saveWorldToDB(this.currentWorldKey, saveData);
+            // A world the server already owns only needs its index metadata
+            // refreshed; the blocks go through the server's own save.
+            if (!isServerBacked) {
+                await this._saveWorldToDB(this.currentWorldKey, saveData);
+            }
 
             // Update world index metadata
             const index = await this._loadWorldIndex();
@@ -993,6 +1006,10 @@ export default class Minecraft {
 
         const index = await this._loadWorldIndex();
         const entry = index.find(e => e.key === worldKey);
+
+        // A world that already has server files is server-authoritative: the
+        // client must not write a competing chunk copy (see saveWorld).
+        this._worldIsServerBacked = Boolean(serverEntry);
 
         // A legacy IndexedDB save (from before the integrated server) is
         // migrated into server files the first time the world is entered.

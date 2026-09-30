@@ -52,8 +52,19 @@ COPY --from=assets /app/src/ /app/public/src/
 COPY index.html style.css /app/public/
 COPY libraries/ /app/public/libraries/
 
+# API discovery (RFC 9727). The catalog is copied in twice on purpose:
+# .well-known/api-catalog is the well-known URI, catalog.json is the document
+# itself, which the catalog may be served from per RFC 9727 s4. Both are read
+# by cors.js from /app (not /app/public), so it gets its own copy below.
+COPY .well-known/ /app/public/.well-known/
+COPY catalog.json openapi.json api-docs.html /app/public/
+COPY _headers /app/public/_headers
+
 # --- the auth API -------------------------------------------------------------
 COPY cors.js ./
+# cors.js reads these from its own directory when serving the catalog,
+# rel=service-desc and rel=service-doc.
+COPY catalog.json openapi.json api-docs.html ./
 
 # cors.js requires these two game modules directly:
 #   src/js/net/minecraft/client/fs/IsomorphicFilesystem.js -> ./Filesystem.js, ../lib/pako.js

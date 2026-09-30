@@ -2,7 +2,7 @@ import { Buffer } from '../../../../../libraries/buffer.js';
 import { readLongBE } from './binary.js';
 import { readVarInt, readString, broadcast, ensureReadable, MalformedPacketError } from './protocol.js';
 import { addPlayer, removePlayer, getPlayers, updatePosition, loadPlayerData, findPlayerByUsername, normalizeInventoryState, savePlayerData, isSpectator } from './players.js';
-import { addWorldChange, saveWorld, getBlockAt, getAllBlockInventoriesState, getSpawnPosition, deleteBlockInventory, getBlockInventories, getWorldTime, getBlockMetadata, setBlockInventory, getWorldChanges } from './world.js';
+import { addWorldChange, saveWorld, getBlockAt, getAllBlockInventoriesState, getSpawnPosition, deleteBlockInventory, getBlockInventories, getWorldTime, getBlockMetadata, setBlockInventory } from './world.js';
 import { addItemEntity, removeItemEntity, getItemEntity, getAllItemEntities } from './entities.js';
 import { handleCommand } from './commands.js';
 import {
@@ -866,13 +866,12 @@ function checkAndSendChunks(player) {
     const playerChunkZ = Math.floor(player.z / 16);
 
     const sentChunks = playerChunks.get(player.eid) || new Set();
-    const worldChanges = getWorldChanges();
 
     for (let cx = playerChunkX - renderDistance; cx <= playerChunkX + renderDistance; cx++) {
         for (let cz = playerChunkZ - renderDistance; cz <= playerChunkZ + renderDistance; cz++) {
             const chunkKey = `${cx},${cz}`;
             if (!sentChunks.has(chunkKey)) {
-                sendSingleChunk(player, cx, cz, worldChanges);
+                sendSingleChunk(player, cx, cz);
                 sentChunks.add(chunkKey);
             }
         }

@@ -1,0 +1,368 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Breakmine API",
+    "version": "1.0.0",
+    "summary": "Accounts, authentication and player skins for breakmine.com",
+    "description": "HTTP API backing breakmine.com. It provides user registration, JWT authentication and player skin uploads/retrieval.\n\nObtain a token with `POST /api/login` and send it as `Authorization: Bearer <token>` on every other authenticated endpoint.",
+    "license": { "name": "ISC", "identifier": "ISC" },
+    "contact": { "name": "Breakmine Revived Team", "url": "https://breakmine.com" }
+  },
+  "servers": [
+    { "url": "https://breakmine.com", "description": "Production" },
+    { "url": "https://api.breakmine.com", "description": "API-only host" }
+  ],
+  "tags": [
+    { "name": "health", "description": "Service liveness" },
+    { "name": "auth", "description": "Registration and session tokens" },
+    { "name": "skins", "description": "Player skin upload and retrieval" }
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "Service health",
+        "description": "Liveness probe. Returns 200 while the service is able to serve requests.",
+        "tags": ["health"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The service is up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["status", "timestamp", "version"],
+                  "properties": {
+                    "status": { "type": "string", "const": "ok" },
+                    "timestamp": { "type": "string", "format": "date-time" },
+                    "version": { "type": "string" }
+                  }
+                },
+                "example": {
+                  "status": "ok",
+                  "timestamp": "2026-09-30T00:55:29.202Z",
+                  "version": "1.0.0"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/register": {
+      "post": {
+        "operationId": "register",
+        "summary": "Create an account",
+        "description": "Registers a new user. Usernames are 3-32 characters of letters, numbers, underscores or hyphens. Passwords are 6-128 characters.",
+        "tags": ["auth"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/Credentials" },
+              "example": { "username": "spinningcubes", "password": "correct-horse" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Account created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["message", "username"],
+                  "properties": {
+                    "message": { "type": "string" },
+                    "username": { "type": "string" }
+                  }
+                },
+                "example": { "message": "User created successfully", "username": "spinningcubes" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "409": {
+            "description": "The username is already taken.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Username already taken" }
+              }
+            }
+          },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/api/login": {
+      "post": {
+        "operationId": "login",
+        "summary": "Exchange credentials for a JWT",
+        "description": "Returns a bearer token valid for 7 days. Tokens can be revoked with `POST /api/logout` before they expire.",
+        "tags": ["auth"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/Credentials" },
+              "example": { "username": "spinningcubes", "password": "correct-horse" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["token", "expiresIn"],
+                  "properties": {
+                    "token": { "type": "string", "description": "JWT to send as a bearer token." },
+                    "expiresIn": { "type": "string", "description": "Lifetime of the token, e.g. `7d`." }
+                  }
+                },
+                "example": { "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...", "expiresIn": "7d" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": {
+            "description": "The username or password is wrong.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Invalid credentials" }
+              }
+            }
+          },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/api/logout": {
+      "post": {
+        "operationId": "logout",
+        "summary": "Revoke the current token",
+        "description": "Blacklists the presented token so it can no longer be used, even before it expires.",
+        "tags": ["auth"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Token revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["message"],
+                  "properties": { "message": { "type": "string" } }
+                },
+                "example": { "message": "Logged out successfully" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/user/{username}": {
+      "get": {
+        "operationId": "getUser",
+        "summary": "Look up a public profile",
+        "description": "Returns public account metadata. No authentication required.",
+        "tags": ["auth"],
+        "security": [],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "description": "Account name.",
+            "schema": { "type": "string", "minLength": 3, "maxLength": 32, "pattern": "^[a-zA-Z0-9_-]+$" },
+            "example": "spinningcubes"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["username", "created_at", "last_login", "has_skin"],
+                  "properties": {
+                    "username": { "type": "string" },
+                    "created_at": { "type": "integer", "format": "int64", "description": "Unix time in milliseconds." },
+                    "last_login": { "type": ["integer", "null"], "format": "int64" },
+                    "has_skin": { "type": "boolean" }
+                  }
+                },
+                "example": {
+                  "username": "spinningcubes",
+                  "created_at": 1757308800000,
+                  "last_login": 1759200000000,
+                  "has_skin": true
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": {
+            "description": "No such user.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "User not found" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/upload_skin": {
+      "post": {
+        "operationId": "uploadSkin",
+        "summary": "Upload a player skin",
+        "description": "Uploads a PNG skin for the authenticated user, replacing any previous one. A 64x64 image is cropped to its top 64x32 face region; any other size is stored as-is. Maximum size is 256 KB.",
+        "tags": ["skins"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": {
+                  "file": { "type": "string", "format": "binary", "description": "PNG skin, max 256 KB." }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Skin stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["message", "filename"],
+                  "properties": {
+                    "message": { "type": "string" },
+                    "filename": { "type": "string" }
+                  }
+                },
+                "example": { "message": "Skin uploaded successfully", "filename": "3f2a1c9e8b7d6054.png" }
+              }
+            }
+          },
+          "400": {
+            "description": "No file was sent, it was not a PNG, or it exceeded 256 KB.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "No file uploaded" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/skin/{username}": {
+      "get": {
+        "operationId": "getSkin",
+        "summary": "Fetch a player skin",
+        "description": "Returns the skin image for a user as `image/png`. No authentication required.",
+        "tags": ["skins"],
+        "security": [],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "description": "Account name.",
+            "schema": { "type": "string", "minLength": 3, "maxLength": 32, "pattern": "^[a-zA-Z0-9_-]+$" },
+            "example": "spinningcubes"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The skin image.",
+            "content": { "image/png": { "schema": { "type": "string", "format": "binary" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": {
+            "description": "The user does not exist or has no skin.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Skin not found" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "A token from `POST /api/login`, sent as `Authorization: Bearer <token>`."
+      }
+    },
+    "schemas": {
+      "Credentials": {
+        "type": "object",
+        "required": ["username", "password"],
+        "properties": {
+          "username": { "type": "string", "minLength": 3, "maxLength": 32, "pattern": "^[a-zA-Z0-9_-]+$" },
+          "password": { "type": "string", "minLength": 6, "maxLength": 128 }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": { "error": { "type": "string" } }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "A field failed validation.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "error": "Username must be at least 3 characters" }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing, malformed, expired or revoked token.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "error": "Missing or invalid authorization header" }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Too many requests.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "error": "Too many requests" }
+          }
+        }
+      }
+    }
+  }
+}

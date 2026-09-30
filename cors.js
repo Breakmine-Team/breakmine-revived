@@ -106,6 +106,50 @@ const app = express();
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 app.use(cors({ origin: true, methods: ['GET', 'POST'], allowedHeaders: ['Content-Type', 'Authorization'] }));
 
+// --- API discovery (RFC 9727) ------------------------------------------------
+// These routes are registered before the static handler on purpose. The static
+// host would otherwise answer /.well-known/api-catalog and /catalog.json from
+// disk, guessing application/octet-stream and application/json respectively,
+// and RFC 9727 s6.2 requires application/linkset+json.
+//
+// The catalog is a static file (catalog.json) rather than an inlined literal so
+// that the static host, which is what actually answers breakmine.com in
+// production, and this API container always publish the same document.
+const CATALOG_PATH = path.join(__dirname, 'catalog.json');
+const LINKSET_TYPE = 'application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"';
+
+function sendCatalog(req, res) {
+    fs.readFile(CATALOG_PATH, (err, body) => {
+        if (err) return res.status(404).json({ error: 'API catalog not found' });
+        res.set('Content-Type', LINKSET_TYPE);
+        res.set('Cache-Control', 'public, max-age=3600');
+        res.status(200).send(body);
+    });
+}
+
+app.get('/.well-known/api-catalog', sendCatalog);
+
+// Also published at the catalog URI itself, per RFC 9727 s4.
+app.get('/catalog.json', (req, res) => {
+    res.set('Content-Type', LINKSET_TYPE);
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.sendFile(CATALOG_PATH);
+});
+
+// The machine-readable description the catalog points at with rel=service-desc.
+app.get('/openapi.json', (req, res) => {
+    res.set('Content-Type', 'application/json');
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.sendFile(path.join(__dirname, 'openapi.json'));
+});
+
+// The human-readable documentation for rel=service-doc.
+app.get('/api-docs.html', (req, res) => {
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.sendFile(path.join(__dirname, 'api-docs.html'));
+});
+
 // Mounted before the rate limiter on purpose: the limiter caps everything at
 // 100 requests per 15 minutes, which a page load's worth of assets blows
 // through instantly. Only the API is rate limited.
@@ -113,6 +157,34 @@ const serveSite = express.static(SITE_DIR, { index: 'index.html', fallthrough: t
 app.use((req, res, next) => {
     if (!SITE_HOSTNAMES.has(hostnameOf(req))) return next();
     return serveSite(req, res, next);
+});
+
+// robots.txt should be accessible without rate limiting
+app.get('/robots.txt', (req, res) => {
+    res.set('Content-Type', 'text/plain');
+    res.send(`# robots.txt for breakmine.com
+# Per RFC 9309: https://www.rfc-editor.org/rfc/rfc9309
+
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /data/
+Disallow: /players/
+Disallow: /worlds/
+
+Sitemap: https://breakmine.com/sitemap.xml
+`);
+});
+
+// sitemap.xml should be accessible without rate limiting
+app.get('/sitemap.xml', (req, res) => {
+    const sitemapPath = path.join(__dirname, 'sitemap.xml');
+    if (fs.existsSync(sitemapPath)) {
+        res.set('Content-Type', 'application/xml');
+        res.sendFile(sitemapPath);
+    } else {
+        res.status(404).json({ error: 'Sitemap not found' });
+    }
 });
 
 app.use(rateLimit({ windowMs: 900000, max: 100 }));
@@ -166,6 +238,10 @@ function validatePassword(password) {
 }
 
 app.get('/', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' }));
+
+// Health endpoint, referenced by rel="status" in the API catalog. Kept
+// unversioned at /api/status as well as the root probe so both hosts agree.
+app.get('/api/status', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' }));
 
 app.post('/api/register', async (req, res) => {
     try {

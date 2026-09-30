@@ -1,4 +1,4 @@
-import { initWorld, saveWorld, getWorldChanges, loadCurrentWorld, getWorldTime, tickWorldTime, setBlockInventory, getBlockInventories, getCurrentWorldName } from './world.js';
+import { initWorld, saveWorld, getSubChunkStore, loadCurrentWorld, getWorldTime, tickWorldTime, setBlockInventory, getBlockInventories, getCurrentWorldName } from './world.js';
 import { tickAllFurnaces, broadcastFurnaceChanges } from './Furnace.js';
 import { sendTimeUpdate, sendChatMessage, sendPlayerListEntry } from './packets.js';
 import { handlePacket, cleanupPlayerChunks, respawnPlayer, flushSaveWorld } from './handlers.js';
@@ -33,7 +33,7 @@ export function initServer() {
 
     // Seed block ticks for any saved bluestone components so loaded networks
     // (dust, lamps, repeaters, doors) settle to their correct state.
-    serverWorld.seedScheduledTicks(getWorldChanges());
+    serverWorld.seedScheduledTicks(getSubChunkStore());
 
     // Start server tick loop for block ticking and world time synchronization
     tickInterval = setInterval(() => {

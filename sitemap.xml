@@ -7,20 +7,6 @@
         <priority>1.0</priority>
     </url>
 
-    <!-- Mods Subdomain -->
-    <url>
-        <loc>https://mods.breakmine.com/</loc>
-        <changefreq>weekly</changefreq>
-        <priority>1.0</priority>
-    </url>
-
-    <!-- Wiki Subdomain -->
-    <url>
-        <loc>https://wiki.breakmine.com/</loc>
-        <changefreq>daily</changefreq>
-        <priority>1.0</priority>
-    </url>
-
     <!-- Worldplace Subdomain -->
     <url>
         <loc>https://worldplace.breakmine.com/</loc>

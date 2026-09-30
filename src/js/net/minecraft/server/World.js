@@ -142,15 +142,13 @@ class ServerWorld {
     // After a world load, queue ticks for every saved block that participates
     // in block ticking so saved bluestone networks settle to their correct
     // state again.
-    seedScheduledTicks(worldChanges) {
-        for (const key of worldChanges.keys()) {
-            const [x, y, z] = key.split(',').map(Number);
-            const blockId = getBlockAt(x, y, z);
-            const block = Block.getById(blockId);
+    seedScheduledTicks(subChunks) {
+        subChunks.forEachModifiedBlock((x, y, z, blockState) => {
+            const block = Block.getById(blockState >> 4);
             if (block && (block.onBlockTick || block.onBlockAdded)) {
                 this.scheduleBlockTick(x, y, z, 1);
             }
-        }
+        });
     }
 
     // Process block ticks (called from the server tick loop).

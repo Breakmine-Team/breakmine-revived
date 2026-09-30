@@ -1,0 +1,40 @@
+{
+  "linkset": [
+    {
+      "anchor": "https://breakmine.com/api/",
+      "service-desc": [
+        {
+          "href": "https://breakmine.com/openapi.json",
+          "type": "application/json"
+        }
+      ],
+      "service-doc": [
+        {
+          "href": "https://breakmine.com/api-docs.html#accounts",
+          "type": "text/html"
+        }
+      ],
+      "status": [
+        {
+          "href": "https://breakmine.com/api/status",
+          "type": "application/json"
+        }
+      ]
+    },
+    {
+      "anchor": "https://breakmine.com/skin/",
+      "service-desc": [
+        {
+          "href": "https://breakmine.com/openapi.json",
+          "type": "application/json"
+        }
+      ],
+      "service-doc": [
+        {
+          "href": "https://breakmine.com/api-docs.html#skins",
+          "type": "text/html"
+        }
+      ]
+    }
+  ]
+}

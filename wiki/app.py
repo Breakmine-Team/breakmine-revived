@@ -442,6 +442,55 @@ def register():
 @wiki_bp.route('/')
 def index(): return redirect(url_for('wiki.view_page', slug='Main_Page'))
 
+@wiki_bp.route('/robots.txt')
+def robots_txt():
+    return Response('''# robots.txt for wiki.breakmine.com
+# Per RFC 9309: https://www.rfc-editor.org/rfc/rfc9309
+
+User-agent: *
+Allow: /
+Disallow: /login
+Disallow: /register
+Disallow: /edit/
+Disallow: /save
+Disallow: /upload
+Disallow: /delete/
+Disallow: /comment/
+Disallow: /gallery/
+Disallow: /tempmod/
+
+Sitemap: https://wiki.breakmine.com/sitemap.xml
+''', mimetype='text/plain')
+
+@wiki_bp.route('/sitemap.xml')
+def sitemap_xml():
+    db = get_db()
+    pages = db.execute('SELECT slug, updated_at FROM pages ORDER BY updated_at DESC').fetchall()
+    db.close()
+    
+    xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+        <loc>https://wiki.breakmine.com/</loc>
+        <changefreq>daily</changefreq>
+        <priority>1.0</priority>
+    </url>
+'''
+    for page in pages:
+        slug = page['slug']
+        updated = page['updated_at'] or datetime.now().strftime("%Y-%m-%d")
+        # URL encode the slug for proper URL formatting (handles spaces as %20 etc)
+        encoded_slug = urllib.parse.quote(slug, safe='')
+        xml += f'''    <url>
+        <loc>https://wiki.breakmine.com/wiki/{encoded_slug}</loc>
+        <lastmod>{updated}</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.8</priority>
+    </url>
+'''
+    xml += '</urlset>'
+    return Response(xml, mimetype='application/xml')
+
 @wiki_bp.route('/wiki/<slug>')
 def view_page(slug):
     db = get_db()
@@ -601,6 +650,54 @@ def index():
         search_cat=cat,
         meta_description=meta_desc
     )
+
+@mods_bp.route('/robots.txt')
+def robots_txt():
+    return Response('''# robots.txt for mods.breakmine.com
+# Per RFC 9309: https://www.rfc-editor.org/rfc/rfc9309
+
+User-agent: *
+Allow: /
+Disallow: /login
+Disallow: /register
+Disallow: /upload
+Disallow: /edit/
+Disallow: /delete/
+Disallow: /upload-version/
+Disallow: /delete-version/
+Disallow: /comment/
+Disallow: /gallery/
+Disallow: /tempmod/
+
+Sitemap: https://mods.breakmine.com/sitemap.xml
+''', mimetype='text/plain')
+
+@mods_bp.route('/sitemap.xml')
+def sitemap_xml():
+    db = get_db()
+    mods = db.execute('SELECT id, created_at FROM mods ORDER BY created_at DESC').fetchall()
+    db.close()
+    
+    xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+        <loc>https://mods.breakmine.com/</loc>
+        <changefreq>daily</changefreq>
+        <priority>1.0</priority>
+    </url>
+'''
+    for mod in mods:
+        mod_id = mod['id']
+        created = mod['created_at'] or datetime.now().strftime("%Y-%m-%d")
+        xml += f'''    <url>
+        <loc>https://mods.breakmine.com/view/{mod_id}</loc>
+        <lastmod>{created}</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.7</priority>
+    </url>
+'''
+    xml += '</urlset>'
+    return Response(xml, mimetype='application/xml')
 
 @mods_bp.route('/upload', methods=['GET', 'POST'])
 def upload():

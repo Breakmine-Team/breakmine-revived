@@ -1,0 +1,17 @@
+# Static-host response overrides.
+#
+# An extensionless path like /.well-known/api-catalog is guessed as
+# application/octet-stream by most static hosts, but RFC 9727 s6.2 requires
+# application/linkset+json. This file is honoured by Cloudflare Pages/Workers
+# and Netlify; on hosts that ignore it, cors.js corrects the type itself.
+/.well-known/api-catalog
+  Content-Type: application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"
+  Cache-Control: public, max-age=3600
+
+/catalog.json
+  Content-Type: application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"
+  Cache-Control: public, max-age=3600
+
+/openapi.json
+  Content-Type: application/json
+  Cache-Control: public, max-age=3600

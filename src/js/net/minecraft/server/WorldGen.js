@@ -234,42 +234,37 @@ function flatBlockId(worldY) {
 
 // Build the full chunk data buffer (same format the server always sent for
 // flat worlds) for the configured world type and seed.
-function generateChunkColumn(chunkX, chunkZ, worldChanges) {
+//
+// `subChunks` is the SubChunkStore holding every modified subchunk. A stored
+// section is copied straight into the packet, so what the client receives is
+// byte-for-byte what was written to disk. Only sections the player never
+// touched are regenerated.
+function generateChunkColumn(chunkX, chunkZ, subChunks) {
     const buffer = Buffer.alloc(SECTION_SIZE * SECTION_COUNT + 256);
-    const blocks = getColumnBlocks(chunkX, chunkZ);
+    const column = getColumnBlocks(chunkX, chunkZ);
 
-    const chunkChanges = new Map();
-    if (worldChanges && worldChanges.size > 0) {
-        const x0 = chunkX * 16;
-        const z0 = chunkZ * 16;
-        for (const [coords, blockState] of worldChanges.entries()) {
-            const comma1 = coords.indexOf(',');
-            const comma2 = coords.indexOf(',', comma1 + 1);
-            const x = parseInt(coords, 10);
-            const y = parseInt(coords.slice(comma1 + 1), 10);
-            const z = parseInt(coords.slice(comma2 + 1), 10);
-            if (x < x0 || x >= x0 + 16 || z < z0 || z >= z0 + 16 || y < 0 || y > 255) continue;
-            chunkChanges.set((y << 8) | ((z & 15) << 4) | (x & 15), blockState);
-        }
-    }
+    for (let sectionIndexY = 0; sectionIndexY < SECTION_COUNT; sectionIndexY++) {
+        const sectionOffset = sectionIndexY * SECTION_SIZE;
+        const stored = subChunks ? subChunks.get(chunkX, chunkZ, sectionIndexY) : null;
 
-    for (let sectionIndex = 0; sectionIndex < SECTION_COUNT; sectionIndex++) {
-        const sectionOffset = sectionIndex * SECTION_SIZE;
-        const baseY = sectionIndex * 16;
-
-        for (let y = 0; y < 16; y++) {
-            const worldY = baseY + y;
-            const yBase = worldY << 8;
-            for (let z = 0; z < 16; z++) {
-                const zBase = (z << 4);
-                for (let x = 0; x < 16; x++) {
-                    const localIndex = (y << 8) | zBase | x;
-                    const blockIndex = yBase | zBase | x;
-                    let blockState = chunkChanges.get(blockIndex);
-                    if (blockState === undefined) {
-                        blockState = blocks ? (blocks[blockIndex] << 4) : (flatBlockId(worldY) << 4);
+        if (stored) {
+            stored.copy(buffer, sectionOffset, 0, BLOCK_STATE_SIZE);
+        } else {
+            const baseY = sectionIndexY * 16;
+            for (let y = 0; y < 16; y++) {
+                const worldY = baseY + y;
+                const yBase = worldY << 8;
+                for (let z = 0; z < 16; z++) {
+                    const zBase = (z << 4);
+                    for (let x = 0; x < 16; x++) {
+                        // blockIndex indexes the generated column (global y);
+                        // localIndex is the position inside this section, which
+                        // is where the value has to be written.
+                        const blockIndex = yBase | zBase | x;
+                        const localIndex = (y << 8) | zBase | x;
+                        const id = column ? column[blockIndex] : flatBlockId(worldY);
+                        buffer.writeUInt16LE(id << 4, sectionOffset + localIndex * 2);
                     }
-                    buffer.writeUInt16LE(blockState, sectionOffset + localIndex * 2);
                 }
             }
         }
@@ -295,6 +290,17 @@ function getBaseBlockAt(x, y, z) {
         return flatBlockId(y);
     }
     return blocks[((y & 255) << 8) | ((z & 15) << 4) | (x & 15)];
+}
+
+// Raw generated terrain for a chunk column, or null for flat worlds where the
+// column is a pure function of y. The subchunk store uses this to materialize a
+// section the first time a block inside it is modified.
+function getGeneratedColumn(chunkX, chunkZ) {
+    return getColumnBlocks(chunkX, chunkZ);
+}
+
+function getFlatBlockId(worldY) {
+    return flatBlockId(worldY);
 }
 
 // Block ids that are structures rather than terrain: logs and leaves must not
@@ -350,5 +356,7 @@ export {
     getWorldType,
     generateChunkColumn,
     getBaseBlockAt,
-    getSpawnPosition
+    getSpawnPosition,
+    getGeneratedColumn,
+    getFlatBlockId
 };

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Breakmine API documentation</title>
+<style>
+    :root { color-scheme: dark; }
+    body { font: 15px/1.6 system-ui, sans-serif; margin: 0 auto; max-width: 52rem; padding: 2rem 1.25rem 4rem; }
+    h1 { margin-bottom: 0; }
+    h2 { margin-top: 2.5rem; border-bottom: 1px solid #333; padding-bottom: .3rem; }
+    h3 { margin-top: 1.6rem; }
+    code, pre { font-family: ui-monospace, monospace; font-size: 13px; }
+    pre { background: #16181d; border: 1px solid #2a2e37; border-radius: 6px; padding: .85rem 1rem; overflow-x: auto; }
+    .m { display: inline-block; min-width: 4.5rem; padding: .1rem .45rem; margin-right: .5rem;
+         border-radius: 4px; font-weight: 600; font-size: 12px; text-align: center; }
+    .get { background: #1b3a5c; color: #9fd0ff; }
+    .post { background: #1b4a2f; color: #9fe0b4; }
+    table { border-collapse: collapse; width: 100%; margin: .5rem 0 1rem; }
+    th, td { text-align: left; padding: .4rem .6rem; border-bottom: 1px solid #2a2e37; vertical-align: top; }
+    th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #9aa3b2; }
+    .muted { color: #9aa3b2; }
+    a { color: #7cc0ff; }
+</style>
+</head>
+<body>
+
+<h1>Breakmine API</h1>
+<p class="muted">
+    Accounts, authentication and player skins for <a href="https://breakmine.com">breakmine.com</a>.
+    Machine-readable description:
+    <a href="/openapi.json">/openapi.json</a> (OpenAPI 3.1).
+    Discovery:
+    <a href="/.well-known/api-catalog">/.well-known/api-catalog</a> (RFC 9727).
+</p>
+
+<h2>Base URL</h2>
+<table>
+    <tr><th>Host</th><th>Notes</th></tr>
+    <tr><td><code>https://breakmine.com</code></td><td>Serves the site and the API.</td></tr>
+    <tr><td><code>https://api.breakmine.com</code></td><td>API only, no static site.</td></tr>
+</table>
+
+<h2>Authentication</h2>
+<p>
+    Obtain a token with <span class="m post">POST</span><code>/api/login</code>, then send it on every
+    authenticated request as a bearer token. Tokens are JWTs signed with HS256 and last 7 days;
+    <span class="m post">POST</span><code>/api/logout</code> revokes one before it expires.
+</p>
+<pre>Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...</pre>
+
+<h2 id="accounts">Accounts and authentication</h2>
+
+<h3><span class="m post">POST</span><code>/api/register</code></h3>
+<p>Create an account. No authentication.</p>
+<table>
+    <tr><th>Field</th><th>Rules</th></tr>
+    <tr><td><code>username</code></td><td>3-32 chars, <code>a-z A-Z 0-9 _ -</code></td></tr>
+    <tr><td><code>password</code></td><td>6-128 chars</td></tr>
+</table>
+<pre>curl -X POST https://breakmine.com/api/register \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"spinningcubes","password":"correct-horse"}'</pre>
+<table>
+    <tr><th>Status</th><th>Response</th></tr>
+    <tr><td><code>201</code></td><td><code>{"message":"User created successfully","username":"spinningcubes"}</code></td></tr>
+    <tr><td><code>400</code></td><td><code>{"error":"Username must be at least 3 characters"}</code></td></tr>
+    <tr><td><code>409</code></td><td><code>{"error":"Username already taken"}</code></td></tr>
+    <tr><td><code>429</code></td><td>Too many requests.</td></tr>
+</table>
+
+<h3><span class="m post">POST</span><code>/api/login</code></h3>
+<p>Exchange credentials for a JWT. No authentication. Rate limited to 10 requests per 15 minutes.</p>
+<pre>curl -X POST https://breakmine.com/api/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"spinningcubes","password":"correct-horse"}'</pre>
+<pre>{"token":"eyJhbGciOiJIUzI1NiIs...","expiresIn":"7d"}</pre>
+<p class="muted">Wrong credentials return <code>401 {"error":"Invalid credentials"}</code>. An unknown
+username takes the same time to answer as a wrong password, so it does not leak which accounts exist.</p>
+
+<h3><span class="m post">POST</span><code>/api/logout</code></h3>
+<p>Revoke the presented token. Requires authentication.</p>
+<pre>curl -X POST https://breakmine.com/api/logout \
+  -H "Authorization: Bearer $TOKEN"</pre>
+<pre>{"message":"Logged out successfully"}</pre>
+
+<h3><span class="m get">GET</span><code>/api/user/{username}</code></h3>
+<p>Public profile lookup. No authentication.</p>
+<pre>curl https://breakmine.com/api/user/spinningcubes</pre>
+<pre>{"username":"spinningcubes","created_at":1757308800000,"last_login":1759200000000,"has_skin":true}</pre>
+<p class="muted">Unknown users return <code>404 {"error":"User not found"}</code>.</p>
+
+<h2 id="skins">Skins</h2>
+
+<h3><span class="m post">POST</span><code>/api/upload_skin</code></h3>
+<p>Upload a PNG skin for the authenticated user, replacing any previous one. Requires authentication.</p>
+<p>
+    Maximum 256&nbsp;KB. A 64&times;64 image is cropped to its top 64&times;32 face region on
+    retrieval; any other size is served as stored. Only <code>image/png</code> is accepted.
+</p>
+<pre>curl -X POST https://breakmine.com/api/upload_skin \
+  -H "Authorization: Bearer $TOKEN" \
+  -F 'file=@skin.png'</pre>
+<pre>{"message":"Skin uploaded successfully","filename":"3f2a1c9e8b7d6054.png"}</pre>
+<p class="muted">A non-PNG file, a missing file, or one over the size limit returns
+<code>400</code>. Repeat uploads are rate limited to 10 per 15 minutes.</p>
+
+<h3><span class="m get">GET</span><code>/skin/{username}</code></h3>
+<p>Fetch a skin as <code>image/png</code>. No authentication.</p>
+<pre>curl -o skin.png https://breakmine.com/skin/spinningcubes</pre>
+<p class="muted">A user with no skin returns <code>404 {"error":"Skin not found"}</code>.</p>
+
+<h2>Errors</h2>
+<p>Error responses are JSON objects with a single <code>error</code> string:</p>
+<pre>{"error":"Missing or invalid authorization header"}</pre>
+<p>
+    <code>400</code> validation failure, <code>401</code> missing/expired/revoked token,
+    <code>404</code> no such user or skin, <code>409</code> username taken,
+    <code>429</code> rate limited, <code>500</code> server error.
+</p>
+
+<h2>Status</h2>
+<p>Liveness probe, referenced by the catalog's <code>status</code> relation:</p>
+<pre>curl https://breakmine.com/api/status</pre>
+<pre>{"status":"ok","timestamp":"2026-09-30T00:55:29.202Z","version":"1.0.0"}</pre>
+
+</body>
+</html>
