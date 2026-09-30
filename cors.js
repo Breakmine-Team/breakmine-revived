@@ -103,8 +103,54 @@ setInterval(() => stmts.cleanExpiredTokens.run(Date.now()), 3600000);
 
 const app = express();
 
-app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
-app.use(cors({ origin: true, methods: ['GET', 'POST'], allowedHeaders: ['Content-Type', 'Authorization'] }));
+// The client on breakmine.com calls this API from another origin, so the
+// browser only hands the response to JavaScript if these headers come back.
+// The list is explicit instead of `origin: true`, which reflected whatever asked
+// and let any page on the internet read the API. CORS_ORIGINS overrides it; "*"
+// restores the old reflect-anything behaviour for local testing.
+const DEFAULT_CORS_ORIGINS = [
+    'https://breakmine.com',
+    'https://www.breakmine.com',
+    'https://api.breakmine.com',
+    'https://wiki.breakmine.com',
+    'https://mods.breakmine.com',
+    'http://breakmine.com',
+    'http://www.breakmine.com',
+    'http://localhost:8080',
+    'http://127.0.0.1:8080',
+];
+
+const CORS_ORIGINS = new Set(
+    (process.env.CORS_ORIGINS || DEFAULT_CORS_ORIGINS.join(','))
+        .split(',')
+        .map((o) => o.trim().toLowerCase())
+        .filter(Boolean)
+);
+
+// Skins are loaded cross-origin by the client, and helmet's default
+// Cross-Origin-Resource-Policy: same-origin drops them before CORS is consulted.
+app.use(helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
+
+app.use(cors({
+    // Reflect the caller's own Origin (never "*") so the browser's origin check
+    // matches, and leave Vary: Origin in place so a shared cache cannot replay
+    // one origin's header to another. No Origin header means a non-browser
+    // client (the launcher) or same-origin, so there is nothing to allow.
+    origin(origin, callback) {
+        if (!origin || CORS_ORIGINS.has('*') || CORS_ORIGINS.has(origin.toLowerCase())) return callback(null, true);
+        callback(null, false);
+    },
+    methods: ['GET', 'HEAD', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    exposedHeaders: ['Content-Type', 'Content-Length'],
+    maxAge: 86400,
+    // Deliberately no credentials: the API authenticates with a Bearer token,
+    // and browsers reject Allow-Origin: * together with credentials anyway.
+}));
 
 // --- API discovery (RFC 9727) ------------------------------------------------
 // These routes are registered before the static handler on purpose. The static
@@ -189,6 +235,17 @@ app.get('/sitemap.xml', (req, res) => {
 
 app.use(rateLimit({ windowMs: 900000, max: 100 }));
 app.use(express.json({ limit: '1mb' }));
+
+// A shared cache stores a response under the URL, not under the Origin. A body
+// cached from a request that carried no Origin gets replayed to a browser
+// request, and the ACAO header is missing from that copy - which is exactly the
+// "no Access-Control-Allow-Origin header is present" failure, and it only hits
+// some visitors. These responses are per-user state or 404s that must not stick,
+// so they opt out of caching entirely.
+app.use('/api', (req, res, next) => {
+    res.set('Cache-Control', 'no-store');
+    next();
+});
 
 const authLimiter = rateLimit({ windowMs: 900000, max: 10 });
 
