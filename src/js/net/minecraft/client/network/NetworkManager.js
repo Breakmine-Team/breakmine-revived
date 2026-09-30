@@ -208,6 +208,10 @@ export default class NetworkManager {
                 return;
             }
 
+            // Give installed mods a chance to consume extension packets while
+            // retaining the built-in JSON handlers below.
+            this.minecraft?.modLoader?.handleNetworkMessage(payload, this);
+
             if (payload.type === 'playerState') {
                 const player = this.minecraft?.player;
                 if (player) {

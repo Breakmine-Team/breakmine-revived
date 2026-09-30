@@ -133,16 +133,22 @@ export class IsomorphicFilesystem {
     // Lazily persist a cache entry to the async store (fire-and-forget).
     #persist(key, entry) {
         if (isNode || !this.#browserFS || entry.kind !== 'file') return;
-        const str = new TextDecoder().decode(entry.data);
-        let keepAsText = true;
+        // saveFile() deflates the text and the loader inflates it back on the
+        // next session, which is only lossless for real UTF-8. World files are
+        // opaque binary (BMW3 header plus deflate streams); routing them through
+        // the text path replaced every non-UTF-8 byte with U+FFFD and corrupted
+        // the save the next time it was read. A strict UTF-8 decode distinguishes
+        // the two: only genuine text goes through saveFile(), everything else is
+        // written raw via saveBinaryFile().
+        let text = null;
         try {
-            new TextEncoder().encode(str);
+            text = new TextDecoder('utf-8', { fatal: true }).decode(entry.data);
         } catch {
-            keepAsText = false;
+            // Not valid UTF-8 -> opaque binary; store the raw bytes.
         }
         try {
-            if (keepAsText) {
-                this.#browserFS.saveFile(str, key).catch(() => {});
+            if (text !== null) {
+                this.#browserFS.saveFile(text, key).catch(() => {});
             } else {
                 this.#browserFS.saveBinaryFile(entry.data, key).catch(() => {});
             }

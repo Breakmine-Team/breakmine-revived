@@ -284,6 +284,7 @@ function handleLoginPacket(player, packetId, buffer, offset) {
             player.gamemode = typeof playerData.gamemode === 'number' ? playerData.gamemode : player.gamemode;
             player.health = typeof playerData.health === 'number' && playerData.health > 0 ? playerData.health : 20;
             player.inventory = normalizeInventoryState(playerData.inventory);
+            player.cape = typeof playerData.cape === 'string' ? playerData.cape : null;
 
             // A saved position from a previous world type/seed can be buried
             // inside solid terrain (e.g. y=10 saved on a flat world, now
@@ -306,6 +307,7 @@ function handleLoginPacket(player, packetId, buffer, offset) {
             player.pitch = 0;
             player.isFlying = false;
             player.inventory = normalizeInventoryState([]);
+            player.cape = null;
         }
 
         addPlayer(player);

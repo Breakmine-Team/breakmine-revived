@@ -22,6 +22,15 @@ export default class GuiIngameMenu extends GuiScreen {
             this.minecraft.displayScreen(new GuiOptions(this));
         }));
 
+        const modButtons = this.minecraft.modLoader?.getGuiButtons('pause-menu', this) || [];
+        for (const button of modButtons) {
+            button.x = this.width / 2 + 2;
+            button.y = y + 24;
+            button.width = 98;
+            button.height = 20;
+            this.buttonList.push(button);
+        }
+
         const shareButton = new GuiButton(this.minecraft, "Share World", this.width / 2 + 2, y + 24, 98, 20, () => {
             this.minecraft.shareWorld();
         });
