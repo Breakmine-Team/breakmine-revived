@@ -105,27 +105,17 @@ const app = express();
 
 // The client on breakmine.com calls this API from another origin, so the
 // browser only hands the response to JavaScript if these headers come back.
-// The list is explicit instead of `origin: true`, which reflected whatever asked
-// and let any page on the internet read the API. CORS_ORIGINS overrides it; "*"
-// restores the old reflect-anything behaviour for local testing.
-const DEFAULT_CORS_ORIGINS = [
-    'https://breakmine.com',
-    'https://www.breakmine.com',
-    'https://api.breakmine.com',
-    'https://wiki.breakmine.com',
-    'https://mods.breakmine.com',
-    'http://breakmine.com',
-    'http://www.breakmine.com',
-    'http://localhost:8080',
-    'http://127.0.0.1:8080',
-];
-
-const CORS_ORIGINS = new Set(
-    (process.env.CORS_ORIGINS || DEFAULT_CORS_ORIGINS.join(','))
+// Public by default ("*"), which is what the client needs: it is served from
+// breakmine.com, from previews and from local builds, and none of them send
+// cookies. CORS_ORIGINS pins a comma-separated allowlist when the API ever holds
+// something that should not be readable by any site.
+const CORS_ALLOWLIST = new Set(
+    (process.env.CORS_ORIGINS || '')
         .split(',')
         .map((o) => o.trim().toLowerCase())
         .filter(Boolean)
 );
+const CORS_WIDE_OPEN = CORS_ALLOWLIST.size === 0;
 
 // Skins are loaded cross-origin by the client, and helmet's default
 // Cross-Origin-Resource-Policy: same-origin drops them before CORS is consulted.
@@ -136,20 +126,16 @@ app.use(helmet({
 }));
 
 app.use(cors({
-    // Reflect the caller's own Origin (never "*") so the browser's origin check
-    // matches, and leave Vary: Origin in place so a shared cache cannot replay
-    // one origin's header to another. No Origin header means a non-browser
-    // client (the launcher) or same-origin, so there is nothing to allow.
-    origin(origin, callback) {
-        if (!origin || CORS_ORIGINS.has('*') || CORS_ORIGINS.has(origin.toLowerCase())) return callback(null, true);
+    origin: CORS_WIDE_OPEN ? '*' : (origin, callback) => {
+        if (!origin || CORS_ALLOWLIST.has(origin.toLowerCase())) return callback(null, true);
         callback(null, false);
     },
     methods: ['GET', 'HEAD', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
     exposedHeaders: ['Content-Type', 'Content-Length'],
     maxAge: 86400,
-    // Deliberately no credentials: the API authenticates with a Bearer token,
-    // and browsers reject Allow-Origin: * together with credentials anyway.
+    // No credentials: the API authenticates with a Bearer token, and browsers
+    // reject Allow-Origin: * together with credentials anyway.
 }));
 
 // --- API discovery (RFC 9727) ------------------------------------------------
