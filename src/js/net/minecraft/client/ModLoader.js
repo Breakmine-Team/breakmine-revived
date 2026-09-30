@@ -5,6 +5,8 @@ import { BlockRegistry } from "./world/block/BlockRegistry.js";
 import Sound from "./sound/Sound.js";
 import { loadJSZip } from "./JSZipLoader.js";
 import * as THREE from "../../../../../libraries/three.module.js";
+import ModelRenderer from "./render/model/renderer/ModelRenderer.js";
+import Tessellator from "./render/Tessellator.js";
 
 /**
  * ModLoader — discovers, installs, and registers mods.
@@ -47,6 +49,7 @@ export default class ModLoader {
         this.minecraft = minecraft;
         this.mods = new Map();          // modId → ModEntry
         this.enabledMods = new Set();   // modIds that are active
+        this.services = new Map();      // serviceId → mod-provided runtime service
         this.filesystem = new FileSystem('ModDB', 'mods');
         this._devModFilesystems = new Map(); // modId → MemoryFilesystem (temporary dev mods, never persisted)
         this._blockBaseClass = null;    // cached Block class for eval sandbox
@@ -56,6 +59,48 @@ export default class ModLoader {
     /* ------------------------------------------------------------------
      *  Public API
      * ------------------------------------------------------------------ */
+
+    /**
+     * Register a runtime service from a mod. Services are intentionally
+     * small objects: the core can call generic lifecycle hooks without
+     * knowing anything about a particular mod's feature set.
+     */
+    registerService(serviceId, service) {
+        if (!serviceId || !service) {
+            throw new Error('A service id and service instance are required.');
+        }
+        this.services.set(String(serviceId), service);
+        return service;
+    }
+
+    getService(serviceId) {
+        return this.services.get(String(serviceId)) || null;
+    }
+
+    getGuiButtons(screenId, screen) {
+        const buttons = [];
+        for (const service of this.services.values()) {
+            if (typeof service.getGuiButtons !== 'function') continue;
+            try {
+                const result = service.getGuiButtons(screenId, screen);
+                if (Array.isArray(result)) buttons.push(...result.filter(Boolean));
+            } catch (error) {
+                console.warn(`[Patchwork] Mod GUI hook failed for '${screenId}':`, error);
+            }
+        }
+        return buttons;
+    }
+
+    handleNetworkMessage(payload, networkManager) {
+        for (const service of this.services.values()) {
+            if (typeof service.handleNetworkMessage !== 'function') continue;
+            try {
+                service.handleNetworkMessage(payload, networkManager);
+            } catch (error) {
+                console.warn('[Patchwork] Mod network hook failed:', error);
+            }
+        }
+    }
 
     /**
      * Load all installed mods from IndexedDB and register their content.
@@ -112,6 +157,14 @@ export default class ModLoader {
             if (path === 'ModLoad.js') {
                 const src = await entry.async('string');
                 await this.filesystem.saveFile(src, `mods/${modId}/ModLoad.js`);
+            } else if (path.endsWith('.js') && !path.includes('/')) {
+                // Root-level helper modules are used by runtime-only mods
+                // (for example a renderer/service module imported by
+                // ModLoad.js). Preserve them instead of silently dropping
+                // them during persistent ZIP installation.
+                const src = await entry.async('string');
+                const filename = path.split('/').pop();
+                await this.filesystem.saveFile(src, `mods/${modId}/${filename}`);
             } else if (path.startsWith('blocks/') && path.endsWith('.js')) {
                 const src = await entry.async('string');
                 const filename = path.split('/').pop();
@@ -818,7 +871,9 @@ export default class ModLoader {
             const src = await fs.loadFile(`mods/${modId}/ModLoad.js`);
             if (!src) return;
 
-            const modDeps = { Sound };
+            const GuiButton = (await import('./gui/widgets/GuiButton.js')).default;
+            const GuiScreen = (await import('./gui/GuiScreen.js')).default;
+            const modDeps = { Sound, THREE, GuiButton, GuiScreen, ModelRenderer, Tessellator };
             await this._resolveModImports(src, modDeps, modId, 'ModLoad.js', new Set(['ModLoad.js']), fs);
 
             let transformed = src.replace(/import\s+.*?from\s+["'][^"']*["']\s*;?/g, '');
@@ -843,7 +898,7 @@ export default class ModLoader {
             const factory = new Function(wrapped)();
             const modLoadClass = factory(modDeps);
             if (modLoadClass && typeof modLoadClass.onLoad === 'function') {
-                modLoadClass.onLoad(this.minecraft.world);
+                modLoadClass.onLoad(this.minecraft.world, this.minecraft, this);
                 console.log(`[Patchwork]   Called ModLoad.onLoad for '${modId}'`);
             }
         } catch (err) {

@@ -16,6 +16,39 @@ let autosaveInterval = null;
 let playerSaveInterval = null;
 let started = false;
 
+const MAX_CAPE_DATA_URL_LENGTH = 512 * 1024;
+
+function isValidCapeDataUrl(value) {
+    return value === null || (
+        typeof value === 'string' &&
+        value.startsWith('data:image/png;base64,') &&
+        value.length <= MAX_CAPE_DATA_URL_LENGTH
+    );
+}
+
+function sendCapeStates(target) {
+    if (!target?.ws || target.ws.readyState !== 1) return;
+    for (const player of getPlayers().values()) {
+        if (!player.cape) continue;
+        target.ws.send(JSON.stringify({
+            type: 'cape:state',
+            username: player.username,
+            cape: player.cape
+        }));
+    }
+}
+
+function broadcastCapeState(player) {
+    const message = JSON.stringify({
+        type: 'cape:state',
+        username: player.username,
+        cape: player.cape || null
+    });
+    for (const peer of getPlayers().values()) {
+        if (peer.ws.readyState === 1) peer.ws.send(message);
+    }
+}
+
 // Initialize the world: pick the server (CLI flag wins, else last used),
 // load its config + world data, register game blocks and seed pending block
 // ticks. Safe to call once; subsequent calls are no-ops until stopServer().
@@ -116,6 +149,21 @@ export function onConnection(ws) {
             if (payload && payload.type === 'inventory') {
                 player.inventory = normalizeInventoryState(payload.inventory);
                 savePlayerData(player);
+            } else if (payload && payload.type === 'cape:request') {
+                sendCapeStates(player);
+            } else if (payload && payload.type === 'cape:update') {
+                // The username is taken from the authenticated login state;
+                // clients cannot update another player's cape.
+                if (!player.username || payload.username !== player.username) {
+                    return;
+                }
+                if (!isValidCapeDataUrl(payload.cape)) {
+                    log.warn('Server', `Rejected invalid cape from ${player.username}`);
+                    return;
+                }
+                player.cape = payload.cape;
+                savePlayerData(player);
+                broadcastCapeState(player);
             } else if (payload && payload.type === 'health') {
                 if (typeof payload.health === 'number') {
                     player.health = Math.max(0, Math.min(20, payload.health));

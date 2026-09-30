@@ -185,6 +185,9 @@ export default class PlayerRenderer extends EntityRenderer {
             mesh.material = mesh.material.clone();
             mesh.material.depthTest = false;
         }
+
+        const capeService = this.worldRenderer.minecraft.modLoader?.getService('cape_plus');
+        capeService?.onRendererRebuilt?.(this, entity);
     }
 
     render(entity, partialTicks) {
@@ -204,6 +207,9 @@ export default class PlayerRenderer extends EntityRenderer {
         }
 
         super.render(entity, partialTicks);
+
+        const capeService = this.worldRenderer.minecraft.modLoader?.getService('cape_plus');
+        capeService?.render?.(this, entity, partialTicks);
 
         // Render shadow below the entity
         this.renderShadow(entity, partialTicks);
@@ -288,6 +294,11 @@ export default class PlayerRenderer extends EntityRenderer {
 
         meta.firstPerson = firstPerson;
         meta.itemInHand = firstPerson ? this.worldRenderer.itemToRender : entity.inventory.getItemInSelectedSlot();
+
+        const capeService = this.worldRenderer.minecraft.modLoader?.getService('cape_plus');
+        if (capeService?.getVersion) {
+            meta.cape = capeService.getVersion(entity);
+        }
     }
 
     renderNametag(entity, partialTicks) {

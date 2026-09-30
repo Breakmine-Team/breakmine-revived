@@ -59,6 +59,9 @@ export default class GuiMainMenu extends GuiScreen {
             this.minecraft.displayScreen(new GuiMods(this.minecraft, this));
         }));
 
+        const modButtons = this.minecraft.modLoader?.getGuiButtons('main-menu', this) || [];
+        this.buttonList.push(...modButtons);
+
         this.buttonList.push(new GuiButton(this.minecraft, "Account", this.width / 2 - 100, y + 24 * 3, 98, 20, () => {
             this.minecraft.displayScreen(new GuiAccount(this));
         }));//.setEnabled(false).setTooltip("Coming soon!"));
@@ -70,6 +73,7 @@ export default class GuiMainMenu extends GuiScreen {
         this.buttonList.push(new GuiButton(this.minecraft, "Texture Packs", this.width / 2 + 2, y + 24 * 3, 98, 20, () => {
             this.minecraft.displayScreen(new GuiTexturePacks(this));
         }));
+
         this.buttonList.push(new GuiButton(this.minecraft, "Quit Game", this.width / 2 + 2, y + 96 + 12, 98, 20, () => {
             this.minecraft.stop();
         }).setEnabled(false));

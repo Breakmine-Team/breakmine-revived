@@ -87,7 +87,13 @@ export default class EntityRenderer {
             this.group.traverse(child => {
                 if (child.isMesh) {
                     child.material.color.setHex(0xffffff);
-                    child.material.vertexColors = true;
+                    // Built-in voxel meshes have a per-vertex color
+                    // attribute; renderer extensions (cape/nametag style
+                    // textured meshes) may not. Enabling vertexColors on a
+                    // geometry with no color buffer makes Three render it
+                    // incorrectly, often as black. Restore the material to
+                    // the mode its geometry can actually support.
+                    child.material.vertexColors = Boolean(child.geometry?.getAttribute?.('color'));
                 }
             });
         }

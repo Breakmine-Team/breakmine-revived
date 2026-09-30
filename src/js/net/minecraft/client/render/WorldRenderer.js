@@ -220,6 +220,14 @@ export default class WorldRenderer {
                     console.error(`[Patchwork] Failed to load dev mod from '${devModUrl}':`, err);
                 }
             }
+
+            // The title screen is created before async mod loading finishes.
+            // Rebuild it once so mod-provided menu actions become available
+            // without requiring a second navigation round-trip.
+            const currentScreen = this.minecraft.currentScreen;
+            if (currentScreen?.constructor?.name === 'GuiMainMenu') {
+                currentScreen.setup(this.minecraft, this.window.width, this.window.height);
+            }
             
             // Rebind renderers so the GPU sees new mod textures
             if (this.blockRenderer) {

@@ -171,6 +171,7 @@ function savePlayerData(player) {
         isFlying: player.isFlying || false,
         gamemode: player.gamemode,
         health: player.health,
+        cape: player.cape || null,
         inventory: normalizeInventoryState(player.inventory)
     };
     fs.writeFileSync(playerFile, JSON.stringify(data, null, 2));
