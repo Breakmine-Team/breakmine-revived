@@ -121,14 +121,16 @@ async function startServer(options) {
     config.reload(serverName);
     serverWorld.initWorld(serverName);
 
-    // One-time migration of a legacy IndexedDB save into the server's file
-    // layout. Runs between initWorld() (clears maps, creates the dir) and
-    // initServer() (re-reads world_data.bin from disk).
+    // initServer() itself calls initWorld(), which clears the world-change map
+    // and re-reads world_data.bin. Migration must therefore run AFTER it, or
+    // the migrated changes are thrown away. The caller deletes the IndexedDB
+    // copy once the server is up, so anything dropped here is lost for good.
+    initServer();
+
     if (options.migrateData) {
         migrateLegacySave(options.migrateData, options.username);
+        serverWorld.saveWorld();
     }
-
-    initServer();
     accepting = true;
     currentServerName = serverName;
     running = true;

@@ -3,6 +3,7 @@ import GuiButton from "../widgets/GuiButton.js";
 import GuiTexturePackSlotContainer from "../widgets/GuiTexturePackSlotContainer.js";
 import FileSystem from "../../fs/Filesystem.js";
 import * as THREE from "../../../../../../../libraries/three.module.js";
+import { loadJSZip } from "../../JSZipLoader.js";
 
 function parseToml(str) {
     const result = {};
@@ -165,19 +166,8 @@ export default class GuiTexturePacks extends GuiScreen {
     }
 
     async processZipFile(file) {
-        // Load JSZip from libraries via script tag since it's a UMD library
-        if (typeof window.JSZip === 'undefined') {
-            await new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                script.src = 'libraries/jszip.min.js';
-                script.onload = resolve;
-                script.onerror = reject;
-                document.head.appendChild(script);
-            });
-        }
-        
-        const JSZip = window.JSZip;
-        
+        const JSZip = await loadJSZip();
+
         try {
             const zip = await JSZip.loadAsync(file);
             

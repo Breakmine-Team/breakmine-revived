@@ -7,6 +7,7 @@ import GuiYesNo from "./GuiYesNo.js";
 import GuiTooltip from "../widgets/GuiTooltip.js";
 import fs from "../../fs/ServerFs.js";
 import path from "../../../util/path.js";
+import { loadJSZip } from "../../JSZipLoader.js";
 
 export default class GuiSelectWorld extends GuiScreen {
 
@@ -111,15 +112,7 @@ export default class GuiSelectWorld extends GuiScreen {
     }
 
     async _loadJSZip() {
-        if (typeof window.JSZip !== 'undefined') return window.JSZip;
-        await new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = 'libraries/jszip.min.js';
-            script.onload = resolve;
-            script.onerror = reject;
-            document.head.appendChild(script);
-        });
-        return window.JSZip;
+        return loadJSZip();
     }
 
     _addDirToZip(zip, dir, prefix) {

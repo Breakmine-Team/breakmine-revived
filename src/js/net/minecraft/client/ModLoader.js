@@ -3,6 +3,7 @@ import FileSystem from "./fs/Filesystem.js";
 import EnumCreativeInventoryTab from "./gui/EnumCreativeInventoryTab.js";
 import { BlockRegistry } from "./world/block/BlockRegistry.js";
 import Sound from "./sound/Sound.js";
+import { loadJSZip } from "./JSZipLoader.js";
 import * as THREE from "../../../../../libraries/three.module.js";
 
 /**
@@ -1313,14 +1314,7 @@ export default class ModLoader {
      * Ensure JSZip is loaded.
      */
     async _ensureJSZip() {
-        if (window.JSZip) return window.JSZip;
-        return new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = 'libraries/jszip.min.js';
-            script.onload = () => resolve(window.JSZip);
-            script.onerror = () => reject(new Error('Failed to load JSZip library'));
-            document.head.appendChild(script);
-        });
+        return loadJSZip();
     }
 
     async _arrayBufferToBase64(buffer) {
