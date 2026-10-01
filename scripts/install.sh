@@ -2,19 +2,19 @@
 #
 # Breakmine Desktop installer for Linux.
 #
-# There are no prebuilt AppImages published on the mod wiki or in GitHub
-# Releases, so this script fetches the game source from GitHub, builds it
-# locally and packages the result as an AppImage. That means Node, npm and a
-# working network connection are required — it is a source install, not a
-# binary download.
+# The AppImage is built by appbuild.js (npm run dist:linux) and published as a
+# release asset, so this script normally just downloads it — no Node, no npm,
+# no compiler. Pass --source to build from a git checkout instead, which needs
+# Node 22+, npm and a few minutes.
 #
-# Re-running the script finds an existing install, compares the installed
-# commit against the remote one and offers to update.
+# Re-running the script finds an existing install, compares it against the
+# published release and offers to update.
 #
 # Usage:
-#   ./scripts/install.sh                 install or update from the main branch
+#   ./scripts/install.sh                 install or update the latest release
 #   ./scripts/install.sh --ref v4.7.9a   install a specific tag
-#   ./scripts/install.sh --force         rebuild even if already up to date
+#   ./scripts/install.sh --force         reinstall even when already up to date
+#   ./scripts/install.sh --source        build from source instead of downloading
 #   ./scripts/install.sh --dir ~/games/breakmine
 #
 set -euo pipefail
@@ -24,6 +24,7 @@ API="https://api.github.com/repos/${REPO}"
 
 REF="main"
 FORCE=0
+FROM_SOURCE=0
 INSTALL_DIR="${BREAKMINE_INSTALL_DIR:-$HOME/.local/share/breakmine}"
 APPNAME="Breakmine"
 APPIMAGE_NAME="Breakmine.AppImage"
@@ -43,8 +44,8 @@ fi
 
 step()  { printf '%s==>%s %s%s%s\n' "$GREEN" "$RESET" "$BOLD" "$*" "$RESET"; }
 info()  { printf '    %s\n' "$*"; }
-warn()  { printf '%s !! %s%s\n' "$YELLOW" "$*" "$RESET" >&2; }
-die()   { printf '%s xx %s%s\n' "$RED" "$*" "$RESET" >&2; exit 1; }
+warn()  { printf '    %s !!%s %s%s%s\n' "$YELLOW" "$RESET" "$YELLOW" "$*" "$RESET" >&2; }
+die()   { printf '%s xx%s %s%s%s\n' "$RED" "$RESET" "$RED" "$*" "$RESET" >&2; exit 1; }
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "'$1' is required but not installed.${2:+ $2}"
@@ -71,6 +72,16 @@ confirm() {
   case "$reply" in y|yes) return 0 ;; *) return 1 ;; esac
 }
 
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d' ' -f1
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | cut -d' ' -f1
+  else
+    return 1
+  fi
+}
+
 # ---------------------------------------------------------------- args
 
 while [ $# -gt 0 ]; do
@@ -78,6 +89,7 @@ while [ $# -gt 0 ]; do
     --ref)   REF="${2:?--ref needs a value}"; shift 2 ;;
     --dir)   INSTALL_DIR="${2:?--dir needs a value}"; shift 2 ;;
     --force) FORCE=1; shift ;;
+    --source) FROM_SOURCE=1; shift ;;
     -h|--help)
       sed -n '3,20p' "$0" | sed 's/^# \{0,1\}//'
       exit 0 ;;
@@ -94,27 +106,6 @@ esac
 
 step "Checking prerequisites"
 need_cmd curl "Install it with: sudo apt install curl"
-need_cmd tar  "Install it with: sudo apt install tar"
-need_cmd node "Install Node 22 or newer from https://nodejs.org"
-need_cmd npm  "It ships with Node."
-info "node $(node --version), npm $(npm --version)"
-
-# The commit currently installed, if any.
-VERSION_FILE="$INSTALL_DIR/.breakmine-version"
-INSTALLED_SHA=""
-INSTALLED_REF=""
-if [ -f "$VERSION_FILE" ]; then
-  INSTALLED_SHA="$(sed -n 's/^sha=//p' "$VERSION_FILE" | head -n1)"
-  INSTALLED_REF="$(sed -n 's/^ref=//p' "$VERSION_FILE" | head -n1)"
-fi
-
-if [ -f "$INSTALL_DIR/$APPIMAGE_NAME" ] && [ -z "$INSTALLED_SHA" ]; then
-  warn "Found an install at $INSTALL_DIR but no version marker; treating it as unknown."
-fi
-
-# ---------------------------------------------------------------- remote state
-
-step "Checking $REPO ($REF)"
 
 # GITHUB_TOKEN is optional and only lifts the 60 requests/hour anonymous limit.
 CURL_AUTH=()
@@ -122,8 +113,87 @@ if [ -n "${GITHUB_TOKEN:-}" ]; then
   CURL_AUTH=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
 fi
 
-REMOTE_JSON="$(curl -fsSL --max-time 30 "${CURL_AUTH[@]+"${CURL_AUTH[@]}"}" "${API}/commits/${REF}" 2>/dev/null || true)"
+# ---------------------------------------------------------------- installed state
 
+VERSION_FILE="$INSTALL_DIR/.breakmine-version"
+INSTALLED_SHA=""
+INSTALLED_REF=""
+INSTALLED_RELEASE=""
+INSTALLED_SOURCE=""
+if [ -f "$VERSION_FILE" ]; then
+  INSTALLED_SHA="$(sed -n 's/^sha=//p' "$VERSION_FILE" | head -n1)"
+  INSTALLED_REF="$(sed -n 's/^ref=//p' "$VERSION_FILE" | head -n1)"
+  INSTALLED_RELEASE="$(sed -n 's/^release=//p' "$VERSION_FILE" | head -n1)"
+  INSTALLED_SOURCE="$(sed -n 's/^source=//p' "$VERSION_FILE" | head -n1)"
+fi
+
+if [ -f "$INSTALL_DIR/$APPIMAGE_NAME" ] && [ -z "$INSTALLED_SHA" ] && [ -z "$INSTALLED_RELEASE" ]; then
+  warn "Found an install at $INSTALL_DIR but no version marker; treating it as unknown."
+fi
+
+# ---------------------------------------------------------------- release lookup
+
+release_json() {
+  # Echoes the release payload, or nothing when there is no such release.
+  curl -fsSL --max-time 30 "${CURL_AUTH[@]+"${CURL_AUTH[@]}"}" "$1" 2>/dev/null || true
+}
+
+# Sets RELEASE_TAG / ASSET_URL / CHECKSUM_URL from a release payload.
+# browser_download_url only ever appears on assets, and URLs contain no
+# spaces, so they can be pulled out with grep instead of needing jq.
+read_release() {
+  local json="$1" url name urls
+  # grep exits 1 when there is no match, which would kill the script under
+  # set -e, hence the || true on every extraction.
+  RELEASE_TAG="$(printf '%s' "$json" | grep -o '"tag_name": *"[^"]*"' | head -n1 | sed 's/^[^:]*: *"//; s/"$//' || true)"
+  urls="$(printf '%s' "$json" | grep -o '"browser_download_url": *"[^"]*"' | sed 's/^[^:]*: *"//; s/"$//' || true)"
+  ASSET_URL=""
+  CHECKSUM_URL=""
+  while IFS= read -r url; do
+    [ -n "$url" ] || continue
+    name="${url##*/}"
+    case "$name" in
+      *.AppImage)             [ -n "$ASSET_URL" ] || ASSET_URL="$url" ;;
+      *.AppImage.sha256|checksums.txt) CHECKSUM_URL="$url" ;;
+    esac
+  done <<EOF
+$urls
+EOF
+}
+
+RELEASE_TAG=""
+ASSET_URL=""
+CHECKSUM_URL=""
+
+step "Looking for a published AppImage ($REF)"
+if [ "$FROM_SOURCE" -eq 1 ]; then
+  info "--source given, skipping the download."
+else
+  # A tag gets its own release; the default branch (and a commit sha, which
+  # simply has no release) fall back to whatever was published last.
+  if [ "$REF" != "main" ]; then
+    read_release "$(release_json "${API}/releases/tags/${REF}")"
+  fi
+  if [ -z "$ASSET_URL" ]; then
+    read_release "$(release_json "${API}/releases/latest")"
+    if [ -n "$ASSET_URL" ] && [ "$REF" != "main" ] && [ "$RELEASE_TAG" != "$REF" ]; then
+      warn "No release for '$REF'; using the latest one ($RELEASE_TAG) instead."
+      warn "Pass --source to build '$REF' from a checkout instead."
+    fi
+  fi
+
+  if [ -n "$ASSET_URL" ]; then
+    info "release : $RELEASE_TAG"
+    info "asset   : ${ASSET_URL##*/}"
+    [ -n "$CHECKSUM_URL" ] && info "sha256  : published"
+  else
+    warn "No AppImage published yet; falling back to a source build."
+  fi
+fi
+
+# The branch head is only needed to describe the source build, so a failure
+# here is not fatal.
+REMOTE_JSON="$(release_json "${API}/commits/${REF}")"
 REMOTE_SHA=""
 REMOTE_SHORT=""
 REMOTE_DATE=""
@@ -131,13 +201,10 @@ if [ -n "$REMOTE_JSON" ]; then
   # grep -o then head: the commit payload also contains a nested tree "sha",
   # so a greedy pattern would happily report the wrong one. The top-level
   # commit "sha" is the first match in the document.
-  REMOTE_SHA="$(printf '%s' "$REMOTE_JSON" | grep -o '"sha": "[0-9a-f]\{40\}"' | head -n1 | grep -o '[0-9a-f]\{40\}')"
+  REMOTE_SHA="$(printf '%s' "$REMOTE_JSON" | grep -o '"sha": "[0-9a-f]\{40\}"' | head -n1 | grep -o '[0-9a-f]\{40\}' || true)"
   REMOTE_SHORT="${REMOTE_SHA:0:7}"
-  REMOTE_DATE="$(printf '%s' "$REMOTE_JSON" | grep -o '"date": "[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T' | head -n1 | grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}')"
-fi
-
-if [ -z "$REMOTE_SHA" ]; then
-  # Not fatal: the tarball endpoint may still work, we just cannot compare.
+  REMOTE_DATE="$(printf '%s' "$REMOTE_JSON" | grep -o '"date": "[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T' | head -n1 | grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}' || true)"
+else
   warn "Could not read the remote commit (offline, rate limited, or bad ref '$REF'?)."
   warn "Set GITHUB_TOKEN to raise the API rate limit."
 fi
@@ -148,20 +215,31 @@ REINSTALL=0
 if [ -f "$INSTALL_DIR/$APPIMAGE_NAME" ]; then
   step "Existing install found"
   info "location : $INSTALL_DIR"
+  info "version  : ${INSTALLED_RELEASE:-${INSTALLED_SHA:-unknown}}"
+  info "kind     : ${INSTALLED_SOURCE:-source build}"
   info "ref      : ${INSTALLED_REF:-unknown}"
-  info "commit   : ${INSTALLED_SHA:-unknown}"
 
-  if [ -n "$REMOTE_SHA" ] && [ "$INSTALLED_SHA" = "$REMOTE_SHA" ] && [ "$FORCE" -eq 0 ]; then
-    step "Already up to date (${REMOTE_SHORT:-$INSTALLED_SHA})"
-    info "Run with --force to rebuild anyway."
-    exit 0
+  if [ "$FORCE" -eq 0 ]; then
+    if [ -n "$RELEASE_TAG" ] && [ "$RELEASE_TAG" = "$INSTALLED_RELEASE" ]; then
+      step "Already up to date ($RELEASE_TAG)"
+      info "Run with --force to reinstall anyway."
+      exit 0
+    fi
+    # An older install from before releases existed only recorded a commit.
+    if [ -z "$RELEASE_TAG" ] && [ -n "$REMOTE_SHA" ] && [ "$INSTALLED_SHA" = "$REMOTE_SHA" ]; then
+      step "Already up to date (${REMOTE_SHORT:-$INSTALLED_SHA})"
+      info "Run with --force to rebuild anyway."
+      exit 0
+    fi
   fi
 
-  if [ -n "$REMOTE_SHA" ]; then
+  if [ -n "$ASSET_URL" ]; then
+    info "release  : $RELEASE_TAG"
+  elif [ -n "$REMOTE_SHA" ]; then
     info "remote   : $REMOTE_SHORT ($REMOTE_DATE)"
   fi
 
-  if confirm "Update to the latest version?" "y"; then
+  if confirm "Update to ${RELEASE_TAG:-the latest commit}?" "y"; then
     REINSTALL=1
   else
     step "Keeping the current install."
@@ -193,54 +271,87 @@ else
   warn "No root? The AppImage still runs with --appimage-extract-and-run"
 fi
 
-# ---------------------------------------------------------------- fetch source
+# ---------------------------------------------------------------- fetch the AppImage
 
 WORKDIR="$(mktemp -d)"
-step "Downloading source ($REF)"
+APPIMAGE_FETCHED=""
 
-# The tarball endpoint resolves branches, tags and commit SHAs alike, which
-# avoids having to guess refs/heads vs refs/tags.
-TARBALL_URL="${API}/tarball/${REF}"
-info "$TARBALL_URL"
+if [ -n "$ASSET_URL" ]; then
+  step "Downloading $RELEASE_TAG"
+  info "$ASSET_URL"
 
-if ! curl -fL --retry 3 --retry-delay 2 --max-time 600 \
-        "${CURL_AUTH[@]+"${CURL_AUTH[@]}"}" -o "$WORKDIR/source.tar.gz" "$TARBALL_URL"; then
-  die "Download failed. Check the ref '$REF' and your connection."
-fi
+  if ! curl -fL --retry 3 --retry-delay 2 --max-time 1800 --progress-bar \
+          "${CURL_AUTH[@]+"${CURL_AUTH[@]}"}" -o "$WORKDIR/appimage" "$ASSET_URL"; then
+    die "Download failed. Check your connection and try again."
+  fi
 
-tar -xzf "$WORKDIR/source.tar.gz" -C "$WORKDIR" --strip-components=1
-info "extracted to $WORKDIR"
+  if [ -n "$CHECKSUM_URL" ]; then
+    if curl -fsSL --max-time 60 "${CURL_AUTH[@]+"${CURL_AUTH[@]}"}" \
+            -o "$WORKDIR/appimage.sha256" "$CHECKSUM_URL"; then
+      # sha256sum output: the digest, then the file name. Accept either a
+      # sibling <asset>.sha256 or a checksums.txt listing.
+      EXPECTED_SHA="$(grep -o '[0-9a-fA-F]\{64\}' "$WORKDIR/appimage.sha256" | head -n1 || true)"
+      ACTUAL_SHA="$(sha256_of "$WORKDIR/appimage" || true)"
+      if [ -z "$ACTUAL_SHA" ]; then
+        warn "No sha256sum/shasum available; skipping checksum verification."
+      elif [ "$EXPECTED_SHA" != "$ACTUAL_SHA" ]; then
+        die "Checksum mismatch for the downloaded AppImage. Refusing to install it."
+      else
+        info "checksum ok ($ACTUAL_SHA)"
+      fi
+    else
+      warn "Could not fetch the published checksum; continuing unverified."
+    fi
+  fi
 
-if [ ! -f "$WORKDIR/package.json" ]; then
-  die "Downloaded archive does not look like the game (no package.json)."
-fi
-
-# ---------------------------------------------------------------- build
-
-step "Installing build dependencies"
-cd "$WORKDIR"
-if [ -f package-lock.json ]; then
-  npm ci --no-audit --no-fund
+  APPIMAGE_FETCHED="$WORKDIR/appimage"
 else
-  warn "No package-lock.json found; falling back to npm install."
-  npm install --no-audit --no-fund
+  step "Building from source ($REF)"
+
+  need_cmd tar  "Install it with: sudo apt install tar"
+  need_cmd node "Install Node 22 or newer from https://nodejs.org"
+  need_cmd npm  "It ships with Node."
+  info "node $(node --version), npm $(npm --version)"
+
+  # The tarball endpoint resolves branches, tags and commit SHAs alike, which
+  # avoids having to guess refs/heads vs refs/tags.
+  TARBALL_URL="${API}/tarball/${REF}"
+  info "$TARBALL_URL"
+
+  if ! curl -fL --retry 3 --retry-delay 2 --max-time 600 \
+          "${CURL_AUTH[@]+"${CURL_AUTH[@]}"}" -o "$WORKDIR/source.tar.gz" "$TARBALL_URL"; then
+    die "Download failed. Check the ref '$REF' and your connection."
+  fi
+
+  tar -xzf "$WORKDIR/source.tar.gz" -C "$WORKDIR" --strip-components=1
+
+  if [ ! -f "$WORKDIR/package.json" ]; then
+    die "Downloaded archive does not look like the game (no package.json)."
+  fi
+
+  step "Installing build dependencies"
+  cd "$WORKDIR"
+  if [ -f package-lock.json ]; then
+    npm ci --no-audit --no-fund
+  else
+    warn "No package-lock.json found; falling back to npm install."
+    npm install --no-audit --no-fund
+  fi
+
+  step "Packaging the AppImage (this takes a few minutes)"
+  # appbuild.js embeds the assets, runs vite and drives electron-builder, so
+  # the source build produces exactly what the release asset is.
+  node appbuild.js --linux
+
+  APPIMAGE_BUILT=""
+  for candidate in release/*.AppImage; do
+    [ -e "$candidate" ] && APPIMAGE_BUILT="$candidate" && break
+  done
+  [ -n "$APPIMAGE_BUILT" ] || die "appbuild.js produced no AppImage (look above for the error)."
+  cd "$OLDPWD"
+
+  APPIMAGE_FETCHED="$APPIMAGE_BUILT"
 fi
-
-step "Building the game (this takes a few minutes)"
-npm run build
-
-if [ ! -f dist/index.html ]; then
-  die "Build finished but dist/index.html is missing; the vite build likely failed."
-fi
-
-step "Packaging the AppImage"
-npx --no-install electron-builder --linux AppImage --publish never
-
-APPIMAGE_BUILT=""
-for candidate in release/*.AppImage; do
-  [ -e "$candidate" ] && APPIMAGE_BUILT="$candidate" && break
-done
-[ -n "$APPIMAGE_BUILT" ] || die "electron-builder produced no AppImage (look above for the error)."
 
 # ---------------------------------------------------------------- install
 
@@ -252,13 +363,21 @@ fi
 
 # Write to a temporary name first so an interrupted copy cannot leave a
 # half-written AppImage that fails to launch next time.
-cp "$APPIMAGE_BUILT" "$INSTALL_DIR/$APPIMAGE_NAME.new"
+cp "$APPIMAGE_FETCHED" "$INSTALL_DIR/$APPIMAGE_NAME.new"
 chmod +x "$INSTALL_DIR/$APPIMAGE_NAME.new"
 mv -f "$INSTALL_DIR/$APPIMAGE_NAME.new" "$INSTALL_DIR/$APPIMAGE_NAME"
+
+if [ -n "$ASSET_URL" ]; then
+  SOURCE_KIND="release"
+else
+  SOURCE_KIND="source"
+fi
 
 cat > "$VERSION_FILE" <<EOF
 sha=$REMOTE_SHA
 ref=$REF
+release=$RELEASE_TAG
+source=$SOURCE_KIND
 installed=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF
 
@@ -285,9 +404,25 @@ EOF
 chmod +x "$DESKTOP_DIR/breakmine.desktop"
 
 # electron-builder copies buildResources/<icon> into the AppImage as
-# linux/icon.png; reuse the same source for the menu icon.
-if [ -f "$WORKDIR/src/resources/favicon.png" ]; then
-  cp "$WORKDIR/src/resources/favicon.png" "$ICON_DIR/breakmine.png"
+# usr/share/icons/hicolor/512x512/apps/breakmine.png, so the checkout's copy
+# and the AppImage's are the same artwork. Prefer the checkout, and fall back
+# to unpacking the AppImage so a download-only run still gets a menu icon.
+ICON_SRC=""
+for candidate in "$PWD/src/resources/favicon.png" "$WORKDIR/src/resources/favicon.png"; do
+  if [ -f "$candidate" ]; then ICON_SRC="$candidate"; break; fi
+done
+
+if [ -z "$ICON_SRC" ] && [ "$SOURCE_KIND" = "release" ]; then
+  if (cd "$WORKDIR" && "$INSTALL_DIR/$APPIMAGE_NAME" --appimage-extract \
+          'usr/share/icons/hicolor/*/apps/*.png' >/dev/null 2>&1); then
+    ICON_SRC="$(find "$WORKDIR/squashfs-root/usr/share/icons" -name '*.png' 2>/dev/null | sort | head -n1)"
+  fi
+fi
+
+if [ -n "$ICON_SRC" ]; then
+  cp "$ICON_SRC" "$ICON_DIR/breakmine.png"
+else
+  warn "No icon found; the menu entry will use a placeholder."
 fi
 
 if command -v update-desktop-database >/dev/null 2>&1; then
@@ -304,9 +439,10 @@ fi
 # ---------------------------------------------------------------- done
 
 printf '\n%s%s installed.%s\n\n' "$BOLD" "$GREEN" "$RESET"
-info "binary : $INSTALL_DIR/$APPIMAGE_NAME"
+info "binary  : $INSTALL_DIR/$APPIMAGE_NAME"
+info "version : ${RELEASE_TAG:-$REMOTE_SHA} ($SOURCE_KIND)"
 info "launcher: $DESKTOP_DIR/breakmine.desktop"
-info "mods   : $INSTALL_DIR/mods"
+info "mods    : $INSTALL_DIR/mods"
 printf '\n'
 info "Launch it from your application menu, or:"
 printf '\n        %s%s%s\n\n' "$BOLD" "$INSTALL_DIR/$APPIMAGE_NAME" "$RESET"

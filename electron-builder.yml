@@ -91,6 +91,9 @@ linux:
     - target: AppImage
       arch:
         - x64
+  # scripts/install.sh downloads the artifact by name off the release, so keep
+  # it predictable; appbuild.js writes the matching .sha256 next to it.
+  artifactName: "${productName}-${version}.${ext}"
   category: Game
   icon: favicon.png
   synopsis: Minecraft in JavaScript
