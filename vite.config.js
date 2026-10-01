@@ -23,6 +23,12 @@ export default defineConfig({
         https: true,
         allowedHosts: true
     },
+    // Relative asset URLs. The desktop app is packaged with electron-builder
+    // and loaded with win.loadFile() (main.js), so the page origin is
+    // file:///.../app.asar/dist/index.html. With the default base of "/" the
+    // built HTML asks for /assets/index-<hash>.js, which resolves to the
+    // filesystem root instead of the bundle and every chunk 404s.
+    base: "./",
     build: {
         outDir: "dist",
         assetsInlineLimit: 0,

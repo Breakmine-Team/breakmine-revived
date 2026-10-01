@@ -95,8 +95,7 @@ linux:
   icon: favicon.png
   synopsis: Minecraft in JavaScript
   description: >-
-    Breakmine, a Minecraft-like voxel game written in JavaScript. Drop mods
-    into the mods folder or install them straight from the mod wiki.
+    Breakmine is a Minecraft-like voxel game written in JavaScript.
   # `desktop.entry` overwrites the keys electron-builder computes by default.
   # Name, Comment, StartupWMClass and Categories are all derived from
   # productName / description / desktopName / `category` above, so only the

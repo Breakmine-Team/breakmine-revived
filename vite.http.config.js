@@ -21,6 +21,10 @@ export default defineConfig({
         port: 8000,
         allowedHosts: ["breakmine.minetest.land", "breakmine.logicerror.dev"],
     },
+    // Must match vite.config.js: this config writes to the same outDir, and the
+    // packaged app is loaded over file://, where a base of "/" would resolve
+    // asset URLs against the filesystem root.
+    base: "./",
     build: {
         outDir: "dist",
         assetsInlineLimit: 0,
