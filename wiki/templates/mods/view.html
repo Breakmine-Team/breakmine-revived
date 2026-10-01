@@ -61,7 +61,9 @@
       {% if versions %}
         <button type="button" class="btn-floating btn-large waves-effect waves-light teal" 
                 title="Download Mod"
-                data-download-url="{{ url_for('mods.download_version', mod_id=mod['id'], ver_id=versions[0]['id']) }}" 
+                data-download-url="{{ url_for('mods.download_version', mod_id=mod['id'], ver_id=versions[0]['id']) }}"
+                data-desktop-url="{{ url_for('mods.download_version', mod_id=mod['id'], ver_id=versions[0]['id'], _external=True) }}"
+                data-mod-name="{{ (mod['title'] if mod['title'] else mod['name']) | e }}"
                 onclick="openModloaderDialogFromData(this)">
           <i class="material-icons">file_download</i>
         </button>
@@ -198,7 +200,7 @@
                       <i class="material-icons">delete</i>
                   </button>
                 {% endif %}
-                <button type="button" class="btn-floating btn-large waves-effect teal" onclick="openModloaderDialog('{{ url_for('mods.download_version', mod_id=mod['id'], ver_id=ver['id']) }}')">
+                <button type="button" class="btn-floating btn-large waves-effect teal" onclick="openModloaderDialog('{{ url_for('mods.download_version', mod_id=mod['id'], ver_id=ver['id']) }}', null, '{{ url_for('mods.download_version', mod_id=mod['id'], ver_id=ver['id'], _external=True) }}', '{{ (mod['title'] if mod['title'] else mod['name']) | e }}')">
                   <i class="material-icons">file_download</i>
               </button>
               </div>

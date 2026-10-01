@@ -10,9 +10,9 @@ data/*
 vcs.py
 vcs2.py
 node_modules/*
-package-lock.json
 dist/
 dist-single/
+release/
 serverconfig.conf
 current_world.txt
 src/resources.js

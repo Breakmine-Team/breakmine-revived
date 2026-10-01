@@ -69,7 +69,12 @@ export default class GuiMods extends GuiScreen {
             if (this.selectedIndex < 0 || this.selectedIndex >= this.mods.length) return;
             const mod = this.mods[this.selectedIndex];
             this.minecraft.displayScreen(new GuiYesNo(this, `Delete mod "${mod.name}" by ${mod.author}?`, "This action cannot be undone!", "Delete", "Cancel", async () => {
-                await this.minecraft.modLoader.uninstallMod(mod.id);
+                try {
+                    await this.minecraft.modLoader.uninstallMod(mod.id);
+                } catch (err) {
+                    alert('Failed to delete mod: ' + err.message);
+                    return;
+                }
                 this.dirty = true;
                 await this.refreshModList();
                 this.rebuildSlotList();
@@ -100,14 +105,22 @@ export default class GuiMods extends GuiScreen {
 
     updateButtonStates() {
         const hasSelection = this.selectedIndex >= 0 && this.selectedIndex < this.mods.length;
+        const mod = hasSelection ? this.mods[this.selectedIndex] : null;
+        // Folder mods live in the physical mods/ directory, which the game
+        // never writes to — deleting them is a filesystem action, not a UI one.
+        const isDiskMod = !!mod?.disk;
+
         this.buttonToggle.enabled = hasSelection;
-        this.buttonDelete.enabled = hasSelection;
+        this.buttonDelete.enabled = hasSelection && !isDiskMod;
 
         if (hasSelection) {
-            const mod = this.mods[this.selectedIndex];
             this.buttonToggle.string = mod.enabled ? "Disable" : "Enable";
         } else {
             this.buttonToggle.string = "Toggle";
+        }
+
+        if (this.buttonDelete) {
+            this.buttonDelete.string = isDiskMod ? "In mods/" : "Delete";
         }
 
         if (this.buttonBack) {

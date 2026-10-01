@@ -7,9 +7,9 @@ const { contextBridge, ipcRenderer } = require('electron');
  * read/write the physical `mods/` folder at the project root. Every method
  * delegates to an IPC handler in the main process (`main.js`).
  *
- * The bridge mirrors the layout translation of NodeFilesystem:
- *   - ModData.js on disk → ModData.json (parsed) in the virtual layout
- *   - .png / .ogg → .png.b64 / .ogg.b64 in the virtual layout
+ * The bridge is backed by the physical `mods/` folder at the app root. The
+ * renderer is responsible for translating between that on-disk layout and the
+ * virtual layout the mod loader expects; see `fs/BridgeFilesystem.js`.
  */
 contextBridge.exposeInMainWorld('modsBridge', {
   /**
@@ -47,14 +47,15 @@ contextBridge.exposeInMainWorld('modsBridge', {
   deleteFile: (filename) => ipcRenderer.invoke('mods:deleteFile', filename),
 
   /**
-   * List all files in a directory (virtual layout).
-   * @param {string} dir  e.g. 'mods/' or 'mods/cooldeco/'
-   * @returns {Promise<string[]>}
+   * Recursively list every file under a directory.
+   * @param {string} dir  e.g. '' (the whole mods folder) or 'mods/'
+   * @returns {Promise<string[]>} paths relative to the mods folder,
+   *                             e.g. ['cooldeco/ModData.js', 'cooldeco/blocks/BlockFoo.js']
    */
   listDir: (dir) => ipcRenderer.invoke('mods:listDir', dir),
 
   /**
-   * Check if a file exists in the virtual filesystem.
+   * Check if a file exists.
    * @param {string} filename
    * @returns {Promise<boolean>}
    */
@@ -66,10 +67,4 @@ contextBridge.exposeInMainWorld('modsBridge', {
    * @returns {Promise<number|null>}
    */
   getFileSize: (filename) => ipcRenderer.invoke('mods:getFileSize', filename),
-
-  /**
-   * Get the JSZip library from the main process (already a dependency).
-   * @returns {Promise<object>}
-   */
-  getJSZip: () => ipcRenderer.invoke('mods:getJSZip'),
 });

@@ -23,16 +23,43 @@
   </div>
   <div class="modal-footer">
     <a href="#!" class="modal-close btn-flat">Cancel</a>
+    <button type="button" class="btn waves-effect waves-light blue-grey" id="install-desktop-btn" onclick="confirmDesktopInstall()" style="display: none;">
+      <i class="material-icons left">desktop_windows</i>Install to Breakmine Desktop
+    </button>
     <button type="button" class="btn waves-effect waves-light teal" onclick="confirmDownload()">Download</button>
+  </div>
+</div>
+
+<!-- Confirm hand-off to Breakmine Desktop. Asked here rather than in the app:
+     "No (Don't have it)" only means anything to someone in the browser. -->
+<div id="desktop-confirm-modal" class="modal" style="width: 450px;">
+  <div class="modal-content">
+    <h4>Install to Breakmine Desktop?</h4>
+    <p id="desktop-confirm-text">Do you want to install to Breakmine Desktop?</p>
+  </div>
+  <div class="modal-footer">
+    <button type="button" class="btn waves-effect waves-light grey darken-1" onclick="answerDesktopInstall(false)">
+      No (Don't have it)
+    </button>
+    <button type="button" class="btn waves-effect waves-light teal" onclick="answerDesktopInstall(true)">
+      Yes
+    </button>
   </div>
 </div>
 
 <script>
   let versions = [];
   let downloadBaseUrl = null;
+  let desktopBaseUrl = null;
+  let desktopModName = '';
+  let pendingDesktopInstall = null;
 
   function openModloaderDialogFromData(button) {
     const url = button.getAttribute('data-download-url');
+    // Absolute URL on an allowlisted host; the desktop app fetches the
+    // archive itself and cannot resolve a page-relative path.
+    const desktopUrl = button.getAttribute('data-desktop-url');
+    const modName = button.getAttribute('data-mod-name');
     const versionsScript = document.getElementById('mod-versions-data');
     let availableVersions = null;
     
@@ -45,12 +72,14 @@
       }
     }
     
-    openModloaderDialog(url, availableVersions);
+    openModloaderDialog(url, availableVersions, desktopUrl, modName);
   }
 
-  function openModloaderDialog(url, availableVersions) {
+  function openModloaderDialog(url, availableVersions, desktopUrl, modName) {
     downloadBaseUrl = url;
     versions = availableVersions || [];
+    desktopBaseUrl = desktopUrl || null;
+    desktopModName = modName || 'this mod';
     
     // Populate version selector
     const versionSelect = document.getElementById('version-select');
@@ -72,6 +101,11 @@
     
     // Reset radio buttons
     document.querySelectorAll('input[name="modloader"]').forEach(radio => radio.checked = true);
+
+    // Only offer the desktop hand-off when the page knows an absolute
+    // download URL, otherwise the deep link could not fetch anything.
+    const desktopBtn = document.getElementById('install-desktop-btn');
+    if (desktopBtn) desktopBtn.style.display = desktopBaseUrl ? '' : 'none';
     
     var modal = document.getElementById('modloader-dialog');
     var instance = M.Modal.getInstance(modal);
@@ -86,6 +120,88 @@
     M.FormSelect.init(selects);
   }
 
+  // Absolute URL for the currently selected version.
+  function resolveSelectedVersionUrl(base) {
+    let url = base;
+    if (versions.length > 0) {
+      const selectedVersionId = document.getElementById('version-select').value;
+      if (!selectedVersionId) return null;
+      url = base.replace(/\/v\/\d+$/, `/v/${selectedVersionId}`);
+    }
+    try {
+      return new URL(url, window.location.href).toString();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function closeModloaderDialog() {
+    var modal = document.getElementById('modloader-dialog');
+    var instance = M.Modal.getInstance(modal);
+    if (instance) { instance.close(); }
+  }
+
+  // Hand the mod to Breakmine Desktop over the breakmine-game:// protocol.
+  // This asks the question first — the answer only makes sense here, since
+  // somebody using the app obviously has it. "No" just falls through to the
+  // normal .zip download.
+  function confirmDesktopInstall() {
+    if (!desktopBaseUrl) return;
+
+    const zipUrl = resolveSelectedVersionUrl(downloadBaseUrl);
+    const installUrl = resolveSelectedVersionUrl(desktopBaseUrl);
+    if (!zipUrl || !installUrl) {
+      alert('Please select a version');
+      return;
+    }
+
+    const selectedVersionId = versions.length > 0
+      ? document.getElementById('version-select').value
+      : '';
+
+    const label = desktopModName || 'this mod';
+    const text = document.getElementById('desktop-confirm-text');
+    if (text) {
+      text.textContent = 'Do you want to install "' + label + '" to Breakmine Desktop?';
+    }
+
+    pendingDesktopInstall = { zipUrl: zipUrl, installUrl: installUrl };
+
+    // Close the version dialog first; two Materialize modals stacked on top
+    // of each other fight over focus.
+    closeModloaderDialog();
+
+    var modal = document.getElementById('desktop-confirm-modal');
+    var instance = M.Modal.getInstance(modal);
+    if (!instance) {
+      M.Modal.init(modal);
+      instance = M.Modal.getInstance(modal);
+    }
+    instance.open();
+  }
+
+  function answerDesktopInstall(yes) {
+    var modal = document.getElementById('desktop-confirm-modal');
+    var instance = M.Modal.getInstance(modal);
+    if (instance) { instance.close(); }
+
+    const pending = pendingDesktopInstall;
+    pendingDesktopInstall = null;
+    if (!pending) return;
+
+    if (!yes) {
+      // "No (Don't have it)" — they're on the browser version.
+      window.location.href = pending.zipUrl;
+      return;
+    }
+
+    const deepLink = 'breakmine-game://install'
+      + '?url=' + encodeURIComponent(pending.installUrl)
+      + '&name=' + encodeURIComponent(desktopModName || '');
+
+    window.location.href = deepLink;
+  }
+
   function confirmDownload() {
     const selectedModloader = document.querySelector('input[name="modloader"]:checked');
     if (!selectedModloader) {
@@ -93,22 +209,14 @@
       return;
     }
     
-    let downloadUrl = downloadBaseUrl;
-    
-    // Only replace version ID if versions are available
-    if (versions.length > 0) {
-      const selectedVersionId = document.getElementById('version-select').value;
-      if (!selectedVersionId) {
-        alert('Please select a version');
-        return;
-      }
-      downloadUrl = downloadBaseUrl.replace(/\/v\/\d+$/, `/v/${selectedVersionId}`);
+    const downloadUrl = resolveSelectedVersionUrl(downloadBaseUrl);
+    if (!downloadUrl) {
+      alert('Please select a version');
+      return;
     }
     
     window.location.href = downloadUrl;
     
-    var modal = document.getElementById('modloader-dialog');
-    var instance = M.Modal.getInstance(modal);
-    if (instance) { instance.close(); }
+    closeModloaderDialog();
   }
 </script>

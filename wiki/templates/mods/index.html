@@ -28,6 +28,8 @@
           <td>
             <button type="button" class="btn btn-floating waves-effect waves-light teal btn-small" style="margin-right: 3px;" 
                     data-download-url="{{ url_for('mods.download_version', mod_id=mod['id'], ver_id=mod['latest_ver_id']) }}"
+                    data-desktop-url="{{ url_for('mods.download_version', mod_id=mod['id'], ver_id=mod['latest_ver_id'], _external=True) }}"
+                    data-mod-name="{{ mod['name'] | e }}"
                     onclick="openModloaderDialogFromData(this)">
               <i class="material-icons">download</i>
             </button>

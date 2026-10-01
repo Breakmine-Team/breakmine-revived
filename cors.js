@@ -14,14 +14,17 @@ const { v4: uuidv4 } = require('uuid');
 const sharp = require('sharp');
 const Logger = require('./src/js/net/minecraft/server/logger.js').default;
 
-// All runtime state lives here: auth.db, secrets.json and uploaded skins.
+// All runtime state lives here: auth.db, secrets.json, uploaded skins and capes.
 // Docker mounts a volume over DATA_DIR so accounts and sessions survive rebuilds.
 const DATA_DIR = process.env.DATA_DIR || path.resolve(__dirname, 'data');
 const SECRETS_FILE = path.join(DATA_DIR, 'secrets.json');
+const SKIN_UPLOAD_DIR = path.join(DATA_DIR, 'skins');
+const CAPE_UPLOAD_DIR = path.join(DATA_DIR, 'capes');
 
 function loadOrCreateSecrets() {
     fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.mkdirSync(path.join(DATA_DIR, 'skins'), { recursive: true });
+    fs.mkdirSync(SKIN_UPLOAD_DIR, { recursive: true });
+    fs.mkdirSync(CAPE_UPLOAD_DIR, { recursive: true });
 
     if (fs.existsSync(SECRETS_FILE)) {
         const secrets = JSON.parse(fs.readFileSync(SECRETS_FILE, 'utf8'));
@@ -46,7 +49,13 @@ const PORT = Number(process.env.PORT) || 6006;
 const JWT_EXPIRES_IN = '7d';
 const BCRYPT_ROUNDS = 12;
 const MAX_SKIN_SIZE = 256 * 1024;
-const UPLOAD_DIR = path.join(DATA_DIR, 'skins');
+// A cape is a 64x32 strip, so it needs far less room than a 64x64 skin sheet.
+const MAX_CAPE_SIZE = 64 * 1024;
+
+// Every cape the client can draw is one 64x32 PNG strip. Uploads larger than that
+// are full texture sheets, of which only the strip is wanted.
+const CAPE_WIDTH = 64;
+const CAPE_HEIGHT = 32;
 
 // Serving the client from this process too: the game client is just static
 // files, so on its own hostname this serves the site and everywhere else it
@@ -76,7 +85,8 @@ db.exec(`
         password_hash TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         last_login INTEGER,
-        skin_path TEXT
+        skin_path TEXT,
+        cape_path TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
     CREATE TABLE IF NOT EXISTS revoked_tokens (
@@ -88,12 +98,20 @@ db.exec(`
     CREATE INDEX IF NOT EXISTS idx_revoked_tokens_jti ON revoked_tokens(token_jti);
 `);
 
+// CREATE TABLE IF NOT EXISTS leaves an already existing table alone, so a database
+// created before capes existed keeps its old shape. Add the column to those.
+if (!db.prepare('PRAGMA table_info(users)').all().some((col) => col.name === 'cape_path')) {
+    db.exec('ALTER TABLE users ADD COLUMN cape_path TEXT');
+    Logger.info('Auth', 'Added cape_path column to users');
+}
+
 const stmts = {
     createUser: db.prepare('INSERT INTO users (id, username, password_hash, created_at) VALUES (?, ?, ?, ?)'),
     findByUsername: db.prepare('SELECT * FROM users WHERE username = ?'),
-    findById: db.prepare('SELECT id, username, created_at, last_login, skin_path FROM users WHERE id = ?'),
+    findById: db.prepare('SELECT id, username, created_at, last_login, skin_path, cape_path FROM users WHERE id = ?'),
     updateLastLogin: db.prepare('UPDATE users SET last_login = ? WHERE id = ?'),
     updateSkinPath: db.prepare('UPDATE users SET skin_path = ? WHERE id = ?'),
+    updateCapePath: db.prepare('UPDATE users SET cape_path = ? WHERE id = ?'),
     revokeToken: db.prepare('INSERT OR IGNORE INTO revoked_tokens (token_jti, revoked_at, expires_at) VALUES (?, ?, ?)'),
     isTokenRevoked: db.prepare('SELECT 1 FROM revoked_tokens WHERE token_jti = ? AND expires_at > ?'),
     cleanExpiredTokens: db.prepare('DELETE FROM revoked_tokens WHERE expires_at <= ?'),
@@ -130,7 +148,7 @@ app.use(cors({
         if (!origin || CORS_ALLOWLIST.has(origin.toLowerCase())) return callback(null, true);
         callback(null, false);
     },
-    methods: ['GET', 'HEAD', 'POST', 'OPTIONS'],
+    methods: ['GET', 'HEAD', 'POST', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
     exposedHeaders: ['Content-Type', 'Content-Length'],
     maxAge: 86400,
@@ -235,16 +253,23 @@ app.use('/api', (req, res, next) => {
 
 const authLimiter = rateLimit({ windowMs: 900000, max: 10 });
 
-const upload = multer({
-    storage: multer.diskStorage({
-        destination: UPLOAD_DIR,
-        filename: (req, file, cb) => cb(null, crypto.randomBytes(16).toString('hex') + '.png'),
-    }),
-    limits: { fileSize: MAX_SKIN_SIZE },
-    fileFilter: (req, file, cb) => {
-        cb(file.mimetype === 'image/png' ? null : new Error('Only PNG images are allowed'), file.mimetype === 'image/png');
-    },
-});
+// Uploads land in their own directory and are never served by path: the filename
+// is random and only the one recorded in the users row is ever read back.
+function makeUploader(destination, maxSize) {
+    return multer({
+        storage: multer.diskStorage({
+            destination,
+            filename: (req, file, cb) => cb(null, crypto.randomBytes(16).toString('hex') + '.png'),
+        }),
+        limits: { fileSize: maxSize },
+        fileFilter: (req, file, cb) => {
+            cb(file.mimetype === 'image/png' ? null : new Error('Only PNG images are allowed'), file.mimetype === 'image/png');
+        },
+    });
+}
+
+const upload = makeUploader(SKIN_UPLOAD_DIR, MAX_SKIN_SIZE);
+const uploadCape = makeUploader(CAPE_UPLOAD_DIR, MAX_CAPE_SIZE);
 
 function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
@@ -370,6 +395,7 @@ app.get('/api/user/:username', (req, res) => {
             created_at: user.created_at,
             last_login: user.last_login,
             has_skin: !!user.skin_path,
+            has_cape: !!user.cape_path,
         });
     } catch (err) {
         Logger.error('Auth', `GetUser failed: ${err.message}`);
@@ -383,7 +409,7 @@ app.post('/api/upload_skin', authenticateToken, upload.single('file'), (req, res
 
         const user = stmts.findById.get(req.user.sub);
         if (user?.skin_path) {
-            const oldPath = path.join(UPLOAD_DIR, user.skin_path);
+            const oldPath = path.join(SKIN_UPLOAD_DIR, user.skin_path);
             if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
         }
 
@@ -404,7 +430,7 @@ app.get('/skin/:username', async (req, res) => {
         const user = stmts.findByUsername.get(usernameVal.value);
         if (!user || !user.skin_path) return res.status(404).json({ error: 'Skin not found' });
 
-        const skinPath = path.resolve(UPLOAD_DIR, user.skin_path);
+        const skinPath = path.resolve(SKIN_UPLOAD_DIR, user.skin_path);
         if (!fs.existsSync(skinPath)) {
             stmts.updateSkinPath.run(null, user.id);
             return res.status(404).json({ error: 'Skin not found' });
@@ -425,9 +451,75 @@ app.get('/skin/:username', async (req, res) => {
     }
 });
 
+app.post('/api/upload_cape', authenticateToken, uploadCape.single('file'), async (req, res) => {
+    const uploadedPath = req.file?.path;
+    try {
+        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+        // Normalise here rather than on every read: a sheet upload is cut down to
+        // the strip once, and anything too small to contain one is rejected up
+        // front instead of looking like a successful upload that then 400s on
+        // every fetch. Multer already wrote the file, so a rejection has to
+        // clean up after itself.
+        const metadata = await sharp(uploadedPath).metadata();
+        if (metadata.width < CAPE_WIDTH || metadata.height < CAPE_HEIGHT) {
+            fs.unlinkSync(uploadedPath);
+            return res.status(400).json({ error: `Cape must be at least ${CAPE_WIDTH}x${CAPE_HEIGHT}` });
+        }
+
+        if (metadata.width !== CAPE_WIDTH || metadata.height !== CAPE_HEIGHT) {
+            await sharp(uploadedPath)
+                .extract({ left: 0, top: 0, width: CAPE_WIDTH, height: CAPE_HEIGHT })
+                .png()
+                .toFile(uploadedPath);
+        }
+
+        const user = stmts.findById.get(req.user.sub);
+        if (user?.cape_path) {
+            const oldPath = path.join(CAPE_UPLOAD_DIR, user.cape_path);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        }
+
+        stmts.updateCapePath.run(req.file.filename, req.user.sub);
+        Logger.info('Cape', `Uploaded: ${req.user.username}`);
+        res.json({ message: 'Cape uploaded successfully', filename: req.file.filename });
+    } catch (err) {
+        if (uploadedPath && fs.existsSync(uploadedPath)) fs.unlinkSync(uploadedPath);
+        Logger.error('Cape', `Upload failed: ${err.message}`);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Capes are stored pre-cropped to the strip by the upload route, so this is
+// just the file: a 64x32 PNG or a 404, exactly as a skin without a skin is.
+app.get('/cape/:username', (req, res) => {
+    try {
+        const usernameVal = validateUsername(req.params.username);
+        if (!usernameVal.valid) return res.status(400).json({ error: 'Invalid username' });
+
+        const user = stmts.findByUsername.get(usernameVal.value);
+        if (!user || !user.cape_path) return res.status(404).json({ error: 'Cape not found' });
+
+        const capePath = path.resolve(CAPE_UPLOAD_DIR, user.cape_path);
+        if (!fs.existsSync(capePath)) {
+            stmts.updateCapePath.run(null, user.id);
+            return res.status(404).json({ error: 'Cape not found' });
+        }
+
+        res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600' });
+        res.sendFile(capePath);
+    } catch (err) {
+        Logger.error('Cape', `GetCape failed: ${err.message}`);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 app.use((err, req, res, next) => {
     if (err instanceof multer.MulterError) {
-        return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? `File too large. Max ${MAX_SKIN_SIZE / 1024}KB` : err.message });
+        // Multer does not report which limit it hit, so pick the one that applies
+        // to the route the request was heading for.
+        const maxSize = req.originalUrl.startsWith('/api/upload_cape') ? MAX_CAPE_SIZE : MAX_SKIN_SIZE;
+        return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? `File too large. Max ${maxSize / 1024}KB` : err.message });
     }
     if (err.message === 'Only PNG images are allowed') return res.status(400).json({ error: err.message });
     next(err);

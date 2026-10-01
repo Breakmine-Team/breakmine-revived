@@ -175,7 +175,14 @@ export function getSkinUrl(username) {
     return `${API_BASE_URL}/skin/${username}`;
 }
 
-export function uploadSkinForUser(username) {
+export function getCapeUrl(username) {
+    return `${API_BASE_URL}/cape/${username}`;
+}
+
+// Skins and capes are both a single PNG picked locally and POSTed as multipart
+// form data, so they share one picker: only the endpoint and the noun in the
+// error messages differ.
+function pickAndUploadImage(endpoint, label) {
     return new Promise((resolve, reject) => {
 
         const fileInput = document.createElement('input');
@@ -185,7 +192,7 @@ export function uploadSkinForUser(username) {
 
         const token = getAuthToken();
         if (!token) {
-            return reject(new Error("You must be logged in to upload a skin"));
+            return reject(new Error(`You must be logged in to upload a ${label}`));
         }
 
         fileInput.onchange = async (event) => {
@@ -200,7 +207,7 @@ export function uploadSkinForUser(username) {
             formData.append('file', file);
 
             try {
-                const response = await fetch(`${API_BASE_URL}/api/upload_skin`, {
+                const response = await fetch(API_BASE_URL + endpoint, {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -217,10 +224,10 @@ export function uploadSkinForUser(username) {
                     return reject(new Error(data.error || `Server-side error: ${response.status}`));
                 }
 
-                resolve(data); 
+                resolve(data);
 
             } catch (error) {
-                reject(new Error(`Failed to upload skin, ${error.message}`));
+                reject(new Error(`Failed to upload ${label}, ${error.message}`));
             } finally {
                 fileInput.remove();
             }
@@ -238,4 +245,12 @@ export function uploadSkinForUser(username) {
             }
         }, 1000);
     });
+}
+
+export function uploadSkinForUser(username) {
+    return pickAndUploadImage('/api/upload_skin', 'skin');
+}
+
+export function uploadCapeForUser(username) {
+    return pickAndUploadImage('/api/upload_cape', 'cape');
 }

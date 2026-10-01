@@ -1,5 +1,6 @@
 import CraftingRegistry from "./crafting/CraftingRegistry.js";
 import FileSystem from "./fs/Filesystem.js";
+import BridgeFilesystem from "./fs/BridgeFilesystem.js";
 import EnumCreativeInventoryTab from "./gui/EnumCreativeInventoryTab.js";
 import { BlockRegistry } from "./world/block/BlockRegistry.js";
 import Sound from "./sound/Sound.js";
@@ -7,6 +8,10 @@ import { loadJSZip } from "./JSZipLoader.js";
 import * as THREE from "../../../../../libraries/three.module.js";
 import ModelRenderer from "./render/model/renderer/ModelRenderer.js";
 import Tessellator from "./render/Tessellator.js";
+import * as AuthLib from "./network/AuthLib.js";
+
+const ENABLED_MODS_KEY = 'breakmine_enabled_mods';
+const DISABLED_MODS_KEY = 'breakmine_disabled_mods';
 
 /**
  * ModLoader — discovers, installs, and registers mods.
@@ -25,7 +30,11 @@ import Tessellator from "./render/Tessellator.js";
  *
  * Modding API exposed to block/item/GUI code:
  *   Block, BlockRegistry, BoundingBox, EnumBlockFace, EnumCreativeInventoryTab,
- *   THREE, Sound
+ *   THREE, Sound, AuthLib
+ * AuthLib is the account module: getAuthToken(), getUserInfo(username),
+ * userExists(username), getSkinUrl(username) and getCapeUrl(username). Mods read
+ * it rather than calling fetch, so they inherit the API base URL and the auth
+ * token already in the browser.
  * Relative imports that point to other files inside the mod are resolved
  * automatically (e.g. `import Helper from "./Helper.js"` in blocks/BlockFoo.js
  * loads blocks/Helper.js). Imports of game classes (e.g. `../Block.js`) are
@@ -49,9 +58,14 @@ export default class ModLoader {
         this.minecraft = minecraft;
         this.mods = new Map();          // modId → ModEntry
         this.enabledMods = new Set();   // modIds that are active
+        this._disabledMods = new Set(); // modIds the user has explicitly switched off
+        // Load the deny-list up front so toggleMod()/uninstallMod() are correct
+        // regardless of whether loadAllMods() has run yet.
+        this._loadDisabledSet();
         this.services = new Map();      // serviceId → mod-provided runtime service
         this.filesystem = new FileSystem('ModDB', 'mods');
         this._devModFilesystems = new Map(); // modId → MemoryFilesystem (temporary dev mods, never persisted)
+        this._diskFilesystem = null;         // BridgeFilesystem over the physical mods/ folder (Electron only)
         this._blockBaseClass = null;    // cached Block class for eval sandbox
         this._modModuleCache = new Map(); // 'modId/filePath' → evaluated exports
     }
@@ -100,28 +114,6 @@ export default class ModLoader {
                 console.warn('[Patchwork] Mod network hook failed:', error);
             }
         }
-    }
-
-    /**
-     * Load all installed mods from IndexedDB and register their content.
-     * Call this once during game startup, after BlockRegistry.create().
-     */
-    async loadAllMods() {
-        this._loadEnabledSet();
-
-        const modIds = await this.getInstalledModIds();
-        console.log(`[Patchwork] Found ${modIds.length} installed mod(s)`);
-
-        for (const modId of modIds) {
-            if (!this.enabledMods.has(modId)) continue;
-            try {
-                await this._loadMod(modId);
-            } catch (err) {
-                console.error(`[Patchwork] Failed to load mod '${modId}':`, err);
-            }
-        }
-
-        console.log(`[Patchwork] ${this.mods.size} mod(s) loaded successfully`);
     }
 
     /**
@@ -303,8 +295,18 @@ export default class ModLoader {
      * @param {string} modId
      */
     async uninstallMod(modId) {
+        // Files in the physical mods/ folder belong to the user; deleting
+        // them is a deliberate act outside the game.
+        if (await this.isDiskMod(modId)) {
+            throw new Error(
+                `'${modId}' is a folder in the mods/ directory and cannot be deleted from inside the game. Remove the folder and restart.`
+            );
+        }
+
         this.enabledMods.delete(modId);
+        this._disabledMods.delete(modId);
         this._saveEnabledSet();
+        this._saveDisabledSet();
 
         const entry = this.mods.get(modId);
         if (entry) {
@@ -335,26 +337,74 @@ export default class ModLoader {
     async toggleMod(modId, enabled) {
         if (enabled) {
             this.enabledMods.add(modId);
+            this._disabledMods.delete(modId);
             if (!this.mods.has(modId)) {
-                await this._loadMod(modId);
+                await this._loadMod(modId, await this._fsForMod(modId));
             }
         } else {
             this.enabledMods.delete(modId);
+            // Remember the refusal, otherwise a wiki-installed folder would be
+            // switched straight back on at the next launch.
+            this._disabledMods.add(modId);
         }
         this._saveEnabledSet();
+        this._saveDisabledSet();
     }
 
     /**
      * Return list of mod IDs that have a ModData.json stored.
      */
     async getInstalledModIds() {
-        const allFiles = await this.filesystem.listDir('mods/');
         const modIdSet = new Set();
+
+        const allFiles = await this.filesystem.listDir('mods/');
         for (const f of allFiles) {
             const match = f.match(/^mods\/([^/]+)\/ModData\.json$/);
             if (match) modIdSet.add(match[1]);
         }
+
+        // Mods dropped into the physical mods/ folder (Electron only).
+        const disk = this._getDiskFilesystem();
+        if (disk) {
+            for (const modId of await disk.getModIds()) {
+                modIdSet.add(modId);
+            }
+        }
+
         return [...modIdSet];
+    }
+
+    /**
+     * The filesystem a mod should be loaded from, or null when mods/ is not
+     * reachable (i.e. the web build). A folder on disk wins over a ZIP of the
+     * same name so that editing the folder takes effect immediately.
+     * @param {string} modId
+     */
+    async _fsForMod(modId) {
+        const disk = this._getDiskFilesystem();
+        if (!disk) return this.filesystem;
+        const diskIds = await disk.getModIds();
+        return diskIds.includes(modId) ? disk : this.filesystem;
+    }
+
+    /**
+     * True when the mod is a folder in the physical mods/ directory rather
+     * than a ZIP installed into IndexedDB.
+     * @param {string} modId
+     */
+    async isDiskMod(modId) {
+        const disk = this._getDiskFilesystem();
+        if (!disk) return false;
+        return (await disk.getModIds()).includes(modId);
+    }
+
+    /**
+     * Re-scan the physical mods/ folder. Use after adding or removing files
+     * there while the game is running.
+     */
+    async refreshDiskMods() {
+        const disk = this._getDiskFilesystem();
+        if (disk) await disk.refresh();
     }
 
     /**
@@ -534,7 +584,7 @@ export default class ModLoader {
         const EnumCreativeInventoryTabClass = await this._getEnumCreativeInventoryTab();
 
         // Build deps: base block deps + any GUI classes from this mod
-        const blockDeps = { Block: BlockClass, BlockRegistry, BoundingBox: BoundingBoxClass, EnumBlockFace: EnumBlockFaceClass, EnumCreativeInventoryTab: EnumCreativeInventoryTabClass, THREE, Sound };
+        const blockDeps = { Block: BlockClass, BlockRegistry, BoundingBox: BoundingBoxClass, EnumBlockFace: EnumBlockFaceClass, EnumCreativeInventoryTab: EnumCreativeInventoryTabClass, THREE, Sound, AuthLib };
         for (const [className, cls] of entry.guiClasses) {
             blockDeps[className] = cls;
         }
@@ -831,6 +881,7 @@ export default class ModLoader {
                 BoundingBox: BoundingBoxClass,
                 EnumCreativeInventoryTab: EnumCreativeInventoryTabClass,
                 Sound,
+                AuthLib,
             };
         } catch (e) {
             console.error('[Patchwork] Could not import GUI classes:', e);
@@ -873,7 +924,7 @@ export default class ModLoader {
 
             const GuiButton = (await import('./gui/widgets/GuiButton.js')).default;
             const GuiScreen = (await import('./gui/GuiScreen.js')).default;
-            const modDeps = { Sound, THREE, GuiButton, GuiScreen, ModelRenderer, Tessellator };
+            const modDeps = { Sound, THREE, GuiButton, GuiScreen, ModelRenderer, Tessellator, AuthLib };
             await this._resolveModImports(src, modDeps, modId, 'ModLoad.js', new Set(['ModLoad.js']), fs);
 
             let transformed = src.replace(/import\s+.*?from\s+["'][^"']*["']\s*;?/g, '');
@@ -1357,7 +1408,8 @@ export default class ModLoader {
                 ItemTool: toolMod.default,
                 EnumCreativeInventoryTab: EnumCreativeInventoryTabClass,
                 THREE,
-                Sound
+                Sound,
+                AuthLib
             };
         } catch (e) {
             console.error('[Patchwork] Could not import Item classes:', e);
@@ -1385,19 +1437,39 @@ export default class ModLoader {
      *  Internal — persistence of enabled set
      * ------------------------------------------------------------------ */
 /**
-     * Load all installed mods from IndexedDB and register their content.
+     * The read-only view of the physical `mods/` folder, or null when running
+     * outside Electron (the preload bridge is simply absent in the browser).
+     */
+    _getDiskFilesystem() {
+        if (!BridgeFilesystem.isAvailable()) return null;
+        if (!this._diskFilesystem) {
+            this._diskFilesystem = new BridgeFilesystem({
+                bridge: window.modsBridge,
+                modDataParser: (source) => this._parseModDataSource(source)
+            });
+        }
+        return this._diskFilesystem;
+    }
+
+    /**
+     * Load every enabled mod — both ZIPs installed into IndexedDB and folders
+     * in the physical mods/ directory — and register their content.
      * Call this once during game startup, after BlockRegistry.create().
      */
     async loadAllMods() {
         await this._loadEnabledSet();
 
         const modIds = await this.getInstalledModIds();
+        const disk = this._getDiskFilesystem();
+        if (disk) {
+            console.log(`[Patchwork] Scanning mods/ folder: ${(await disk.getModIds()).length} mod(s) found on disk`);
+        }
         console.log(`[Patchwork] Found ${modIds.length} installed mod(s)`);
 
         for (const modId of modIds) {
             if (!this.enabledMods.has(modId)) continue;
             try {
-                await this._loadMod(modId);
+                await this._loadMod(modId, await this._fsForMod(modId));
             } catch (err) {
                 console.error(`[Patchwork] Failed to load mod '${modId}':`, err);
             }
@@ -1416,17 +1488,21 @@ export default class ModLoader {
         const result = [];
         for (const modId of modIds) {
             try {
-                const raw = await this.filesystem.loadFile(`mods/${modId}/ModData.json`);
+                const fs = await this._fsForMod(modId);
+                const raw = await fs.loadFile(`mods/${modId}/ModData.json`);
                 if (!raw) continue;
                 const meta = JSON.parse(raw);
                 const actualId = meta.ID || modId;
-                
+
                 result.push({
                     id: actualId,
                     name: meta.NAME || 'Unknown',
                     author: meta.AUTHOR || 'Unknown',
                     version: meta.VERSION || '0.0.0',
-                    enabled: this.enabledMods.has(actualId) || this.enabledMods.has(modId)
+                    enabled: this.enabledMods.has(actualId) || this.enabledMods.has(modId),
+                    // Folder in the physical mods/ directory rather than an
+                    // installed ZIP; the GUI uses this to hide Delete.
+                    disk: fs !== this.filesystem
                 });
             } catch (e) {
                 console.warn(`[Patchwork] Could not read metadata for '${modId}':`, e);
@@ -1441,7 +1517,9 @@ export default class ModLoader {
 
     async _loadEnabledSet() {
         try {
-            const stored = localStorage.getItem('breakmine_enabled_mods');
+            this._loadDisabledSet();
+
+            const stored = localStorage.getItem(ENABLED_MODS_KEY);
             if (stored !== null) {
                 const arr = JSON.parse(stored);
                 this.enabledMods = new Set(arr);
@@ -1451,14 +1529,47 @@ export default class ModLoader {
                 this.enabledMods = new Set(modIds);
                 this._saveEnabledSet();
             }
+
+            // A mod installed from the wiki lands in mods/ as a folder, and
+            // this enabled set was written before it existed. Enable it
+            // unless the user has since switched it off — without this a
+            // deep-link install would need a manual enable every time.
+            const disk = this._getDiskFilesystem();
+            if (disk) {
+                for (const modId of await disk.getModIds()) {
+                    if (this._disabledMods.has(modId)) continue;
+                    if (!(await disk.isWikiInstalled(modId))) continue;
+                    if (!this.enabledMods.has(modId)) {
+                        this.enabledMods.add(modId);
+                        this._saveEnabledSet();
+                    }
+                }
+            }
         } catch (e) {
             this.enabledMods = new Set();
         }
     }
 
+    _loadDisabledSet() {
+        try {
+            const stored = localStorage.getItem(DISABLED_MODS_KEY);
+            this._disabledMods = new Set(stored ? JSON.parse(stored) : []);
+        } catch (e) {
+            this._disabledMods = new Set();
+        }
+    }
+
+    _saveDisabledSet() {
+        try {
+            localStorage.setItem(DISABLED_MODS_KEY, JSON.stringify([...this._disabledMods]));
+        } catch (e) {
+            console.warn('[Patchwork] Could not save disabled mods:', e);
+        }
+    }
+
     _saveEnabledSet() {
         try {
-            localStorage.setItem('breakmine_enabled_mods', JSON.stringify([...this.enabledMods]));
+            localStorage.setItem(ENABLED_MODS_KEY, JSON.stringify([...this.enabledMods]));
         } catch (e) {
             console.warn('[Patchwork] Could not save enabled mods:', e);
         }
