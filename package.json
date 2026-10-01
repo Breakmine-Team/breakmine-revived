@@ -58,5 +58,11 @@
     "vite": "^8.1.3",
     "vite-plugin-singlefile": "^2.3.3",
     "wait-on": "^9.1.0"
+  },
+  "allowScripts": {
+    "bcrypt@5.1.1": true,
+    "better-sqlite3@11.10.0": true,
+    "electron-winstaller@5.4.0": true,
+    "github:devsnek/node-register-scheme#e7cc9a63a1f512565da44cb57316d9fb10750e17": true
   }
 }

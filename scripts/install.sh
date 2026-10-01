@@ -169,14 +169,28 @@ if [ -f "$INSTALL_DIR/$APPIMAGE_NAME" ]; then
   fi
 fi
 
-# AppImages are squashfs images that need FUSE to mount. The device node
-# exists even when the libfuse2 userspace library is missing, so check the
-# library rather than /dev/fuse.
-if command -v ldconfig >/dev/null 2>&1 && ldconfig -p 2>/dev/null | grep -q 'libfuse\.so'; then
+# AppImages are squashfs images that need FUSE to mount. The /dev/fuse device
+# node exists even when the libfuse userspace library is missing, so check for
+# the library itself rather than the device.
+#
+# Do not rely on `ldconfig -p` here: ldconfig is absent on several current
+# distros (including Debian 13 minimal), which made this report a missing
+# libfuse2 even when it was installed. Test for the library files instead.
+FUSE_OK=0
+for _lib in libfuse.so.2 libfuse.so.3 libfuse2.so libfuse3.so; do
+  for _dir in /lib/"$(uname -m)"-linux-gnu /usr/lib/"$(uname -m)"-linux-gnu \
+              /lib64 /usr/lib64 /lib /usr/lib; do
+    if [ -e "$_dir/$_lib" ]; then FUSE_OK=1; break 2; fi
+  done
+done
+
+if [ "$FUSE_OK" -eq 1 ]; then
   info "FUSE present."
 else
-  warn "libfuse2 not detected — the AppImage may refuse to start."
-  warn "On Debian/Ubuntu: sudo apt install libfuse2"
+  warn "libfuse not detected — the AppImage may refuse to start."
+  warn "Debian/Ubuntu: sudo apt install libfuse2t64   (or: libfuse2)"
+  warn "Fedora: sudo dnf install fuse   |   Arch: sudo pacman -S fuse2"
+  warn "No root? The AppImage still runs with --appimage-extract-and-run"
 fi
 
 # ---------------------------------------------------------------- fetch source
