@@ -130,7 +130,17 @@ export default class GuiMods extends GuiScreen {
 
     async refreshModList() {
         if (!this.minecraft.modLoader) return;
-        this.mods = await this.minecraft.modLoader.getInstalledMods();
+        // init() awaits this before it builds any buttons, so a rejection here
+        // used to leave the whole screen blank with nothing on screen to
+        // explain it. Report the failure and render an empty list instead: the
+        // buttons are still useful (Delete/Toggle on a refresh, Upload for
+        // recovery), and the console now carries the reason.
+        try {
+            this.mods = await this.minecraft.modLoader.getInstalledMods();
+        } catch (err) {
+            console.error('[Patchwork] Could not list installed mods:', err);
+            this.mods = [];
+        }
     }
 
     uploadMod() {

@@ -12,9 +12,18 @@ export default class SoundManager {
         // Audio failed to initialize — all methods become no-ops.
         this.disabled = false;
 
-        // Set once a sound fails to load (e.g. singlefile bundles ship no
-        // .ogg files) so we stop firing the remaining requests.
+        // Set once sounds prove to be unavailable as a whole (e.g. singlefile
+        // bundles ship no .ogg files) so we stop firing the remaining requests.
+        // A single missing variant must NOT set this: random.pop,
+        // random.door_open and random.door_close ship only as an unnumbered
+        // file, so their numbered variants 404 and used to take every other
+        // sound down with them for the rest of the session.
         this._soundsUnavailable = false;
+
+        // Consecutive load failures with no success in between. Only a run of
+        // these means the asset backend is broken; isolated misses are normal.
+        this._consecutiveFailures = 0;
+        this._failureLimit = 8;
 
         // Preload click sound (never fatal if it fails)
         this.clickReady = false;
@@ -85,7 +94,8 @@ export default class SoundManager {
         let pool = [];
         let amount = 4;
 
-        // Load all sounds into pool
+        // Load all sounds into pool. Missing numbered variants just drop out of
+        // the pool; they are expected for sounds that ship a single file.
         let path = name.replace(".", "/");
         for (let i = 0; i < amount; i++) {
             const assetKey = `sound/${path}${i + 1}.ogg`;
@@ -97,9 +107,6 @@ export default class SoundManager {
             }
             if (sound) {
                 pool.push(sound);
-            }
-            if (this._soundsUnavailable) {
-                return;
             }
         }
 
@@ -143,11 +150,15 @@ export default class SoundManager {
                 sound.setBuffer(buffer);
                 sound.hasBuffer = true;
                 this.scene.add(sound);
+                this._consecutiveFailures = 0;
             }, progress => {
                 // Progress callback (optional)
             }, error => {
                 sound.hasBuffer = false;
-                if (!this._soundsUnavailable) {
+                this._consecutiveFailures++;
+                // Only give up once a run of loads has failed with nothing in
+                // between, so one absent variant cannot mute the whole game.
+                if (!this._soundsUnavailable && this._consecutiveFailures >= this._failureLimit) {
                     this._soundsUnavailable = true;
                     console.warn('SoundManager: Sounds unavailable (not bundled or failed to load), disabling sound loading:', error && error.message || error);
                 }
@@ -243,6 +254,7 @@ export default class SoundManager {
 
         let path = name.replace(".", "/");
         let soundSrc = null;
+        const plainSrc = this.resolveAsset(`sound/${path}.ogg`);
 
         if (!dontUseRandom) {
             // Try random numbered variant (1-5)
@@ -251,13 +263,26 @@ export default class SoundManager {
         }
 
         if (!soundSrc) {
-            soundSrc = this.resolveAsset(`sound/${path}.ogg`);
+            soundSrc = plainSrc;
         }
 
         try {
             let audio = new Audio(soundSrc);
             audio.volume = volume;
             audio.playbackRate = pitch;
+            // resolveAsset always returns a string, so a numbered variant that
+            // was never shipped cannot be detected here. random.pop,
+            // random.door_open and random.door_close have no numbered files at
+            // all, and several others ship fewer than five, so retry the
+            // unnumbered file when the picked variant 404s.
+            if (soundSrc !== plainSrc) {
+                audio.addEventListener('error', () => {
+                    let fallback = new Audio(plainSrc);
+                    fallback.volume = volume;
+                    fallback.playbackRate = pitch;
+                    fallback.play().catch(() => {});
+                }, { once: true });
+            }
             audio.play();
         } catch (e) {
             console.warn('Failed to play mono sound:', name, e);

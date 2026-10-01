@@ -48,9 +48,16 @@ function ensureModsDir() {
  * that does not live under the mods root.
  */
 function resolveModPath(relPath) {
-    if (typeof relPath !== 'string' || relPath.length === 0) {
+    if (typeof relPath !== 'string') {
         throw new Error('Invalid path');
     }
+    // An empty path addresses the mods root itself, not an invalid request:
+    // listDir('') is the documented way to ask for the whole folder (see the
+    // preload bridge), and BridgeFilesystem opens its index with exactly that
+    // call. Rejecting it made every mod lookup fail in the packaged build,
+    // where the renderer reaches the disk through this bridge. It stays inside
+    // the sandbox - '' normalises to no segments, so it resolves to MODS_DIR and
+    // still passes the containment check at the end of this function.
     if (relPath.includes('\0')) {
         throw new Error('Invalid path');
     }

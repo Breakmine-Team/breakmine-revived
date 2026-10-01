@@ -5,6 +5,11 @@ import { base64Assets } from '../resources.js';
 import { uiTextures } from './assetManifest.js';
 
 window.addEventListener('unhandledrejection', event => {
+    // Suppress the default console noise, but never silently: a rejected
+    // promise inside an async init() leaves a screen half-built, and with no
+    // log there is nothing on screen or in the console to explain it.
+    const reason = event.reason;
+    console.warn('[Client] Unhandled promise rejection:', reason && reason.stack || reason);
     event.preventDefault();
 });
 
