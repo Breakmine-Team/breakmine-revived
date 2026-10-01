@@ -224,7 +224,7 @@ export default class GuiCreateWorld extends GuiScreen {
             this.drawString(stack, "Seed for the World Generator", this.width / 2 - 100, y - 3, -6250336);
             this.drawString(stack, "Leave blank for a random seed", this.width / 2 - 100, y + 35, -6250336);
         }
-        this.drawCenteredString(stack, "World saving is still in development, don't rely on it!", this.width / 2, 5, 0xFF6363);
+        //this.drawCenteredString(stack, "World saving is still in development, don't rely on it!", this.width / 2, 5, 0xFF6363);
 
         super.drawScreen(stack, mouseX, mouseY, partialTicks);
     }
