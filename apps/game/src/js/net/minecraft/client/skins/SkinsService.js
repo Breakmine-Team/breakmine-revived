@@ -666,6 +666,16 @@ export default class SkinsService {
             renderer.capeTextureKey = record.dataUrl;
         }
 
+        // Cape meshes are built independently from the player model, so they
+        // do not inherit EntityRenderer's per-entity light tint. Without this
+        // they use the white MeshBasicMaterial color and look emissive at
+        // night. Keep the same light value as the player body instead.
+        const brightness = Math.max(0.05, Math.min(1, entity.getEntityBrightness?.() ?? 1));
+        renderer.capeModel.bone.traverse(child => {
+            if (!child.isMesh || !child.material?.color) return;
+            child.material.color.setRGB(brightness, brightness, brightness);
+        });
+
         const state = this._getPhysicsState(entity, partialTicks);
         const interpolatedX = entity.prevX + (entity.x - entity.prevX) * partialTicks;
         const interpolatedY = entity.prevY + (entity.y - entity.prevY) * partialTicks;
