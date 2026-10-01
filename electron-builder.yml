@@ -37,10 +37,42 @@ files:
   # loads, so they are kept out of the bundle.
   #
   # Order matters: electron-builder applies patterns in sequence and the last
-  # match wins, so the blanket exclusion has to come before the two keeps.
+  # match wins, so the blanket exclusion has to come before the keeps below.
   - "!node_modules/**"
   - "node_modules/discord-rpc/**"
   - "node_modules/jszip/**"
+  # Requiring discord-rpc and jszip is not enough: both pull in their own
+  # dependencies, which the blanket exclusion above also stripped. They are
+  # hoisted to the top level, so each one has to be re-admitted by hand.
+  #
+  #   discord-rpc -> node-fetch -> whatwg-url -> tr46, webidl-conversions
+  #                -> ws 7 (already covered above, it is nested inside
+  #                   discord-rpc/node_modules)
+  #   jszip       -> lie, pako, readable-stream, setimmediate (which needs
+  #                 immediate), plus readable-stream's own chain below
+  #
+  # readable-stream pulls in core-util-is, inherits, isarray,
+  # process-nextick-args, string_decoder and util-deprecate. Anything nested
+  # inside these - safe-buffer, for instance - comes along with the pattern.
+  #
+  # register-scheme is deliberately absent: it is an optional native addon and
+  # npmRebuild is off, but discord-rpc only reaches for it when running outside
+  # Electron, which never happens in the packaged main process.
+  - "node_modules/node-fetch/**"
+  - "node_modules/whatwg-url/**"
+  - "node_modules/tr46/**"
+  - "node_modules/webidl-conversions/**"
+  - "node_modules/lie/**"
+  - "node_modules/pako/**"
+  - "node_modules/setimmediate/**"
+  - "node_modules/immediate/**"
+  - "node_modules/readable-stream/**"
+  - "node_modules/core-util-is/**"
+  - "node_modules/inherits/**"
+  - "node_modules/isarray/**"
+  - "node_modules/process-nextick-args/**"
+  - "node_modules/string_decoder/**"
+  - "node_modules/util-deprecate/**"
   - "!src/**/*.map"
   - "!dist/**/*.map"
 
