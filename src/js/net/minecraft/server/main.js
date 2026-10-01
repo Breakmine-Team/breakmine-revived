@@ -3,6 +3,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const RPC = require('discord-rpc'); // [1] Moved up for clarity
 const { registerDeepLinks } = require('./deeplink.js');
+const { runSelfUpdate } = require('./updater.js');
 
 const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
 app.commandLine.appendSwitch('disable-pointer-lock-options');
@@ -181,6 +182,18 @@ function registerModHandlers() {
         } catch {
             return false;
         }
+    });
+
+    // Re-downloads, rebuilds and reinstalls the game, then quits. Only the
+    // main process can do this: it needs to spawn the installer and replace
+    // the files the renderer is running from.
+    ipcMain.handle('game:selfUpdate', async (event, options) => {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        const requested = options && typeof options.ref === 'string' ? options.ref.trim() : '';
+        // Only accept a plain ref; this string ends up in a shell-free argv
+        // (no shell is involved) but still should not be arbitrary junk.
+        const ref = /^[A-Za-z0-9._/-]{1,120}$/.test(requested) ? requested : 'main';
+        return runSelfUpdate({ window: win, ref });
     });
 
     ipcMain.handle('mods:getFileSize', (_event, filename) => {

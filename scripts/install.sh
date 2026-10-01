@@ -14,6 +14,7 @@
 #   ./scripts/install.sh                 install or update the latest release
 #   ./scripts/install.sh --ref v4.7.9a   install a specific tag
 #   ./scripts/install.sh --force         reinstall even when already up to date
+#   ./scripts/install.sh --yes           answer yes to every prompt (no TTY)
 #   ./scripts/install.sh --source        build from source instead of downloading
 #   ./scripts/install.sh --dir ~/games/breakmine
 #
@@ -24,6 +25,9 @@ API="https://api.github.com/repos/${REPO}"
 
 REF="main"
 FORCE=0
+# Set when Breakmine Desktop drives this script itself: there is no TTY to
+# answer prompts on, and confirm() reads /dev/tty, so it would fail closed.
+ASSUME_YES=0
 FROM_SOURCE=0
 INSTALL_DIR="${BREAKMINE_INSTALL_DIR:-$HOME/.local/share/breakmine}"
 APPNAME="Breakmine"
@@ -89,6 +93,7 @@ while [ $# -gt 0 ]; do
     --ref)   REF="${2:?--ref needs a value}"; shift 2 ;;
     --dir)   INSTALL_DIR="${2:?--dir needs a value}"; shift 2 ;;
     --force) FORCE=1; shift ;;
+    --yes|-y) ASSUME_YES=1; shift ;;
     --source) FROM_SOURCE=1; shift ;;
     -h|--help)
       sed -n '3,20p' "$0" | sed 's/^# \{0,1\}//'
@@ -219,7 +224,12 @@ if [ -f "$INSTALL_DIR/$APPIMAGE_NAME" ]; then
   info "kind     : ${INSTALLED_SOURCE:-source build}"
   info "ref      : ${INSTALLED_REF:-unknown}"
 
-  if [ "$FORCE" -eq 0 ]; then
+  if [ "$ASSUME_YES" -eq 1 ]; then
+    # Also covers the "already up to date?" early exit: the caller asked for a
+    # rebuild, so build one instead of reporting there is nothing to do.
+    info "rebuilding (--yes)."
+    REINSTALL=1
+  elif [ "$FORCE" -eq 0 ]; then
     if [ -n "$RELEASE_TAG" ] && [ "$RELEASE_TAG" = "$INSTALLED_RELEASE" ]; then
       step "Already up to date ($RELEASE_TAG)"
       info "Run with --force to reinstall anyway."
@@ -239,7 +249,9 @@ if [ -f "$INSTALL_DIR/$APPIMAGE_NAME" ]; then
     info "remote   : $REMOTE_SHORT ($REMOTE_DATE)"
   fi
 
-  if confirm "Update to ${RELEASE_TAG:-the latest commit}?" "y"; then
+  if [ "$ASSUME_YES" -eq 1 ]; then
+    REINSTALL=1
+  elif confirm "Update to ${RELEASE_TAG:-the latest commit}?" "y"; then
     REINSTALL=1
   else
     step "Keeping the current install."

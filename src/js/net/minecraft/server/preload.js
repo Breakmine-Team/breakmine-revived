@@ -13,6 +13,37 @@ const { contextBridge, ipcRenderer } = require('electron');
  */
 contextBridge.exposeInMainWorld('modsBridge', {
   /**
+   * False when running from a dev checkout, true inside a packaged AppImage /
+   * NSIS install. The renderer needs this to know that reloading the window
+   * re-runs the frozen bundle instead of picking up an update.
+   */
+  isPackaged: !process.defaultApp,
+
+  /**
+   * Re-download, rebuild and reinstall the game, then quit.
+   *
+   * A packaged install cannot update itself by reloading, because the game
+   * files are frozen inside the installed app. This hands the job to the
+   * repo's own installer, which is the only updater available while the
+   * project publishes no release artifacts.
+   *
+   * @param {{ref?: string}} [options]
+   * @returns {Promise<{started: boolean, reason?: string}>}
+   */
+  selfUpdate: (options) => ipcRenderer.invoke('game:selfUpdate', options || {}),
+
+  /**
+   * Progress from the running installer: { phase, message }.
+   * @param {(status: {phase: string, message: string}) => void} callback
+   * @returns {() => void} unsubscribe
+   */
+  onUpdateStatus: (callback) => {
+    const listener = (_event, status) => callback(status);
+    ipcRenderer.on('game:updateStatus', listener);
+    return () => ipcRenderer.removeListener('game:updateStatus', listener);
+  },
+
+  /**
    * Read a text file from the virtual filesystem.
    * @param {string} filename  e.g. 'mods/cooldeco/ModData.json'
    * @returns {Promise<string|null>}

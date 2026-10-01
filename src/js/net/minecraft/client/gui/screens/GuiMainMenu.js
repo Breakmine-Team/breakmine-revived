@@ -12,9 +12,10 @@ import GuiAccount from "./GuiAccount.js";
 import GuiTexturePacks from "./GuiTexturePacks.js";
 import GuiMods from "./GuiMods.js";
 import { SplashTexts } from "../../../../../../resources/splashes.js";
-import GuiYesNo from "./GuiYesNo.js";
 import { Version } from "../../../../../../resources/version.js";
 import GuiTooltip from "../widgets/GuiTooltip.js";
+import { checkForUpdate } from "../../VersionChecker.js";
+import GuiNewVersion from "./GuiNewVersion.js";
 
 export default class GuiMainMenu extends GuiScreen {
 
@@ -24,23 +25,26 @@ export default class GuiMainMenu extends GuiScreen {
         this.panoramaTimer = 0;
 
         this.splashText = SplashTexts.generateSplash();
+
+        // Filled in by the background update check; see checkForUpdateInBackground.
+        this.updateInfo = null;
+        this.updateCheckStarted = false;
     }
 
     init() {
         super.init();
         this.textureLogo = this.getTexture("gui/title/minecraft.png");
 
-        let y = this.height / 4 + 36;
+        // Coming back to the main menu rebuilds buttonList, so the update
+        // button is (re)added here rather than only on first load.
+        this.updateButtonAdded = false;
+        if (this.updateInfo && this.updateInfo.available) {
+            this.addUpdateButton();
+        } else if (!this.updateInfo) {
+            this.checkForUpdateInBackground();
+        }
 
-        /*if (Notification.permission !== "granted") {
-            this.buttonList.push(new GuiButton(this.minecraft, "Enable Notifications", 0, 0, 130, 20, async () => {
-                this.minecraft.displayScreen(new GuiYesNo(this, "Do you want to enable notifications?", "We will only send you notifications about updates.", "Yes", "No", () => {
-                    this.minecraft.initVersionChecker();
-                }));
-            }));
-        } else {
-            this.minecraft.initVersionChecker();
-        }*/
+        let y = this.height / 4 + 36;
 
         this.buttonList.push(new GuiButton(this.minecraft, "Singleplayer", this.width / 2 - 100, y, 200, 20, async () => {
             const hasSave = await this.minecraft.hasSaveData();
@@ -83,6 +87,56 @@ export default class GuiMainMenu extends GuiScreen {
         }
 
         this.initPanoramaRenderer();
+    }
+
+    /**
+     * Ask GitHub whether `main` has moved past this build.
+     *
+     * Runs off the init path so the menu paints immediately; the button is
+     * appended to buttonList when the answer arrives, and drawScreen picks it
+     * up on the next frame.
+     */
+    async checkForUpdateInBackground() {
+        if (this.updateCheckStarted) return;
+        this.updateCheckStarted = true;
+
+        let info;
+        try {
+            info = await checkForUpdate();
+        } catch (err) {
+            console.warn("[update] check failed:", err);
+            return;
+        }
+
+        if (info.error) {
+            console.warn("[update] could not check for updates:", info.error);
+            return;
+        }
+        if (!info.available) return;
+
+        this.updateInfo = info;
+        this.addUpdateButton();
+    }
+
+    /** Top-left of the main menu, only present while an update is pending. */
+    addUpdateButton() {
+        if (!this.updateInfo || this.updateButtonAdded) return;
+        // init() may have been re-entered while the check was in flight, which
+        // would otherwise leave the button list with no way to rebuild it.
+        if (!this.buttonList) return;
+        this.updateButtonAdded = true;
+
+        this.buttonList.push(new GuiButton(
+            this.minecraft,
+            "Update " + this.updateInfo.latestClean,
+            2, 2, 130, 20,
+            () => {
+                this.minecraft.displayScreen(new GuiNewVersion(this.updateInfo, this));
+            }
+        ).setTooltip(
+            "Breakmine " + this.updateInfo.latestClean + " is available\n"
+            + "§7You are running " + this.updateInfo.currentClean
+        ));
     }
 
     drawScreen(stack, mouseX, mouseY, partialTicks) {

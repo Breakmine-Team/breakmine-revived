@@ -20,6 +20,10 @@
 .PARAMETER Force
     Rebuild even when already up to date.
 
+.PARAMETER Yes
+    Answer yes to every prompt. Required when Breakmine Desktop drives this
+    script itself, because Read-Host has no console to read from.
+
 .EXAMPLE
     .\scripts\install.ps1
     .\scripts\install.ps1 -Ref 4.7.9a-93f80b7
@@ -30,7 +34,8 @@
 param(
     [string] $Ref = 'main',
     [string] $InstallDir = (Join-Path $env:LOCALAPPDATA 'Breakmine'),
-    [switch] $Force
+    [switch] $Force,
+    [switch] $Yes
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,6 +57,7 @@ function Die { param([string]$Message) Write-Host " xx $Message" -ForegroundColo
 
 function Confirm-Prompt {
     param([string]$Message, [bool]$Default = $true)
+    if ($Yes) { return $true }
     $hint = if ($Default) { 'Y/n' } else { 'y/N' }
     $answer = Read-Host "    $Message [$hint]"
     if ([string]::IsNullOrWhiteSpace($answer)) { return $Default }
@@ -134,7 +140,7 @@ if (Test-Path $InstallDir) {
     Write-Info "ref      : $(if ($installedRef) { $installedRef } else { 'unknown' })"
     Write-Info "commit   : $(if ($installedSha) { $installedSha } else { 'unknown' })"
 
-    if ($remoteSha -and $installedSha -eq $remoteSha -and -not $Force) {
+    if ($remoteSha -and $installedSha -eq $remoteSha -and -not $Force -and -not $Yes) {
         Write-Step "Already up to date ($remoteShort)"
         Write-Info 'Re-run with -Force to rebuild anyway.'
         exit 0
