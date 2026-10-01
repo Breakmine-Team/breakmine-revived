@@ -65,14 +65,15 @@ linux:
   description: >-
     Breakmine, a Minecraft-like voxel game written in JavaScript. Drop mods
     into the mods folder or install them straight from the mod wiki.
+  # `desktop.entry` overwrites the keys electron-builder computes by default.
+  # Name, Comment, StartupWMClass and Categories are all derived from
+  # productName / description / desktopName / `category` above, so only the
+  # custom scheme is worth setting here.
   desktop:
-    Name: Breakmine
-    Comment: Minecraft in JavaScript
-    StartupWMClass: Breakmine
-    Categories: Game;
-    # Makes this the handler for breakmine-game:// so mod-wiki download links
-    # can install straight into the game.
-    MimeType: x-scheme-handler/breakmine-game;
+    entry:
+      # Makes this the handler for breakmine-game:// so mod-wiki download links
+      # can install straight into the game.
+      MimeType: x-scheme-handler/breakmine-game;
 
 win:
   target:
