@@ -1,0 +1,252 @@
+import GuiScreen from "../GuiScreen.js";
+import GuiButton from "../widgets/GuiButton.js";
+import GuiOptions from "./GuiOptions.js";
+import * as THREE from "../../../../../../../libraries/three.module.js";
+import {BackSide} from "../../../../../../../libraries/three.module.js";
+import MathHelper from "../../../util/MathHelper.js";
+import Minecraft from "../../Minecraft.js";
+import GuiCreateWorld from "./GuiCreateWorld.js";
+import GuiSelectWorld from "./GuiSelectWorld.js";
+import GuiMultiplayer from "./GuiMultiplayer.js";
+import GuiAccount from "./GuiAccount.js";
+import GuiTexturePacks from "./GuiTexturePacks.js";
+import GuiMods from "./GuiMods.js";
+import { SplashTexts } from "../../../../../../resources/splashes.js";
+import GuiYesNo from "./GuiYesNo.js";
+import { Version } from "../../../../../../resources/version.js";
+import GuiTooltip from "../widgets/GuiTooltip.js";
+import GuiSkins from "./GuiSkins.js";
+
+export default class GuiMainMenu extends GuiScreen {
+
+    constructor() {
+        super();
+
+        this.panoramaTimer = 0;
+
+        this.splashText = SplashTexts.generateSplash();
+    }
+
+    init() {
+        super.init();
+        this.textureLogo = this.getTexture("gui/title/minecraft_title.png");
+        this.minecraft.skins?.disposePlayerPreview(this.skinPreview);
+        this.skinPreview = this.minecraft.skins?.createPlayerPreview(80, 100);
+
+        let y = this.height / 4 + 36;
+
+        /*if (Notification.permission !== "granted") {
+            this.buttonList.push(new GuiButton(this.minecraft, "Enable Notifications", 0, 0, 130, 20, async () => {
+                this.minecraft.displayScreen(new GuiYesNo(this, "Do you want to enable notifications?", "We will only send you notifications about updates.", "Yes", "No", () => {
+                    this.minecraft.initVersionChecker();
+                }));
+            }));
+        } else {
+            this.minecraft.initVersionChecker();
+        }*/
+
+        this.buttonList.push(new GuiButton(this.minecraft, "Singleplayer", this.width / 2 - 100, y, 200, 20, async () => {
+            const hasSave = await this.minecraft.hasSaveData();
+            if (hasSave) {
+                this.minecraft.displayScreen(new GuiSelectWorld(this));
+            } else {
+                this.minecraft.displayScreen(new GuiCreateWorld(this));
+            }
+        }));
+        let btntemp = new GuiButton(this.minecraft, "Multiplayer", this.width / 2 - 100, y + 24, 200, 20, () => {
+            this.minecraft.displayScreen(new GuiMultiplayer(this));
+        }).setEnabled(this.minecraft.settings.loggedIn);
+        this.buttonList.push(btntemp);
+
+        this.buttonList.push(new GuiButton(this.minecraft, "Mods", this.width / 2 - 100, y + 24 * 2, 200, 20, () => {
+            this.minecraft.displayScreen(new GuiMods(this.minecraft, this));
+        }));
+
+        const modButtons = this.minecraft.modLoader?.getGuiButtons('main-menu', this) || [];
+        this.buttonList.push(...modButtons);
+
+        this.buttonList.push(new GuiButton(this.minecraft, "Account", this.width / 2 - 100, y + 24 * 3, 98, 20, () => {
+            this.minecraft.displayScreen(new GuiAccount(this));
+        }));//.setEnabled(false).setTooltip("Coming soon!"));
+
+        this.buttonList.push(new GuiButton(this.minecraft, "Options...", this.width / 2 - 100, y + 96 + 12, 98, 20, () => {
+            this.minecraft.displayScreen(new GuiOptions(this));
+        }));
+
+        this.buttonList.push(new GuiButton(this.minecraft, "Texture Packs", this.width / 2 + 2, y + 24 * 3, 98, 20, () => {
+            this.minecraft.displayScreen(new GuiTexturePacks(this));
+        }));
+
+        this.buttonList.push(new GuiButton(this.minecraft, "Quit Game", this.width / 2 + 2, y + 96 + 12, 98, 20, () => {
+            this.minecraft.stop();
+        }).setEnabled(false));
+
+        const previewX = this.width / 2 + 112;
+        const previewWidth = Math.max(54, Math.min(80, this.width - previewX - 3));
+        this.skinPreviewBounds = { x: previewX, y, width: previewWidth, height: 100 };
+        this.buttonList.push(new GuiButton(this.minecraft, "Skins", previewX, y + 96 + 12, previewWidth, 20, () => {
+            this.minecraft.displayScreen(new GuiSkins(this));
+        }));
+
+        if (!this.minecraft.settings.loggedIn) {
+            this.buttonList.push(new GuiTooltip(this.minecraft, "You must be logged in\n§7Don't worry, it's free!", this.width / 2 - 100, y + 24, 200, 20));
+        }
+
+        this.initPanoramaRenderer();
+    }
+
+    drawScreen(stack, mouseX, mouseY, partialTicks) {
+        let logoWidth = 274;
+        let x = this.width / 2 - logoWidth / 2;
+        let y = 30;
+
+        let rotationX = Math.sin((this.panoramaTimer + partialTicks) / 400.0) * 25.0 + 20.0;
+        let rotationY = -(this.panoramaTimer + partialTicks) * 0.1;
+
+        // Draw panorama
+        this.camera.aspect = this.width / this.height;
+        this.camera.rotation.x = -MathHelper.toRadians(rotationX + 180);
+        this.camera.rotation.y = -MathHelper.toRadians(rotationY - 180);
+        this.camera.updateProjectionMatrix();
+        this.minecraft.worldRenderer.webRenderer.clear();
+        this.minecraft.worldRenderer.webRenderer.render(this.scene, this.camera);
+
+        // Draw panorama overlay
+        this.drawGradientRect(stack, 0, 0, this.width, this.height, 'rgba(255,255,255,0.5)', 'rgb(255,255,255,0)');
+        this.drawGradientRect(stack, 0, 0, this.width, this.height, 'rgb(0,0,0,0)', 'rgb(0,0,0,0.5)');
+
+        // Draw logo
+        this.drawLogo(stack, x, y);
+
+        // Draw version
+        this.drawRightString(stack, "Updated at " + Minecraft.TIMESTAMP, this.width - 2, this.height - 20, 0xFFFFFFff);
+        this.drawString(stack, "Breakmine " + Minecraft.VERSION, 2, this.height - 10, 0xFFFFFFff);
+
+        // Draw Patchwork version
+        this.drawString(stack, "Patchwork " + Version.PATCHWORK_VERSION, 2, this.height - 20, 0xFFFFFFff);
+
+        // Draw copyright
+        this.drawRightString(stack, "(C) 2026 SpinningCubes under SCLv1.", this.width - 2, this.height - 10);
+
+        // Draw buttons
+        super.drawScreen(stack, mouseX, mouseY, partialTicks);
+
+        if (this.skinPreview) {
+            const bounds = this.skinPreviewBounds;
+            this.minecraft.skins.renderPlayerPreview(this.skinPreview, mouseX - bounds.x, mouseY - bounds.y,
+                mouseX >= bounds.x && mouseX < bounds.x + bounds.width && mouseY >= bounds.y && mouseY < bounds.y + bounds.height);
+            stack.save();
+            stack.imageSmoothingEnabled = false;
+            stack.drawImage(this.skinPreview.canvas, bounds.x, bounds.y, bounds.width, bounds.height);
+            stack.restore();
+        }
+
+        // Draw splash text
+        this.drawSplash(stack);
+
+        // Draw warning
+        //let pageText = "In development, expect bugs and breaking changes.";
+        //let centerX = Math.floor(this.width / 2);
+        //this.drawString(stack, pageText, centerX - this.getStringWidth(stack, pageText) / 2, 10, 0xFF6363, false);
+    }
+
+    updateScreen() {
+        this.panoramaTimer++;
+    }
+
+    drawLogo(stack, x, y) {
+        if (!this.textureLogo) return;
+        const width = 340;
+        const height = width * (this.textureLogo.height / this.textureLogo.width);
+        this.drawSprite(stack, this.textureLogo, 0, 0, this.textureLogo.width, this.textureLogo.height,
+            (this.width - width) / 2, y, width, height);
+    }
+
+    drawSplash(stack) {
+        let f = 1.8 - Math.abs(Math.sin((new Date().getTime() % 1000) / 1000.0 * Math.PI * 2.0) * 0.1);
+        f = f * 100.0 / (this.getStringWidth(stack, this.splashText) + 32);
+
+        stack.save();
+        stack.translate((this.width / 2 + 123), 69.0, 0.0);
+        stack.rotate(MathHelper.toRadians(-20));
+        stack.scale(f, f, f);
+
+        this.drawCenteredString(stack, this.splashText, 0, -8, -256);
+        stack.restore();
+    }
+
+    keyTyped(key) {
+        // In TV mode, allow navigation keys through to parent
+        if (this.minecraft && this.minecraft.settings.tvmode) {
+            super.keyTyped(key);
+        }
+        // Cancel other key inputs
+    }
+
+    mouseClicked(mouseX, mouseY, mouseButton) {
+        super.mouseClicked(mouseX, mouseY, mouseButton);
+    }
+
+    initPanoramaRenderer() {
+        this.scene = new THREE.Scene();
+
+        // Create cube
+        let geometry = new THREE.BoxBufferGeometry(1, 1, 1);
+        let materials = [
+            new THREE.MeshBasicMaterial({
+                side: BackSide,
+                map: this.minecraft.getThreeTexture("gui/title/background/panorama_1.png")
+            }),
+            new THREE.MeshBasicMaterial({
+                side: BackSide,
+                map: this.minecraft.getThreeTexture("gui/title/background/panorama_3.png")
+            }),
+            new THREE.MeshBasicMaterial({
+                side: BackSide,
+                map: this.minecraft.getThreeTexture("gui/title/background/panorama_4.png")
+            }),
+            new THREE.MeshBasicMaterial({
+                side: BackSide,
+                map: this.minecraft.getThreeTexture("gui/title/background/panorama_5.png")
+            }),
+            new THREE.MeshBasicMaterial({
+                side: BackSide,
+                map: this.minecraft.getThreeTexture("gui/title/background/panorama_0.png")
+            }),
+            new THREE.MeshBasicMaterial({
+                side: BackSide,
+                map: this.minecraft.getThreeTexture("gui/title/background/panorama_2.png")
+            })
+        ];
+
+        materials.forEach(material => {
+            material.map.minFilter = THREE.LinearFilter;
+            material.map.magFilter = THREE.LinearFilter;
+        });
+
+        let cube = new THREE.Mesh(geometry, materials);
+        cube.scale.set(-1, -1, -1);
+        this.scene.add(cube);
+
+        this.camera = new THREE.PerspectiveCamera(120, 1, 0.1, 1);
+        this.camera.rotation.order = 'ZYX';
+
+        // Apply blur
+        let style = this.minecraft.window.canvas.style;
+        style.backdropFilter = "blur(0px)";
+        style.webkitBackdropFilter = "blur(0px)";
+        this.minecraft.window.wrapper.insertBefore(this.minecraft.window.canvasWorld, this.minecraft.window.canvas);
+    }
+
+    onClose() {
+        this.minecraft.skins?.disposePlayerPreview(this.skinPreview);
+        this.skinPreview = null;
+        // Remove blur
+        let style = this.minecraft.window.canvas.style;
+        style.backdropFilter = "";
+        style.webkitBackdropFilter = "";
+        if (this.minecraft.window.wrapper.contains(this.minecraft.window.canvasWorld)) {
+            this.minecraft.window.wrapper.removeChild(this.minecraft.window.canvasWorld);
+        }
+    }
+}

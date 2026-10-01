@@ -9,10 +9,20 @@ players/*
 data/*
 vcs.py
 vcs2.py
-node_modules/*
+node_modules/
 package-lock.json
-dist/
-dist-single/
-serverconfig.conf
-current_world.txt
-src/resources.js
+apps/game/dist/
+apps/game/dist-single/
+.kilo/
+apps/game/serverconfig.conf
+apps/game/current_world.txt
+apps/game/src/resources.js
+
+# Wiki runtime and machine-local files
+apps/wiki/node_modules/
+apps/wiki/__pycache__/
+apps/wiki/.env
+apps/wiki/*.db-wal
+apps/wiki/*.db-shm
+apps/wiki/*.pem
+apps/wiki/*.key
