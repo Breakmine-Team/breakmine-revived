@@ -21,10 +21,15 @@ const SECRETS_FILE = path.join(DATA_DIR, 'secrets.json');
 const SKIN_UPLOAD_DIR = path.join(DATA_DIR, 'skins');
 const CAPE_UPLOAD_DIR = path.join(DATA_DIR, 'capes');
 
+// Allowlist map and common default cape paths
+const CAPE_MAP_FILE = path.join(__dirname, 'USER_CAPE_MAP.txt');
+const COMMON_CAPE_PATH = path.join(DATA_DIR, 'common-capes', 'common.png');
+
 function loadOrCreateSecrets() {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.mkdirSync(SKIN_UPLOAD_DIR, { recursive: true });
     fs.mkdirSync(CAPE_UPLOAD_DIR, { recursive: true });
+    fs.mkdirSync(path.join(DATA_DIR, 'common-capes'), { recursive: true });
 
     if (fs.existsSync(SECRETS_FILE)) {
         const secrets = JSON.parse(fs.readFileSync(SECRETS_FILE, 'utf8'));
@@ -49,17 +54,11 @@ const PORT = Number(process.env.PORT) || 6006;
 const JWT_EXPIRES_IN = '7d';
 const BCRYPT_ROUNDS = 12;
 const MAX_SKIN_SIZE = 256 * 1024;
-// A cape is a 64x32 strip, so it needs far less room than a 64x64 skin sheet.
 const MAX_CAPE_SIZE = 64 * 1024;
 
-// Every cape the client can draw is one 64x32 PNG strip. Uploads larger than that
-// are full texture sheets, of which only the strip is wanted.
 const CAPE_WIDTH = 64;
 const CAPE_HEIGHT = 32;
 
-// Serving the client from this process too: the game client is just static
-// files, so on its own hostname this serves the site and everywhere else it
-// stays a pure JSON API. That lets one container answer both domains.
 const SITE_DIR = process.env.SITE_DIR || __dirname;
 const SITE_HOSTNAMES = new Set(
     (process.env.SITE_HOSTNAMES || 'breakmine.com')
@@ -69,9 +68,27 @@ const SITE_HOSTNAMES = new Set(
 );
 
 function hostnameOf(req) {
-    // Traefik keeps the original Host and also sets X-Forwarded-Host.
     const raw = req.headers['x-forwarded-host'] || req.headers.host || '';
     return raw.split(',')[0].trim().toLowerCase();
+}
+
+function getCapeAllowlist() {
+    const map = new Map();
+    if (!fs.existsSync(CAPE_MAP_FILE)) return map;
+
+    const content = fs.readFileSync(CAPE_MAP_FILE, 'utf8');
+    const lines = content.split(/\r?\n/);
+
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+
+        const [username, capeFilename] = trimmed.split(/\s+/);
+        if (username && capeFilename) {
+            map.set(username.toLowerCase(), capeFilename);
+        }
+    }
+    return map;
 }
 
 const db = new Database(path.join(DATA_DIR, 'auth.db'));
@@ -98,8 +115,6 @@ db.exec(`
     CREATE INDEX IF NOT EXISTS idx_revoked_tokens_jti ON revoked_tokens(token_jti);
 `);
 
-// CREATE TABLE IF NOT EXISTS leaves an already existing table alone, so a database
-// created before capes existed keeps its old shape. Add the column to those.
 if (!db.prepare('PRAGMA table_info(users)').all().some((col) => col.name === 'cape_path')) {
     db.exec('ALTER TABLE users ADD COLUMN cape_path TEXT');
     Logger.info('Auth', 'Added cape_path column to users');
@@ -121,12 +136,6 @@ setInterval(() => stmts.cleanExpiredTokens.run(Date.now()), 3600000);
 
 const app = express();
 
-// The client on breakmine.com calls this API from another origin, so the
-// browser only hands the response to JavaScript if these headers come back.
-// Public by default ("*"), which is what the client needs: it is served from
-// breakmine.com, from previews and from local builds, and none of them send
-// cookies. CORS_ORIGINS pins a comma-separated allowlist when the API ever holds
-// something that should not be readable by any site.
 const CORS_ALLOWLIST = new Set(
     (process.env.CORS_ORIGINS || '')
         .split(',')
@@ -135,8 +144,6 @@ const CORS_ALLOWLIST = new Set(
 );
 const CORS_WIDE_OPEN = CORS_ALLOWLIST.size === 0;
 
-// Skins are loaded cross-origin by the client, and helmet's default
-// Cross-Origin-Resource-Policy: same-origin drops them before CORS is consulted.
 app.use(helmet({
     contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false,
@@ -152,19 +159,8 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
     exposedHeaders: ['Content-Type', 'Content-Length'],
     maxAge: 86400,
-    // No credentials: the API authenticates with a Bearer token, and browsers
-    // reject Allow-Origin: * together with credentials anyway.
 }));
 
-// --- API discovery (RFC 9727) ------------------------------------------------
-// These routes are registered before the static handler on purpose. The static
-// host would otherwise answer /.well-known/api-catalog and /catalog.json from
-// disk, guessing application/octet-stream and application/json respectively,
-// and RFC 9727 s6.2 requires application/linkset+json.
-//
-// The catalog is a static file (catalog.json) rather than an inlined literal so
-// that the static host, which is what actually answers breakmine.com in
-// production, and this API container always publish the same document.
 const CATALOG_PATH = path.join(__dirname, 'catalog.json');
 const LINKSET_TYPE = 'application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"';
 
@@ -179,37 +175,30 @@ function sendCatalog(req, res) {
 
 app.get('/.well-known/api-catalog', sendCatalog);
 
-// Also published at the catalog URI itself, per RFC 9727 s4.
 app.get('/catalog.json', (req, res) => {
     res.set('Content-Type', LINKSET_TYPE);
     res.set('Cache-Control', 'public, max-age=3600');
     res.sendFile(CATALOG_PATH);
 });
 
-// The machine-readable description the catalog points at with rel=service-desc.
 app.get('/openapi.json', (req, res) => {
     res.set('Content-Type', 'application/json');
     res.set('Cache-Control', 'public, max-age=3600');
     res.sendFile(path.join(__dirname, 'openapi.json'));
 });
 
-// The human-readable documentation for rel=service-doc.
 app.get('/api-docs.html', (req, res) => {
     res.set('Content-Type', 'text/html; charset=utf-8');
     res.set('Cache-Control', 'public, max-age=3600');
     res.sendFile(path.join(__dirname, 'api-docs.html'));
 });
 
-// Mounted before the rate limiter on purpose: the limiter caps everything at
-// 100 requests per 15 minutes, which a page load's worth of assets blows
-// through instantly. Only the API is rate limited.
 const serveSite = express.static(SITE_DIR, { index: 'index.html', fallthrough: true });
 app.use((req, res, next) => {
     if (!SITE_HOSTNAMES.has(hostnameOf(req))) return next();
     return serveSite(req, res, next);
 });
 
-// robots.txt should be accessible without rate limiting
 app.get('/robots.txt', (req, res) => {
     res.set('Content-Type', 'text/plain');
     res.send(`# robots.txt for breakmine.com
@@ -226,7 +215,6 @@ Sitemap: https://breakmine.com/sitemap.xml
 `);
 });
 
-// sitemap.xml should be accessible without rate limiting
 app.get('/sitemap.xml', (req, res) => {
     const sitemapPath = path.join(__dirname, 'sitemap.xml');
     if (fs.existsSync(sitemapPath)) {
@@ -240,12 +228,6 @@ app.get('/sitemap.xml', (req, res) => {
 app.use(rateLimit({ windowMs: 900000, max: 100 }));
 app.use(express.json({ limit: '1mb' }));
 
-// A shared cache stores a response under the URL, not under the Origin. A body
-// cached from a request that carried no Origin gets replayed to a browser
-// request, and the ACAO header is missing from that copy - which is exactly the
-// "no Access-Control-Allow-Origin header is present" failure, and it only hits
-// some visitors. These responses are per-user state or 404s that must not stick,
-// so they opt out of caching entirely.
 app.use('/api', (req, res, next) => {
     res.set('Cache-Control', 'no-store');
     next();
@@ -253,8 +235,6 @@ app.use('/api', (req, res, next) => {
 
 const authLimiter = rateLimit({ windowMs: 900000, max: 10 });
 
-// Uploads land in their own directory and are never served by path: the filename
-// is random and only the one recorded in the users row is ever read back.
 function makeUploader(destination, maxSize) {
     return multer({
         storage: multer.diskStorage({
@@ -269,7 +249,6 @@ function makeUploader(destination, maxSize) {
 }
 
 const upload = makeUploader(SKIN_UPLOAD_DIR, MAX_SKIN_SIZE);
-const uploadCape = makeUploader(CAPE_UPLOAD_DIR, MAX_CAPE_SIZE);
 
 function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
@@ -306,9 +285,6 @@ function validatePassword(password) {
 }
 
 app.get('/', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' }));
-
-// Health endpoint, referenced by rel="status" in the API catalog. Kept
-// unversioned at /api/status as well as the root probe so both hosts agree.
 app.get('/api/status', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' }));
 
 app.post('/api/register', async (req, res) => {
@@ -395,7 +371,7 @@ app.get('/api/user/:username', (req, res) => {
             created_at: user.created_at,
             last_login: user.last_login,
             has_skin: !!user.skin_path,
-            has_cape: !!user.cape_path,
+            has_cape: false, // Custom uploads disabled
         });
     } catch (err) {
         Logger.error('Auth', `GetUser failed: ${err.message}`);
@@ -451,63 +427,37 @@ app.get('/skin/:username', async (req, res) => {
     }
 });
 
-app.post('/api/upload_cape', authenticateToken, uploadCape.single('file'), async (req, res) => {
-    const uploadedPath = req.file?.path;
-    try {
-        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-
-        // Normalise here rather than on every read: a sheet upload is cut down to
-        // the strip once, and anything too small to contain one is rejected up
-        // front instead of looking like a successful upload that then 400s on
-        // every fetch. Multer already wrote the file, so a rejection has to
-        // clean up after itself.
-        const metadata = await sharp(uploadedPath).metadata();
-        if (metadata.width < CAPE_WIDTH || metadata.height < CAPE_HEIGHT) {
-            fs.unlinkSync(uploadedPath);
-            return res.status(400).json({ error: `Cape must be at least ${CAPE_WIDTH}x${CAPE_HEIGHT}` });
-        }
-
-        if (metadata.width !== CAPE_WIDTH || metadata.height !== CAPE_HEIGHT) {
-            await sharp(uploadedPath)
-                .extract({ left: 0, top: 0, width: CAPE_WIDTH, height: CAPE_HEIGHT })
-                .png()
-                .toFile(uploadedPath);
-        }
-
-        const user = stmts.findById.get(req.user.sub);
-        if (user?.cape_path) {
-            const oldPath = path.join(CAPE_UPLOAD_DIR, user.cape_path);
-            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-        }
-
-        stmts.updateCapePath.run(req.file.filename, req.user.sub);
-        Logger.info('Cape', `Uploaded: ${req.user.username}`);
-        res.json({ message: 'Cape uploaded successfully', filename: req.file.filename });
-    } catch (err) {
-        if (uploadedPath && fs.existsSync(uploadedPath)) fs.unlinkSync(uploadedPath);
-        Logger.error('Cape', `Upload failed: ${err.message}`);
-        res.status(500).json({ error: 'Internal server error' });
-    }
+// Explicitly disable user cape uploads
+app.post('/api/upload_cape', authenticateToken, (req, res) => {
+    res.status(403).json({ error: 'User-uploaded capes are disabled' });
 });
 
-// Capes are stored pre-cropped to the strip by the upload route, so this is
-// just the file: a 64x32 PNG or a 404, exactly as a skin without a skin is.
 app.get('/cape/:username', (req, res) => {
     try {
         const usernameVal = validateUsername(req.params.username);
         if (!usernameVal.valid) return res.status(400).json({ error: 'Invalid username' });
 
-        const user = stmts.findByUsername.get(usernameVal.value);
-        if (!user || !user.cape_path) return res.status(404).json({ error: 'Cape not found' });
+        const usernameLower = usernameVal.value.toLowerCase();
+        const capeAllowlist = getCapeAllowlist();
 
-        const capePath = path.resolve(CAPE_UPLOAD_DIR, user.cape_path);
-        if (!fs.existsSync(capePath)) {
-            stmts.updateCapePath.run(null, user.id);
-            return res.status(404).json({ error: 'Cape not found' });
+        // 1. Check USER_CAPE_MAP.txt allowlist
+        if (capeAllowlist.has(usernameLower)) {
+            const customCapeFile = capeAllowlist.get(usernameLower);
+            const customCapePath = path.resolve(CAPE_UPLOAD_DIR, customCapeFile);
+
+            if (fs.existsSync(customCapePath)) {
+                res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600' });
+                return res.sendFile(customCapePath);
+            }
         }
 
-        res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600' });
-        res.sendFile(capePath);
+        // 2. Fallback: serve common cape for all non-allowlisted users
+        if (fs.existsSync(COMMON_CAPE_PATH)) {
+            res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600' });
+            return res.sendFile(COMMON_CAPE_PATH);
+        }
+
+        res.status(404).json({ error: 'Cape not found' });
     } catch (err) {
         Logger.error('Cape', `GetCape failed: ${err.message}`);
         res.status(500).json({ error: 'Internal server error' });
@@ -516,8 +466,6 @@ app.get('/cape/:username', (req, res) => {
 
 app.use((err, req, res, next) => {
     if (err instanceof multer.MulterError) {
-        // Multer does not report which limit it hit, so pick the one that applies
-        // to the route the request was heading for.
         const maxSize = req.originalUrl.startsWith('/api/upload_cape') ? MAX_CAPE_SIZE : MAX_SKIN_SIZE;
         return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? `File too large. Max ${maxSize / 1024}KB` : err.message });
     }

@@ -1,0 +1,4 @@
+# DO NOT EDIT UNLESS ALLOWED TO!
+# <username> <cape>
+kai contributor_cape.png
+doxism contributor_cape.png

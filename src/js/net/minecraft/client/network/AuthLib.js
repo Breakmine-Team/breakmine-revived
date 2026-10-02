@@ -3,24 +3,20 @@ const TOKEN_STORAGE_KEY = 'authToken';
 export function isLocalNetwork() {
     const hostname = window.location.hostname;
 
-    // 1. Instantly validate standard local text hostnames
     if (hostname === 'localhost' || hostname.endsWith('.local')) {
         return true;
     }
 
-    // 2. Regular expressions for IPv4 Private & Loopback Ranges
     const ipV4Loopback = /^127\./;
     const ipV4PrivateA = /^10\./;
     const ipV4PrivateB = /^172\.(1[6-9]|2[0-9]|3[0-1])\./;
     const ipV4PrivateC = /^192\.168\./;
     const ipV4LinkLocal = /^169\.254\./;
 
-    // 3. Regular expressions for IPv6 Private & Loopback Ranges
     const ipV6Loopback = /^::1$/;
-    const ipV6UniqueLocal = /^[fF][cCdD]/; // fc00::/7
-    const ipV6LinkLocal = /^[fF][eE][89aAbB]/; // fe80::/10
+    const ipV6UniqueLocal = /^[fF][cCdD]/;
+    const ipV6LinkLocal = /^[fF][eE][89aAbB]/;
 
-    // Strip IPv6 bracket notation if present (e.g. [::1] -> ::1)
     const cleanHost = hostname.replace(/[\[\]]/g, '');
 
     return (
@@ -46,9 +42,8 @@ export function getApiBaseUrl() {
     return API_BASE_URL;
 }
 
-
 export class AuthLibInfo {
-    static VERSION = "1.0.0";
+    static VERSION = "1.2.0";
     static NAME = "AuthLib";
     
     constructor() {
@@ -179,12 +174,20 @@ export function getCapeUrl(username) {
     return `${API_BASE_URL}/cape/${username}`;
 }
 
-// Skins and capes are both a single PNG picked locally and POSTed as multipart
-// form data, so they share one picker: only the endpoint and the noun in the
-// error messages differ.
-function pickAndUploadImage(endpoint, label) {
-    return new Promise((resolve, reject) => {
+/**
+ * Build a cape URL that explicitly selects a specific owned cape by ID.
+ * Used by the cape-picker GUI when the user picks a cape from their
+ * owned list. The server validates that the user actually owns the cape.
+ */
+export function getCapeUrlForId(username, capeId) {
+    if (!capeId || capeId === 'common') {
+        return `${API_BASE_URL}/cape/${username}?id=common`;
+    }
+    return `${API_BASE_URL}/cape/${username}?id=${encodeURIComponent(capeId)}`;
+}
 
+export function uploadSkinForUser(username) {
+    return new Promise((resolve, reject) => {
         const fileInput = document.createElement('input');
         fileInput.type = 'file';
         fileInput.accept = 'image/png';
@@ -192,7 +195,7 @@ function pickAndUploadImage(endpoint, label) {
 
         const token = getAuthToken();
         if (!token) {
-            return reject(new Error(`You must be logged in to upload a ${label}`));
+            return reject(new Error("You must be logged in to upload a skin"));
         }
 
         fileInput.onchange = async (event) => {
@@ -207,7 +210,7 @@ function pickAndUploadImage(endpoint, label) {
             formData.append('file', file);
 
             try {
-                const response = await fetch(API_BASE_URL + endpoint, {
+                const response = await fetch(API_BASE_URL + '/api/upload_skin', {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -227,7 +230,7 @@ function pickAndUploadImage(endpoint, label) {
                 resolve(data);
 
             } catch (error) {
-                reject(new Error(`Failed to upload ${label}, ${error.message}`));
+                reject(new Error(`Failed to upload skin, ${error.message}`));
             } finally {
                 fileInput.remove();
             }
@@ -245,12 +248,4 @@ function pickAndUploadImage(endpoint, label) {
             }
         }, 1000);
     });
-}
-
-export function uploadSkinForUser(username) {
-    return pickAndUploadImage('/api/upload_skin', 'skin');
-}
-
-export function uploadCapeForUser(username) {
-    return pickAndUploadImage('/api/upload_cape', 'cape');
 }
