@@ -1245,9 +1245,12 @@ export default class WorldRenderer {
         // and shape for the target position, without touching real chunk storage.
         let fakeWorld = this.createPreviewWorld(world, typeId, x, y, z, this.getBlockPlacementData(block, hitResult));
 
-        // Blocks like stairs, torches and doors compute their orientation in
+        // Blocks like stairs, torches and door compute their orientation in
         // onBlockPlaced; run it against the fake world so the ghost matches.
         block.onBlockPlaced(fakeWorld, x, y, z, hitResult.face);
+
+        let previewOpacity = Math.cos(performance.now() / 300) * 0.2 + 0.8;
+        previewOpacity = Math.min(previewOpacity * 0.2 + 0.3, 0.6);
 
         tessellator.startDrawing();
         tessellator.setRenderingPass(true);
@@ -1256,7 +1259,7 @@ export default class WorldRenderer {
         if (tessellator.addedVertices > 0) {
             let mesh = tessellator.draw(this.blockPreviewGroup);
             mesh.material.transparent = true;
-            mesh.material.opacity = 0.45;
+            mesh.material.opacity = previewOpacity;
             mesh.material.depthWrite = false;
             mesh.material.alphaTest = 0;
             mesh.renderOrder = 10001;
@@ -1266,9 +1269,9 @@ export default class WorldRenderer {
             if (colorAttr) {
                 for (let i = 0; i < colorAttr.count; i++) {
                     colorAttr.setXYZ(i,
-                        1 - (1 - colorAttr.getX(i)) * 0.55,
-                        1 - (1 - colorAttr.getY(i)) * 0.55,
-                        1 - (1 - colorAttr.getZ(i)) * 0.55
+                        1 - (1 - colorAttr.getX(i)) * 0.55 * previewOpacity,
+                        1 - (1 - colorAttr.getY(i)) * 0.55 * previewOpacity,
+                        1 - (1 - colorAttr.getZ(i)) * 0.55 * previewOpacity
                     );
                 }
                 colorAttr.needsUpdate = true;
