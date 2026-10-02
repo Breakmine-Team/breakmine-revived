@@ -146,10 +146,8 @@ export default class CapeService {
         return this.localCape;
     }
 
-    useDefaultCape(variant = "default") {
-        const resourceKey = variant === "cape_2" ? "gui/cape_plus/cape_2" : "gui/cape_plus/default_cape";
-        const image = this.minecraft?.resources?.[resourceKey] || this.minecraft?.resources?.["gui/cape_plus/default_cape"];
-        
+    useDefaultCape() {
+        const image = this.minecraft?.resources?.["gui/cape_plus/default_cape"];
         if (!image) throw new Error("Default cape texture is still loading.");
         const textureHeight = image.naturalHeight === MODERN_CAPE_HEIGHT
             ? MODERN_CAPE_HEIGHT
