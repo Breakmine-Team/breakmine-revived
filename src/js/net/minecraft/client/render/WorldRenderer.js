@@ -267,7 +267,20 @@ export default class WorldRenderer {
         this.rebuildAll();
     }
 
+    /**
+     * Fire a mod render hook ('beforeRender', 'renderChunks', 'renderSky',
+     * 'renderBlockHitBox', 'afterRender', 'onTick'). A no-op unless a mod
+     * registered a handler, so unloaded mods cost nothing per frame.
+     */
+    emitRenderHook(hook, payload = {}) {
+        const modLoader = this.minecraft?.modLoader;
+        if (!modLoader || !modLoader.renderHooks?.has(hook)) return;
+        modLoader.emitRenderHook(hook, payload, this);
+    }
+
     render(partialTicks) {
+        this.emitRenderHook('beforeRender', { partialTicks });
+
         // Setup camera
         this.orientCamera(partialTicks);
 
@@ -275,13 +288,16 @@ export default class WorldRenderer {
         let player = this.minecraft.player;
         let cameraChunkX = Math.floor(player.x) >> 4;
         let cameraChunkZ = Math.floor(player.z) >> 4;
+        this.emitRenderHook('renderChunks', { partialTicks, cameraChunkX, cameraChunkZ, player });
         this.renderChunks(cameraChunkX, cameraChunkZ);
         this.updateChunkBoundaryLines(cameraChunkX, cameraChunkZ);
 
         // Render sky
+        this.emitRenderHook('renderSky', { partialTicks });
         this.renderSky(partialTicks);
 
         // Render target block
+        this.emitRenderHook('renderBlockHitBox', { partialTicks, player });
         this.renderBlockHitBox(player, partialTicks);
 
         // Render placement preview ghost block
@@ -390,6 +406,8 @@ export default class WorldRenderer {
         // Render overlay with the same FOV as the world
         this.overlay.updateMatrixWorld(true);
         this.webRenderer.render(this.overlay, this.camera);
+
+        this.emitRenderHook('afterRender', { partialTicks });
     }
 
     updateChunkBoundaryLines(cameraChunkX, cameraChunkZ) {
@@ -463,6 +481,8 @@ export default class WorldRenderer {
     }
 
     onTick() {
+        this.emitRenderHook('onTick');
+
         // Rebuild chunk sections each tick
         let rebuildCount = Math.min(32, this.chunkSectionUpdateQueue.length);
         for (let i = 0; i < rebuildCount; i++) {

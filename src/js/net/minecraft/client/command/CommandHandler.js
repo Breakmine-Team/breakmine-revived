@@ -8,6 +8,7 @@ import PlaceCommand from "./command/PlaceCommand.js"
 import HealCommand from "./command/HealCommand.js"
 import GiveCommand from "./command/GiveCommand.js"
 import SummonCommand from "./command/SummonCommand.js"
+import CommandRegistry from "./CommandRegistry.js";
 
 export default class CommandHandler {
 
@@ -27,6 +28,30 @@ export default class CommandHandler {
         this.commands.push(new SummonCommand());
     }
 
+    /**
+     * Register a mod-provided command. Mods normally go through
+     * ModLoader.registerCommand(), which fills in the owning modId; this is
+     * the same entry point for anything else holding a CommandHandler.
+     */
+    registerCommand(descriptor) {
+        return CommandRegistry.register(descriptor);
+    }
+
+    unregisterCommand(name) {
+        return CommandRegistry.unregister(name);
+    }
+
+    /** Built-in commands plus everything mods registered. */
+    getCommands() {
+        return [...this.commands, ...CommandRegistry.getAll()];
+    }
+
+    /** True when the command exists, either built-in or registered by a mod. */
+    hasCommand(name) {
+        const key = typeof name === 'string' ? name.toLowerCase() : '';
+        return this.commands.some(command => command.command === key) || CommandRegistry.has(key);
+    }
+
     handleMessage(message) {
         let args = message.split(" ");
         let command = args[0].toLowerCase();
@@ -43,6 +68,25 @@ export default class CommandHandler {
                 return;
             }
         }
+
+        // Mod commands live in the shared registry rather than in this list, so
+        // they also work on the server, where each CommandHandler is shared by
+        // every player and `minecraft` is the current player's adapter.
+        const modCommand = CommandRegistry.get(command);
+        if (modCommand) {
+            let handled = false;
+            try {
+                handled = modCommand.execute(this.minecraft, args);
+            } catch (error) {
+                this.minecraft.addMessageToChat("§cCommand /" + modCommand.command + " failed: " + error.message);
+                return;
+            }
+            if (!handled) {
+                this.minecraft.addMessageToChat("/" + modCommand.command + " " + modCommand.usage);
+            }
+            return;
+        }
+
         this.minecraft.addMessageToChat("Unknown command! Type \"/help\" for help.");
     }
 }

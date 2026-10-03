@@ -1,4 +1,5 @@
 import CommandHandler from '../client/command/CommandHandler.js';
+import CommandRegistry from '../client/command/CommandRegistry.js';
 import Logger from './logger.js';
 import { sendChatMessageToPlayer, createCommandContext, syncCommandState } from './CommandContext.js';
 import { getPlayers, isOp, savePlayerData, loadPlayerData, normalizeInventoryState } from './players.js';
@@ -19,6 +20,14 @@ const commandHandler = new CommandHandler(null);
 // Commands that mutate shared state or affect other players. Non-ops get a
 // permission error instead of the command executing.
 const OP_ONLY_COMMANDS = new Set(['tp', 'gamemode', 'heal', 'give', 'setblock', 'place', 'summon', 'util']);
+
+// Mods register their commands into CommandRegistry, the same registry the
+// client reads. A mod marks a command op-only by setting `opOnly` when it
+// registers it, and everything else stays open to any player, like the
+// built-in read-only commands.
+function isOpOnlyCommand(name) {
+    return OP_ONLY_COMMANDS.has(name) || CommandRegistry.isOpOnly(name);
+}
 
 function requireOp(player) {
     if (isOp(player)) {
@@ -47,8 +56,18 @@ function handleCommand(player, command) {
     if (cmd === 'time' && (args[0] === 'set' || args[0] === 'add') && !requireOp(player)) {
         return;
     }
-    if (OP_ONLY_COMMANDS.has(cmd) && !requireOp(player)) {
+    if (isOpOnlyCommand(cmd) && !requireOp(player)) {
         return;
+    }
+
+    // A mod command only works if the mod is installed here too. Say so
+    // instead of the bare "unknown command" a player would get otherwise.
+    if (!commandHandler.hasCommand(cmd)) {
+        if (player.mods && player.mods.length > 0) {
+            const names = player.mods.map(mod => mod.name).join(', ');
+            sendChatMessageToPlayer(player, `§cUnknown command '/${cmd}'. Your mods are only installed on your client (${names}).`);
+            return;
+        }
     }
 
     const context = createCommandContext(player, commandHandler);

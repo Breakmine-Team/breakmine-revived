@@ -1,4 +1,5 @@
 import FontRenderer from "../../render/gui/FontRenderer.js";
+import CommandRegistry from "../../command/CommandRegistry.js";
 
 export default class GuiTabScroll {
 
@@ -13,6 +14,14 @@ export default class GuiTabScroll {
         },
         "heal": "players"
     };
+
+    /** Built-in commands plus everything mods registered. */
+    static commandNames() {
+        return [...new Set([
+            ...GuiTabScroll.BASE_COMMANDS,
+            ...CommandRegistry.getAll().map(command => command.command)
+        ])];
+    }
 
     constructor(minecraft, inputField) {
         this.minecraft = minecraft;
@@ -40,9 +49,10 @@ export default class GuiTabScroll {
                 return;
             }
 
+            const names = GuiTabScroll.commandNames();
             this.suggestions = force
-                ? GuiTabScroll.BASE_COMMANDS.slice()
-                : GuiTabScroll.BASE_COMMANDS.filter(c => c.startsWith(partial));
+                ? names.slice()
+                : names.filter(c => c.startsWith(partial));
             this.isActive = this.suggestions.length > 0 && (partial.length > 0 || force);
             if (!force) this._updateSelection(prevKey);
             return;

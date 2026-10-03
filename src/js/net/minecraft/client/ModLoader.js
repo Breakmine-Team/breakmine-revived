@@ -9,6 +9,7 @@ import * as THREE from "../../../../../libraries/three.module.js";
 import ModelRenderer from "./render/model/renderer/ModelRenderer.js";
 import Tessellator from "./render/Tessellator.js";
 import * as AuthLib from "./network/AuthLib.js";
+import CommandRegistry from "./command/CommandRegistry.js";
 
 const ENABLED_MODS_KEY = 'breakmine_enabled_mods';
 const DISABLED_MODS_KEY = 'breakmine_disabled_mods';
@@ -24,13 +25,25 @@ const DISABLED_MODS_KEY = 'breakmine_disabled_mods';
  *   crafting/*.js        — crafting recipe classes
  *   smelting/*.js        — smelting recipe classes
  *   gui/*.js             — GUI screen classes (extend GuiScreen / GuiContainer)
+ *   commands/*.js        — chat commands (extend Command); registered for
+ *                           client and server use, op-only with `this.opOnly = true`
  *   gui_textures/*.png   — GUI background textures (accessible via 'gui/&lt;modId&gt;/&lt;name&gt;')
  *   textures/*.png       — 16×16 block/item textures
  *   sounds/*.ogg         — custom sounds (playable via Sound.play('&lt;modId&gt;:&lt;name&gt;.ogg', volume))
  *
- * Modding API exposed to block/item/GUI code:
+ * Modding API exposed to block/item/GUI/command code:
  *   Block, BlockRegistry, BoundingBox, EnumBlockFace, EnumCreativeInventoryTab,
- *   THREE, Sound, AuthLib
+ *   Command, THREE, Sound, AuthLib, ModAPI
+ *
+ * ModAPI is the mod-facing facade (also the third argument of ModLoad.onLoad
+ * as the loader itself):
+ *   ModAPI.registerCommand(name, usage, description, execute, { opOnly })
+ *   ModAPI.registerRenderHook(hook, fn, { priority })   // 'beforeRender',
+ *       'renderChunks', 'renderSky', 'renderBlockHitBox', 'afterRender', 'onTick'
+ *   ModAPI.registerService(id, service), ModAPI.getService(id),
+ *   ModAPI.resolveTexture('modid:name'), ModAPI.log(...), ModAPI.warn(...)
+ * Commands and render hooks are dropped again when the mod is disabled or
+ * uninstalled.
  * AuthLib is the account module: getAuthToken(), getUserInfo(username),
  * userExists(username), getSkinUrl(username) and getCapeUrl(username). Mods read
  * it rather than calling fetch, so they inherit the API base URL and the auth
@@ -67,7 +80,12 @@ export default class ModLoader {
         this._devModFilesystems = new Map(); // modId → MemoryFilesystem (temporary dev mods, never persisted)
         this._diskFilesystem = null;         // BridgeFilesystem over the physical mods/ folder (Electron only)
         this._blockBaseClass = null;    // cached Block class for eval sandbox
+        this._commandBaseClass = null;  // cached Command class for mod command sandboxes
         this._modModuleCache = new Map(); // 'modId/filePath' → evaluated exports
+        this.renderHooks = new Map();    // hook name → [{ fn, modId, priority, hook }] — world-render hook targets
+        this._modRegistrations = new Map(); // modId → { commands: Set, hooks: Set } for cleanup
+        this._activeModId = null;       // mod currently being loaded (attributes registrations)
+        this._modApis = new Map();      // modId → ModAPI facade handed to mod sandboxes
     }
 
     /* ------------------------------------------------------------------
@@ -114,6 +132,214 @@ export default class ModLoader {
                 console.warn('[Patchwork] Mod network hook failed:', error);
             }
         }
+    }
+
+    /* ----------------------------- commands --------------------------- */
+
+    /**
+     * Register a chat command for a mod.
+     *
+     * Two call styles are accepted:
+     *   registerCommand({ command: "spawn_pet", usage: "<type>", description: "...",
+     *                      opOnly: false, execute(minecraft, args) { ... } })
+     *   registerCommand("spawn_pet", "<type>", "Spawn a pet", (minecraft, args) => ..., { opOnly: true })
+     *
+     * `execute` gets the same `minecraft` object the command was typed into
+     * (the real client, or a per-player adapter on the server) and returns
+     * false to have the usage line echoed back. `opOnly: true` makes the
+     * server require operator status, exactly like the built-in mutating
+     * commands. A modId that collides with an existing command replaces it.
+     *
+     * @returns the stored registry entry
+     */
+    registerCommand(name, usage, description, execute, options = {}) {
+        const descriptor = typeof name === 'object' && name !== null
+            ? { ...name }
+            : { command: name, usage, description, execute, ...options };
+        const modId = descriptor.modId || options.modId || this._activeModId || null;
+
+        const entry = CommandRegistry.register({ ...descriptor, modId });
+        if (modId) {
+            this._trackRegistration(modId).commands.add(entry.command);
+        }
+        return entry;
+    }
+
+    unregisterCommand(name) {
+        const entry = CommandRegistry.get(name);
+        const removed = CommandRegistry.unregister(name);
+        if (entry && entry.modId) {
+            this._modRegistrations.get(entry.modId)?.commands.delete(entry.command);
+        }
+        return removed;
+    }
+
+    /** Every command mods registered, in registration order. */
+    getModCommands() {
+        return CommandRegistry.getAll();
+    }
+
+    /* ---------------------------- render hooks ------------------------ */
+
+    /**
+     * Hook a world-render function. WorldRenderer emits these points:
+     *   'beforeRender'      — once per frame before the camera is oriented
+     *   'renderChunks'      — before the visible chunks are drawn
+     *   'renderSky'         — before the sky is drawn
+     *   'renderBlockHitBox' — before the block outline is drawn
+     *   'afterRender'       — once per frame after everything is drawn
+     *   'onTick'            — once per client tick, before renderer updates
+     * A handler receives a single context object:
+     *   { hook, minecraft, worldRenderer, partialTicks, ...payload }
+     * `priority` runs lower numbers first (default 0).
+     */
+    registerRenderHook(hook, fn, options = {}) {
+        if (typeof hook !== 'string' || !hook) {
+            throw new Error('A render hook name is required.');
+        }
+        if (typeof fn !== 'function') {
+            throw new Error(`Render hook '${hook}' needs a function.`);
+        }
+        const modId = options.modId || this._activeModId || null;
+        const entry = { fn, modId, priority: options.priority || 0, hook };
+
+        if (!this.renderHooks.has(hook)) this.renderHooks.set(hook, []);
+        const list = this.renderHooks.get(hook);
+        list.push(entry);
+        list.sort((a, b) => a.priority - b.priority);
+
+        if (modId) {
+            this._trackRegistration(modId).hooks.add(entry);
+        }
+        return entry;
+    }
+
+    /** Remove one hook (the handle registerRenderHook returned) or all hooks for a name. */
+    unregisterRenderHook(hook, handle) {
+        if (typeof handle === 'function') {
+            for (const entry of [...(this.renderHooks.get(hook) || [])]) {
+                if (entry.fn === handle) return this._removeRenderHook(entry);
+            }
+            return false;
+        }
+        if (typeof handle === 'object' && handle && handle.fn) {
+            return this._removeRenderHook(handle);
+        }
+        return this.clearRenderHooks(hook) > 0;
+    }
+
+    _removeRenderHook(entry) {
+        const hooks = this.renderHooks.get(entry.hook);
+        if (!hooks) return false;
+        const index = hooks.indexOf(entry);
+        if (index === -1) return false;
+        hooks.splice(index, 1);
+        if (hooks.length === 0) this.renderHooks.delete(entry.hook);
+        for (const record of this._modRegistrations.values()) {
+            record.hooks.delete(entry);
+        }
+        return true;
+    }
+
+    /** Drop every handler for a hook name, or for all names when omitted. */
+    clearRenderHooks(hook) {
+        if (hook) {
+            const hooks = this.renderHooks.get(hook);
+            if (!hooks) return 0;
+            this.renderHooks.delete(hook);
+            return hooks.length;
+        }
+        let count = 0;
+        for (const hooks of this.renderHooks.values()) count += hooks.length;
+        this.renderHooks.clear();
+        return count;
+    }
+
+    hasRenderHooks(hook) {
+        if (hook) return (this.renderHooks.get(hook) || []).length > 0;
+        for (const hooks of this.renderHooks.values()) {
+            if (hooks.length > 0) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Fire a render hook. Called from WorldRenderer; mods never need this.
+     * A throwing hook is reported and skipped so one bad mod cannot break the
+     * frame for everybody else.
+     */
+    emitRenderHook(hook, payload = {}, worldRenderer = null) {
+        const hooks = this.renderHooks.get(hook);
+        if (!hooks || hooks.length === 0) return;
+
+        const context = {
+            hook,
+            minecraft: this.minecraft,
+            worldRenderer: worldRenderer || this.minecraft?.worldRenderer || null,
+            ...payload
+        };
+
+        for (const entry of [...hooks]) {
+            try {
+                entry.fn(context);
+            } catch (error) {
+                console.warn(`[Patchwork] Mod render hook '${hook}' failed:`, error);
+            }
+        }
+    }
+
+    /* --------------------------- mod bookkeeping ---------------------- */
+
+    _trackRegistration(modId) {
+        let record = this._modRegistrations.get(modId);
+        if (!record) {
+            record = { commands: new Set(), hooks: new Set() };
+            this._modRegistrations.set(modId, record);
+        }
+        return record;
+    }
+
+    /** Remove every command and render hook a mod registered. */
+    releaseModRegistrations(modId) {
+        const record = this._modRegistrations.get(modId);
+        this._modRegistrations.delete(modId);
+        if (!record) return 0;
+
+        for (const name of record.commands) {
+            CommandRegistry.unregister(name);
+        }
+        for (const entry of record.hooks) {
+            this._removeRenderHook(entry);
+        }
+        return record.commands.size + record.hooks.size;
+    }
+
+    /**
+     * The object injected into every mod sandbox as `ModAPI` (and passed to
+     * ModLoad.onLoad as its third argument is this loader itself).
+     */
+    _getModApi(modId) {
+        const cached = this._modApis.get(modId);
+        if (cached) return cached;
+        const loader = this;
+        const api = {
+            modId,
+            get minecraft() { return loader.minecraft; },
+            get world() { return loader.minecraft?.world; },
+            registerCommand: (name, usage, description, execute, options = {}) =>
+                loader.registerCommand(name, usage, description, execute, { modId, ...options }),
+            unregisterCommand: (name) => loader.unregisterCommand(name),
+            getCommand: (name) => CommandRegistry.get(name),
+            registerRenderHook: (hook, fn, options = {}) => loader.registerRenderHook(hook, fn, { modId, ...options }),
+            unregisterRenderHook: (hook, handle) => loader.unregisterRenderHook(hook, handle),
+            registerService: (serviceId, service) => loader.registerService(serviceId, service),
+            getService: (serviceId) => loader.getService(serviceId),
+            resolveTexture: (key) => loader.resolveTexture(key),
+            log: (...args) => console.log(`[Patchwork] [${modId}]`, ...args),
+            warn: (...args) => console.warn(`[Patchwork] [${modId}]`, ...args)
+        };
+        this._modApis.set(modId, api);
+        return api;
     }
 
     /**
@@ -319,6 +545,9 @@ export default class ModLoader {
             this.mods.delete(modId);
         }
 
+        this.releaseModRegistrations(modId);
+        this._modApis.delete(modId);
+
         for (const key of this._modModuleCache.keys()) {
             if (key.startsWith(`${modId}/`)) this._modModuleCache.delete(key);
         }
@@ -343,6 +572,9 @@ export default class ModLoader {
             }
         } else {
             this.enabledMods.delete(modId);
+            // Commands and render hooks are live JS, so they must go away with
+            // the switch; blocks/textures stay registered like they always did.
+            this.releaseModRegistrations(modId);
             // Remember the refusal, otherwise a wiki-installed folder would be
             // switched straight back on at the next launch.
             this._disabledMods.add(modId);
@@ -461,6 +693,20 @@ export default class ModLoader {
      * ------------------------------------------------------------------ */
 
     async _loadMod(modId, fs = this.filesystem) {
+        // Attribute anything registered while this mod loads (and everything
+        // ModLoad.onLoad does) to it, so it can be removed again on disable.
+        const previousActiveMod = this._activeModId;
+        this._activeModId = modId;
+        try {
+            // A reload would otherwise leave the previous run's hooks behind.
+            this.releaseModRegistrations(modId);
+            await this._loadModInner(modId, fs);
+        } finally {
+            this._activeModId = previousActiveMod;
+        }
+    }
+
+    async _loadModInner(modId, fs = this.filesystem) {
         // 1. Read metadata
         const raw = await fs.loadFile(`mods/${modId}/ModData.json`);
         if (!raw) throw new Error(`ModData.json not found for mod '${modId}'`);
@@ -476,6 +722,7 @@ export default class ModLoader {
             itemIds: [],
             itemClasses: new Map(),
             guiClasses: new Map(),
+            commandNames: [],
             guiTextureNames: [],
             textureNames: [],
             soundNames: []
@@ -506,6 +753,10 @@ export default class ModLoader {
             .filter(f => f.startsWith('gui/') && f.endsWith('.js'))
             .map(f => f.replace(/^gui\//, ''));
 
+        const commandFiles = relFiles
+            .filter(f => f.startsWith('commands/') && f.endsWith('.js'))
+            .map(f => f.replace(/^commands\//, ''));
+
         entry.guiTextureNames = relFiles
             .filter(f => f.startsWith('gui_textures/') && f.endsWith('.png.b64'))
             .map(f => f.replace(/^gui_textures\//, '').replace(/\.png\.b64$/, ''));
@@ -526,6 +777,9 @@ export default class ModLoader {
 
         // 5. Load and register GUI classes (before blocks so blocks can reference them)
         await this._registerModGuis(modId, entry, guiFiles, fs);
+
+        // 5b. Load and register chat commands from commands/
+        await this._registerModCommands(modId, entry, commandFiles, fs);
 
         // 6. Load and register block classes (may reference GUI classes)
         await this._registerModBlocks(modId, entry, blockFiles, fs);
@@ -584,7 +838,7 @@ export default class ModLoader {
         const EnumCreativeInventoryTabClass = await this._getEnumCreativeInventoryTab();
 
         // Build deps: base block deps + any GUI classes from this mod
-        const blockDeps = { Block: BlockClass, BlockRegistry, BoundingBox: BoundingBoxClass, EnumBlockFace: EnumBlockFaceClass, EnumCreativeInventoryTab: EnumCreativeInventoryTabClass, THREE, Sound, AuthLib };
+        const blockDeps = { Block: BlockClass, BlockRegistry, BoundingBox: BoundingBoxClass, EnumBlockFace: EnumBlockFaceClass, EnumCreativeInventoryTab: EnumCreativeInventoryTabClass, THREE, Sound, AuthLib, ModAPI: this._getModApi(modId) };
         for (const [className, cls] of entry.guiClasses) {
             blockDeps[className] = cls;
         }
@@ -625,7 +879,7 @@ export default class ModLoader {
      * ------------------------------------------------------------------ */
 
     async _registerModItems(modId, entry, itemFiles, fs = this.filesystem) {
-        const itemClasses = await this._getItemClasses();
+        const itemClasses = await this._getItemClasses(modId);
 
         for (const filename of itemFiles) {
             try {
@@ -850,7 +1104,7 @@ export default class ModLoader {
      *  Internal — dynamically import GUI base classes for mod sandboxing
      * ------------------------------------------------------------------ */
 
-    async _getGuiDeps() {
+    async _getGuiDeps(modId = null) {
         try {
             const [GuiScreen, GuiContainer, GuiBase, ContainerCls, SlotCls, InventoryBasic, ItemStack, GuiButton] = await Promise.all([
                 import('./gui/GuiScreen.js').then(m => m.default),
@@ -882,6 +1136,8 @@ export default class ModLoader {
                 EnumCreativeInventoryTab: EnumCreativeInventoryTabClass,
                 Sound,
                 AuthLib,
+                Command: modId ? await this._getCommandBaseClass() : undefined,
+                ModAPI: modId ? this._getModApi(modId) : undefined,
             };
         } catch (e) {
             console.error('[Patchwork] Could not import GUI classes:', e);
@@ -894,7 +1150,7 @@ export default class ModLoader {
      * ------------------------------------------------------------------ */
 
     async _registerModGuis(modId, entry, guiFiles, fs = this.filesystem) {
-        const guiDeps = await this._getGuiDeps();
+        const guiDeps = await this._getGuiDeps(modId);
 
         for (const filename of guiFiles) {
             try {
@@ -914,6 +1170,61 @@ export default class ModLoader {
     }
 
     /* ------------------------------------------------------------------
+     *  Internal — load commands/*.js and register them in CommandRegistry
+     * ------------------------------------------------------------------ */
+
+    /**
+     * A commands/CommandSpawnPet.js file is a normal Command subclass:
+     *
+     *   export default class CommandSpawnPet extends Command {
+     *       constructor() { super("spawn_pet", "<type>", "Spawn a pet") }
+     *       execute(minecraft, args) { ... return true; }
+     *   }
+     *
+     * The instance is registered in the shared CommandRegistry, so it works
+     * both in singleplayer and on the server (which shares the registry and
+     * hands each command a per-player `minecraft` adapter).
+     */
+    async _registerModCommands(modId, entry, commandFiles, fs = this.filesystem) {
+        if (commandFiles.length === 0) return;
+
+        const Command = await this._getCommandBaseClass();
+        const ModAPI = this._getModApi(modId);
+        const deps = { Command, ModAPI, THREE, Sound, BlockRegistry, AuthLib };
+        for (const [className, cls] of entry.guiClasses) {
+            deps[className] = cls;
+        }
+
+        for (const filename of commandFiles) {
+            try {
+                const src = await fs.loadFile(`mods/${modId}/commands/${filename}`);
+                if (!src) continue;
+
+                const CommandClass = await this._evalClass(src, deps, modId, `commands/${filename}`, fs);
+                if (!CommandClass) {
+                    console.warn(`[Patchwork] No class found in command file '${filename}' of mod '${modId}'`);
+                    continue;
+                }
+
+                const instance = new CommandClass();
+                const registered = this.registerCommand({
+                    command: instance.command,
+                    usage: instance.usage,
+                    description: instance.description,
+                    opOnly: !!instance.opOnly,
+                    execute: (minecraft, args) => instance.execute(minecraft, args),
+                    modId
+                });
+
+                entry.commandNames.push(registered.command);
+                console.log(`[Patchwork]   Registered command '/${registered.command}' from ${filename}`);
+            } catch (err) {
+                console.error(`[Patchwork] Failed to load command '${filename}' from mod '${modId}':`, err);
+            }
+        }
+    }
+
+    /* ------------------------------------------------------------------
      *  Internal — call ModLoad.onLoad if present
      * ------------------------------------------------------------------ */
 
@@ -924,7 +1235,7 @@ export default class ModLoader {
 
             const GuiButton = (await import('./gui/widgets/GuiButton.js')).default;
             const GuiScreen = (await import('./gui/GuiScreen.js')).default;
-            const modDeps = { Sound, THREE, GuiButton, GuiScreen, ModelRenderer, Tessellator, AuthLib };
+            const modDeps = { Sound, THREE, GuiButton, GuiScreen, ModelRenderer, Tessellator, AuthLib, ModAPI: this._getModApi(modId) };
             await this._resolveModImports(src, modDeps, modId, 'ModLoad.js', new Set(['ModLoad.js']), fs);
 
             let transformed = src.replace(/import\s+.*?from\s+["'][^"']*["']\s*;?/g, '');
@@ -1321,6 +1632,14 @@ export default class ModLoader {
     /**
      * Dynamically import the Block base class.
      */
+    async _getCommandBaseClass() {
+        if (!this._commandBaseClass) {
+            const mod = await import('./command/Command.js');
+            this._commandBaseClass = mod.default;
+        }
+        return this._commandBaseClass;
+    }
+
     async _getBlockClass() {
         if (this._blockBaseClass) return this._blockBaseClass;
         if (window.__ModBlockClass__) {
@@ -1389,7 +1708,7 @@ export default class ModLoader {
     /**
      * Dynamically import item base classes for mod sandboxing.
      */
-    async _getItemClasses() {
+    async _getItemClasses(modId = null) {
         const BlockClass = await this._getBlockClass();
         const BoundingBoxClass = await this._getBoundingBox();
         const EnumCreativeInventoryTabClass = await this._getEnumCreativeInventoryTab();
@@ -1409,7 +1728,9 @@ export default class ModLoader {
                 EnumCreativeInventoryTab: EnumCreativeInventoryTabClass,
                 THREE,
                 Sound,
-                AuthLib
+                AuthLib,
+                Command: modId ? await this._getCommandBaseClass() : undefined,
+                ModAPI: modId ? this._getModApi(modId) : undefined
             };
         } catch (e) {
             console.error('[Patchwork] Could not import Item classes:', e);
