@@ -190,4 +190,925 @@ if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) && navigator.ma
 <!--TODO: remove this-->
 <div id="taskbar"></div>
 
+<script>
+    /**
+ * Controller (DualShock 4 / DualSense / Xbox 360 / Switch Pro) Mouse & Keyboard Browser Polyfill
+ * 
+* Features:
+ * - Creates a fixed overlay canvas for a smooth visual mouse cursor.
+ * - Reads window.GAMESTATE to know what the game is doing and switches the
+ *   whole mapping between "in game" and "in a menu".
+ *
+ *   In game : X = jump, left stick = move, right stick = look,
+ *             Square = inventory (closes it again), Circle = pause,
+ *             L3 = shift (sneak), L2 = place, R2 = break,
+ *             L1/R1 = prev/next hotbar slot.
+ *   Menus  : X = left click, Square = right click, Triangle = on-screen
+ *             keyboard, Circle = escape, left stick = mouse, triggers scroll.
+ *
+ * - Dispatches real-like DOM events (mousemove, mousedown, mouseup, click, keydown, keyup).
+ */
+(function () {
+  'use strict';
+
+  // --- Configuration & Settings ---
+  const config = {
+    cursorSpeed: 12,           // Speed multiplier for cursor/look movement
+    deadzone: 0.15,            // Analog stick deadzone to prevent drift
+    triggerThreshold: 0.5,    // Analog trigger value counted as pressed
+    scrollRepeatMs: 150,      // Repeat delay while a trigger is held (menus)
+    cursorSize: 18,            // Size of the visual cursor SVG/pointer
+    cursorColor: '#10b981'     // Cursor highlight color
+  };
+
+  // --- State Variables ---
+  let cursorX = window.innerWidth / 2;
+  let cursorY = window.innerHeight / 2;
+  let canvas, ctx;
+  let hoveredElement = null;
+  const activeKeys = new Set();
+  const previousButtonStates = {};
+
+  // --- Game state (window.GAMESTATE, published every frame by Minecraft.js) ---
+  let lookMode = false;
+
+  // Movement/sneak keys currently held down by the gamepad.
+  const heldGameKeys = new Set();
+
+  // Mouse buttons currently held down by the gamepad (triggers in game).
+  const heldMouseButtons = new Map();
+
+  // Square is the inventory button, so it closes the container when open.
+  let squareClosedScreen = false;
+  const CONTAINER_SCREENS = [
+    'GuiPlayerInventory',
+    'GuiContainerCreative',
+    'GuiContainerChest',
+    'GuiContainerFurnace',
+    'GuiContainerCraftingTable'
+  ];
+
+  function isContainerScreen() {
+    const screen = window.app && window.app.currentScreen;
+    return !!screen && CONTAINER_SCREENS.indexOf(screen.constructor.name) !== -1;
+  }
+
+  // TV mode moves with the arrow keys, desktop mode with WASD.
+  function movementKeys() {
+    const tvmode = !!(window.app && window.app.settings && window.app.settings.tvmode);
+    return tvmode
+      ? {
+        forward: { key: 'ArrowUp', code: 'ArrowUp' },
+        back: { key: 'ArrowDown', code: 'ArrowDown' },
+        left: { key: 'ArrowLeft', code: 'ArrowLeft' },
+        right: { key: 'ArrowRight', code: 'ArrowRight' }
+      }
+      : {
+        forward: { key: 'w', code: 'KeyW' },
+        back: { key: 's', code: 'KeyS' },
+        left: { key: 'a', code: 'KeyA' },
+        right: { key: 'd', code: 'KeyD' }
+      };
+  }
+
+  // L3 = shift, which the game binds to sneaking (default ShiftLeft).
+  function crouchMapping() {
+    const app = window.app;
+    const code = (app && app.settings && app.settings.keyCrouching) || 'ShiftLeft';
+    return { code, key: code.replace(/Left$|Right$/, '') };
+  }
+
+  // Hold/release a game key without spamming keydown/keyup every frame.
+  function setGameKey(mapping, held) {
+    if (held) {
+      if (!heldGameKeys.has(mapping.code)) {
+        heldGameKeys.add(mapping.code);
+        dispatchKeyEvent('keydown', mapping);
+      }
+    } else if (heldGameKeys.has(mapping.code)) {
+      heldGameKeys.delete(mapping.code);
+      dispatchKeyEvent('keyup', mapping);
+    }
+  }
+
+  function releaseGameKeys() {
+    for (const code of Array.from(heldGameKeys)) {
+      heldGameKeys.delete(code);
+      dispatchKeyEvent('keyup', { code, key: code.replace(/^(Key|Digit|Arrow)/, '') });
+    }
+  }
+
+  // Same as setGameKey but for buttons that must be held (place / break).
+  function setMouseButton(button, held, x, y) {
+    if (held) {
+      if (!heldMouseButtons.has(button)) {
+        heldMouseButtons.set(button, { x, y });
+        dispatchMouseEvent('mousedown', button, x, y);
+      }
+    } else if (heldMouseButtons.has(button)) {
+      const pos = heldMouseButtons.get(button);
+      heldMouseButtons.delete(button);
+      dispatchMouseEvent('mouseup', button, pos.x, pos.y);
+    }
+  }
+
+  // Press/release a mouse button for a single tap (menus).
+  function tapMouseButton(button, pressed, x, y) {
+    if (pressed) {
+      dispatchMouseEvent('mousedown', button, x, y);
+    } else {
+      dispatchMouseEvent('mouseup', button, x, y);
+      dispatchMouseEvent(button === 2 ? 'contextmenu' : 'click', button, x, y);
+    }
+  }
+
+  function releaseMouseButtons() {
+    for (const [button, pos] of heldMouseButtons) {
+      dispatchMouseEvent('mouseup', button, pos.x, pos.y);
+    }
+    heldMouseButtons.clear();
+  }
+
+  // Let go of everything when the game switches between playing and a menu.
+  function releaseHeldInputs() {
+    releaseGameKeys();
+    releaseMouseButtons();
+  }
+
+  // Fire once on press, then repeat while held (menu list scrolling).
+  const repeatTimers = new Map();
+  function repeatAction(key, active, action, intervalMs) {
+    let timer = repeatTimers.get(key);
+    if (!active) {
+      if (timer) {
+        clearInterval(timer);
+        repeatTimers.delete(key);
+      }
+      return;
+    }
+    if (timer) return;
+    action();
+    timer = setInterval(action, intervalMs);
+    repeatTimers.set(key, timer);
+  }
+
+  // --- Virtual keyboard (Triangle in menus) ---
+  // A real on-screen keyboard: a small DOM panel whose buttons are also hit by
+  // the polyfill's own cursor, so it works with a gamepad on any platform (no
+  // platform/mobile keyboard needed). Keys are fed straight into the focused
+  // text widget through its own keyTyped().
+  const VK_LAYOUT = [
+    ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
+    ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
+    ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'],
+    [{ label: 'Shift', wide: true, action: 'shift' },
+     'z', 'x', 'c', 'v', 'b', 'n', 'm',
+     { label: '\u232b', wide: true, action: 'back' }],
+    [{ label: '\u2190', action: 'left' },
+     { label: '\u2192', action: 'right' },
+     { label: 'space', wide: true, action: 'space' },
+     { label: '\u23ce', action: 'enter' },
+     { label: '?123', action: 'layout' },
+     { label: '\u2715', action: 'close' }]
+  ];
+
+  // Symbols live on their own page, toggled with ?123 / ABC.
+  const VK_SYMBOL_LAYOUT = [
+    ['.', ',', ';', ':', '?', '!'],
+    ['-', '+', '_', '=', '*', '/', '\\', '|'],
+    ['(', ')', '[', ']', '{', '}', '<', '>'],
+    ['@', '#', '$', '%', '^', '&', '~', '`'],
+    [{ label: 'ABC', wide: true, action: 'layout' },
+     { label: '\u232b', wide: true, action: 'back' },
+     { label: '\u2190', action: 'left' },
+     { label: '\u2192', action: 'right' },
+     { label: 'space', wide: true, action: 'space' },
+     { label: '\u23ce', action: 'enter' },
+     { label: '\u2715', action: 'close' }]
+  ];
+
+  let vkRoot = null;
+  let vkBody = null;
+  let vkWidget = null;
+  let vkShift = false;
+  let vkSymbols = false;
+  let vkScreen = null;
+
+  function focusedTextWidget() {
+    const screen = window.app && window.app.currentScreen;
+    if (!screen) return null;
+
+    const isTextWidget = w => w && typeof w.setText === 'function' && typeof w.getText === 'function'
+      && typeof w.keyTyped === 'function';
+
+    if (screen.buttonList) {
+      for (const button of screen.buttonList) {
+        if (isTextWidget(button) && button.isFocused === true) {
+          return button;
+        }
+      }
+    }
+
+    // Chat and friends expose their field directly, even when unfocused
+    return isTextWidget(screen.inputField) ? screen.inputField : null;
+  }
+
+  function vkKeyStyle() {
+    return 'flex:1 1 0;background:#2f2f33;color:#fff;border:1px solid #55565c;border-radius:5px;' +
+      'font-family:inherit;font-size:15px;line-height:1;height:30px;' +
+      'text-align:center;min-width:30px;cursor:pointer;user-select:none;touch-action:none;';
+  }
+
+  function vkPressKey(character, code) {
+    if (vkWidget === null) return;
+
+    // Text fields insert on a single character and only inspect the code for
+    // Backspace / arrows / ctrl combos, so send exactly what a keyboard sends.
+    vkWidget.keyTyped(code || character, character);
+    vkShift = false;
+    updateVirtualKeyboardLabels();
+  }
+
+  function vkPressAction(action) {
+    switch (action) {
+      case 'shift':
+        vkShift = !vkShift;
+        updateVirtualKeyboardLabels();
+        break;
+      case 'layout':
+        vkSymbols = !vkSymbols;
+        vkShift = false;
+        renderVirtualKeyboard();
+        break;
+      case 'back':
+        vkPressKey('Backspace', 'Backspace');
+        break;
+      case 'left':
+        vkPressKey('ArrowLeft', 'ArrowLeft');
+        break;
+      case 'right':
+        vkPressKey('ArrowRight', 'ArrowRight');
+        break;
+      case 'space':
+        vkPressKey(' ', 'Space');
+        break;
+      case 'enter':
+        // Send it as a real Enter so the game routes it exactly like a
+        // keyboard (chat sends the message, fields confirm, ...).
+        dispatchKeyEvent('keydown', ENTER_KEY);
+        dispatchKeyEvent('keyup', ENTER_KEY);
+        closeVirtualKeyboard();
+        break;
+      case 'close':
+        closeVirtualKeyboard();
+        break;
+    }
+  }
+
+  function updateVirtualKeyboardLabels() {
+    if (!vkRoot) return;
+
+    const shiftBtn = vkRoot.querySelector('.vk-shift');
+    if (shiftBtn) {
+      shiftBtn.textContent = vkShift ? 'SHIFT' : 'Shift';
+      shiftBtn.style.background = vkShift ? config.cursorColor : '#2f2f33';
+      shiftBtn.style.color = vkShift ? '#06281c' : '#fff';
+    }
+
+    for (const btn of vkRoot.querySelectorAll('[data-char]')) {
+      const c = btn.getAttribute('data-char');
+      btn.textContent = vkShift ? c.toUpperCase() : c;
+    }
+  }
+
+  // Draggable floating window, position remembered between openings.
+  let vkDrag = null;
+
+  function startKeyboardDrag(event) {
+    if (vkDrag) return;
+
+    const rect = vkRoot.getBoundingClientRect();
+    vkDrag = { startX: event.clientX, startY: event.clientY, left: rect.left, top: rect.top };
+
+    // Capture phase: the panel stops bubbling mouse events so they never reach
+    // the game, which means the drag has to listen before that happens.
+    window.addEventListener('mousemove', onKeyboardDragMove, true);
+    window.addEventListener('mouseup', endKeyboardDrag, true);
+  }
+
+  function onKeyboardDragMove(event) {
+    if (!vkDrag || !vkRoot) return;
+
+    const width = vkRoot.offsetWidth;
+    const height = vkRoot.offsetHeight;
+    const left = vkDrag.left + (event.clientX - vkDrag.startX);
+    const top = vkDrag.top + (event.clientY - vkDrag.startY);
+
+    vkRoot.style.left = Math.max(0, Math.min(window.innerWidth - width, left)) + 'px';
+    vkRoot.style.top = Math.max(0, Math.min(window.innerHeight - height, top)) + 'px';
+  }
+
+  function endKeyboardDrag() {
+    vkDrag = null;
+    window.removeEventListener('mousemove', onKeyboardDragMove, true);
+    window.removeEventListener('mouseup', endKeyboardDrag, true);
+
+    if (vkRoot) {
+      try {
+        localStorage.setItem('ps4_vk_pos', vkRoot.style.left + '|' + vkRoot.style.top);
+      } catch (e) { /* storage unavailable */ }
+    }
+  }
+
+  function placeVirtualKeyboard() {
+    if (!vkRoot) return;
+
+    const width = vkRoot.offsetWidth;
+    const height = vkRoot.offsetHeight;
+
+    let left = null;
+    let top = null;
+    try {
+      const saved = localStorage.getItem('ps4_vk_pos');
+      if (saved) {
+        const parts = saved.split('|');
+        left = parseFloat(parts[0]);
+        top = parseFloat(parts[1]);
+      }
+    } catch (e) { /* storage unavailable */ }
+
+    if (left === null || top === null || isNaN(left) || isNaN(top)) {
+      left = (window.innerWidth - width) / 2;
+      top = window.innerHeight - height - 8;
+    }
+
+    // Keep it fully on screen after a resize
+    vkRoot.style.left = Math.max(0, Math.min(window.innerWidth - width, left)) + 'px';
+    vkRoot.style.top = Math.max(0, Math.min(window.innerHeight - height, top)) + 'px';
+  }
+
+  function buildVirtualKeyboard() {
+    if (vkRoot) return vkRoot;
+
+    vkRoot = document.createElement('div');
+    vkRoot.id = 'ps4-virtual-keyboard';
+    vkRoot.style.cssText = 'position:fixed;display:none;flex-direction:column;z-index:999998;' +
+      'background:rgba(12,12,14,0.94);border:1px solid #3a3b40;border-radius:10px;' +
+      'box-shadow:0 8px 30px rgba(0,0,0,0.6);width:420px;max-width:92vw;';
+
+    // Keys handle their own clicks; keep them from reaching the game screen
+    // (it listens on document and would otherwise click widgets behind us).
+    for (const type of ['mousedown', 'mouseup', 'click', 'dblclick', 'contextmenu', 'wheel', 'touchstart']) {
+      vkRoot.addEventListener(type, event => event.stopPropagation());
+    }
+
+    // Title bar doubles as the drag handle
+    const title = document.createElement('div');
+    title.style.cssText = 'display:flex;align-items:center;justify-content:space-between;' +
+      'padding:5px 8px;background:#22232a;border-bottom:1px solid #3a3b40;' +
+      'border-radius:9px 9px 0 0;cursor:move;user-select:none;touch-action:none;';
+    title.addEventListener('mousedown', startKeyboardDrag);
+
+    const label = document.createElement('span');
+    label.textContent = 'Keyboard';
+    label.style.cssText = 'color:#c9cbd1;font-size:13px;';
+
+    const close = document.createElement('div');
+    close.textContent = '\u2715';
+    close.style.cssText = 'color:#c9cbd1;font-size:13px;padding:0 6px;cursor:pointer;';
+    close.addEventListener('click', () => closeVirtualKeyboard());
+
+    title.appendChild(label);
+    title.appendChild(close);
+
+    vkBody = document.createElement('div');
+    vkBody.style.cssText = 'display:flex;flex-direction:column;gap:4px;padding:6px;';
+
+    vkRoot.appendChild(title);
+    vkRoot.appendChild(vkBody);
+    document.body.appendChild(vkRoot);
+    renderVirtualKeyboard();
+    return vkRoot;
+  }
+
+  // (Re)build the key rows for the current page (letters or symbols).
+  function renderVirtualKeyboard() {
+    if (!vkBody) return;
+
+    vkBody.textContent = '';
+
+    for (const row of (vkSymbols ? VK_SYMBOL_LAYOUT : VK_LAYOUT)) {
+      const rowEl = document.createElement('div');
+      rowEl.style.cssText = 'display:flex;gap:4px;width:100%;';
+
+      for (const entry of row) {
+        const btn = document.createElement('div');
+        btn.style.cssText = vkKeyStyle();
+
+        if (typeof entry === 'string') {
+          btn.setAttribute('data-char', entry);
+          btn.textContent = entry;
+          btn.addEventListener('click', () => {
+            const c = btn.getAttribute('data-char');
+            const out = vkShift ? c.toUpperCase() : c;
+            if (/^[a-z0-9]$/.test(c)) {
+              vkPressKey(out, (/^[0-9]$/.test(c) ? 'Digit' : 'Key') + out.toUpperCase());
+            } else {
+              // Symbols are plain characters; the widget only reads the char.
+              vkPressKey(out, out);
+            }
+          });
+        } else {
+          if (entry.wide) btn.style.flex = '2 1 0';
+          if (entry.action === 'shift') btn.className = 'vk-shift';
+          btn.textContent = entry.label;
+          btn.addEventListener('click', () => vkPressAction(entry.action));
+        }
+
+        rowEl.appendChild(btn);
+      }
+
+      vkBody.appendChild(rowEl);
+    }
+
+    updateVirtualKeyboardLabels();
+  }
+
+  function openVirtualKeyboard() {
+    const app = window.app;
+    const widget = focusedTextWidget();
+    if (!app || !widget) return;
+
+    vkWidget = widget;
+    vkScreen = app.currentScreen;
+    vkShift = false;
+
+    // Keep the field focused while the panel is up: the game would otherwise
+    // drop focus as soon as the cursor moves onto the keyboard.
+    widget.isFocused = true;
+    if (typeof widget.enableS === 'boolean') widget.enableS = false;
+
+    buildVirtualKeyboard().style.display = 'flex';
+    placeVirtualKeyboard();
+    updateVirtualKeyboardLabels();
+  }
+
+  function closeVirtualKeyboard() {
+    endKeyboardDrag();
+
+    if (!vkRoot) {
+      vkWidget = null;
+      return;
+    }
+
+    vkRoot.style.display = 'none';
+
+    const widget = vkWidget;
+    if (widget) {
+      if (typeof widget.enableS === 'boolean') widget.enableS = true;
+      widget.isFocused = false;
+    }
+
+    vkWidget = null;
+    vkScreen = null;
+  }
+
+  // Close the panel when the screen it was opened for is gone.
+  function syncVirtualKeyboard() {
+    if (!vkWidget) return;
+
+    const screen = window.app && window.app.currentScreen;
+    if (screen !== vkScreen || focusedTextWidget() === null) {
+      closeVirtualKeyboard();
+    }
+  }
+
+  function gameState() {
+    return window.GAMESTATE || null;
+  }
+
+  // True when the player is actually driving the camera: in game, no screen
+  // open and the game considers itself focused (pointer lock, or TV mode).
+  function isLookMode() {
+    const gs = gameState();
+    if (!gs) return false;
+    return gs.inGame === true && gs.guiOpen === false && gs.hasFocus === true;
+  }
+
+  // --- PS4 Standard Gamepad Button Index Mapping ---
+  const PS4_BUTTONS = {
+    CROSS: 0,          // X
+    CIRCLE: 1,         // O
+    SQUARE: 2,         // Square
+    TRIANGLE: 3,       // Triangle
+    L1: 4,             // Left shoulder
+    R1: 5,             // Right shoulder
+    L2: 6,             // Left analog trigger
+    R2: 7,             // Right analog trigger
+    SHARE: 8,          // Share / Create
+    OPTIONS: 9,        // Options
+    L3: 10,            // Left Stick Click
+    R3: 11,            // Right Stick Click
+    DPAD_UP: 12,       // Arrow Up
+    DPAD_DOWN: 13,     // Arrow Down
+    DPAD_LEFT: 14,     // Arrow Left
+    DPAD_RIGHT: 15,    // Arrow Right
+    PS_BUTTON: 16      // Meta / Home key
+  };
+
+  // Buttons that behave the same everywhere. The rest (X, Square, Circle,
+  // Triangle, L1, R1) are mode dependent and handled in onButtonDown/Up:
+  //   menus : X=left click, Square=right click, Triangle=virtual keyboard,
+  //           Circle=escape, left stick=mouse
+  //   in game: X=jump, Square=inventory, Triangle=unused, Circle=escape,
+  //           left stick=move, right stick=look, L3=shift(sneak),
+  //           L2=place, R2=break, L1/R1=prev/next hotbar slot
+  const BUTTON_KEY_MAP = {
+    [PS4_BUTTONS.OPTIONS]: { key: 'Enter', code: 'Enter' },
+    [PS4_BUTTONS.SHARE]: { key: 'Backspace', code: 'Backspace' },
+    [PS4_BUTTONS.DPAD_UP]: { key: 'ArrowUp', code: 'ArrowUp' },
+    [PS4_BUTTONS.DPAD_DOWN]: { key: 'ArrowDown', code: 'ArrowDown' },
+    [PS4_BUTTONS.DPAD_LEFT]: { key: 'ArrowLeft', code: 'ArrowLeft' },
+    [PS4_BUTTONS.DPAD_RIGHT]: { key: 'ArrowRight', code: 'ArrowRight' }
+  };
+
+  const ESCAPE_KEY = { key: 'Escape', code: 'Escape' };
+  const ENTER_KEY = { key: 'Enter', code: 'Enter' };
+  const JUMP_KEY = { key: ' ', code: 'Space' };
+
+  function inventoryKey() {
+    const app = window.app;
+    const code = (app && app.settings && app.settings.keyOpenInventory) || 'KeyE';
+    return { code, key: code.replace(/^Key/, '') };
+  }
+
+  function chatKey() {
+    const app = window.app;
+    const code = (app && app.settings && app.settings.keyOpenChat) || 'KeyT';
+    return { code, key: code.replace(/^Key/, '') };
+  }
+
+  // Cycle the selected hotbar slot through the game itself.
+  function switchItem(delta) {
+    const app = window.app;
+    if (app && typeof app.onMouseScroll === 'function') {
+      app.onMouseScroll(delta);
+    }
+  }
+
+  // --- Setup Visual Overlay ---
+  function initOverlay() {
+    canvas = document.createElement('canvas');
+    canvas.id = 'ps4-mouse-polyfill-overlay';
+    canvas.style.position = 'fixed';
+    canvas.style.top = '0';
+    canvas.style.left = '0';
+    canvas.style.width = '100vw';
+    canvas.style.height = '100vh';
+    canvas.style.pointerEvents = 'none';
+    canvas.style.zIndex = '999999';
+    
+    ctx = canvas.getContext('2d');
+    document.body.appendChild(canvas);
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+  }
+
+  function resizeCanvas() {
+    if (!canvas) return;
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+
+  // Draw the custom mouse pointer (hidden while looking around in game)
+  function renderCursor() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (lookMode) return;
+
+    ctx.save();
+    ctx.translate(cursorX, cursorY);
+
+    // Draw Arrow Cursor
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(0, config.cursorSize);
+    ctx.lineTo(config.cursorSize * 0.4, config.cursorSize * 0.7);
+    ctx.lineTo(config.cursorSize * 0.7, config.cursorSize * 0.7);
+    ctx.closePath();
+
+    ctx.fillStyle = config.cursorColor;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#ffffff';
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // Apply deadzone processing to analog stick values (-1.0 to 1.0)
+  function applyDeadzone(value) {
+    if (Math.abs(value) < config.deadzone) return 0;
+    const sign = Math.sign(value);
+    return sign * ((Math.abs(value) - config.deadzone) / (1 - config.deadzone));
+  }
+
+  // --- Synthetic DOM Event Dispatchers ---
+  function dispatchMouseEvent(type, buttonNumber = 0, posX = cursorX, posY = cursorY) {
+    const targetElement = document.elementFromPoint(posX, posY) || document.body;
+
+    // Handle hover enter/leave state
+    if (type === 'mousemove') {
+      if (hoveredElement !== targetElement) {
+        if (hoveredElement) {
+          hoveredElement.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false, clientX: posX, clientY: posY }));
+          hoveredElement.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, clientX: posX, clientY: posY }));
+        }
+        targetElement.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false, clientX: posX, clientY: posY }));
+        targetElement.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: posX, clientY: posY }));
+        hoveredElement = targetElement;
+      }
+    }
+
+    const mouseEvt = new MouseEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      clientX: posX,
+      clientY: posY,
+      screenX: posX,
+      screenY: posY,
+      button: buttonNumber,
+      buttons: type === 'mousedown' ? (buttonNumber === 0 ? 1 : buttonNumber === 2 ? 2 : 4) : 0
+    });
+
+    targetElement.dispatchEvent(mouseEvt);
+
+    // Focus form elements on click
+    if (type === 'click' && (targetElement.tagName === 'INPUT' || targetElement.tagName === 'TEXTAREA')) {
+      targetElement.focus();
+    }
+  }
+
+  // In-game look: synthetic mousemove events always carry movementX/movementY of
+  // 0, so the camera never turned. Feed the game's own motion accumulator
+  // instead - exactly what a real mouse does inside GameWindow.
+  function dispatchLook(deltaX, deltaY) {
+    const gw = window.app && window.app.window;
+    if (gw) {
+      gw.mouseMotionX += deltaX;
+      gw.mouseMotionY += -deltaY;
+    }
+  }
+
+  // The game ignores world clicks (place / break / mine) until it considers
+  // itself locked, which never happens on a TV because no pointer is ever
+  // locked. Nudge it into the locked state ourselves.
+  function requestGameFocus() {
+    const gs = gameState();
+    const gw = window.app && window.app.window;
+    if (!gs || !lookMode || gs.focusLocked || !gw || !gw.focusState) return;
+
+    const focusStateType = gw.focusState.constructor;
+    const locked = typeof focusStateType.getById === 'function' ? focusStateType.getById(3) : null;
+    if (locked && typeof gw.updateFocusState === 'function') {
+      gw.updateFocusState(locked);
+    }
+  }
+
+  function dispatchKeyEvent(type, mapping) {
+    const activeElement = document.activeElement || document.body;
+    const keyEvt = new KeyboardEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      key: mapping.key,
+      code: mapping.code,
+      view: window
+    });
+
+    activeElement.dispatchEvent(keyEvt);
+  }
+
+  function dispatchScrollEvent(deltaY) {
+    const targetElement = document.elementFromPoint(cursorX, cursorY) || document.body;
+    targetElement.scrollBy({ top: deltaY, behavior: 'smooth' });
+  }
+
+  // --- Mode dependent button handling ---
+  function onButtonDown(index) {
+    const x = lookMode ? window.innerWidth / 2 : cursorX;
+    const y = lookMode ? window.innerHeight / 2 : cursorY;
+
+    if (lookMode) {
+      // --- In game ---
+      switch (index) {
+        case PS4_BUTTONS.SQUARE: dispatchKeyEvent('keydown', inventoryKey()); break;  // Inventory
+        case PS4_BUTTONS.CIRCLE: dispatchKeyEvent('keydown', ESCAPE_KEY); break;     // Pause menu
+        case PS4_BUTTONS.L1: switchItem(-1); break;                                  // Prev item
+        case PS4_BUTTONS.R1: switchItem(1); break;                                   // Next item
+        case PS4_BUTTONS.DPAD_RIGHT: dispatchKeyEvent('keydown', chatKey()); break;  // Open chat
+        default:
+          // X (jump), L3 (sneak) and L2/R2 (place/break) are analog holds
+          if (BUTTON_KEY_MAP[index]) dispatchKeyEvent('keydown', BUTTON_KEY_MAP[index]);
+      }
+      return;
+    }
+
+    // --- Menus ---
+    switch (index) {
+      case PS4_BUTTONS.CROSS: tapMouseButton(0, true, x, y); break;        // Left click
+      case PS4_BUTTONS.L3: tapMouseButton(0, true, x, y); break;            // Left click
+      case PS4_BUTTONS.R3: tapMouseButton(2, true, x, y); break;            // Right click
+      case PS4_BUTTONS.TRIANGLE: openVirtualKeyboard(); break;             // Virtual keyboard
+      case PS4_BUTTONS.CIRCLE: dispatchKeyEvent('keydown', ESCAPE_KEY); break;
+      case PS4_BUTTONS.SQUARE:
+        // Square is the inventory button: close the container instead of right clicking
+        if (isContainerScreen()) {
+          squareClosedScreen = true;
+          dispatchKeyEvent('keydown', ESCAPE_KEY);
+        } else {
+          squareClosedScreen = false;
+          tapMouseButton(2, true, x, y);
+        }
+        break;
+      default:
+        if (BUTTON_KEY_MAP[index]) dispatchKeyEvent('keydown', BUTTON_KEY_MAP[index]);
+    }
+  }
+
+  function onButtonUp(index) {
+    const x = lookMode ? window.innerWidth / 2 : cursorX;
+    const y = lookMode ? window.innerHeight / 2 : cursorY;
+
+    if (lookMode) {
+      if (index === PS4_BUTTONS.SQUARE) {
+        dispatchKeyEvent('keyup', inventoryKey());
+      } else if (index === PS4_BUTTONS.CIRCLE) {
+        dispatchKeyEvent('keyup', ESCAPE_KEY);
+      } else if (index === PS4_BUTTONS.DPAD_RIGHT) {
+        dispatchKeyEvent('keyup', chatKey());
+      } else if (BUTTON_KEY_MAP[index]) {
+        dispatchKeyEvent('keyup', BUTTON_KEY_MAP[index]);
+      }
+      return;
+    }
+
+    if (index === PS4_BUTTONS.CIRCLE) {
+      dispatchKeyEvent('keyup', ESCAPE_KEY);
+      closeVirtualKeyboard();
+    } else if (index === PS4_BUTTONS.SQUARE && squareClosedScreen) {
+      squareClosedScreen = false;
+      dispatchKeyEvent('keyup', ESCAPE_KEY);
+    } else if (index === PS4_BUTTONS.CROSS || index === PS4_BUTTONS.L3) {
+      tapMouseButton(0, false, x, y);
+    } else if (index === PS4_BUTTONS.SQUARE || index === PS4_BUTTONS.R3) {
+      tapMouseButton(2, false, x, y);
+    } else if (BUTTON_KEY_MAP[index]) {
+      dispatchKeyEvent('keyup', BUTTON_KEY_MAP[index]);
+    }
+  }
+
+  // --- Controller detection ---
+  // The button layout below is identical on every pad we support, they only
+  // differ in the name they report:
+  //   DualShock 4 / DualSense : X O / Square Triangle / L1 R1 / L2 R2 / L3 R3
+  //   Xbox 360                 : A B / X Y     / LB RB / LT RT / L3 R3
+  //   Switch Pro               : A B / X Y     / L R  / ZL ZR / L3 R3
+  // Buttons 0-3 are the four face buttons, 4/5 the shoulders, 6/7 the
+  // triggers, 8/9 back+start and 10/11 the stick clicks - so the indices in
+  // PS4_BUTTONS below are used as-is for all of them.
+  const GAMEPAD_IDS = [
+    'wireless controller',  // DualShock 4 / DualSense
+    'dualshock',
+    'dualsense',
+    'playstation',
+    'ps4 controller',
+    'ps5 controller',
+    'xbox 360',
+    'xbox one',
+    'xbox series',
+    'xbox wireless',
+    'xbox',                 // Generic "Xbox Controller" / "X-Box 360 pad"
+    'pro controller',       // Switch Pro
+    'nintendo switch',
+    'joy-con'
+  ];
+
+  function findGamepad() {
+    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+
+    for (const gp of gamepads) {
+      if (!gp || !gp.id) continue;
+
+      const id = gp.id.toLowerCase();
+      for (const name of GAMEPAD_IDS) {
+        if (id.includes(name)) return gp;
+      }
+
+      // Anything else that exposes the standard mapping has the same layout
+      if (gp.mapping === 'standard') return gp;
+    }
+
+    return null;
+  }
+
+  // --- Main Gamepad Loop ---
+  function pollGamepad() {
+    const gamepad = findGamepad();
+
+    if (gamepad) {
+      // Follow the game: gamepad drives the player in game, the cursor in menus
+      const look = isLookMode();
+      if (look !== lookMode) {
+        lookMode = look;
+        releaseHeldInputs();
+      }
+
+      requestGameFocus();
+
+      const leftX = applyDeadzone(gamepad.axes[0]);
+      const leftY = applyDeadzone(gamepad.axes[1]);
+      const rightX = applyDeadzone(gamepad.axes[2]);
+      const rightY = applyDeadzone(gamepad.axes[3]);
+
+      const held = index => {
+        const b = gamepad.buttons[index];
+        return !!(b && (b.pressed || b.value > config.triggerThreshold));
+      };
+
+      if (lookMode) {
+        const clickX = window.innerWidth / 2;
+        const clickY = window.innerHeight / 2;
+
+        // 1. X = jump (hold)
+        setGameKey(JUMP_KEY, held(PS4_BUTTONS.CROSS));
+
+        // 2. Left stick = walk, L3 = shift (sneak)
+        const keys = movementKeys();
+        setGameKey(keys.forward, leftY < -config.deadzone);
+        setGameKey(keys.back, leftY > config.deadzone);
+        setGameKey(keys.left, leftX < -config.deadzone);
+        setGameKey(keys.right, leftX > config.deadzone);
+        setGameKey(crouchMapping(), held(PS4_BUTTONS.L3));
+
+        // 3. Right stick = look around
+        if (rightX !== 0 || rightY !== 0) {
+          dispatchLook(rightX * config.cursorSpeed, rightY * config.cursorSpeed);
+        }
+
+        // 4. L2 = place (right click), R2 = break (left click)
+        setMouseButton(2, held(PS4_BUTTONS.L2), clickX, clickY);
+        setMouseButton(0, held(PS4_BUTTONS.R2), clickX, clickY);
+      } else {
+        // 1. Left stick = mouse cursor
+        if (leftX !== 0 || leftY !== 0) {
+          cursorX = Math.min(Math.max(0, cursorX + leftX * config.cursorSpeed), window.innerWidth);
+          cursorY = Math.min(Math.max(0, cursorY + leftY * config.cursorSpeed), window.innerHeight);
+
+          dispatchMouseEvent('mousemove');
+        }
+
+        // 2. Triggers scroll long lists
+        repeatAction('l2', held(PS4_BUTTONS.L2), () => dispatchScrollEvent(-40), config.scrollRepeatMs);
+        repeatAction('r2', held(PS4_BUTTONS.R2), () => dispatchScrollEvent(40), config.scrollRepeatMs);
+
+        // 3. The virtual keyboard belongs to the screen it was opened from
+        syncVirtualKeyboard();
+      }
+
+      // 3. Process Buttons (Clicks & Key Presses)
+      gamepad.buttons.forEach((button, index) => {
+        const isPressed = button.pressed;
+        const wasPressed = previousButtonStates[index] || false;
+
+        if (isPressed && !wasPressed) {
+          onButtonDown(index);
+        } else if (!isPressed && wasPressed) {
+          onButtonUp(index);
+        }
+
+        previousButtonStates[index] = isPressed;
+      });
+
+      renderCursor();
+    }
+
+    requestAnimationFrame(pollGamepad);
+  }
+
+  // Initialization Hook
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      initOverlay();
+      requestAnimationFrame(pollGamepad);
+    });
+  } else {
+    initOverlay();
+    requestAnimationFrame(pollGamepad);
+  }
+
+})();
+</script>
+
 </html>

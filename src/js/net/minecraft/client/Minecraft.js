@@ -143,6 +143,9 @@ export default class Minecraft {
         // Expose Block class globally for mod sandboxing
         window.__ModBlockClass__ = Block;
 
+        // Expose live game state on window for external tooling/remote support
+        this.initGameState();
+
         // Mixin: allow mods to register custom blocks
         this.registerBlockClass = (id, name, blockClass) => {
             return BlockRegistry.registerBlockClass(id, name, blockClass);
@@ -1019,6 +1022,92 @@ export default class Minecraft {
         return this.world !== null && this.worldRenderer !== null && this.player !== null;
     }
 
+    /**
+     * Publishes window.GAMESTATE: a single JSON-safe object describing what the
+     * game is currently doing, kept up to date once per frame by
+     * updateGameState(). Remote support / controller polyfills poll it to know
+     * whether they should drive a relative mouse (camera look) or an absolute
+     * on-screen cursor (menus).
+     */
+    initGameState() {
+        this.gameState = {
+            // boot | menu | loading | gui | ingame | paused
+            state: "boot",
+            inGame: false,
+            guiOpen: false,
+            screen: null,        // class name of the current screen, e.g. "GuiChat"
+            loading: false,
+            pointerLock: false,  // browser cursor is locked to the canvas
+            focusLocked: false, // game considers itself cursor-locked
+            hasFocus: false,    // player accepts mouse look / input
+            paused: false,
+            hudHidden: false,
+            world: null,
+            singleplayer: false,
+            tvmode: false,
+            mobile: false,
+            fps: 0,
+            maxFps: 0,
+            time: Date.now(),
+            player: { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, health: 0 }
+        };
+
+        // Live handle: always up to date, never stale.
+        this.gameState.snapshot = () => JSON.parse(JSON.stringify(this.gameState));
+
+        if (typeof window !== "undefined") {
+            window.GAMESTATE = this.gameState;
+        }
+    }
+
+    updateGameState() {
+        if (this.gameState === undefined) {
+            this.initGameState();
+        }
+
+        const gs = this.gameState;
+        const inGame = this.isInGame();
+        const screen = this.currentScreen;
+        const loading = this.loadingScreen !== null;
+        const guiOpen = screen !== null;
+        const paused = inGame && this.isPaused();
+
+        let state = "boot";
+        if (inGame) {
+            state = guiOpen ? "gui" : (paused ? "paused" : "ingame");
+        } else if (guiOpen) {
+            state = loading ? "loading" : "menu";
+        }
+
+        gs.state = state;
+        gs.inGame = inGame;
+        gs.guiOpen = guiOpen;
+        gs.screen = guiOpen ? screen.constructor.name : null;
+        gs.loading = loading;
+        gs.pointerLock = !!this.window.isCursorLockedToCanvas();
+        gs.focusLocked = !!this.window.isLocked();
+        gs.hasFocus = this.hasInGameFocus();
+        gs.paused = paused;
+        gs.hudHidden = GuiFunctions.isGuiHidden();
+        gs.world = this.currentWorldKey;
+        gs.singleplayer = inGame && this.isSingleplayer();
+        gs.tvmode = !!this.settings.tvmode;
+        gs.mobile = !!this.window.mobileDevice;
+        gs.fps = this.fps;
+        gs.maxFps = this.maxFps;
+        gs.time = Date.now();
+
+        if (inGame && this.player !== null) {
+            const p = gs.player;
+            p.x = this.player.x;
+            p.y = this.player.y;
+            p.z = this.player.z;
+            p.yaw = this.player.rotationYaw;
+            p.pitch = this.player.rotationPitch;
+            p.health = this.player.health;
+        }
+    }
+
     addMessageToChat(message) {
         this.ingameOverlay.chatOverlay.addMessage(message);
     }
@@ -1060,6 +1149,9 @@ export default class Minecraft {
             this.lastTime += 1000;
             this.frames = 0;
         }
+
+        // Publish window.GAMESTATE for external tooling (remote support)
+        this.updateGameState();
     }
 
     onRender(partialTicks) {
@@ -1173,6 +1265,9 @@ export default class Minecraft {
 
         // Update items
         this.itemRenderer.rebuildAllItems();
+
+        // Publish window.GAMESTATE immediately so listeners see the new screen
+        this.updateGameState();
     }
 
     onTick() {
