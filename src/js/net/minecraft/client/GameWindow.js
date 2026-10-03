@@ -17,6 +17,8 @@ export default class GameWindow {
 
         this.mouseMotionX = 0;
         this.mouseMotionY = 0;
+        this.remoteMotionX = 0;   // gamepad / TV remote look (own sensitivity)
+        this.remoteMotionY = 0;
 
         this.mouseInsideWindow = false;
         this.mouseButtons = [false, false, false];
@@ -1048,6 +1050,30 @@ export default class GameWindow {
     pullMouseMotionY() {
         let value = this.mouseMotionY;
         this.mouseMotionY = 0;
+        return value;
+    }
+
+    /**
+     * Look input from a remote (gamepad right stick, TV remote). It is kept
+     * apart from mouse motion on purpose: remotes get their own sensitivity
+     * (settings.remoteSensitivity) while a mouse keeps settings.sensitivity.
+     * Synthetic mouse events always report movementX/movementY of 0, so a
+     * remote has to feed this accumulator instead.
+     */
+    addRemoteMotion(deltaX, deltaY) {
+        this.remoteMotionX += deltaX;
+        this.remoteMotionY += -deltaY;
+    }
+
+    pullRemoteMotionX() {
+        let value = this.remoteMotionX;
+        this.remoteMotionX = 0;
+        return value;
+    }
+
+    pullRemoteMotionY() {
+        let value = this.remoteMotionY;
+        this.remoteMotionY = 0;
         return value;
     }
 

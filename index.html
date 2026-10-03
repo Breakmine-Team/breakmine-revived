@@ -719,13 +719,13 @@ if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) && navigator.ma
   // Buttons that behave the same everywhere. The rest (X, Square, Circle,
   // Triangle, L1, R1) are mode dependent and handled in onButtonDown/Up:
   //   menus : X=left click, Square=right click, Triangle=virtual keyboard,
-  //           Circle=escape, left stick=mouse
-  //   in game: X=jump, Square=inventory, Triangle=unused, Circle=escape,
-  //           left stick=move, right stick=look, L3=shift(sneak),
+  //           Share=back, left stick=mouse
+  //   in game: X=jump, Square=inventory, Triangle=unused, Options=pause menu,
+  //           Share=back, left stick=move, right stick=look, L3=shift(sneak),
   //           L2=place, R2=break, L1/R1=prev/next hotbar slot
+  // Circle is deliberately unmapped so it does nothing.
   const BUTTON_KEY_MAP = {
     [PS4_BUTTONS.OPTIONS]: { key: 'Enter', code: 'Enter' },
-    [PS4_BUTTONS.SHARE]: { key: 'Backspace', code: 'Backspace' },
     [PS4_BUTTONS.DPAD_UP]: { key: 'ArrowUp', code: 'ArrowUp' },
     [PS4_BUTTONS.DPAD_DOWN]: { key: 'ArrowDown', code: 'ArrowDown' },
     [PS4_BUTTONS.DPAD_LEFT]: { key: 'ArrowLeft', code: 'ArrowLeft' },
@@ -852,11 +852,15 @@ if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) && navigator.ma
   }
 
   // In-game look: synthetic mousemove events always carry movementX/movementY of
-  // 0, so the camera never turned. Feed the game's own motion accumulator
-  // instead - exactly what a real mouse does inside GameWindow.
+  // 0, so the camera never turned. Feed the game's own remote-look accumulator
+  // instead - GameWindow applies settings.remoteSensitivity to it, so remotes
+  // keep their own look speed instead of the mouse cursor's sensitivity.
   function dispatchLook(deltaX, deltaY) {
     const gw = window.app && window.app.window;
-    if (gw) {
+    if (!gw) return;
+    if (typeof gw.addRemoteMotion === 'function') {
+      gw.addRemoteMotion(deltaX, deltaY);
+    } else {
       gw.mouseMotionX += deltaX;
       gw.mouseMotionY += -deltaY;
     }
@@ -875,6 +879,23 @@ if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) && navigator.ma
     if (locked && typeof gw.updateFocusState === 'function') {
       gw.updateFocusState(locked);
     }
+  }
+
+  // Circle / Options open the in-game pause menu. GameWindow ignores key
+  // presses while it believes the mouse is outside the window, which is always
+  // the case on a TV, so mark the window as focused before sending Escape.
+  function dispatchPause() {
+    const gw = window.app && window.app.window;
+    if (gw) gw.mouseInsideWindow = true;
+    dispatchKeyEvent('keydown', ESCAPE_KEY);
+  }
+
+  // Share is the universal "back" button: with a screen open it returns to the
+  // previous screen, and in game (no screen) it falls through to the pause menu.
+  function dispatchBack() {
+    const gw = window.app && window.app.window;
+    if (gw) gw.mouseInsideWindow = true;
+    dispatchKeyEvent('keydown', ESCAPE_KEY);
   }
 
   function dispatchKeyEvent(type, mapping) {
@@ -902,9 +923,11 @@ if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) && navigator.ma
 
     if (lookMode) {
       // --- In game ---
+      // Circle is intentionally unmapped; Options opens the pause menu.
       switch (index) {
         case PS4_BUTTONS.SQUARE: dispatchKeyEvent('keydown', inventoryKey()); break;  // Inventory
-        case PS4_BUTTONS.CIRCLE: dispatchKeyEvent('keydown', ESCAPE_KEY); break;     // Pause menu
+        case PS4_BUTTONS.OPTIONS: dispatchPause(); break;                            // Pause menu (Options button)
+        case PS4_BUTTONS.SHARE: dispatchBack(); break;                               // Back to previous screen
         case PS4_BUTTONS.L1: switchItem(-1); break;                                  // Prev item
         case PS4_BUTTONS.R1: switchItem(1); break;                                   // Next item
         case PS4_BUTTONS.DPAD_RIGHT: dispatchKeyEvent('keydown', chatKey()); break;  // Open chat
@@ -921,7 +944,7 @@ if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) && navigator.ma
       case PS4_BUTTONS.L3: tapMouseButton(0, true, x, y); break;            // Left click
       case PS4_BUTTONS.R3: tapMouseButton(2, true, x, y); break;            // Right click
       case PS4_BUTTONS.TRIANGLE: openVirtualKeyboard(); break;             // Virtual keyboard
-      case PS4_BUTTONS.CIRCLE: dispatchKeyEvent('keydown', ESCAPE_KEY); break;
+      case PS4_BUTTONS.SHARE: dispatchBack(); break;                       // Back to previous screen
       case PS4_BUTTONS.SQUARE:
         // Square is the inventory button: close the container instead of right clicking
         if (isContainerScreen()) {
@@ -944,7 +967,7 @@ if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) && navigator.ma
     if (lookMode) {
       if (index === PS4_BUTTONS.SQUARE) {
         dispatchKeyEvent('keyup', inventoryKey());
-      } else if (index === PS4_BUTTONS.CIRCLE) {
+      } else if (index === PS4_BUTTONS.OPTIONS || index === PS4_BUTTONS.SHARE) {
         dispatchKeyEvent('keyup', ESCAPE_KEY);
       } else if (index === PS4_BUTTONS.DPAD_RIGHT) {
         dispatchKeyEvent('keyup', chatKey());
@@ -954,7 +977,7 @@ if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) && navigator.ma
       return;
     }
 
-    if (index === PS4_BUTTONS.CIRCLE) {
+    if (index === PS4_BUTTONS.SHARE) {
       dispatchKeyEvent('keyup', ESCAPE_KEY);
       closeVirtualKeyboard();
     } else if (index === PS4_BUTTONS.SQUARE && squareClosedScreen) {

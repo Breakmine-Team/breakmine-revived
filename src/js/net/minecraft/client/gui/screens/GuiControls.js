@@ -21,8 +21,8 @@ export default class GuiControls extends GuiScreen {
 
         let y = this.height / 2 - 50;
 
-        this.buttonList.push(new GuiSliderButton("Mouse Sensitivity", settings.sensitivity, 50, 150, this.width / 2 - 100, y - 24, 200, 20, value => {
-            settings.sensitivity = value;
+        this.buttonList.push(new GuiSliderButton("Mouse Sensitivity", settings.getMouseSensitivity(), 50, 150, this.width / 2 - 100, y - 24, 200, 20, value => {
+            settings.remoteSensitivity = value;
         }).setDisplayNameBuilder(function (name, value) {
             return name + ": " + value + "%";
         }));

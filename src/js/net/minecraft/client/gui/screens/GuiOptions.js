@@ -101,6 +101,14 @@ export default class GuiOptions extends GuiScreen {
                         settingKey: "showPreview",
                         type: "toggle",
                         tooltip: "Render a ghost of the placed block."
+                    },
+                    {
+                        name: "Controller Sensitivity",
+                        settingKey: "remoteSensitivity",
+                        type: "slider",
+                        min: 10,
+                        max: 200,
+                        tooltip: "Look speed for remotes (PS4/Xbox pads, TV remotes).\nMouse look is set in Controls. §7100 is the default."
                     }
                 ]
             }

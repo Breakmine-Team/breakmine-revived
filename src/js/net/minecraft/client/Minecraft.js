@@ -82,6 +82,14 @@ export default class Minecraft {
         this.world = null;
         this.player = null;
         this.currentWorldKey = null;
+        // Seed of the world handed to the in-page integrated server. Singleplayer
+        // runs through that server, so the client world is a WorldClient with a
+        // ChunkProviderClient that has no generator to read a seed from.
+        this.currentWorldSeed = null;
+        // True while the client is connected to the in-page integrated server
+        // (loopback). isSingleplayer() is false there because singleplayer also
+        // uses PlayerControllerMultiplayer, so local sessions need their own flag.
+        this.isConnectedToIntegratedServer = false;
         this.playerController = null;
         this.fps = 0;
         this.maxFps = 0;
@@ -361,6 +369,9 @@ export default class Minecraft {
             if (this.world !== null && this.isSingleplayer()) {
                 await this.saveWorld();
             }
+
+            this.isConnectedToIntegratedServer = false;
+            this.currentWorldSeed = null;
 
             this.worldRenderer.reset();
             this.itemRenderer.reset();
@@ -687,6 +698,7 @@ export default class Minecraft {
     async createNewWorld(name, seedLong, worldType, gameMode) {
         const worldKey = 'w_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
         this.currentWorldKey = worldKey;
+        this.currentWorldSeed = seedLong || null;
 
         // Add to world index
         const index = await this._loadWorldIndex();
@@ -731,6 +743,7 @@ export default class Minecraft {
         const networkManager = new NetworkManager(this);
         networkManager.setNetworkHandler(new NetworkLoginHandler(networkManager));
         networkManager.connect('loopback', 0, { url: 'ws://loopback' });
+        this.isConnectedToIntegratedServer = true;
 
         const mods = [];
         if (this.modLoader) {
@@ -928,6 +941,11 @@ export default class Minecraft {
 
         const index = await this._loadWorldIndex();
         const entry = index.find(e => e.key === worldKey);
+
+        const seedSource = serverEntry || entry;
+        this.currentWorldSeed = seedSource
+            ? { low: seedSource.seedLow || 0, high: seedSource.seedHigh || 0 }
+            : null;
 
         // A world that already has server files is server-authoritative: the
         // client must not write a competing chunk copy (see saveWorld).
@@ -1160,7 +1178,16 @@ export default class Minecraft {
             if (this.hasInGameFocus()) {
                 let deltaX = this.window.pullMouseMotionX();
                 let deltaY = this.window.pullMouseMotionY();
-                this.player.turn(deltaX, deltaY);
+                if (deltaX !== 0 || deltaY !== 0) {
+                    this.player.turn(deltaX, deltaY);
+                }
+
+                // Remotes (gamepad/TV) look with their own sensitivity.
+                let remoteX = this.window.pullRemoteMotionX();
+                let remoteY = this.window.pullRemoteMotionY();
+                if (remoteX !== 0 || remoteY !== 0) {
+                    this.player.turn(remoteX, remoteY, this.settings.getRemoteSensitivity());
+                }
             }
 
             // Update lights (limit iterations to prevent freezing)
@@ -1899,6 +1926,37 @@ export default class Minecraft {
 
     isSingleplayer() {
         return this.isInGame() && !(this.playerController instanceof PlayerControllerMultiplayer);
+    }
+
+    /**
+     * True for a local (singleplayer) session. Singleplayer is served by the
+     * in-page integrated server over the loopback transport, so the client uses
+     * a PlayerControllerMultiplayer there too and isSingleplayer() is false.
+     */
+    isLocalSession() {
+        return this.isInGame() && (this.isSingleplayer() || this.isConnectedToIntegratedServer);
+    }
+
+    /**
+     * Seed of the local world, or null when unknown (e.g. a remote multiplayer
+     * server never discloses its seed). The value comes from the seed handed to
+     * the integrated server, since the client-side WorldClient has no generator.
+     */
+    getLocalSeed() {
+        if (!this.isLocalSession()) return null;
+        const seed = this.currentWorldSeed;
+        if (seed) {
+            const low = BigInt(seed.low >>> 0);
+            const high = BigInt(seed.high >>> 0);
+            let value = (high << 32n) | low;
+            if (high & 0x80000000n) value -= 1n << 64n;
+            return value.toString();
+        }
+        if (this.world) {
+            const worldSeed = this.world.getSeed();
+            if (worldSeed) return String(worldSeed);
+        }
+        return null;
     }
 
     stop() {

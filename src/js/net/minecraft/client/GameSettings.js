@@ -31,6 +31,7 @@ export default class GameSettings {
         this.showVersion = false;
         this.dynamicLights = false;
         this.showPreview = true;
+        this.remoteSensitivity = 100;
 
         this.tvmode = false;
 
@@ -40,6 +41,24 @@ export default class GameSettings {
         this.loggedIn = false;
 
         this.selectedTexturePack = null;
+    }
+
+    /**
+     * Mouse/cursor look sensitivity (Controls screen slider, 100 = default).
+     */
+    getMouseSensitivity() {
+        const value = Number(this.sensitivity);
+        return Number.isFinite(value) && value > 0 ? value : 100;
+    }
+
+    /**
+     * Look sensitivity for remotes - gamepads and TV remotes looking around
+     * in game (Options slider "Controller Sensitivity", 100 = default).
+     * Anything invalid in a saved settings blob falls back to 100.
+     */
+    getRemoteSensitivity() {
+        const value = Number(this.remoteSensitivity);
+        return Number.isFinite(value) && value > 0 ? value : 100;
     }
 
     load() {

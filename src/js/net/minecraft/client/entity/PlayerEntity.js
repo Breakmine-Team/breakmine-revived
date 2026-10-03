@@ -115,8 +115,12 @@ export default class PlayerEntity extends EntityLiving {
         this.setPosition(spawn.x, spawn.y, spawn.z);
     }
 
-    turn(motionX, motionY) {
-        let sensitivity = this.minecraft.settings.sensitivity / 500;
+    /**
+     * @param {number} sensitivityPercent look sensitivity; defaults to the mouse
+     *        setting, remotes pass settings.getRemoteSensitivity() instead.
+     */
+    turn(motionX, motionY, sensitivityPercent = this.minecraft.settings.getMouseSensitivity()) {
+        let sensitivity = sensitivityPercent / 500;
         this.rotationYaw = this.rotationYaw + motionX * sensitivity;
         this.rotationPitch = this.rotationPitch - motionY * sensitivity;
 
