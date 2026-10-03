@@ -55,8 +55,20 @@ class ServerWorld {
         this._set(x, y, z, getBlockAt(x, y, z), data);
     }
 
+    // Kept deliberately narrow: waking the neighbours when a block disappears.
+// Without it a wire that loses a block (or a door whose other half was
+    // removed) keeps its old state until something else happens to tick it.
+    // Block placement/removal callbacks are NOT fired here -- onBlockRemoved
+    // can cascade (the pusher head tears down its own base), and running
+    // placement logic from the simulation made networks unstable instead of
+    // settling. Placements are seeded by the placement handler's onBlockAdded.
     setBlockAt(x, y, z, type, data) {
         this._set(x, y, z, type, data === undefined ? 0 : data);
+
+        if (type === 0) {
+            this.scheduleNeighborTicks(x, y, z);
+            this.notifyNeighborBlockChange(x, y, z);
+        }
     }
 
     _set(x, y, z, type, data) {
@@ -133,8 +145,18 @@ class ServerWorld {
             if (typeId === 0) continue;
 
             const block = Block.getById(typeId);
-            if (block && typeof block.onNeighborBlockChange === 'function') {
+            if (!block) continue;
+
+            if (typeof block.onNeighborBlockChange === 'function') {
                 block.onNeighborBlockChange(this, checkX, checkY, checkZ);
+            } else if (typeof block.onBlockTick === 'function') {
+                // Plenty of bluestone blocks (pusher, pusher head, sticky
+                // pusher, rod pillar, ...) have no onNeighborBlockChange hook.
+                // Calling only the hook meant those blocks were skipped
+                // entirely and silently kept their old state. Anything that
+                // ticks gets scheduled instead, so a neighbour change can
+                // never be dropped on the floor.
+                this.scheduleBlockTick(checkX, checkY, checkZ, 1);
             }
         }
     }

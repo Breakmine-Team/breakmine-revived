@@ -160,6 +160,14 @@ export default class BlockBluestonePusher extends Block {
         }
     }
 
+    // Both notifyNeighborBlockChange implementations (client World and
+    // ServerWorld) only invoke this hook when a block actually defines it, so
+    // a pusher without it was skipped whenever the wire beside it changed and
+    // never extended or retracted.
+    onNeighborBlockChange(world, x, y, z) {
+        world.scheduleBlockTick(x, y, z, 1);
+    }
+
     onBlockTick(world, x, y, z) {
         this.updateState(world, x, y, z);
     }

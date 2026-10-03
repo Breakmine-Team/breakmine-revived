@@ -187,6 +187,17 @@ export default class BlockBluestoneDust extends Block {
         this._scheduleNeighbors(world, x, y, z);
     }
 
+    // Wire power is stored in this block's data nibble, so a dust block has to
+    // re-run its own propagation whenever something next to it changes state.
+    // Without this hook, neighbour notifications (ServerWorld's
+    // notifyNeighborBlockChange only calls blocks that implement it) silently
+    // skip every dust block, which is why a lever flip did not light the wire
+    // until the dust itself was replaced.
+    onNeighborBlockChange(world, x, y, z) {
+        this._scheduleNeighbors(world, x, y, z);
+        this.onBlockTick(world, x, y, z);
+    }
+
     onBlockTick(world, x, y, z) {
         if (world.getBlockAt(x, y, z) !== this.id) return;
         this._propagate(world, x, y, z);

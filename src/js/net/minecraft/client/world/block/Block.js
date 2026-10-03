@@ -255,19 +255,10 @@ export default class Block {
                 let closestDistance = Infinity;
 
                 for (let part of multipart) {
-                    let bbox = part[2];
+                    let bbox = Block.getPartBoundingBox(part);
                     if (!bbox) continue;
 
-                    let worldBbox = new BoundingBox(
-                        x + bbox.minX,
-                        y + bbox.minY,
-                        z + bbox.minZ,
-                        x + bbox.maxX,
-                        y + bbox.maxY,
-                        z + bbox.maxZ
-                    );
-
-                    let hit = this.raytraceBoundingBox(worldBbox, x, y, z, start, end);
+                    let hit = this.raytraceBoundingBox(bbox, x, y, z, start, end);
                     if (hit) {
                         let distance = start.squareDistanceTo(hit.vector);
                         if (distance < closestDistance) {
@@ -277,91 +268,43 @@ export default class Block {
                     }
                 }
 
-                if (closestHit !== null) {
-                    return closestHit;
-                }
+                // The multipart parts are the whole shape of this block, so when
+                // none of them are hit there is nothing else to test. Falling back
+                // to the full block box would make the empty parts selectable.
+                return closestHit;
             }
         }
 
-        // Default raytrace against single bounding box
-        start = start.addVector(-x, -y, -z);
-        end = end.addVector(-x, -y, -z);
+        // Default raytrace against this block's actual bounding box, which may be
+        // smaller than a full block (slabs, torches, panels, dust, ...)
+        let bbox = this.getBoundingBox(world, x, y, z);
+        if (!bbox) {
+            return null;
+        }
+        return this.raytraceBoundingBox(bbox, x, y, z, start, end);
+    }
 
-        let vec3 = start.getIntermediateWithXValue(end, this.boundingBox.minX);
-        let vec31 = start.getIntermediateWithXValue(end, this.boundingBox.maxX);
-        let vec32 = start.getIntermediateWithYValue(end, this.boundingBox.minY);
-        let vec33 = start.getIntermediateWithYValue(end, this.boundingBox.maxY);
-        let vec34 = start.getIntermediateWithZValue(end, this.boundingBox.minZ);
-        let vec35 = start.getIntermediateWithZValue(end, this.boundingBox.maxZ);
-
-        if (!this.isVecInsideYZBounds(vec3)) {
-            vec3 = null;
-        }
-
-        if (!this.isVecInsideYZBounds(vec31)) {
-            vec31 = null;
-        }
-
-        if (!this.isVecInsideXZBounds(vec32)) {
-            vec32 = null;
-        }
-
-        if (!this.isVecInsideXZBounds(vec33)) {
-            vec33 = null;
-        }
-
-        if (!this.isVecInsideXYBounds(vec34)) {
-            vec34 = null;
-        }
-
-        if (!this.isVecInsideXYBounds(vec35)) {
-            vec35 = null;
-        }
-
-        let vec36 = null;
-        if (vec3 != null && (vec36 == null || start.squareDistanceTo(vec3) < start.squareDistanceTo(vec36))) {
-            vec36 = vec3;
-        }
-        if (vec31 != null && (vec36 == null || start.squareDistanceTo(vec31) < start.squareDistanceTo(vec36))) {
-            vec36 = vec31;
-        }
-        if (vec32 != null && (vec36 == null || start.squareDistanceTo(vec32) < start.squareDistanceTo(vec36))) {
-            vec36 = vec32;
-        }
-        if (vec33 != null && (vec36 == null || start.squareDistanceTo(vec33) < start.squareDistanceTo(vec36))) {
-            vec36 = vec33;
-        }
-        if (vec34 != null && (vec36 == null || start.squareDistanceTo(vec34) < start.squareDistanceTo(vec36))) {
-            vec36 = vec34;
-        }
-        if (vec35 != null && (vec36 == null || start.squareDistanceTo(vec35) < start.squareDistanceTo(vec36))) {
-            vec36 = vec35;
-        }
-
-        if (vec36 == null) {
+    /**
+     * Returns the block-local bounding box of a multipart part entry, or null when
+     * the entry has no box. Parts are either ["block", blockId, bbox] or
+     * ["blockClass"/"texture", id, { block| texture, bbox }].
+     */
+    static getPartBoundingBox(part) {
+        if (!Array.isArray(part)) {
             return null;
         }
 
-        let face = null;
-        if (vec36 === vec3) {
-            face = EnumBlockFace.WEST;
+        let data = part[2];
+        if (!data) {
+            return null;
         }
-        if (vec36 === vec31) {
-            face = EnumBlockFace.EAST;
+
+        // Wrapped form: { block, bbox } / { texture, bbox }
+        if (typeof data.minX === "undefined" && typeof data.bbox !== "undefined") {
+            data = data.bbox;
         }
-        if (vec36 === vec32) {
-            face = EnumBlockFace.BOTTOM;
-        }
-        if (vec36 === vec33) {
-            face = EnumBlockFace.TOP;
-        }
-        if (vec36 === vec34) {
-            face = EnumBlockFace.NORTH;
-        }
-        if (vec36 === vec35) {
-            face = EnumBlockFace.SOUTH;
-        }
-        return new MovingObjectPosition(vec36.addVector(x, y, z), face, x, y, z);
+
+        return typeof data.minX === "number" ? data : null;
     }
 
     raytraceBoundingBox(bbox, x, y, z, start, end) {
