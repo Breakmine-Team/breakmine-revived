@@ -20,8 +20,8 @@ class Start {
 
         return Promise.all(textures.map((texturePath) => {
             return new Promise((resolve) => {
-                let image = new Image();
-                
+                let image = new Image;
+
                 const base64Data = base64Assets[texturePath];
 
                 if (base64Data) {
@@ -50,6 +50,9 @@ class Start {
     launch(canvasWrapperId) {
         this.loadTextures(uiTextures).then((resources) => {
             window.app = new Minecraft(canvasWrapperId, resources);
+            if (window.hideLoadingScreen) {
+                window.hideLoadingScreen();
+            }
         });
     }
 }

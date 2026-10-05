@@ -160,6 +160,11 @@
 
 <div id="background" class="fullscreen"></div>
 
+<div id="loading-overlay">
+    <img src="src/resources/gui/title/logo_splash_hd.png" alt="Breakmine">
+    <img src="loading.gif" alt="Loading..." class="loading-gif">
+</div>
+
 <div id="content">
     <div id="canvas-container" class="fullscreen"></div>
 </div>
@@ -180,6 +185,22 @@ if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) && navigator.ma
 <script type="module" src="libraries/asn1.js"></script>
 <script type="module" src="libraries/bigint-mod-arith.js"></script>
 <script type="module" src="libraries/sha1.min.js"></script>
+
+<!-- Loading Screen -->
+<script>
+(function() {
+    const loadingOverlay = document.getElementById('loading-overlay');
+
+    window.hideLoadingScreen = function() {
+        if (loadingOverlay) {
+            loadingOverlay.style.opacity = '0';
+            setTimeout(() => {
+                loadingOverlay.style.display = 'none';
+            }, 500);
+        }
+    };
+})();
+</script>
 
 <!-- Minecraft -->
 <script type="module" src="src/js/Start.js"></script>
