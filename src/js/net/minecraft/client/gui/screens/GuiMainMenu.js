@@ -11,6 +11,7 @@ import GuiMultiplayer from "./GuiMultiplayer.js";
 import GuiAccount from "./GuiAccount.js";
 import GuiTexturePacks from "./GuiTexturePacks.js";
 import GuiMods from "./GuiMods.js";
+import GuiCredits from "./GuiCredits.js";
 import { SplashTexts } from "../../../../../../resources/splashes.js";
 import { Version } from "../../../../../../resources/version.js";
 import GuiTooltip from "../widgets/GuiTooltip.js";
@@ -170,8 +171,11 @@ export default class GuiMainMenu extends GuiScreen {
         // Draw Patchwork version
         this.drawString(stack, "Patchwork " + Version.PATCHWORK_VERSION, 2, this.height - 20, 0xFFFFFFff);
 
+        let mouseOver = mouseX > this.width - 190 && mouseY > this.height - 10;
+        this.drawRightString(stack, "SpinningCubes & Others under SCLv1", this.width - 2, this.height - 10, mouseOver ? 0xFF00FFFF : 0xFFFFFFff);
+        
         // Draw copyright
-        this.drawRightString(stack, "(C) 2026 SpinningCubes under SCLv1.", this.width - 2, this.height - 10);
+        // this.drawRightString(stack, "2026 SpinningCubes under SCLv1.", this.width - 2, this.height - 10);
 
         // Draw buttons
         super.drawScreen(stack, mouseX, mouseY, partialTicks);
@@ -217,6 +221,11 @@ export default class GuiMainMenu extends GuiScreen {
 
     mouseClicked(mouseX, mouseY, mouseButton) {
         super.mouseClicked(mouseX, mouseY, mouseButton);
+
+        let mouseOver = mouseX > this.width - 190 && mouseY > this.height - 10;
+        if (mouseOver) {
+            this.minecraft.displayScreen(new GuiCredits());
+        }
     }
 
     initPanoramaRenderer() {
