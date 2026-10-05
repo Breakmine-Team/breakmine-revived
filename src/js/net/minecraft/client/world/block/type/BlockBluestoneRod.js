@@ -17,6 +17,24 @@ export default class BlockBluestoneRod extends BlockBluestoneDust {
         this.multipart = true;
     }
 
+    getOpacity() {
+        // The rod is a thin wire/post; 0 keeps it from dimming any light, so
+        // the flood treats the cell exactly like the air it displaces.
+        return 0;
+    }
+
+    getTransparency() {
+        return 0.2;
+    }
+
+    isSolid() {
+        return false;
+    }
+
+    isTranslucent() {
+        return true;
+    }
+
     // The rod conducts bluestone power in every direction, including up and
     // down (unlike dust, which stays horizontal).
     canConductTo(world, x, y, z, dx, dy, dz) {

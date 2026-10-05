@@ -732,7 +732,7 @@ function handleBlockPlacement(player, buffer, offset) {
             let yaw = player.yaw ?? player.rotationYaw ?? 0;
             let dirIndex = Math.floor((yaw * 4 / 360) + 0.5) & 3;
             metadata = [2, 5, 3, 4][dirIndex];
-        } else if (blockId === 168 || blockId === 169) { // Bluestone Repeater / Observer
+        } else if (blockId === 168 || blockId === 169 || blockId === 182) { // Bluestone Repeater / Observer / Memory Cell
             let yaw = player.yaw ?? player.rotationYaw ?? 0;
             let dirIndex = Math.floor((yaw * 4 / 360) + 0.5) & 3;
             // Direction stored in bits 1-2 (0: SOUTH, 1: WEST, 2: NORTH, 3: EAST)

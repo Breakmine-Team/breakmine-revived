@@ -20,6 +20,20 @@ export default class BlockBluestoneRepeater extends Block {
 
     getAmbientOcclusion() { return false; }
 
+    // getAmbientOcclusion() only turns off AO on the repeater's own faces.
+    // This is the other half: it tells the light sampler that this thin
+    // machine doesn't occlude its neighbours either, so it stops darkening the
+    // blocks around it. Without it the repeater inherits `true` from Block and
+    // is treated as an opaque cube by getAverageLightLevelAt().
+    canCastAmbientOcclusion() { return false; }
+
+    // The repeater is a thin machine sitting on the floor; it must not dim the
+    // light around it. 0 is the engine's "transparent to light" value (the
+    // light flood then treats the cell exactly like the air it displaces).
+    getOpacity() {
+        return 0;
+    }
+
     isSolid() { return false; }
 
     hasBlockEntity() { return true; }
@@ -38,17 +52,20 @@ export default class BlockBluestoneRepeater extends Block {
 
     onBlockPlaced(world, x, y, z, face) {
         const player = world.minecraft?.player;
-        if (!player) return;
 
         // Direction mapping: 0: SOUTH, 1: WEST, 2: NORTH, 3: EAST
-        const dirIndex = Math.floor((player.rotationYaw * 4 / 360) + 0.5) & 3;
-        const currentPower = world.getBlockDataAt(x, y, z) & 1;
+        if (player) {
+            const dirIndex = Math.floor((player.rotationYaw * 4 / 360) + 0.5) & 3;
+            const currentPower = world.getBlockDataAt(x, y, z) & 1;
 
-        world.setBlockDataAt(x, y, z, (dirIndex << 1) | currentPower);
+            world.setBlockDataAt(x, y, z, (dirIndex << 1) | currentPower);
+        }
 
         // onBlockAdded ran before the direction was known, so re-check the
         // input now that the direction is set (an existing power source
-        // behind the repeater turns it on immediately).
+        // behind the repeater turns it on immediately). This must run even when
+        // there is no player to derive a facing from, otherwise a repeater
+        // placed without a local player never evaluates its input.
         this.updateState(world, x, y, z);
     }
 
@@ -71,7 +88,7 @@ export default class BlockBluestoneRepeater extends Block {
     isPoweredFromInput(world, x, y, z) {
         const data = world.getBlockDataAt(x, y, z);
         const { back } = this._getDirectionFaces(data);
-        
+
         const inputX = x + back[0];
         const inputY = y + back[1];
         const inputZ = z + back[2];
@@ -147,6 +164,24 @@ export default class BlockBluestoneRepeater extends Block {
 
         world.scheduleBlockTick(outX, outY, outZ, 1);
         world.onBlockChanged(outX, outY, outZ);
+
+        // onBlockChanged() only marks sections as modified, so on its own it
+        // never wakes the block in front of us. Notify it for real so the dust
+        // on our output face re-propagates immediately (BlockBluestoneDust
+        // settles its whole network synchronously from this callback). Without
+        // this the front dust is driven purely by the scheduled tick above,
+        // which World.processBlockTicks() skips entirely outside singleplayer,
+        // leaving the repeater with no visible output at all.
+        world.notifyNeighborBlockChange(outX, outY, outZ);
+
+        // Directly trigger the output dust's propagation if it's bluestone.
+        // This ensures the dust network updates immediately even if
+        // notifyNeighborBlockChange is delayed or skipped in integrated mode.
+        const outBlockId = world.getBlockAt(outX, outY, outZ);
+        const outBlock = Block.getById(outBlockId);
+        if (outBlock && (outBlock.isBluestoneDust || outBlock.isBluestoneRod)) {
+            outBlock.onBlockTick(world, outX, outY, outZ);
+        }
     }
 
     updateState(world, x, y, z) {
@@ -165,10 +200,19 @@ export default class BlockBluestoneRepeater extends Block {
     }
 
     onBlockAdded(world, x, y, z) {
+        this.updateState(world, x, y, z);
         world.scheduleBlockTick(x, y, z, DELAY_TICKS);
     }
 
     onNeighborBlockChange(world, x, y, z) {
+        // Re-evaluate the input immediately instead of relying purely on the
+        // scheduled tick. Our whole state machine runs from onBlockTick, and
+        // World.processBlockTicks() returns early unless the game is in
+        // singleplayer, so a repeater that only re-reads its input on a tick
+        // never turns on outside singleplayer: the dust beside it lights up but
+        // the repeater itself stays dark and outputs nothing. The delayed tick
+        // is still scheduled so the repeater keeps its real-world delay.
+        this.updateState(world, x, y, z);
         world.scheduleBlockTick(x, y, z, DELAY_TICKS);
     }
 

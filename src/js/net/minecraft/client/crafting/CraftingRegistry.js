@@ -203,6 +203,7 @@ export default class CraftingRegistry {
         const PUSHER = BlockRegistry.BLUESTONE_PUSHER.id;
         const STICKY_PUSHER = BlockRegistry.BLUESTONE_STICKY_PUSHER.id;
         const REPEATER = BlockRegistry.BLUESTONE_REPEATER.id;
+        const MEMORY_CELL = BlockRegistry.BLUESTONE_MEMORY_CELL.id;
         const OBSERVER = BlockRegistry.BLUESTONE_OBSERVER.id;
         const ORE = BlockRegistry.BLUESTONE_ORE.id;
         const GLASS = BlockRegistry.GLASS.id;
@@ -247,6 +248,12 @@ export default class CraftingRegistry {
 
         this.registerShapedRecipe(REPEATER, 1, 3, 3, [
             0, ROD, 0,
+            STONE, DUST, STONE,
+            STONE, STONE, STONE
+        ]);
+
+        this.registerShapedRecipe(MEMORY_CELL, 1, 3, 3, [
+            ROD, ROD, 0,
             STONE, DUST, STONE,
             STONE, STONE, STONE
         ]);

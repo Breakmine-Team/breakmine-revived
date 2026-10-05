@@ -33,7 +33,7 @@ export default class GuiMainMenu extends GuiScreen {
 
     init() {
         super.init();
-        this.textureLogo = this.getTexture("gui/title/minecraft.png");
+        this.textureLogo = this.getTexture("gui/title/logo_hd.png");
 
         // Coming back to the main menu rebuilds buttonList, so the update
         // button is (re)added here rather than only on first load.
@@ -141,6 +141,7 @@ export default class GuiMainMenu extends GuiScreen {
 
     drawScreen(stack, mouseX, mouseY, partialTicks) {
         let logoWidth = 274;
+        let logoHeight = Math.round(logoWidth * (158 / 1024)); // maintain aspect ratio from 1024x158 source
         let x = this.width / 2 - logoWidth / 2;
         let y = 30;
 
@@ -160,7 +161,7 @@ export default class GuiMainMenu extends GuiScreen {
         this.drawGradientRect(stack, 0, 0, this.width, this.height, 'rgb(0,0,0,0)', 'rgb(0,0,0,0.5)');
 
         // Draw logo
-        this.drawLogo(stack, x, y);
+        this.drawLogo(stack, x, y, logoWidth, logoHeight);
 
         // Draw version
         this.drawRightString(stack, "Updated at " + Minecraft.TIMESTAMP, this.width - 2, this.height - 20, 0xFFFFFFff);
@@ -188,9 +189,9 @@ export default class GuiMainMenu extends GuiScreen {
         this.panoramaTimer++;
     }
 
-    drawLogo(stack, x, y) {
-        this.drawSprite(stack, this.textureLogo, 0, 0, 155, 44, x, y, 155, 44);
-        this.drawSprite(stack, this.textureLogo, 0, 45, 155, 44, x + 155, y, 155, 44);
+    drawLogo(stack, x, y, width = 274, height = 42) {
+        // Draw whole 1024x158 source texture stretched to target width/height
+        this.drawSprite(stack, this.textureLogo, 0, 0, 1024, 158, x, y, width, height);
     }
 
     drawSplash(stack) {

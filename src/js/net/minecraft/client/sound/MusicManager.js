@@ -1,5 +1,18 @@
 import { base64Assets } from "../../../../../resources.js";
-import { musicTracks } from "../../../../assetManifest.js";
+
+// The music ships as eight flat files in src/resources/sound/music/ - there are
+// no per-category subfolders on disk - so every category (menu, game, creative,
+// nether, end) plays out of this one pool.
+const TRACK_FILES = [
+    "sound/music/1.ogg",
+    "sound/music/2.ogg",
+    "sound/music/3.ogg",
+    "sound/music/4.ogg",
+    "sound/music/5.ogg",
+    "sound/music/6.ogg",
+    "sound/music/7.ogg",
+    "sound/music/8.ogg",
+];
 
 export default class MusicManager {
 
@@ -18,17 +31,40 @@ export default class MusicManager {
         this.netherTracks = [];
         this.endTracks = [];
 
-        this.volume = 0.0;
+        this.volume = 0.5;
         this.fadeTime = 2000;
         this.gapTime = 5000;
 
         this._loadedCategories = new Set();
 
-        // Only the menu tracks are loaded eagerly at boot (the "core" asset
-        // package). Game/creative/nether/end tracks are fetched lazily the
-        // first time their category is played, so the initial bundle stays
-        // small when music is served as separate files.
+        // The eight tracks are decoded once and shared by every category, so
+        // switching categories doesn't build a second set of Audio objects for
+        // files the browser has already fetched.
+        this.trackPool = null;
+        this.lastTrack = null;
+
         this.loadTracks('menu');
+    }
+
+    resolveAsset(assetKey) {
+        return (typeof base64Assets !== 'undefined' && base64Assets[assetKey])
+            ? base64Assets[assetKey]
+            : `src/resources/${assetKey}`;
+    }
+
+    getTrackPool() {
+        if (this.trackPool) {
+            return this.trackPool;
+        }
+
+        this.trackPool = TRACK_FILES.map(assetKey => {
+            const audio = new Audio(this.resolveAsset(assetKey));
+            audio.volume = 0;
+            audio.preload = 'auto';
+            return audio;
+        });
+
+        return this.trackPool;
     }
 
     loadTracks(category) {
@@ -36,21 +72,8 @@ export default class MusicManager {
             return;
         }
 
-        const tracks = musicTracks[category];
-        if (!tracks) {
-            return;
-        }
-
         const list = this.getTrackList(category);
-        for (const relativePath of tracks) {
-            const assetKey = relativePath.replace(/^src\/resources\//, '');
-            const src = (typeof base64Assets !== 'undefined' && base64Assets[assetKey])
-                ? base64Assets[assetKey]
-                : `src/resources/${assetKey}`;
-
-            const audio = new Audio(src);
-            audio.volume = 0;
-            audio.preload = 'auto';
+        for (const audio of this.getTrackPool()) {
             list.push(audio);
         }
 
@@ -110,11 +133,20 @@ export default class MusicManager {
         }
         if (this.tracks.length === 0) return;
 
-        const track = this.pickRandom(this.tracks);
-        if (track === this.currentTrack && this.tracks.length > 1) {
-            return this.playNext();
+        // Draw at random, but never repeat the track that just finished.
+        // Retrying by recursing could keep drawing the same track and blow the
+        // stack, so this is a bounded loop; a single-track category repeats
+        // because there is nothing else to pick.
+        let track = this.lastTrack;
+        for (let attempt = 0; attempt < this.tracks.length; attempt++) {
+            const candidate = this.pickRandom(this.tracks);
+            if (candidate !== this.lastTrack) {
+                track = candidate;
+                break;
+            }
         }
 
+        this.lastTrack = track;
         this.currentTrack = track;
         this.currentTrack.currentTime = 0;
         this.currentTrack.volume = 0;
@@ -127,19 +159,35 @@ export default class MusicManager {
         };
     }
 
+    clearFade() {
+        if (this.fadeInterval) {
+            clearInterval(this.fadeInterval);
+            this.fadeInterval = null;
+        }
+    }
+
     fadeIn(audio) {
         const step = 50;
         const increment = this.volume / (this.fadeTime / step);
         let current = 0;
 
-        audio.play();
+        // Only one fade can own the interval handle; leaving an old one running
+        // would keep ramping a track that is no longer playing.
+        this.clearFade();
+
+        // Rejected when the browser blocks autoplay before the first click;
+        // swallowing it keeps the queue alive instead of logging an unhandled
+        // rejection every time.
+        const started = audio.play();
+        if (started && typeof started.catch === 'function') {
+            started.catch(() => {});
+        }
 
         this.fadeInterval = setInterval(() => {
             current += increment;
             if (current >= this.volume) {
                 audio.volume = this.volume;
-                clearInterval(this.fadeInterval);
-                this.fadeInterval = null;
+                this.clearFade();
             } else {
                 audio.volume = current;
             }
@@ -148,7 +196,11 @@ export default class MusicManager {
 
     fadeOut(audio, callback) {
         const step = 50;
-        const decrement = audio.volume / (this.fadeTime / step);
+        // A silent track yields a decrement of 0, which would leave this
+        // interval running forever and never stop the music.
+        const decrement = audio.volume > 0 ? audio.volume / (this.fadeTime / step) : Infinity;
+
+        this.clearFade();
 
         this.fadeInterval = setInterval(() => {
             audio.volume -= decrement;
@@ -156,8 +208,7 @@ export default class MusicManager {
                 audio.volume = 0;
                 audio.pause();
                 audio.currentTime = 0;
-                clearInterval(this.fadeInterval);
-                this.fadeInterval = null;
+                this.clearFade();
                 if (callback) callback();
             }
         }, step);
@@ -170,22 +221,23 @@ export default class MusicManager {
             clearTimeout(this.scheduledNext);
             this.scheduledNext = null;
         }
-        if (this.fadeInterval) {
-            clearInterval(this.fadeInterval);
-            this.fadeInterval = null;
+        this.clearFade();
+
+        // Silence everything, not just the track we remember as current: a track
+        // started before a category switch can still be playing, and leaving it
+        // audible would stack music on top of music.
+        const toStop = new Set([...this.getTrackPool(), this.currentTrack, this.nextTrack]);
+        for (const audio of toStop) {
+            if (!audio) continue;
+
+            audio.pause();
+            audio.currentTime = 0;
+            audio.volume = 0;
+            audio.onended = null;
         }
-        if (this.currentTrack) {
-            this.currentTrack.pause();
-            this.currentTrack.currentTime = 0;
-            this.currentTrack.volume = 0;
-            this.currentTrack.onended = null;
-            this.currentTrack = null;
-        }
-        if (this.nextTrack) {
-            this.nextTrack.pause();
-            this.nextTrack.currentTime = 0;
-            this.nextTrack.volume = 0;
-            this.nextTrack = null;
-        }
+
+        this.currentTrack = null;
+        this.nextTrack = null;
+        this.lastTrack = null;
     }
 }

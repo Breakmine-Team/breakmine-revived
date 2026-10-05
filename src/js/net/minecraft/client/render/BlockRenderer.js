@@ -10,6 +10,7 @@ import MathHelper from "../../util/MathHelper.js";
 import Block from "../world/block/Block.js";
 import BoundingBox from "../../util/BoundingBox.js";
 import { BlockRegistry } from "../world/block/BlockRegistry.js";
+import * as THREE from "../../../../../../libraries/three.module.js";
 import EnumCreativeInventoryTab from "../gui/EnumCreativeInventoryTab.js";
 
 export default class BlockRenderer {
@@ -23,6 +24,11 @@ export default class BlockRenderer {
         } else {
             this.tessellator.bindTexture(worldRenderer.textureTerrain);
         }
+    }
+
+    // Toggle shadow casting for the block meshes this renderer tessellates.
+    setShadows(enabled) {
+        this.tessellator.setShadows(enabled);
     }
 
     renderBlock(world, block, ambientOcclusion, x, y, z) {
@@ -835,11 +841,29 @@ export default class BlockRenderer {
         }
     }
 
+    /**
+     * Blocks drawn outside the world - GUI slots, the held block, preview
+     * renderers - end up in scenes that have no lights at all, so they have to
+     * use the unlit material. Cloning the tessellator's instance rather than
+     * building a fresh MeshBasicMaterial keeps the texture atlas the
+     * tessellator has bound; the flags are set explicitly because
+     * Tessellator.setRenderingPass() mutates the shared instance it hands out.
+     */
+    getUnlitGUIMaterial(alphaTest = 0.1) {
+        let material = this.tessellator.unlitMaterial.clone();
+        material.transparent = true;
+        material.alphaTest = alphaTest;
+        material.depthTest = true;
+        material.depthWrite = true;
+        return material;
+    }
+
     renderBlockInHandThirdPerson(group, block, brightness) {
         this.tessellator.startDrawing();
         this.renderBlock(null, block, false, 0, 0, 0);
         this.tessellator.transformBrightness(brightness);
         let mesh = this.tessellator.draw(group);
+        mesh.material = this.getUnlitGUIMaterial();
         mesh.geometry.center();
         mesh.position.x = 0;
         mesh.position.y = 9;
@@ -855,6 +879,7 @@ export default class BlockRenderer {
         this.renderBlock(null, block, false, 0, 0, 0);
         this.tessellator.transformBrightness(brightness);
         let mesh = this.tessellator.draw(group);
+        mesh.material = this.getUnlitGUIMaterial();
         mesh.geometry.center();
         mesh.scale.x = 16;
         mesh.scale.y = 16;
@@ -916,6 +941,8 @@ export default class BlockRenderer {
         // Create mesh
         let mesh = this.tessellator.draw(group);
         mesh.geometry.center();
+
+        mesh.material = this.getUnlitGUIMaterial();
 
         // Rotate block
         if (block.multipart === true || block.path) {
@@ -993,6 +1020,7 @@ export default class BlockRenderer {
         this.tessellator.transformBrightness(brightness);
         let mesh = this.tessellator.draw(group);
         mesh.geometry.center();
+        mesh.material = this.getUnlitGUIMaterial();
         return mesh;
     }
 }

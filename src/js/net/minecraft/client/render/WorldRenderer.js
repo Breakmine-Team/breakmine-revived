@@ -24,6 +24,15 @@ export default class WorldRenderer {
         this.window = window;
         this.chunkSectionUpdateQueue = [];
 
+        // Shadows are a global graphics option (Options -> Shadows, off by
+        // default). Dynamic lights are a separate option that also forces lit
+        // materials, since MeshBasicMaterial ignores scene lights. Publish both
+        // values before any tessellator is created so every mesh picks up the
+        // right material and shadow flag on its first draw.
+        this.shadowsEnabled = !!minecraft.settings.shadows;
+        this.dynamicLightsEnabled = !!minecraft.settings.dynamicLights;
+        this.applyTessellatorSettings();
+
         this.tessellator = new Tessellator();
 
         // Create world camera first (needed for window size update)
@@ -42,6 +51,47 @@ export default class WorldRenderer {
         this.scene = new THREE.Scene();
         this.scene.matrixAutoUpdate = false;
 
+        // Shadows
+        // Ambient light ensures shadowed areas aren't pitch black and keep their baked vertex colors
+        this.ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
+        this.scene.add(this.ambientLight);
+
+        // Directional light acts as the sun, casting shadows
+        this.sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        this.sunLight.castShadow = this.shadowsEnabled;
+        this.sunLight.shadow.mapSize.width = 2048;
+        this.sunLight.shadow.mapSize.height = 2048;
+
+        // Orthographic shadow camera bounds (covers area around player)
+        const shadowCamSize = 48;
+        this.sunLight.shadow.camera.left = -shadowCamSize;
+        this.sunLight.shadow.camera.right = shadowCamSize;
+        this.sunLight.shadow.camera.top = shadowCamSize;
+        this.sunLight.shadow.camera.bottom = -shadowCamSize;
+        this.sunLight.shadow.camera.near = 0.5;
+        this.sunLight.shadow.camera.far = 200;
+        // This has to be explicit: unlike SpotLightShadow/PointLightShadow,
+        // DirectionalLightShadow in this three.js build has no updateMatrices
+        // override, and LightShadow.updateMatrices() never refreshes the
+        // projection matrix. Without it the bounds above are dead code and the
+        // shadow map keeps the constructor default of -5..5/0.5..500, which
+        // covers a 10x10 block box with a 499.5 block depth range.
+        this.sunLight.shadow.camera.updateProjectionMatrix();
+        this.updateShadowBias(1);
+
+        this.scene.add(this.sunLight);
+        this.scene.add(this.sunLight.target); // Target follows player
+
+        this.dynamicLights = [];
+        this.maxDynamicLights = 12; // Keep performance high by limiting active lights
+        for (let i = 0; i < this.maxDynamicLights; i++) {
+            let light = new THREE.PointLight(0xffaa55, 0, 15, 2);
+            light.visible = false;
+            this.scene.add(light);
+            this.dynamicLights.push(light);
+        }
+        this.dynamicLightUpdateTimer = 0;
+
         // Create overlay for first person model rendering
         this.overlay = new THREE.Scene();
         this.overlay.matrixAutoUpdate = false;
@@ -55,7 +105,7 @@ export default class WorldRenderer {
 
         // Settings
         this.webRenderer.setSize(this.window.width, this.window.height);
-        this.webRenderer.shadowMap.enabled = true;
+        this.webRenderer.shadowMap.enabled = this.shadowsEnabled;
         this.webRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
         this.webRenderer.autoClear = false;
         this.webRenderer.sortObjects = false; // change if buggy!!
@@ -193,8 +243,21 @@ export default class WorldRenderer {
             side: THREE.FrontSide
         });
 
+        // Water, leaves and glass all end up in the batcher, which draws them
+        // with one shared material, so it needs a lit counterpart too -
+        // otherwise those faces ignore both the sun's shadows and torches
+        // while everything around them reacts.
+        this.translucentLitMaterial = new THREE.MeshLambertMaterial({
+            vertexColors: true,
+            transparent: true,
+            depthTest: true,
+            depthWrite: false,
+            alphaTest: 0.1,
+            side: THREE.FrontSide
+        });
+
         // Initialize the batcher, passing the scene and the material
-        this.translucentBatcher = new TranslucentMeshBatcher(this.scene, this.translucentMaterial);
+        this.translucentBatcher = new TranslucentMeshBatcher(this.scene, this.getTranslucentMaterial());
 
         // Initialize texture atlas asynchronously
         this.initialize().catch(error => {
@@ -236,8 +299,7 @@ export default class WorldRenderer {
                 );
             }
             if (this.translucentBatcher) {
-                this.translucentBatcher.mesh.material.map = this.textureAtlas.getTexture();
-                this.translucentBatcher.mesh.material.needsUpdate = true;
+                this.setTranslucentTexture(this.textureAtlas.getTexture());
             }
         }
         
@@ -248,8 +310,7 @@ export default class WorldRenderer {
         
         // Set texture on translucent batcher material
         if (this.translucentBatcher && this.textureAtlas.isLoaded()) {
-            this.translucentBatcher.mesh.material.map = this.textureAtlas.getTexture();
-            this.translucentBatcher.mesh.material.needsUpdate = true;
+            this.setTranslucentTexture(this.textureAtlas.getTexture());
         }
 
         // Use a cloned atlas texture for block damage overlay so the material can use offset/repeat
@@ -356,6 +417,28 @@ export default class WorldRenderer {
 
         // Render hand
         this.renderHand(partialTicks);
+
+        // Smoothly interpolate dynamic light positions to prevent flickering/stutter
+        if (this.dynamicLights) {
+            for (let light of this.dynamicLights) {
+                if (!light.userData) light.userData = {};
+                
+                if (light.visible) {
+                    if (!light.userData.currentPos) light.userData.currentPos = new THREE.Vector3();
+                    if (!light.userData.targetPos) light.userData.targetPos = new THREE.Vector3();
+                    
+                    // Lerp the current position toward the target position
+                    light.userData.currentPos.lerp(light.userData.targetPos, 0.2);
+                    light.position.copy(light.userData.currentPos);
+                } else if (light.userData.targetPos) {
+                    // If hidden, snap current to target so it's ready for next use
+                    if (!light.userData.currentPos) light.userData.currentPos = new THREE.Vector3();
+                    light.userData.currentPos.copy(light.userData.targetPos);
+                }
+            }
+        }
+        
+        this.webRenderer.clearDepth();
 
         // Render background scene
         this.webRenderer.render(this.background, this.camera);
@@ -483,6 +566,12 @@ export default class WorldRenderer {
     onTick() {
         this.emitRenderHook('onTick');
 
+        this.dynamicLightUpdateTimer++;
+        if (this.dynamicLightUpdateTimer >= 5) {
+            this.dynamicLightUpdateTimer = 0;
+            this.updateDynamicLights();
+        }
+
         // Rebuild chunk sections each tick
         let rebuildCount = Math.min(32, this.chunkSectionUpdateQueue.length);
         for (let i = 0; i < rebuildCount; i++) {
@@ -521,6 +610,108 @@ export default class WorldRenderer {
         let renderDistance = this.minecraft.settings.viewDistance / 32.0;
         let fogBrightness = brightnessAtPosition * (1.0 - renderDistance) + renderDistance;
         this.fogBrightness += (fogBrightness - this.fogBrightness) * 0.1;
+    }
+
+    updateDynamicLights() {
+        let player = this.minecraft.player;
+        let world = this.minecraft.world;
+        if (!player || !world) return;
+
+        // The option owns the point lights, so they stay off even though this
+        // runs on a timer
+        if (!this.dynamicLightsEnabled) {
+            this.hideDynamicLights();
+            return;
+        }
+
+        let px = Math.floor(player.x);
+        let py = Math.floor(player.y);
+        let pz = Math.floor(player.z);
+        let radius = 12; 
+        let candidates = [];
+
+        // Scan exact blocks to find all light sources
+        for (let x = px - radius; x <= px + radius; x++) {
+            for (let y = py - radius; y <= py + radius; y++) {
+                for (let z = pz - radius; z <= pz + radius; z++) {
+                    let typeId;
+                    try {
+                        typeId = world.getBlockAt(x, y, z);
+                    } catch (e) {
+                        continue; // Chunk not loaded or out of bounds
+                    }
+                    
+                    if (typeId === 0) continue;
+                    
+                    let block = Block.getById(typeId);
+                    if (!block) continue;
+                    
+                    let lightValue = 0;
+                    try {
+                        if (typeof block.getLightValue === 'function') {
+                            lightValue = block.getLightValue(world, x, y, z);
+                        }
+                    } catch (e) {
+                        continue;
+                    }
+                    
+                    if (lightValue > 0) {
+                        let dx = x - player.x;
+                        let dy = y - player.y;
+                        let dz = z - player.z;
+                        let distSq = dx * dx + dy * dy + dz * dz;
+                        candidates.push({ 
+                            x, y, z, 
+                            distSq, 
+                            lightValue, 
+                            key: `${x},${y},${z}` 
+                        });
+                    }
+                }
+            }
+        }
+
+        // Sort by closest to player
+        candidates.sort((a, b) => a.distSq - b.distSq);
+
+        // Mark all lights as not updated this frame
+        for (let light of this.dynamicLights) {
+            if (!light.userData) light.userData = {};
+            light.userData.updated = false;
+        }
+
+        // Assign candidates to the light pool STABLY
+        for (let i = 0; i < Math.min(candidates.length, this.dynamicLights.length); i++) {
+            let c = candidates[i];
+            
+            // Try to find a light that is ALREADY tracking this specific block
+            let light = this.dynamicLights.find(l => l.userData.blockKey === c.key);
+            
+            // If not, find an unused light to assign it to
+            if (!light) {
+                light = this.dynamicLights.find(l => !l.userData.updated);
+            }
+            
+            if (light) {
+                if (!light.userData.targetPos) light.userData.targetPos = new THREE.Vector3();
+                light.userData.targetPos.set(c.x + 0.5, c.y + 0.5, c.z + 0.5);
+                light.userData.blockKey = c.key;
+                light.userData.updated = true;
+                
+                light.intensity = (c.lightValue / 15.0) * 2.5;
+                light.distance = c.lightValue * 1.5;
+                light.color.setHex(0xffffff);
+                light.visible = true;
+            }
+        }
+
+        // Hide any lights that weren't updated
+        for (let light of this.dynamicLights) {
+            if (!light.userData.updated) {
+                light.visible = false;
+                light.userData.blockKey = null;
+            }
+        }
     }
 
     orientCamera(partialTicks) {
@@ -639,7 +830,8 @@ export default class WorldRenderer {
                 }
             }
             let mesh = this.tessellator.draw(this.listSky);
-            mesh.material.depthTest = false;
+            mesh.material = new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, depthTest: false, depthWrite: false, fog: false });
+            this.listSky.renderOrder = -2;
             this.backgroundCenter.add(this.listSky);
         }
 
@@ -670,10 +862,8 @@ export default class WorldRenderer {
             }
 
             let mesh = this.tessellator.draw(this.listSunset);
-            mesh.material = mesh.material.clone();
-            mesh.material.depthTest = false;
-            mesh.material.opacity = 0.6;
-            mesh.material.side = THREE.DoubleSide;
+            mesh.material = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthTest: false, depthWrite: false, fog: false, blending: THREE.AdditiveBlending });
+            this.listSunset.renderOrder = 1;
             this.backgroundCenter.add(this.listSunset);
         }
 
@@ -751,9 +941,8 @@ export default class WorldRenderer {
             }
 
             let mesh = this.tessellator.draw(this.listStars);
-            mesh.material = mesh.material.clone();
-            mesh.material.depthTest = true;
-            mesh.material.side = THREE.BackSide;
+            mesh.material = new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, transparent: true, opacity: 1.0, depthTest: false, depthWrite: false, side: THREE.BackSide, fog: false, blending: THREE.AdditiveBlending });
+            this.listStars.renderOrder = 0;
             this.cycleGroup.add(this.listStars);
         }
 
@@ -764,11 +953,14 @@ export default class WorldRenderer {
             map: this.textureSun,
             alphaMap: this.textureSun,
             blending: THREE.AdditiveBlending,
-            transparent: true
+            transparent: true,
+            depthTest: false,
+            depthWrite: false,
+            fog: false
         });
         this.sun = new THREE.Mesh(geometry, materialSun);
         this.sun.translateZ(-2);
-        this.sun.material.depthTest = false;
+        this.sun.renderOrder = 2;
         this.cycleGroup.add(this.sun);
 
         // Create moon
@@ -777,11 +969,14 @@ export default class WorldRenderer {
             map: this.textureMoon,
             alphaMap: this.textureMoon,
             blending: THREE.AdditiveBlending,
-            transparent: true
+            transparent: true,
+            depthTest: false,
+            depthWrite: false,
+            fog: false
         });
         this.moon = new THREE.Mesh(geometry, materialMoon);
         this.moon.translateZ(2);
-        this.moon.material.depthTest = false;
+        this.moon.renderOrder = 2;
         this.cycleGroup.add(this.moon);
 
         // Add cycle group before the void to hide the cycling elements behind the void
@@ -802,9 +997,8 @@ export default class WorldRenderer {
                 }
             }
             let mesh = this.tessellator.draw(this.listVoid);
-            mesh.material = mesh.material.clone();
-            mesh.material.depthTest = false;
-            mesh.material.opacity = 1;
+            mesh.material = new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, depthTest: false, depthWrite: false, fog: false });
+            this.listVoid.renderOrder = -1;
             this.backgroundCenter.add(this.listVoid);
         }
     }
@@ -816,6 +1010,44 @@ export default class WorldRenderer {
         // Rotate sky cycle
         let angle = this.minecraft.world.getCelestialAngle(partialTicks);
         this.cycleGroup.rotation.set(angle * Math.PI * 2 + Math.PI / 2, 0, 0);
+        
+        // Force matrix update so we can read the sun's exact world position
+        this.backgroundCenter.updateMatrixWorld(true);
+
+        // Update Shadows
+        if (this.sunLight && this.minecraft.player) {
+            let player = this.minecraft.player;
+            let px = player.prevX + (player.x - player.prevX) * partialTicks;
+            let py = player.prevY + (player.y - player.prevY) * partialTicks;
+            let pz = player.prevZ + (player.z - player.prevZ) * partialTicks;
+
+            // Get the actual world position of the sky's sun mesh
+            let sunWorldPos = new THREE.Vector3();
+            this.sun.getWorldPosition(sunWorldPos);
+
+            // Calculate direction from the camera to the sun
+            let dir = new THREE.Vector3().subVectors(sunWorldPos, this.camera.position).normalize();
+
+            // Place the shadow light far away in that exact direction
+            let dist = 100;
+            this.sunLight.position.set(px + dir.x * dist, py + dir.y * dist, pz + dir.z * dist);
+            this.sunLight.target.position.set(px, py, pz);
+            this.sunLight.target.updateMatrixWorld();
+
+            // Bias has to follow the sun angle, otherwise the long shadows at
+            // sunrise and sunset come back covered in acne
+            this.updateShadowBias(dir.y);
+
+            // If the sun is below the horizon, it's night
+            let isDay = dir.y > 0.05;
+            this.sunLight.castShadow = this.shadowsEnabled && isDay;
+            
+            // Balance intensities so max brightness never exceeds 1.0
+            // Day: 0.6 ambient + 0.4 sun = 1.0 (prevents white-out)
+            // Night: 1.0 ambient + 0.0 sun = 1.0 (keeps vertex colors visible)
+            this.ambientLight.intensity = isDay ? 0.6 : 1.0;
+            this.sunLight.intensity = isDay ? 0.4 : 0.0;
+        }
     }
 
     setupFog(x, z, inWater, partialTicks, inLava) {
@@ -911,6 +1143,11 @@ export default class WorldRenderer {
                     if (this.frustum.intersectsBox(chunkSection.boundingBox) && !chunkSection.isEmpty()) {
                         // Make section visible
                         chunkSection.group.visible = true;
+
+                        // Ensure shadows are enabled on chunk meshes
+                        if (!chunkSection.group.userData.shadowsInit) {
+                            chunkSection.group.userData.shadowsInit = true;
+                        }
 
                         // Render chunk section
                         chunkSection.render();
@@ -1052,6 +1289,158 @@ export default class WorldRenderer {
         
         indexAttr.array.set(newIndices);
         indexAttr.needsUpdate = true;
+    }
+
+    /**
+     * Publish the shadow/dynamic light options to every tessellator, including
+     * ones created after startup (entities, particles).
+     */
+    applyTessellatorSettings() {
+        Tessellator.setShadowsEnabled(this.shadowsEnabled);
+        Tessellator.setDynamicLightsEnabled(this.dynamicLightsEnabled);
+        this.updateTranslucentMaterial();
+    }
+
+    getTranslucentMaterial() {
+        return this.tessellator.getLit() ? this.translucentLitMaterial : this.translucentMaterial;
+    }
+
+    /**
+     * Assign the texture atlas to both translucent materials, not just the one
+     * the batcher happens to be using, so switching between them never drops the
+     * texture for a frame.
+     */
+    setTranslucentTexture(texture) {
+        if (!texture) return;
+
+        for (let material of [this.translucentMaterial, this.translucentLitMaterial]) {
+            if (!material || material.map === texture) continue;
+
+            material.map = texture;
+            material.needsUpdate = true;
+        }
+    }
+
+    /**
+     * Point the batcher's single mesh at whichever translucent material matches
+     * the current lighting, carrying the texture atlas over so the swap doesn't
+     * leave water and leaves untextured for a frame.
+     */
+    updateTranslucentMaterial() {
+        if (!this.translucentBatcher) return;
+
+        let material = this.getTranslucentMaterial();
+        if (this.translucentBatcher.mesh.material === material) return;
+
+        // Keep the atlas the current material is using, whichever it is
+        material.map = this.translucentBatcher.mesh.material.map;
+        material.needsUpdate = true;
+        this.translucentBatcher.mesh.material = material;
+    }
+
+    /**
+     * Scale the shadow bias to the sun angle, in world blocks instead of a magic
+     * number. Two things force this:
+     *
+     * - three.js applies bias in normalized depth ("shadowCoord.z += shadowBias")
+     *   while an ortho shadow camera is linear over (far - near) blocks, so a
+     *   bias of N blocks has to be sent as -N / (far - near).
+     * - acne comes from the receiver's depth growing by roughly texel / sin(sun
+     *   elevation) across a single shadow texel, so a bias tuned for noon is far
+     *   too small at sunrise. Scaling with the elevation covers the whole day.
+     *
+     * Clamped at 6 texels so a sun sitting on the horizon can't push the bias so
+     * far that shadows visibly detach from the blocks casting them.
+     */
+    updateShadowBias(sunHeight) {
+        let shadow = this.sunLight.shadow;
+        let camera = shadow.camera;
+
+        // Size of one shadow texel in world blocks
+        let texelSize = (camera.right - camera.left) / shadow.mapSize.width;
+
+        // sin(elevation), floored just under the day/night cutoff so the clamp
+        // kicks in before the sun reaches the horizon
+        let height = Math.max(Math.abs(sunHeight), 0.2);
+
+        let biasBlocks = Math.min(texelSize / height, texelSize * 6);
+        shadow.bias = -biasBlocks / (camera.far - camera.near);
+
+        // Normal bias slides the receiver along its own normal instead of along
+        // the light, which clears the acne on flat block faces without eating
+        // into contact shadows as much
+        shadow.normalBias = texelSize;
+    }
+
+    /**
+     * Turn sun shadows on or off at runtime (Options -> Shadows). Besides the
+     * renderer flags this has to patch meshes that are already in the scene and
+     * rebuild the world, since lit and unlit rendering use different materials
+     * and existing geometry can't switch between them.
+     */
+    setShadowsEnabled(enabled) {
+        this.shadowsEnabled = !!enabled;
+
+        if (this.webRenderer) {
+            this.webRenderer.shadowMap.enabled = this.shadowsEnabled;
+            // Shadow support is compiled into the shader program, so force a
+            // rebuild instead of just refreshing the map.
+            this.webRenderer.shadowMap.needsUpdate = true;
+        }
+
+        if (this.sunLight) {
+            this.sunLight.castShadow = this.shadowsEnabled;
+        }
+
+        this.applyTessellatorSettings();
+        this.tessellator.setShadows(this.shadowsEnabled);
+        this.blockRenderer?.setShadows(this.shadowsEnabled);
+
+        this.applyShadowsToObject(this.scene);
+        this.rebuildAll();
+    }
+
+    /**
+     * Turn the dynamic point lights on or off (Options -> Dynamic Lighting).
+     * They light the scene through the same materials the sun uses, so toggling
+     * them swaps those between the lit and unlit material too.
+     */
+    setDynamicLightsEnabled(enabled) {
+        this.dynamicLightsEnabled = !!enabled;
+
+        this.applyTessellatorSettings();
+        this.hideDynamicLights();
+
+        this.applyShadowsToObject(this.scene);
+        this.rebuildAll();
+    }
+
+    hideDynamicLights() {
+        if (!this.dynamicLights) return;
+
+        for (let light of this.dynamicLights) {
+            light.visible = false;
+            if (!light.userData) light.userData = {};
+            light.userData.blockKey = null;
+        }
+    }
+
+    applyShadowsToObject(root) {
+        if (!root) return;
+
+        root.traverse(child => {
+            if (!child.isMesh) return;
+
+            child.castShadow = this.shadowsEnabled;
+            child.receiveShadow = this.shadowsEnabled;
+
+            let materials = Array.isArray(child.material) ? child.material : [child.material];
+            for (let material of materials) {
+                if (material) {
+                    material.needsUpdate = true;
+                }
+            }
+        });
     }
 
     rebuildAll() {
@@ -1588,5 +1977,8 @@ export default class WorldRenderer {
         this.blockBreakMesh.visible = false;
 
         this.webRenderer.clear();
+
+        // Hide all dynamic lights
+        this.hideDynamicLights();
     }
 }

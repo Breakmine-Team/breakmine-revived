@@ -4,14 +4,35 @@ import { getLiquidBlockCornerHeights } from "./LiquidMeshHelper.js";
 
 export default class Tessellator {
 
+    // Client-wide defaults for tessellators that don't override them. Both are
+    // global graphics options and tessellators are created ad-hoc (particles,
+    // entity models, GUI previews), so shared flags are the only way to reach
+    // all of them.
+    static shadows = true;
+    static dynamicLights = false;
+
     constructor() {
-        this.material = new THREE.MeshBasicMaterial({
+        // Two materials for the same geometry. The lit one is used whenever a
+        // real light source can affect the mesh; otherwise the baked vertex
+        // colors carry all the lighting and the cheaper unlit one is used.
+        this.litMaterial = new THREE.MeshLambertMaterial({
             side: THREE.FrontSide,
             transparent: true,
             depthTest: true,
             depthWrite: true,
             vertexColors: true
         });
+
+        this.unlitMaterial = new THREE.MeshBasicMaterial({
+            side: THREE.FrontSide,
+            transparent: true,
+            depthTest: true,
+            depthWrite: true,
+            vertexColors: true
+        });
+
+        // null = follow Tessellator.shadows
+        this.shadows = null;
 
         this.red = 0;
         this.green = 0;
@@ -27,8 +48,42 @@ export default class Tessellator {
         this.rotationFace = null;
     }
 
+    // Material meshes are built from. A getter so callers can keep using
+    // tessellator.material; the underlying material swaps with the settings.
+    get material() {
+        return this.getLit() ? this.litMaterial : this.unlitMaterial;
+    }
+
+    // Override shadow casting for meshes produced by this tessellator, or pass
+    // null to follow the shared setting again.
+    setShadows(enabled) {
+        this.shadows = enabled === null ? null : !!enabled;
+    }
+
+    // Toggle the shared setting. Meshes already in a scene keep their current
+    // flag until the owner re-applies it (see WorldRenderer.applyShadowsToObject).
+    static setShadowsEnabled(enabled) {
+        Tessellator.shadows = !!enabled;
+    }
+
+    static setDynamicLightsEnabled(enabled) {
+        Tessellator.dynamicLights = !!enabled;
+    }
+
+    getShadows() {
+        return this.shadows === null ? Tessellator.shadows : this.shadows;
+    }
+
+    // MeshBasicMaterial ignores scene lights entirely, so anything that can
+    // still light a mesh - the sun or dynamic point lights - forces the lit
+    // material even when no shadow map is being rendered.
+    getLit() {
+        return this.getShadows() || Tessellator.dynamicLights;
+    }
+
     bindTexture(texture) {
-        this.material.map = texture;
+        this.litMaterial.map = texture;
+        this.unlitMaterial.map = texture;
     }
 
     startDrawing() {
@@ -223,13 +278,13 @@ export default class Tessellator {
                 v(x, y + h01, z + 1, maxU, minV);
                 v(x, y, z + 1, maxU, maxV);
                 break;
-case EnumBlockFace.EAST:
-        v(x + 1, y + h11, z + 1, minU, minV);
-        v(x + 1, y + h10, z, maxU, minV);
-        v(x + 1, y, z, maxU, maxV);
-        v(x + 1, y, z + 1, minU, maxV);
-        break;
-        }
+            case EnumBlockFace.EAST:
+                v(x + 1, y + h11, z + 1, minU, minV);
+                v(x + 1, y + h10, z, maxU, minV);
+                v(x + 1, y, z, maxU, maxV);
+                v(x + 1, y, z + 1, minU, maxV);
+                break;
+            }
     }
 
     transformBrightness(brightness) {
@@ -264,8 +319,18 @@ case EnumBlockFace.EAST:
         // Compute bounding sphere so Three.js knows the exact geometric center for depth sorting
         geometry.computeBoundingSphere();
 
+        let shadows = this.getShadows();
+
+        // Normals are only used by the lit material. Every quad contributes its
+        // own vertices, so these are already flat per-face normals.
+        if (this.getLit()) {
+            geometry.computeVertexNormals();
+        }
+
         // Clone the material so opaque and translucent passes maintain separate states
         let mesh = new THREE.Mesh(geometry, this.material.clone());
+        mesh.castShadow = shadows;
+        mesh.receiveShadow = shadows;
         if (!inThing) group.matrixAutoUpdate = false;
         group.add(mesh);
         return mesh;

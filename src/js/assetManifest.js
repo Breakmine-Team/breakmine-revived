@@ -10,6 +10,7 @@ export const uiTextures = [
     "char.png",
     "creeper.png",
     "gui/title/minecraft.png",
+    "gui/title/logo_hd.png",
     "gui/title/background/panorama_0.png",
     "gui/title/background/panorama_1.png",
     "gui/title/background/panorama_2.png",
@@ -118,7 +119,10 @@ export const atlasBlockTextures = [
     "bluestoneObserverBackOff.png", "oak_planks_green.png", "oak_planks_sticky.png",
     "bluestoneRepeaterTopOff.png", "bluestoneRepeaterTopOn.png", "lever.png",
     "cobblestone_lever_base.png", "snow.png", "grass_block_snow.png",
-    "tnt_side.png", "tnt_bottom.png", "tnt_top.png"
+    "tnt_side.png", "tnt_bottom.png", "tnt_top.png", "bluestoneMemoryTopOn.png",
+    "bluestoneMemoryTopOff.png", "bluestoneMemoryTopSetOffResetOffOn.png",
+    "bluestoneMemoryTopSetOnResetOff.png", "bluestoneMemoryTopSetOnResetOnOff.png",
+    "bluestoneMemoryTopSetOffResetOn.png"
 ];
 
 const toolMaterials = ['wooden', 'stone', 'iron', 'diamond', 'golden'];

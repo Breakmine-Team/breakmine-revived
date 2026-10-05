@@ -17,6 +17,8 @@ Blaise was here!
 Dinny was here!
 Chlodog was here!
 stryck was here!
+Paradoxism was here!
+'hayuki harashi' was here!
 Cool!
 Modern!
 Runs on a TV!
@@ -44,6 +46,11 @@ Share your worlds!
 Play with your friends!
 Gamers unite!
 Legendary!
+Check out the wiki!
+Check out the mods!
+Now with controller support!
+Shaders?!
+The horizons will soon be distant...
 Nahh Brotato that's crazy`.split('\n');
 
     static generateSplash() {

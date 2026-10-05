@@ -28,6 +28,9 @@ export default class EntityRenderer {
 
     fillMeta(entity, meta) {
         meta.brightness = entity.getEntityBrightness();
+        // Entity models swap between the lit and unlit materials, so a change to
+        // either the shadow or the dynamic light setting has to rebuild them
+        meta.lit = this.tessellator.getLit();
     }
 
     isRebuildRequired(entity) {

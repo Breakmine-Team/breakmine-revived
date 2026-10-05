@@ -15,6 +15,7 @@ export default class GameSettings {
         this.fov = 70;
         this.viewBobbing = true;
         this.ambientOcclusion = true;
+        this.shadows = false;
         this.sensitivity = 100;
         this.viewDistance = 4;
         this.debugOverlay = false;

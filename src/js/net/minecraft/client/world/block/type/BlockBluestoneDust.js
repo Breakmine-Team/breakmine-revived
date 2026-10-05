@@ -233,6 +233,12 @@ export default class BlockBluestoneDust extends Block {
             // so they react to the change on the next scheduled tick.
             this._scheduleNeighbors(world, cx, cy, cz);
 
+            // Notify neighbors so blocks with onNeighborBlockChange (repeaters,
+            // observers, etc.) re-evaluate their input immediately.
+            for (const [dx, dy, dz] of this._neighborOffsets()) {
+                world.notifyNeighborBlockChange(cx + dx, cy + dy, cz + dz);
+            }
+
             for (const [dx, dy, dz] of this._neighborOffsets()) {
                 if (wireBlock.canConductTo(world, cx, cy, cz, dx, dy, dz)) {
                     queue.push([cx + dx, cy + dy, cz + dz]);
@@ -257,5 +263,22 @@ export default class BlockBluestoneDust extends Block {
         return (r << 16) | (g << 8) | b;
     }
 
-    canCastAmbientOcclusion() { return false; }
+    // Bluestone wiring is a flat overlay on the block below and must not dim
+    // the light around it. 0 is the engine's "transparent to light" value, so
+    // the light flood treats the cell exactly like the air it displaces.
+    getOpacity() {
+        return 0;
+    }
+
+    getTransparency() {
+        return 0.8;
+    }
+
+    getAmbientOcclusion() {
+        return false;
+    }
+
+    canCastAmbientOcclusion() {
+        return false;
+    }
 }

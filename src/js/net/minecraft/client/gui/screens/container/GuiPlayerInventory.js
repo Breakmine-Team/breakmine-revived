@@ -57,6 +57,9 @@ export default class GuiPlayerInventory extends GuiContainerSurvival {
                 this.model.rebuild(t, this.modelGroup);
                 this.modelGroup.traverse(child => {
                     if (child.isMesh) {
+                        // This scene has no lights, so the preview always renders
+                        // with the unlit material the baked vertex colors suffice for
+                        child.material = t.unlitMaterial.clone();
                         this.playerMeshes.push(child);
                     }
                 });

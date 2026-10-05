@@ -182,7 +182,8 @@ export default class PlayerRenderer extends EntityRenderer {
 
             // Copy material and update depth test of the hand to render it always in front
             let mesh = this.handModel.bone.children[0];
-            mesh.material = mesh.material.clone();
+            // The overlay scene has no lights, so the hand has to render unlit
+            mesh.material = this.tessellator.unlitMaterial.clone();
             mesh.material.depthTest = false;
         }
 
@@ -224,6 +225,12 @@ export default class PlayerRenderer extends EntityRenderer {
     }
 
     renderShadow(entity, partialTicks) {
+        // Entity blob shadows follow the Shadows graphics option
+        if (!this.worldRenderer.shadowsEnabled) {
+            this.shadowGroup.visible = false;
+            return;
+        }
+
         // Only render shadow when entity is on the ground
         if (!entity.onGround) {
             this.shadowGroup.visible = false;

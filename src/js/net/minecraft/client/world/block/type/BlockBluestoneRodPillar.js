@@ -17,6 +17,23 @@ export default class BlockBluestoneRodPillar extends BlockBluestoneDust {
         this.isBluestoneDust = false;
     }
 
+    getOpacity() {
+        // Render-only multipart of the rod; must not dim light either.
+        return 0;
+    }
+
+    getTransparency() {
+        return 0.2;
+    }
+
+    isSolid() {
+        return false;
+    }
+
+    isTranslucent() {
+        return true;
+    }
+
     getTextureForFace(face, data, x, y, z, world) {
         return 'bluestoneBlock';
     }

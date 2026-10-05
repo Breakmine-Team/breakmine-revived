@@ -8,6 +8,7 @@ export default class TranslucentMeshBatcher {
         this.positions = new Float32Array(this.maxVertices * 3);
         this.colors = new Float32Array(this.maxVertices * 4);
         this.uvs = new Float32Array(this.maxVertices * 2);
+        this.normals = new Float32Array(this.maxVertices * 3);
         this.indices = new Uint32Array(this.maxIndices);
         this.sortedIndices = new Uint32Array(this.maxIndices);
 
@@ -20,6 +21,9 @@ export default class TranslucentMeshBatcher {
         this.geometry.setAttribute('position', new THREE.BufferAttribute(this.positions, 3).setUsage(THREE.DynamicDrawUsage));
         this.geometry.setAttribute('color', new THREE.BufferAttribute(this.colors, 4).setUsage(THREE.DynamicDrawUsage));
         this.geometry.setAttribute('uv', new THREE.BufferAttribute(this.uvs, 2).setUsage(THREE.DynamicDrawUsage));
+        // The lit material (MeshLambertMaterial) needs normals; the unlit one
+        // ignores them, so they stay zeroed until a lit mesh is batched.
+        this.geometry.setAttribute('normal', new THREE.BufferAttribute(this.normals, 3).setUsage(THREE.DynamicDrawUsage));
 
         this.indexAttribute = new THREE.BufferAttribute(this.indices, 1).setUsage(THREE.DynamicDrawUsage);
         this.geometry.setIndex(this.indexAttribute);
@@ -107,7 +111,56 @@ export default class TranslucentMeshBatcher {
             }
         }
 
-        // 4. Copy indices, offsetting them
+        // 4. Copy normals. The tessellator only computes them for the lit
+        // material, so a missing attribute means flat-shaded geometry that
+        // needs its face normal derived from the winding instead.
+        let nrmAttr = geo.getAttribute('normal');
+        if (nrmAttr) {
+            // Chunk meshes carry translation only, so the normals are already
+            // in world space - same assumption addMesh() makes for positions.
+            for (let i = 0; i < vertexCount; i++) {
+                let dstIdx = (vOffset + i) * 3;
+                this.normals[dstIdx]     = nrmAttr.getX(i);
+                this.normals[dstIdx + 1] = nrmAttr.getY(i);
+                this.normals[dstIdx + 2] = nrmAttr.getZ(i);
+            }
+        } else {
+            for (let i = 0; i < vertexCount; i++) {
+                let dstIdx = (vOffset + i) * 3;
+                this.normals[dstIdx]     = 0;
+                this.normals[dstIdx + 1] = 1;
+                this.normals[dstIdx + 2] = 0;
+            }
+
+            for (let t = 0; t + 2 < indexCount; t += 3) {
+                let ia = vOffset + idxAttr.getX(t);
+                let ib = vOffset + idxAttr.getX(t + 1);
+                let ic = vOffset + idxAttr.getX(t + 2);
+
+                let abx = this.positions[ib * 3] - this.positions[ia * 3];
+                let aby = this.positions[ib * 3 + 1] - this.positions[ia * 3 + 1];
+                let abz = this.positions[ib * 3 + 2] - this.positions[ia * 3 + 2];
+                let acx = this.positions[ic * 3] - this.positions[ia * 3];
+                let acy = this.positions[ic * 3 + 1] - this.positions[ia * 3 + 1];
+                let acz = this.positions[ic * 3 + 2] - this.positions[ia * 3 + 2];
+
+                // cross(ab, ac)
+                let nx = aby * acz - abz * acy;
+                let ny = abz * acx - abx * acz;
+                let nz = abx * acy - aby * acx;
+                let len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+                if (len === 0) continue;
+                nx /= len; ny /= len; nz /= len;
+
+                for (let v of [ia, ib, ic]) {
+                    this.normals[v * 3]     = nx;
+                    this.normals[v * 3 + 1] = ny;
+                    this.normals[v * 3 + 2] = nz;
+                }
+            }
+        }
+
+        // 5. Copy indices, offsetting them
         for (let i = 0; i < indexCount; i++) {
             this.indices[iOffset + i] = idxAttr.getX(i) + vOffset;
         }

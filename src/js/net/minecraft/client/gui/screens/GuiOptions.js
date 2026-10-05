@@ -41,8 +41,7 @@ export default class GuiOptions extends GuiScreen {
                     {
                         name: "View Bobbing",
                         settingKey: "viewBobbing",
-                        type: "toggle",
-                        tooltip: "Makes camera bob up and down when moving"
+                        type: "toggle"
                     },
                     {
                         name: "FOV",
@@ -94,7 +93,8 @@ export default class GuiOptions extends GuiScreen {
                         name: "Dynamic Lighting",
                         settingKey: "dynamicLights",
                         type: "toggle",
-                        tooltip: "This feature can cause lag and\nis still in development."
+                        tooltip: "This feature can cause lag and\nis still in development.",
+                        onchange: (_v, mc) => mc.worldRenderer.setDynamicLightsEnabled(_v)
                     },
                     {
                         name: "Placement Preview",
@@ -107,9 +107,15 @@ export default class GuiOptions extends GuiScreen {
                         settingKey: "remoteSensitivity",
                         type: "slider",
                         min: 10,
-                        max: 200,
-                        tooltip: "Look speed for remotes (PS4/Xbox pads, TV remotes).\nMouse look is set in Controls. §7100 is the default."
-                    }
+                        max: 200
+                    },
+                    {
+                        name: "Shadows",
+                        settingKey: "shadows",
+                        type: "toggle",
+                        tooltip: "This feature can cause lag and\nis still in development.",
+                        onchange: (_v, mc) => mc.worldRenderer.setShadowsEnabled(_v)
+                    },
                 ]
             }
         ];
