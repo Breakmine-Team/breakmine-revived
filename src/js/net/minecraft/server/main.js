@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
-const RPC = require('discord-rpc'); // [1] Moved up for clarity
+const RPC = require('discord-rpc');
 const { registerDeepLinks } = require('./deeplink.js');
 const { runSelfUpdate } = require('./updater.js');
 
@@ -124,6 +124,9 @@ function toBase64(data) {
 function fromBase64(text) {
     return Buffer.from(text, 'base64');
 }
+
+// Latest game state pushed by the renderer, used to build the Discord presence.
+let cachedGameState = { state: 'menu', singleplayer: false, username: '', world: null };
 
 function registerModHandlers() {
     ensureModsDir();
@@ -261,15 +264,95 @@ function createWindow() {
 // Initialize RPC client
 const rpc = new RPC.Client({ transport: 'ipc' });
 
-rpc.on('ready', () => {
-  console.log("Discord RPC Connected Successfully!");
+// Discord rejects empty strings in any of these fields, so anything without a
+// value has to be omitted rather than set to ''.
+function text(value) {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+// How long the player has been in the current session, used as the presence
+// timestamp. Reset when a world is entered or left so the timer in Discord
+// reflects the current world rather than how long the app has been open.
+let presenceStartedAt = Date.now();
+let lastPresenceKey = null;
+let lastWorld = null;
+
+function describeGameState(gs) {
+  const inGame = gs.state === 'ingame' || gs.state === 'paused' || gs.state === 'gui';
+  const session = gs.singleplayer ? 'Singleplayer' : 'Multiplayer';
+
+  if (!inGame) {
+    if (gs.state === 'loading') {
+      return { details: 'Loading world', state: undefined, buttons: [] };
+    }
+    // Out of a world (main menu / loading screen): the username is an in-game
+    // detail, so it only shows once the player is actually somewhere.
+    return { details: 'Main Menu', state: undefined, buttons: [] };
+  }
+
+  return {
+    details: gs.paused ? `Paused - ${session}` : session,
+    state: text(gs.username) ? `Playing as ${gs.username}` : undefined,
+    buttons: gs.singleplayer ? [] : [{ label: 'Join Server', url: 'https://breakmine.com' }]
+  };
+}
+
+/**
+ * Push the renderer's game state into the Discord presence.
+ *
+ * The renderer only reports a state when it actually changes, so this runs on
+ * transitions (main menu -> world -> multiplayer) rather than every frame.
+ */
+function updateDiscordRPC(gs) {
+  const presence = describeGameState(gs);
+  const key = JSON.stringify(presence);
+
+  // Discord rate-limits SET_ACTIVITY, and re-sending an identical payload
+  // resets nothing but still costs a round trip.
+  if (key === lastPresenceKey) return;
+  lastPresenceKey = key;
+
   rpc.setActivity({
-    details: 'Playing Breakmine',
-    state: 'Join at breakmine.com!', // [2] Changed from empty string '' (Discord often rejects empty strings)
-    startTimestamp: new Date(),
+    details: presence.details,
+    state: presence.state,
+    startTimestamp: presenceStartedAt,
     largeImageKey: 'favicon',
-    instance: false,
+    largeImageText: 'Breakmine',
+    buttons: presence.buttons.length > 0 ? presence.buttons : undefined
   });
+}
+
+rpc.on('ready', () => {
+  console.log('Discord RPC Connected Successfully!');
+  // The renderer may already have reported a state before Discord was ready.
+  lastPresenceKey = null;
+  updateDiscordRPC(cachedGameState);
+});
+
+rpc.on('error', (err) => {
+  console.error('Discord RPC error:', err);
+});
+
+// Listen for game state updates from the renderer preload
+ipcMain.on('discord:gameState', (_event, data) => {
+  if (!data || typeof data.state !== 'string') return;
+
+  cachedGameState = {
+    state: data.state,
+    singleplayer: data.singleplayer === true,
+    username: typeof data.username === 'string' ? data.username : '',
+    world: typeof data.world === 'string' ? data.world : null,
+    paused: data.paused === true
+  };
+
+  // A world transition restarts the "playing for" timer.
+  if (cachedGameState.world !== lastWorld) {
+    lastWorld = cachedGameState.world;
+    presenceStartedAt = Date.now();
+    lastPresenceKey = null;
+  }
+
+  updateDiscordRPC(cachedGameState);
 });
 
 // A breakmine-game:// link is delivered to whichever process registered as

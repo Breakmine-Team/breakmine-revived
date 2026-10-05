@@ -79,9 +79,13 @@ export default class GuiMainMenu extends GuiScreen {
             this.minecraft.displayScreen(new GuiTexturePacks(this));
         }));
 
+        const isElectron = typeof navigator === 'object' && 
+            typeof navigator.userAgent === 'string' && 
+            navigator.userAgent.indexOf('Electron') !== -1;
+
         this.buttonList.push(new GuiButton(this.minecraft, "Quit Game", this.width / 2 + 2, y + 96 + 12, 98, 20, () => {
-            this.minecraft.stop();
-        }).setEnabled(false));
+            window.close();
+        }).setEnabled(isElectron));
 
         if (!this.minecraft.settings.loggedIn) {
             this.buttonList.push(new GuiTooltip(this.minecraft, "You must be logged in\n§7Don't worry, it's free!", this.width / 2 - 100, y + 24, 200, 20));

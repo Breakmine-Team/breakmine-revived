@@ -51,6 +51,17 @@ contextBridge.exposeInMainWorld('modsBridge', {
   loadFile: (filename) => ipcRenderer.invoke('mods:loadFile', filename),
 
   /**
+   * Report game state to the main process for the Discord Rich Presence.
+   *
+   * The renderer has to push this: the window is context-isolated, so this
+   * preload cannot read `window.GAMESTATE` or `window.app` itself. Minecraft's
+   * updateGameState() calls this whenever the state actually changes.
+   *
+   * @param {{state: string, singleplayer: boolean, username: string, world: string|null}} state
+   */
+  reportGameState: (state) => ipcRenderer.send('discord:gameState', state),
+
+  /**
    * Read a binary file from the virtual filesystem.
    * @param {string} filename  e.g. 'mods/cooldeco/textures/checker.png.b64'
    * @returns {Promise<Uint8Array|null>}

@@ -9,7 +9,7 @@
 
 appId: com.breakmine.desktop
 productName: Breakmine
-copyright: Copyright © Breakmine
+copyright: (C) SpinningCubes Games
 
 directories:
   output: release

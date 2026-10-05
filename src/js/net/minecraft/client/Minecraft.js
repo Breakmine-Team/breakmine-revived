@@ -1073,6 +1073,10 @@ export default class Minecraft {
         // Live handle: always up to date, never stale.
         this.gameState.snapshot = () => JSON.parse(JSON.stringify(this.gameState));
 
+        // Signature of the last state pushed to the Electron host, so the
+        // per-frame update only forwards real transitions.
+        this.lastPublishedGameState = null;
+
         if (typeof window !== "undefined") {
             window.GAMESTATE = this.gameState;
         }
@@ -1123,6 +1127,48 @@ export default class Minecraft {
             p.yaw = this.player.rotationYaw;
             p.pitch = this.player.rotationPitch;
             p.health = this.player.health;
+        }
+
+        this.publishGameStateToHost();
+    }
+
+    /**
+     * Tell the Electron host what the game is doing, for the Discord Rich
+     * Presence. The host cannot read this state itself (the window is context
+     * isolated), so the renderer pushes it whenever it changes.
+     *
+     * `gs.singleplayer` is deliberately not used here: a singleplayer world is
+     * served by the in-page integrated server, so isSingleplayer() is false and
+     * only isLocalSession() tells a local world apart from a remote server.
+     */
+    publishGameStateToHost() {
+        const bridge = typeof window !== "undefined" ? window.modsBridge : null;
+        if (!bridge || typeof bridge.reportGameState !== "function") return;
+
+        const gs = this.gameState;
+        const session = this.getSession();
+        const username = session ? session.getProfile().getUsername() : "";
+
+        const state = {
+            state: gs.state,
+            // An open screen still counts as being in the world (inventory,
+            // chat), so this must not be derived from `inGame`.
+            singleplayer: this.isLocalSession(),
+            paused: gs.paused,
+            username: username,
+            world: this.currentWorldKey || null
+        };
+
+        // updateGameState() runs every frame; only forward real transitions so
+        // the host does not push a Discord update 60 times a second.
+        const key = JSON.stringify(state);
+        if (key === this.lastPublishedGameState) return;
+        this.lastPublishedGameState = key;
+
+        try {
+            bridge.reportGameState(state);
+        } catch {
+            // Host not listening (running in a plain browser) - ignore.
         }
     }
 
