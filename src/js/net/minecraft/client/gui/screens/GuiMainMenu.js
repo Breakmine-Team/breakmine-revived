@@ -67,10 +67,6 @@ export default class GuiMainMenu extends GuiScreen {
         const modButtons = this.minecraft.modLoader?.getGuiButtons('main-menu', this) || [];
         this.buttonList.push(...modButtons);
 
-        this.buttonList.push(new GuiButton(this.minecraft, "Account", this.width / 2 - 100, y + 24 * 3, 98, 20, () => {
-            this.minecraft.displayScreen(new GuiAccount(this));
-        }));//.setEnabled(false).setTooltip("Coming soon!"));
-
         this.buttonList.push(new GuiButton(this.minecraft, "Options...", this.width / 2 - 100, y + 96 + 12, 98, 20, () => {
             this.minecraft.displayScreen(new GuiOptions(this));
         }));
@@ -90,6 +86,10 @@ export default class GuiMainMenu extends GuiScreen {
         if (!this.minecraft.settings.loggedIn) {
             this.buttonList.push(new GuiTooltip(this.minecraft, "You must be logged in\n§7Don't worry, it's free!", this.width / 2 - 100, y + 24, 200, 20));
         }
+
+        this.buttonList.push(new GuiButton(this.minecraft, "Account", this.width / 2 - 100, y + 24 * 3, 98, 20, () => {
+            this.minecraft.displayScreen(new GuiAccount(this));
+        }).setEnabled(false).setTooltip("Server not operational currently!\nWill be fixed soon."));
 
         this.initPanoramaRenderer();
     }
