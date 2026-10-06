@@ -15,4 +15,3 @@ dist-single/
 release/
 serverconfig.conf
 current_world.txt
-src/resources.js
