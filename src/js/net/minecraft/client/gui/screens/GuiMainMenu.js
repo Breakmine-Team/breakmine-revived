@@ -163,8 +163,8 @@ export default class GuiMainMenu extends GuiScreen {
         this.minecraft.worldRenderer.webRenderer.render(this.scene, this.camera);
 
         // Draw panorama overlay
-        this.drawGradientRect(stack, 0, 0, this.width, this.height, 'rgba(255,255,255,0.5)', 'rgb(255,255,255,0)');
-        this.drawGradientRect(stack, 0, 0, this.width, this.height, 'rgb(0,0,0,0)', 'rgb(0,0,0,0.5)');
+        //this.drawGradientRect(stack, 0, 0, this.width, this.height, 'rgba(255,255,255,0.5)', 'rgb(255,255,255,0)');
+        //this.drawGradientRect(stack, 0, 0, this.width, this.height, 'rgb(0,0,0,0)', 'rgb(0,0,0,0.5)');
 
         // Draw logo
         this.drawLogo(stack, x, y, logoWidth, logoHeight);
@@ -236,32 +236,34 @@ export default class GuiMainMenu extends GuiScreen {
     initPanoramaRenderer() {
         this.scene = new THREE.Scene();
 
+        const useAltBg = true; // false=overworld, true=nether
+
         // Create cube
         let geometry = new THREE.BoxBufferGeometry(1, 1, 1);
         let materials = [
             new THREE.MeshBasicMaterial({
                 side: BackSide,
-                map: this.minecraft.getThreeTexture("gui/title/background/panorama_1.png")
+                map: this.minecraft.getThreeTexture(`gui/title/background${useAltBg ? "/alt" : ""}/panorama_1.png`)
             }),
             new THREE.MeshBasicMaterial({
                 side: BackSide,
-                map: this.minecraft.getThreeTexture("gui/title/background/panorama_3.png")
+                map: this.minecraft.getThreeTexture(`gui/title/background${useAltBg ? "/alt" : ""}/panorama_3.png`)
             }),
             new THREE.MeshBasicMaterial({
                 side: BackSide,
-                map: this.minecraft.getThreeTexture("gui/title/background/panorama_4.png")
+                map: this.minecraft.getThreeTexture(`gui/title/background${useAltBg ? "/alt" : ""}/panorama_4.png`)
             }),
             new THREE.MeshBasicMaterial({
                 side: BackSide,
-                map: this.minecraft.getThreeTexture("gui/title/background/panorama_5.png")
+                map: this.minecraft.getThreeTexture(`gui/title/background${useAltBg ? "/alt" : ""}/panorama_5.png`)
             }),
             new THREE.MeshBasicMaterial({
                 side: BackSide,
-                map: this.minecraft.getThreeTexture("gui/title/background/panorama_0.png")
+                map: this.minecraft.getThreeTexture(`gui/title/background${useAltBg ? "/alt" : ""}/panorama_0.png`)
             }),
             new THREE.MeshBasicMaterial({
                 side: BackSide,
-                map: this.minecraft.getThreeTexture("gui/title/background/panorama_2.png")
+                map: this.minecraft.getThreeTexture(`gui/title/background${useAltBg ? "/alt" : ""}/panorama_2.png`)
             })
         ];
 
