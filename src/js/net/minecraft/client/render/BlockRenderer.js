@@ -365,10 +365,15 @@ export default class BlockRenderer {
         minV = 1 - minV;
         maxV = 1 - maxV;
 
-        // Apply face slide animation if the block implements it
-        let slideOffset = 0;
+        // Apply face slide animation if the block implements it. The texture is
+        // scrolled inside its own atlas tile and wrapped there, rather than
+        // moving the sample window across the atlas (which bleeds into the
+        // neighbouring tiles and then wraps around the whole atlas).
+        let uSlideOffset = 0;
+        let wrapRect = null;
         if (world && typeof block.doSlideFaceAnimate === 'function') {
-            let tick = world.getTime?.() || 0;
+            let slideOffset = 0;
+            let tick = world.ticks || 0;
             let result = block.doSlideFaceAnimate(face, x, y, z, world, tick);
             // Support both number and object return values (face -> offset)
             if (typeof result === 'object' && result !== null) {
@@ -385,16 +390,16 @@ export default class BlockRenderer {
             } else {
                 slideOffset = result || 0;
             }
-            // Clamp slideOffset to 0-16 range
-            slideOffset = Math.max(0, Math.min(16, slideOffset));
+            // Normalize slideOffset to 0-16 range (handle wrapping)
+            slideOffset = ((slideOffset % 16) + 16) % 16;
             
-            if (slideOffset > 0) {
-                // Calculate slide amount as a fraction (0-1)
+            if (slideOffset !== 0) {
+                // Calculate slide amount as a fraction (0-1) of the tile's U span
                 let slideFraction = slideOffset / 16.0;
                 let uRange = maxU - minU;
-                let uSlide = uRange * slideFraction;
-                minU += uSlide;
-                maxU += uSlide;
+                uSlideOffset = uRange * slideFraction;
+                // Keep the tile as the wrap boundary; addFace offsets the UVs.
+                wrapRect = [minU, minV, maxU - minU, maxV - minV];
             }
         }
 
@@ -414,7 +419,7 @@ export default class BlockRenderer {
             this.tessellator.setColor(red * shade, green * shade, blue * shade);
         }
 
-        this.addFace(world, face, ambientOcclusion, chunkX, chunkY, chunkZ, minX, minY, minZ, maxX, maxY, maxZ, minU, minV, maxU, maxV, red, green, blue, rotation);
+        this.addFace(world, face, ambientOcclusion, chunkX, chunkY, chunkZ, minX, minY, minZ, maxX, maxY, maxZ, minU, minV, maxU, maxV, red, green, blue, rotation, uSlideOffset, wrapRect);
     }
 
     renderDecoration(world, block, x, y, z) {
@@ -481,7 +486,9 @@ export default class BlockRenderer {
         this.tessellator.addVertexWithUV(maxX - cx, minY - cy, maxZ - cz, maxU, maxV);
     }
 
-    addFace(world, face, ambientOcclusion, chunkX, chunkY, chunkZ, minX, minY, minZ, maxX, maxY, maxZ, minU, minV, maxU, maxV, red = 1, green = 1, blue = 1, rotation = 0) {
+    addFace(world, face, ambientOcclusion, chunkX, chunkY, chunkZ, minX, minY, minZ, maxX, maxY, maxZ, minU, minV, maxU, maxV, red = 1, green = 1, blue = 1, rotation = 0, uOffset = 0, wrapRect = null) {
+        this.tessellator.setTileWrap(wrapRect);
+
         const addCorner = (x, y, z, u, v) => {
             let r = ((rotation % 4) + 4) % 4;
             if (r !== 0) {
@@ -500,7 +507,8 @@ export default class BlockRenderer {
                     v = minV + localU * vRange;
                 }
             }
-            this.addBlockCorner(world, face, ambientOcclusion, chunkX, chunkY, chunkZ, x, y, z, u, v, red, green, blue);
+            // Slide after rotation so the offset stays in the tile's U direction
+            this.addBlockCorner(world, face, ambientOcclusion, chunkX, chunkY, chunkZ, x, y, z, u + uOffset, v, red, green, blue);
         };
 
         if (face === EnumBlockFace.BOTTOM) {
@@ -539,6 +547,8 @@ export default class BlockRenderer {
             addCorner(maxX, minY, minZ, maxU, maxV);
             addCorner(maxX, minY, maxZ, minU, maxV);
         }
+
+        this.tessellator.setTileWrap(null);
     }
 
     addBlockCorner(world, face, ambientOcclusion, chunkX, chunkY, chunkZ, x, y, z, u, v, red, green, blue) {

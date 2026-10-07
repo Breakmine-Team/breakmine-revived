@@ -2,6 +2,45 @@ import * as THREE from "../../../../../../libraries/three.module.js";
 import EnumBlockFace from "../../util/EnumBlockFace.js";
 import { getLiquidBlockCornerHeights } from "./LiquidMeshHelper.js";
 
+/**
+ * Shader patch that makes a face's U coordinate wrap inside its own atlas tile.
+ * The atlas is a single texture, so three.js's RepeatWrapping would otherwise
+ * scroll the sample window into the neighbouring tiles (and around the atlas)
+ * instead of tiling the block's own texture. Keep this at module scope so every
+ * cloned material shares one program (three hashes onBeforeCompile.toString()).
+ */
+function applyTileWrapToShader(shader) {
+    shader.vertexShader = shader.vertexShader
+        .replace(
+            '#include <uv_pars_vertex>',
+            '#include <uv_pars_vertex>\nattribute vec4 aTileRect;\nattribute float aWrap;\nvarying vec4 vTileRect;\nvarying float vWrap;'
+        )
+        .replace(
+            '#include <uv_vertex>',
+            '#include <uv_vertex>\n\tvTileRect = aTileRect;\n\tvWrap = aWrap;'
+        );
+
+    shader.fragmentShader = shader.fragmentShader
+        .replace(
+            '#include <uv_pars_fragment>',
+            '#include <uv_pars_fragment>\nvarying vec4 vTileRect;\nvarying float vWrap;'
+        )
+        .replace(
+            '#include <map_fragment>',
+            `#ifdef USE_MAP
+	vec2 wrappedUv = vUv;
+	if ( vWrap > 0.5 && vTileRect.z > 0.0 ) {
+		wrappedUv.x = vTileRect.x + fract( ( vUv.x - vTileRect.x ) / vTileRect.z ) * vTileRect.z;
+	}
+	vec4 sampledDiffuseColor = texture2D( map, wrappedUv );
+	#ifdef DECODE_VIDEO_TEXTURE
+		sampledDiffuseColor = vec4( mix( pow( sampledDiffuseColor.rgb * 0.9478672986 + vec3( 0.0521327014 ), vec3( 2.4 ) ), sampledDiffuseColor.rgb * 0.0773993808, vec3( lessThanEqual( sampledDiffuseColor.rgb, vec3( 0.04045 ) ) ) ), sampledDiffuseColor.w );
+	#endif
+	diffuseColor *= sampledDiffuseColor;
+#endif`
+        );
+}
+
 export default class Tessellator {
 
     // Client-wide defaults for tessellators that don't override them. Both are
@@ -46,6 +85,10 @@ export default class Tessellator {
 
         this.rotationPivot = null;
         this.rotationFace = null;
+
+        this.tileRects = [];
+        this.wraps = [];
+        this.tileWrap = null;
     }
 
     // Material meshes are built from. A getter so callers can keep using
@@ -91,7 +134,22 @@ export default class Tessellator {
         this.vertices = [];
         this.uv = [];
         this.colors = [];
+        // Per-vertex atlas tile rect (minU, minV, uSpan, vSpan) and a flag that
+        // tells the shader to wrap the U coordinate inside that rect. Used by
+        // animated faces (e.g. conveyor belts) so the texture scrolls within
+        // its own tile instead of sliding across the whole atlas.
+        this.tileRects = [];
+        this.wraps = [];
+        this.tileWrap = null;
+        this.usesTileWrap = false;
         this.clearRotation();
+    }
+
+    // Set the atlas sub-rect that the next vertices' U coordinate wraps within,
+    // or null to disable wrapping. Kept as state so the block renderer doesn't
+    // have to thread it through every addVertexWithUV call.
+    setTileWrap(rect) {
+        this.tileWrap = rect;
     }
 
     // TODO: Use in the game for better FPS
@@ -166,6 +224,16 @@ export default class Tessellator {
         this.colors.push(this.green);
         this.colors.push(this.blue);
         this.colors.push(this.alpha);
+
+        // Add tile wrap data (minU, minV, uSpan, vSpan) and the wrap flag
+        if (this.tileWrap !== null) {
+            this.tileRects.push(this.tileWrap[0], this.tileWrap[1], this.tileWrap[2], this.tileWrap[3]);
+            this.wraps.push(1);
+            this.usesTileWrap = true;
+        } else {
+            this.tileRects.push(0, 0, 1, 1);
+            this.wraps.push(0);
+        }
     }
 
     // Rotate a model so it mounts on one of the six block faces. The model is
@@ -302,6 +370,12 @@ export default class Tessellator {
         if (this.uv.length > 0) {
             geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(this.uv), 2));
         }
+        // Only carry the (fairly large) wrap attributes on meshes that use them;
+        // every other mesh falls back to the shader's default generic values.
+        if (this.usesTileWrap && this.tileRects.length === this.addedVertices * 4) {
+            geometry.setAttribute('aTileRect', new THREE.BufferAttribute(new Float32Array(this.tileRects), 4));
+            geometry.setAttribute('aWrap', new THREE.BufferAttribute(new Float32Array(this.wraps), 1));
+        }
 
         // Create index array
         let index = [];
@@ -328,7 +402,10 @@ export default class Tessellator {
         }
 
         // Clone the material so opaque and translucent passes maintain separate states
-        let mesh = new THREE.Mesh(geometry, this.material.clone());
+        let material = this.material.clone();
+        material.onBeforeCompile = applyTileWrapToShader;
+        material.needsUpdate = true;
+        let mesh = new THREE.Mesh(geometry, material);
         mesh.castShadow = shadows;
         mesh.receiveShadow = shadows;
         if (!inThing) group.matrixAutoUpdate = false;

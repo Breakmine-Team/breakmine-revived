@@ -28,6 +28,12 @@ class ServerWorld {
         this.scheduledBlockTicks = new Map();
         this.blockTickQueue = [];
         this.minecraft = MINECRAFT_STUB;
+
+        // Re-entrancy guard for notifyNeighborBlockChange: nested notifications
+        // (a repeater's output feeding back into an oscillator/combinational
+        // loop) are queued and drained iteratively instead of recursing.
+        this.neighborUpdateQueue = [];
+        this.processingNeighborUpdates = false;
     }
 
     getBlockAt(x, y, z) {
@@ -126,38 +132,63 @@ class ServerWorld {
     }
 
     // Notify adjacent blocks that the block at (x, y, z) changed type.
+    // Propagation is synchronous but loop-safe: nested notifications are
+    // queued and drained iteratively instead of recursing, so a redstone cycle
+    // (oscillator / feedback circuit) can never overflow the call stack. The
+    // cap keeps a genuine oscillator (which has no stable fixpoint) bounded
+    // for each synchronous pass; the scheduled-tick system continues driving
+    // it at normal tick cadence.
     notifyNeighborBlockChange(x, y, z) {
-        const faces = [
-            { x: 1, y: 0, z: 0 },
-            { x: -1, y: 0, z: 0 },
-            { x: 0, y: 0, z: 1 },
-            { x: 0, y: 0, z: -1 },
-            { x: 0, y: 1, z: 0 },
-            { x: 0, y: -1, z: 0 }
-        ];
+        this.neighborUpdateQueue.push([x, y, z]);
+        if (this.processingNeighborUpdates) return;
 
-        for (const face of faces) {
-            const checkX = x + face.x;
-            const checkY = y + face.y;
-            const checkZ = z + face.z;
+        this.processingNeighborUpdates = true;
+        try {
+            const faces = [
+                { x: 1, y: 0, z: 0 },
+                { x: -1, y: 0, z: 0 },
+                { x: 0, y: 0, z: 1 },
+                { x: 0, y: 0, z: -1 },
+                { x: 0, y: 1, z: 0 },
+                { x: 0, y: -1, z: 0 }
+            ];
 
-            const typeId = this.getBlockAt(checkX, checkY, checkZ);
-            if (typeId === 0) continue;
+            let steps = 0;
+            while (this.neighborUpdateQueue.length > 0 && steps < 16384) {
+                const [cx, cy, cz] = this.neighborUpdateQueue.pop();
+                steps++;
 
-            const block = Block.getById(typeId);
-            if (!block) continue;
+                for (const face of faces) {
+                    const checkX = cx + face.x;
+                    const checkY = cy + face.y;
+                    const checkZ = cz + face.z;
 
-            if (typeof block.onNeighborBlockChange === 'function') {
-                block.onNeighborBlockChange(this, checkX, checkY, checkZ);
-            } else if (typeof block.onBlockTick === 'function') {
-                // Plenty of bluestone blocks (pusher, pusher head, sticky
-                // pusher, rod pillar, ...) have no onNeighborBlockChange hook.
-                // Calling only the hook meant those blocks were skipped
-                // entirely and silently kept their old state. Anything that
-                // ticks gets scheduled instead, so a neighbour change can
-                // never be dropped on the floor.
-                this.scheduleBlockTick(checkX, checkY, checkZ, 1);
+                    const typeId = this.getBlockAt(checkX, checkY, checkZ);
+                    if (typeId === 0) continue;
+
+                    const block = Block.getById(typeId);
+                    if (!block) continue;
+
+                    if (typeof block.onNeighborBlockChange === 'function') {
+                        block.onNeighborBlockChange(this, checkX, checkY, checkZ);
+                    } else if (typeof block.onBlockTick === 'function') {
+                        // Plenty of bluestone blocks (pusher, pusher head, sticky
+                        // pusher, rod pillar, ...) have no onNeighborBlockChange hook.
+                        // Calling only the hook meant those blocks were skipped
+                        // entirely and silently kept their old state. Anything that
+                        // ticks gets scheduled instead, so a neighbour change can
+                        // never be dropped on the floor.
+                        this.scheduleBlockTick(checkX, checkY, checkZ, 1);
+                    }
+                }
             }
+
+            if (steps >= 16384) {
+                console.warn("notifyNeighborBlockChange: propagation cascade capped after 16384 steps (oscillating redstone circuit?)");
+            }
+        } finally {
+            this.neighborUpdateQueue = [];
+            this.processingNeighborUpdates = false;
         }
     }
 

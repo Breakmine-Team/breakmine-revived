@@ -26,6 +26,8 @@ export default class World {
         this.entities = [];
         this.nextEntityId = 3;
 
+        this.ticks = 0;
+
         this.group = new THREE.Object3D();
         this.group.matrixAutoUpdate = false;
 
@@ -38,6 +40,12 @@ export default class World {
         // Block tick system
         this.blockTickQueue = [];
         this.scheduledBlockTicks = new Map();
+
+        // Re-entrancy guard for notifyNeighborBlockChange: nested notifications
+        // (a repeater's output feeding back into an oscillator/combinational
+        // loop) are queued and drained iteratively instead of recursing.
+        this.neighborUpdateQueue = [];
+        this.processingNeighborUpdates = false;
 
         // NBT-backed block entities (TileEntity equivalent).
         // Keyed by `${x},${y},${z}` -> BlockEntity instance.
@@ -124,6 +132,8 @@ export default class World {
     }
 
     onTick() {
+        this.ticks++;
+
         // Tick entities
         for (let i = 0; i < this.entities.length; i++) {
             this.entities[i].onUpdate();
@@ -881,29 +891,56 @@ export default class World {
      * Notify adjacent blocks that the block at (x, y, z) changed type
      * (placed or removed). Only blocks that explicitly implement
      * `onNeighborBlockChange` (e.g. observers, repeaters) are affected.
+     *
+     * Propagation is synchronous so multiplayer builds (where scheduled block
+     * ticks never run) still settle immediately, but nested notifications are
+     * queued and drained iteratively instead of recursing: a redstone loop
+     * (oscillator / feedback circuit) can therefore never overflow the call
+     * stack. The cap keeps a genuine oscillator -- which has no stable
+     * fixpoint -- bounded for each synchronous pass; the scheduled-block-tick
+     * system keeps driving it afterwards.
      */
     notifyNeighborBlockChange(x, y, z) {
-        let faces = [
-            { x: 1, y: 0, z: 0 },
-            { x: -1, y: 0, z: 0 },
-            { x: 0, y: 0, z: 1 },
-            { x: 0, y: 0, z: -1 },
-            { x: 0, y: 1, z: 0 },
-            { x: 0, y: -1, z: 0 }
-        ];
+        this.neighborUpdateQueue.push([x, y, z]);
+        if (this.processingNeighborUpdates) return;
 
-        for (let face of faces) {
-            let checkX = x + face.x;
-            let checkY = y + face.y;
-            let checkZ = z + face.z;
+        this.processingNeighborUpdates = true;
+        try {
+            const faces = [
+                { x: 1, y: 0, z: 0 },
+                { x: -1, y: 0, z: 0 },
+                { x: 0, y: 0, z: 1 },
+                { x: 0, y: 0, z: -1 },
+                { x: 0, y: 1, z: 0 },
+                { x: 0, y: -1, z: 0 }
+            ];
 
-            let typeId = this.getBlockAt(checkX, checkY, checkZ);
-            if (typeId === 0) continue;
+            let steps = 0;
+            while (this.neighborUpdateQueue.length > 0 && steps < 16384) {
+                const [cx, cy, cz] = this.neighborUpdateQueue.pop();
+                steps++;
 
-            let block = Block.getById(typeId);
-            if (block && typeof block.onNeighborBlockChange === "function") {
-                block.onNeighborBlockChange(this, checkX, checkY, checkZ);
+                for (let face of faces) {
+                    let checkX = cx + face.x;
+                    let checkY = cy + face.y;
+                    let checkZ = cz + face.z;
+
+                    let typeId = this.getBlockAt(checkX, checkY, checkZ);
+                    if (typeId === 0) continue;
+
+                    let block = Block.getById(typeId);
+                    if (block && typeof block.onNeighborBlockChange === "function") {
+                        block.onNeighborBlockChange(this, checkX, checkY, checkZ);
+                    }
+                }
             }
+
+            if (steps >= 16384) {
+                console.warn("notifyNeighborBlockChange: propagation cascade capped after 16384 steps (oscillating redstone circuit?)");
+            }
+        } finally {
+            this.neighborUpdateQueue = [];
+            this.processingNeighborUpdates = false;
         }
     }
 

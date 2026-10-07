@@ -18,12 +18,6 @@ export default class BlockConveyor extends Block {
     }
 
     doSlideFaceAnimate(face, x, y, z, world, tick) {
-        switch(face) {
-            case EnumBlockFace.WEST:
-            case EnumBlockFace.EAST:
-                return 0;
-            default:
-                return Math.sin(tick * 0.1) * 8;
-        }
+        return tick % 16;
     }
 }
