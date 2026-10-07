@@ -50,6 +50,19 @@ export default class GuiMods extends GuiScreen {
         this.modSlotContainer = new GuiModSlotContainer(this, this.mods);
         this.rebuildSlotList();
 
+        // Check if running in Electron
+        const isElectron = typeof navigator === 'object' &&
+            typeof navigator.userAgent === 'string' &&
+            navigator.userAgent.indexOf('Electron') !== -1;
+
+        // Add "Open Folder" button at top-left (0, 0) - only in Electron
+        if (isElectron) {
+            this.buttonOpenFolder = new GuiButton(this.minecraft, "Open Folder", 0, 0, 100, 20, () => {
+                this.openModsFolder();
+            });
+            this.buttonList.push(this.buttonOpenFolder);
+        }
+
         this.buttonToggle = new GuiButton(this.minecraft, "Toggle", this.width / 2 - 155, this.height - 52, 150, 20, async () => {
             if (this.selectedIndex < 0 || this.selectedIndex >= this.mods.length) return;
             const mod = this.mods[this.selectedIndex];
@@ -93,6 +106,15 @@ export default class GuiMods extends GuiScreen {
         this.buttonList.push(this.buttonBack);
 
         this.updateButtonStates();
+    }
+
+    openModsFolder() {
+        // Use the modsBridge to open the mods folder
+        if (typeof window !== 'undefined' && window.modsBridge && typeof window.modsBridge.openFolder === 'function') {
+            window.modsBridge.openFolder();
+        } else {
+            console.warn('[GuiMods] Cannot open mods folder: no bridge method available');
+        }
     }
 
     goBack() {

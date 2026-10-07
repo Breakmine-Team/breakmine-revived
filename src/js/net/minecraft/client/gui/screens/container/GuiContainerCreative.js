@@ -4,6 +4,8 @@ import InventoryBasic from "../../../inventory/inventory/InventoryBasic.js";
 import EnumCreativeInventoryTab from "../../EnumCreativeInventoryTab.js";
 import GuiScreen from "../../GuiScreen.js";
 import Block from "../../../world/block/Block.js";
+import { BlockRegistry } from "../../../world/block/BlockRegistry.js";
+import GuiButton from "../../widgets/GuiButton.js";
 
 export default class GuiContainerCreative extends GuiContainer {
 
@@ -17,7 +19,7 @@ export default class GuiContainerCreative extends GuiContainer {
         this.inventoryHeight = 136;
 
         this.cantPauseGame = true;
-        
+
         this.scrollOffset = 0;
         this.maxScroll = 0;
 
@@ -25,9 +27,12 @@ export default class GuiContainerCreative extends GuiContainer {
         this.currentScroll = 0;
         this._lastScrollTime = 0;
         this._scrollCooldownMs = 100;
-        
-        // Start selected tab at index 1
+
+        // Tab pagination
+        this.currentPage = 0;
+        this.tabsPerPage = 7;
         this.selectedTabIndex = 1;
+        this.allTabs = [];
     }
 
     init() {
@@ -37,12 +42,110 @@ export default class GuiContainerCreative extends GuiContainer {
         this.textureTabs = this.getTexture("gui/tabs.png");
 
         super.init();
-        
+
+        // Load all tabs (built-in + custom from mods)
+        this.loadAllTabs();
+
         // Calculate max scroll based on total items
         const itemCount = this.container.itemList.length;
         const visibleRows = 5; // 5 rows visible at once
         const totalRows = Math.ceil(itemCount / 9);
         this.maxScroll = Math.max(0, totalRows - visibleRows);
+
+        // Only add navigation buttons if there are more than 7 tabs
+        if (this.allTabs.length > this.tabsPerPage) {
+            // Add prev page button (above the GUI texture)
+            this.prevTabButton = new GuiButton(
+                this.minecraft,
+                "<",
+                this.x,
+                this.y - 22,
+                20,
+                20,
+                () => {
+                    if (this.currentPage > 0) {
+                        this.currentPage--;
+                        this.updateTabButtons();
+                    }
+                }
+            );
+            this.buttonList.push(this.prevTabButton);
+
+            // Add next page button (above the GUI texture)
+            this.nextTabButton = new GuiButton(
+                this.minecraft,
+                ">",
+                this.x + this.inventoryWidth - 20,
+                this.y - 22,
+                20,
+                20,
+                () => {
+                    const maxPage = Math.ceil(this.allTabs.length / this.tabsPerPage) - 1;
+                    if (this.currentPage < maxPage) {
+                        this.currentPage++;
+                        this.updateTabButtons();
+                    }
+                }
+            );
+            this.buttonList.push(this.nextTabButton);
+
+            // Set initial button enabled states
+            this.updateTabButtons();
+        }
+    }
+
+    loadAllTabs() {
+        this.allTabs = [];
+
+        // Load built-in tabs from EnumCreativeInventoryTab
+        Object.keys(EnumCreativeInventoryTab).forEach(propertyName => {
+            const tab = EnumCreativeInventoryTab[propertyName];
+            if (tab && typeof tab === 'object' && !(tab.id >= 99998)) {
+                this.allTabs.push({
+                    id: tab.id,
+                    name: tab.name,
+                    icon: tab.icon,
+                    isCustom: false
+                });
+            }
+        });
+
+        // Load custom tabs from mods
+        if (this.minecraft.modLoader) {
+            const customTabs = this.minecraft.modLoader.getCustomTabs();
+            for (const customTab of customTabs) {
+                this.allTabs.push({
+                    id: customTab.id,
+                    name: customTab.name,
+                    iconBlockId: customTab.iconBlockId,
+                    isCustom: true,
+                    modId: customTab.modId
+                });
+            }
+        }
+
+        // Sort tabs by ID to maintain consistent order
+        this.allTabs.sort((a, b) => a.id - b.id);
+    }
+
+    getCurrentPageTabs() {
+        const startIndex = this.currentPage * this.tabsPerPage;
+        const endIndex = startIndex + this.tabsPerPage;
+        return this.allTabs.slice(startIndex, endIndex);
+    }
+
+    updateTabButtons() {
+        if (!this.prevTabButton || !this.nextTabButton) return;
+
+        const maxPage = Math.ceil(this.allTabs.length / this.tabsPerPage) - 1;
+        this.prevTabButton.setEnabled(this.currentPage > 0);
+        this.nextTabButton.setEnabled(this.currentPage < maxPage);
+
+        // Destroy items so they rerender when page changes
+        if (this.minecraft?.itemRenderer) {
+            this.minecraft.itemRenderer.destroy("*");
+        }
+        this.container.dirty = true;
     }
 
     mouseClicked(mouseX, mouseY, button) {
@@ -95,11 +198,13 @@ export default class GuiContainerCreative extends GuiContainer {
         if (mouseY < tabY || mouseY >= tabY + 32) return false;
         if (mouseX < this.x || mouseX >= this.x + this.inventoryWidth) return false;
 
-        for (let tabId = 1; tabId <= 7; tabId++) {
-            const tabX = this.getTabX(tabId);
+        const currentTabs = this.getCurrentPageTabs();
+        for (let i = 0; i < currentTabs.length; i++) {
+            const tab = currentTabs[i];
+            const tabX = this.getTabX(i + 1); // Position in current page (1-7)
             if (mouseX >= tabX && mouseX < tabX + 26) {
-                if (this.selectedTabIndex !== tabId) {
-                    this.selectedTabIndex = tabId;
+                if (this.selectedTabIndex !== tab.id) {
+                    this.selectedTabIndex = tab.id;
                     this.updateTabItems();
                 }
                 return true;
@@ -133,42 +238,24 @@ export default class GuiContainerCreative extends GuiContainer {
     }
 
     drawInventoryBackground(stack) {
-        // Draw inactive bottom tabs (left-side)
-        if (true) {
+        const currentTabs = this.getCurrentPageTabs();
+
+        // Draw inactive bottom tabs - only for positions that have tabs
+        for (let i = 0; i < currentTabs.length; i++) {
+            const tabX = this.getTabX(i + 1);
+            const tabY = this.y + this.inventoryHeight - 4;
+
             const sourceX = 0;
             const sourceY = 65;
-            const tabRowWidth = 130;
+            const tabRowWidth = 26;
             const tabRowHeight = 31;
-
-            const destX = this.x;
-            const destY = this.y + this.inventoryHeight - 4;
 
             this.drawSprite(
                 stack,
                 this.textureTabs,
                 sourceX, sourceY,
                 tabRowWidth, tabRowHeight,
-                destX, destY,
-                tabRowWidth, tabRowHeight
-            );
-        }
-
-        // Draw inactive bottom tabs (right-side)
-        if (true) {
-            const sourceX = 0;
-            const sourceY = 65;
-            const tabRowWidth = 52;
-            const tabRowHeight = 31;
-
-            const destX = this.x + 143;
-            const destY = this.y + this.inventoryHeight - 4;
-
-            this.drawSprite(
-                stack,
-                this.textureTabs,
-                sourceX, sourceY,
-                tabRowWidth, tabRowHeight,
-                destX, destY,
+                tabX, tabY,
                 tabRowWidth, tabRowHeight
             );
         }
@@ -187,53 +274,56 @@ export default class GuiContainerCreative extends GuiContainer {
             this.inventoryHeight
         );
 
-        // Draw active bottom tab (1 to 7)
-        let sourceX = 0;
-        const sourceY = 96;
-        const tabRowWidth = 26;
-        const tabRowHeight = 32;
+        // Draw active bottom tab based on position in current page
+        const activeTabIndex = currentTabs.findIndex(tab => tab.id === this.selectedTabIndex);
+        if (activeTabIndex !== -1) {
+            let sourceX = 0;
+            const sourceY = 96;
+            const tabRowWidth = 26;
+            const tabRowHeight = 32;
 
-        let destX = this.x;
+            let destX = this.x;
 
-        if (this.selectedTabIndex === 2) {
-            destX += 26;
-            sourceX = 26;
-        } else if (this.selectedTabIndex === 3) {
-            destX += 26 * 2;
-            sourceX = 26;
-        } else if (this.selectedTabIndex === 4) {
-            destX += 26 * 3;
-            sourceX = 26;
-        } else if (this.selectedTabIndex === 5) {
-            destX += 26 * 4;
-            sourceX = 26;
-        } else if (this.selectedTabIndex === 6) {
-            destX += 143;
-            sourceX = 26;
-        } else if (this.selectedTabIndex === 7) {
-            destX += 143 + 26;
-            sourceX = 156;
+            if (activeTabIndex === 1) {
+                destX += 26;
+                sourceX = 26;
+            } else if (activeTabIndex === 2) {
+                destX += 26 * 2;
+                sourceX = 26;
+            } else if (activeTabIndex === 3) {
+                destX += 26 * 3;
+                sourceX = 26;
+            } else if (activeTabIndex === 4) {
+                destX += 26 * 4;
+                sourceX = 26;
+            } else if (activeTabIndex === 5) {
+                destX += 143;
+                sourceX = 26;
+            } else if (activeTabIndex === 6) {
+                destX += 143 + 26;
+                sourceX = 156;
+            }
+
+            const destY = this.y + this.inventoryHeight - 4;
+
+            this.drawSprite(
+                stack,
+                this.textureTabs,
+                sourceX, sourceY,
+                tabRowWidth, tabRowHeight,
+                destX, destY,
+                tabRowWidth, tabRowHeight
+            );
         }
 
-        const destY = this.y + this.inventoryHeight - 4;
-
-        this.drawSprite(
-            stack,
-            this.textureTabs,
-            sourceX, sourceY,
-            tabRowWidth, tabRowHeight,
-            destX, destY,
-            tabRowWidth, tabRowHeight
-        );
-        
         if (this.maxScroll > 0) {
             const barX = this.x + 175;
             const trackTop = 18;
             const trackBottom = 128;
             const thumbHeight = 15;
-            
+
             const scrollRange = (trackBottom - trackTop) - thumbHeight;
-            
+
             const scrollPercent = this.scrollOffset / this.maxScroll;
             const thumbY = this.y + trackTop + (scrollPercent * scrollRange);
 
@@ -241,7 +331,7 @@ export default class GuiContainerCreative extends GuiContainer {
         } else {
             const barX = this.x + 175;
             const trackTop = 18;
-            
+
             const thumbY = this.y + trackTop;
 
             this.drawSprite(stack, this.textureScrollbar, 0, 15, 12, 15, barX, thumbY, 12, 15);
@@ -254,32 +344,39 @@ export default class GuiContainerCreative extends GuiContainer {
     }
 
     drawTabIcons() {
-        for (let tabId = 1; tabId <= 7; tabId++) {
-            let tab = null;
-            Object.keys(EnumCreativeInventoryTab).forEach(propertyName => {
-                let property = EnumCreativeInventoryTab[propertyName];
-                if (property && property.id === tabId) {
-                    tab = property;
-                }
-            });
-
-            if (!tab) continue;
-
-            const block = Block.getById(tab.icon);
-            if (!block) continue;
-
-            const tabX = this.getTabX(tabId);
+        const currentTabs = this.getCurrentPageTabs();
+        for (let i = 0; i < currentTabs.length; i++) {
+            const tab = currentTabs[i];
+            const tabX = this.getTabX(i + 1); // Position in current page (1-7)
 
             const tabY = this.y + this.inventoryHeight - 4;
-            
+
             // Active tab pops down slightly (+12), while inactive tabs stay centered (+10)
-            const isSelected = (this.selectedTabIndex === tabId);
+            const isSelected = (this.selectedTabIndex === tab.id);
             let iconYOffset = isSelected ? 13 : 10;
             iconYOffset += 4;
 
+            let block;
+            if (tab.isCustom) {
+                // For custom tabs, resolve the block ID
+                if (tab.iconBlockId.includes(':')) {
+                    const [modId, blockName] = tab.iconBlockId.split(':');
+                    const namespacedId = `${modId}:${blockName}`;
+                    block = BlockRegistry.get(namespacedId);
+                } else {
+                    // Assume it's a vanilla block ID
+                    block = Block.getById(parseInt(tab.iconBlockId));
+                }
+            } else {
+                // For built-in tabs, use the icon property
+                block = Block.getById(tab.icon);
+            }
+
+            if (!block) continue;
+
             this.minecraft.itemRenderer.renderItemInGui(
                 "inventory",
-                "creative_tab_" + tabId,
+                "creative_tab_" + tab.id,
                 block,
                 tabX + 13,
                 tabY + iconYOffset
@@ -289,24 +386,39 @@ export default class GuiContainerCreative extends GuiContainer {
 
     drawTitle(stack) {
         let gotName = undefined;
-        Object.keys(EnumCreativeInventoryTab).forEach(propertyName => {
-            let property = EnumCreativeInventoryTab[propertyName];
-            if (property.id && property.id === this.selectedTabIndex) {
-                gotName = property.name;
-            }
-        });
+        const selectedTab = this.allTabs.find(tab => tab.id === this.selectedTabIndex);
+        if (selectedTab) {
+            gotName = selectedTab.name;
+        }
         this.drawString(stack, gotName ?? `Unnamed tab #${this.selectedTabIndex}`, this.x + 8, this.y + 6, 0x404040, false);
+
+        // Draw page counter label (e.g., "1/2") centered above the GUI, only if there are multiple pages
+        if (this.allTabs.length > this.tabsPerPage) {
+            const maxPage = Math.ceil(this.allTabs.length / this.tabsPerPage);
+            const pageCounter = `${this.currentPage + 1}/${maxPage}`;
+            const counterWidth = this.minecraft.fontRenderer.getStringWidth(stack, pageCounter);
+            this.drawString(stack, pageCounter, this.x + this.inventoryWidth / 2 - counterWidth / 2, this.y - 16, 0xFFFFFF, false);
+        }
     }
 
     updateTabItems() {
         this.container.updateFilter(this.selectedTabIndex);
-        
+
         const itemCount = this.container.itemList.length;
         const visibleRows = 5;
         const totalRows = Math.ceil(itemCount / 9);
         this.maxScroll = Math.max(0, totalRows - visibleRows);
-        
+
         this.scrollOffset = 0;
+
+        // Destroy items so they rerender with the new tab's items
+        if (this.minecraft?.itemRenderer) {
+            this.minecraft.itemRenderer.destroy("*");
+        }
+        this.container.dirty = true;
+
+        // Update button enabled states (for page navigation)
+        this.updateTabButtons();
     }
 
     keyTyped(key, character) {
@@ -330,16 +442,45 @@ export default class GuiContainerCreative extends GuiContainer {
         let tabChanged = false;
 
         if (key === "ArrowRight") {
-            if (this.selectedTabIndex < 7) {
-                this.selectedTabIndex++;
+            // Move to next tab, or next page if at end of current page
+            const currentTabs = this.getCurrentPageTabs();
+            const currentIndex = currentTabs.findIndex(tab => tab.id === this.selectedTabIndex);
+            if (currentIndex < currentTabs.length - 1) {
+                // Move to next tab in current page
+                this.selectedTabIndex = currentTabs[currentIndex + 1].id;
                 tabChanged = true;
+            } else {
+                // Move to first tab of next page
+                const maxPage = Math.ceil(this.allTabs.length / this.tabsPerPage) - 1;
+                if (this.currentPage < maxPage) {
+                    this.currentPage++;
+                    const nextTabs = this.getCurrentPageTabs();
+                    if (nextTabs.length > 0) {
+                        this.selectedTabIndex = nextTabs[0].id;
+                        tabChanged = true;
+                    }
+                }
             }
         }
 
         if (key === "ArrowLeft") {
-            if (this.selectedTabIndex > 1) {
-                this.selectedTabIndex--;
+            // Move to previous tab, or previous page if at start of current page
+            const currentTabs = this.getCurrentPageTabs();
+            const currentIndex = currentTabs.findIndex(tab => tab.id === this.selectedTabIndex);
+            if (currentIndex > 0) {
+                // Move to previous tab in current page
+                this.selectedTabIndex = currentTabs[currentIndex - 1].id;
                 tabChanged = true;
+            } else {
+                // Move to last tab of previous page
+                if (this.currentPage > 0) {
+                    this.currentPage--;
+                    const prevTabs = this.getCurrentPageTabs();
+                    if (prevTabs.length > 0) {
+                        this.selectedTabIndex = prevTabs[prevTabs.length - 1].id;
+                        tabChanged = true;
+                    }
+                }
             }
         }
 

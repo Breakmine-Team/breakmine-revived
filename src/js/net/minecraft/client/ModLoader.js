@@ -27,6 +27,8 @@ const DISABLED_MODS_KEY = 'breakmine_disabled_mods';
  *   gui/*.js             — GUI screen classes (extend GuiScreen / GuiContainer)
  *   commands/*.js        — chat commands (extend Command); registered for
  *                           client and server use, op-only with `this.opOnly = true`
+ *   tabs/*.js            — custom creative inventory tab classes (with static
+ *                           NAME and ICON_BLOCK_ID properties)
  *   gui_textures/*.png   — GUI background textures (accessible via 'gui/&lt;modId&gt;/&lt;name&gt;')
  *   textures/*.png       — 16×16 block/item textures
  *   sounds/*.ogg         — custom sounds (playable via Sound.play('&lt;modId&gt;:&lt;name&gt;.ogg', volume))
@@ -86,6 +88,7 @@ export default class ModLoader {
         this._modRegistrations = new Map(); // modId → { commands: Set, hooks: Set } for cleanup
         this._activeModId = null;       // mod currently being loaded (attributes registrations)
         this._modApis = new Map();      // modId → ModAPI facade handed to mod sandboxes
+        this.customTabs = [];           // Array of custom tabs from mods: { modId, name, iconBlockId }
     }
 
     /* ------------------------------------------------------------------
@@ -131,6 +134,53 @@ export default class ModLoader {
             } catch (error) {
                 console.warn('[Patchwork] Mod network hook failed:', error);
             }
+        }
+    }
+
+    /* ----------------------------- custom tabs ----------------------- */
+
+    /**
+     * Register a custom creative tab from a mod.
+     * @param {string} modId - The mod ID
+     * @param {string} name - The tab display name
+     * @param {string} iconBlockId - The block ID to use as the tab icon (e.g., "minecraft:stone" or "modId:block_name")
+     * @returns {object} The tab object with { id, name, iconBlockId, modId }
+     */
+    registerCustomTab(modId, name, iconBlockId) {
+        // Find the next available ID (starting from 100 to avoid conflicts with built-in tabs)
+        const nextId = 100 + this.customTabs.length;
+        const tab = { id: nextId, modId, name, iconBlockId };
+        this.customTabs.push(tab);
+        console.log(`[Patchwork] Registered custom tab '${name}' (ID: ${nextId}) from mod '${modId}' with icon '${iconBlockId}'`);
+        return tab;
+    }
+
+    /**
+     * Get all custom tabs registered by mods.
+     * @returns {Array} Array of { id, modId, name, iconBlockId }
+     */
+    getCustomTabs() {
+        return this.customTabs;
+    }
+
+    /**
+     * Get a custom tab by name.
+     * @param {string} name - The tab name
+     * @returns {object|null} The tab object or null if not found
+     */
+    getCustomTabByName(name) {
+        return this.customTabs.find(tab => tab.name === name) || null;
+    }
+
+    /**
+     * Clear all custom tabs (used when a mod is disabled/uninstalled).
+     * @param {string} modId - Optional mod ID to clear only tabs from that mod
+     */
+    clearCustomTabs(modId = null) {
+        if (modId) {
+            this.customTabs = this.customTabs.filter(tab => tab.modId !== modId);
+        } else {
+            this.customTabs = [];
         }
     }
 
@@ -311,6 +361,7 @@ export default class ModLoader {
         for (const entry of record.hooks) {
             this._removeRenderHook(entry);
         }
+        this.clearCustomTabs(modId);
         return record.commands.size + record.hooks.size;
     }
 
@@ -757,6 +808,10 @@ export default class ModLoader {
             .filter(f => f.startsWith('commands/') && f.endsWith('.js'))
             .map(f => f.replace(/^commands\//, ''));
 
+        const tabFiles = relFiles
+            .filter(f => f.startsWith('tabs/') && f.endsWith('.js'))
+            .map(f => f.replace(/^tabs\//, ''));
+
         entry.guiTextureNames = relFiles
             .filter(f => f.startsWith('gui_textures/') && f.endsWith('.png.b64'))
             .map(f => f.replace(/^gui_textures\//, '').replace(/\.png\.b64$/, ''));
@@ -780,6 +835,9 @@ export default class ModLoader {
 
         // 5b. Load and register chat commands from commands/
         await this._registerModCommands(modId, entry, commandFiles, fs);
+
+        // 5c. Load and register custom tabs from tabs/
+        await this._registerModTabs(modId, entry, tabFiles, fs);
 
         // 6. Load and register block classes (may reference GUI classes)
         await this._registerModBlocks(modId, entry, blockFiles, fs);
@@ -863,7 +921,33 @@ export default class ModLoader {
 
                 if (registered) {
                     registered.mod = entry.name;
-                    registered.inventoryTab = EnumCreativeInventoryTab.MATERIALS;
+
+                    // Set inventory tab - check if block specifies one, otherwise default to MATERIALS
+                    // First check class property, then instance property (in case it's set in constructor)
+                    const tabValue = blockClass.inventoryTab || (blockClass.prototype && blockClass.prototype.inventoryTab);
+
+                    if (tabValue) {
+                        if (typeof tabValue === 'object') {
+                            // It's already a tab object (EnumCreativeInventoryTab)
+                            registered.inventoryTab = tabValue;
+                        } else if (typeof tabValue === 'string') {
+                            // It's a tab name - look up custom tab
+                            const customTab = this.getCustomTabByName(tabValue);
+                            if (customTab) {
+                                registered.inventoryTab = { id: customTab.id, name: customTab.name };
+                                console.log(`[Patchwork] Assigned block '${namespacedId}' to custom tab '${tabValue}' (ID: ${customTab.id})`);
+                            } else {
+                                // Tab not found, default to MATERIALS
+                                registered.inventoryTab = EnumCreativeInventoryTab.MATERIALS;
+                                console.warn(`[Patchwork] Custom tab '${tabValue}' not found for block '${namespacedId}', defaulting to MATERIALS`);
+                            }
+                        } else {
+                            registered.inventoryTab = EnumCreativeInventoryTab.MATERIALS;
+                        }
+                    } else {
+                        registered.inventoryTab = EnumCreativeInventoryTab.MATERIALS;
+                    }
+
                     entry.blockIds.push(namespacedId);
                     entry.blockClasses.set(namespacedId, blockClass);
                     console.log(`[Patchwork] Registered block '${namespacedId}' from ${filename}`);
@@ -901,7 +985,29 @@ export default class ModLoader {
 
                 if (registered) {
                     registered.mod = entry.name;
-                    registered.inventoryTab = EnumCreativeInventoryTab.MATERIALS;
+
+                    // Set inventory tab - check if item specifies one, otherwise default to MATERIALS
+                    if (itemClass.inventoryTab) {
+                        if (typeof itemClass.inventoryTab === 'object') {
+                            // It's already a tab object (EnumCreativeInventoryTab)
+                            registered.inventoryTab = itemClass.inventoryTab;
+                        } else if (typeof itemClass.inventoryTab === 'string') {
+                            // It's a tab name - look up custom tab
+                            const customTab = this.getCustomTabByName(itemClass.inventoryTab);
+                            if (customTab) {
+                                registered.inventoryTab = { id: customTab.id, name: customTab.name };
+                            } else {
+                                // Tab not found, default to MATERIALS
+                                registered.inventoryTab = EnumCreativeInventoryTab.MATERIALS;
+                                console.warn(`[Patchwork] Custom tab '${itemClass.inventoryTab}' not found for item '${namespacedId}', defaulting to MATERIALS`);
+                            }
+                        } else {
+                            registered.inventoryTab = EnumCreativeInventoryTab.MATERIALS;
+                        }
+                    } else {
+                        registered.inventoryTab = EnumCreativeInventoryTab.MATERIALS;
+                    }
+
                     entry.itemIds.push(namespacedId);
                     entry.itemClasses.set(namespacedId, itemClass);
                     console.log(`[Patchwork]   Registered item '${namespacedId}' from ${filename}`);
@@ -1220,6 +1326,53 @@ export default class ModLoader {
                 console.log(`[Patchwork]   Registered command '/${registered.command}' from ${filename}`);
             } catch (err) {
                 console.error(`[Patchwork] Failed to load command '${filename}' from mod '${modId}':`, err);
+            }
+        }
+    }
+
+    /* ------------------------------------------------------------------
+     *  Internal — load tabs/*.js and register custom creative tabs
+     * ------------------------------------------------------------------ */
+
+    /**
+     * A tabs/TabMyItems.js file should export a class with static properties:
+     *
+     *   export default class TabMyItems {
+     *       static NAME = "My Items";
+     *       static ICON_BLOCK_ID = "minecraft:stone";  // or "modId:block_name"
+     *   }
+     *
+     * The tab will be added to the creative inventory with the specified icon.
+     */
+    async _registerModTabs(modId, entry, tabFiles, fs = this.filesystem) {
+        if (tabFiles.length === 0) return;
+
+        const ModAPI = this._getModApi(modId);
+        const deps = { ModAPI, BlockRegistry };
+
+        for (const filename of tabFiles) {
+            try {
+                const src = await fs.loadFile(`mods/${modId}/tabs/${filename}`);
+                if (!src) continue;
+
+                const TabClass = await this._evalClass(src, deps, modId, `tabs/${filename}`, fs);
+                if (!TabClass) {
+                    console.warn(`[Patchwork] No class found in tab file '${filename}' of mod '${modId}'`);
+                    continue;
+                }
+
+                const name = TabClass.NAME || 'Unnamed Tab';
+                const iconBlockId = TabClass.ICON_BLOCK_ID;
+
+                if (!iconBlockId) {
+                    console.warn(`[Patchwork] Tab '${name}' from mod '${modId}' missing ICON_BLOCK_ID, skipping`);
+                    continue;
+                }
+
+                this.registerCustomTab(modId, name, iconBlockId);
+                console.log(`[Patchwork]   Registered custom tab '${name}' from ${filename}`);
+            } catch (err) {
+                console.error(`[Patchwork] Failed to load tab '${filename}' from mod '${modId}':`, err);
             }
         }
     }

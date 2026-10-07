@@ -365,6 +365,39 @@ export default class BlockRenderer {
         minV = 1 - minV;
         maxV = 1 - maxV;
 
+        // Apply face slide animation if the block implements it
+        let slideOffset = 0;
+        if (world && typeof block.doSlideFaceAnimate === 'function') {
+            let tick = world.getTime?.() || 0;
+            let result = block.doSlideFaceAnimate(face, x, y, z, world, tick);
+            // Support both number and object return values (face -> offset)
+            if (typeof result === 'object' && result !== null) {
+                // Try by name, enum value, or ordinal
+                if (result[face]) {
+                    slideOffset = result[face];
+                } else if (face && face.name && result[face.name]) {
+                    slideOffset = result[face.name];
+                } else if (face && typeof face.ordinal === 'function' && result[face.ordinal()]) {
+                    slideOffset = result[face.ordinal()];
+                } else if (face && face.ordinal !== undefined && result[face.ordinal]) {
+                    slideOffset = result[face.ordinal];
+                }
+            } else {
+                slideOffset = result || 0;
+            }
+            // Clamp slideOffset to 0-16 range
+            slideOffset = Math.max(0, Math.min(16, slideOffset));
+            
+            if (slideOffset > 0) {
+                // Calculate slide amount as a fraction (0-1)
+                let slideFraction = slideOffset / 16.0;
+                let uRange = maxU - minU;
+                let uSlide = uRange * slideFraction;
+                minU += uSlide;
+                maxU += uSlide;
+            }
+        }
+
         let rotation = block.getRotationForFace(face, blockData, x, y, z, world);
 
         let color = block.getColor(world, x, y, z, face);

@@ -13,6 +13,7 @@ export default class GuiCredits extends GuiScreen {
             { name: "Paradoxism", role: "Developer" },
             { name: "Marw-Programmer", role: "Developer" },
             { name: "ewanhowell5195", role: "Texture Artist" },
+            { name: "Laby Studio", role: "js-minecraft base" },
         ];
     }
 

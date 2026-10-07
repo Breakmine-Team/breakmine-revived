@@ -37,7 +37,7 @@ export default class ItemBucketWater extends ItemGeneric {
             return;
         }
         minecraft.playerController.sendBlockPlacementPacket(
-            new BlockPosition(x - hitFace.x, y - hitFace.y, z - hitFace.z),
+            new BlockPosition(x, y, z),
             minecraft.getFaceValue(hitFace),
             { id: blockId }
         );

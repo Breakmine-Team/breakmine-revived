@@ -42,7 +42,7 @@ export default class GuiModSlot extends GuiButton {
         const authorStr = `by ${this.modAuthor}`;
         this.drawString(stack, authorStr, slotX + slotW - 2 - this.getStringWidth(stack, authorStr), slotY + 1, GRAY, true, false);
 
-        const statusStr = isEnabled ? "[ON]" : "[OFF]";
+        const statusStr = isEnabled ? "Enabled" : "Disabled";
         const statusColor = isEnabled ? 5635925 : 16733525;
         this.drawString(stack, statusStr, slotX + slotW - 2 - this.getStringWidth(stack, statusStr), slotY + 12, statusColor, true, false);
     }

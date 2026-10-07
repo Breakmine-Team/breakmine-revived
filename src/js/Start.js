@@ -9,7 +9,7 @@ window.addEventListener('unhandledrejection', event => {
     // promise inside an async init() leaves a screen half-built, and with no
     // log there is nothing on screen or in the console to explain it.
     const reason = event.reason;
-    console.warn('[Client] Unhandled promise rejection:', reason && reason.stack || reason);
+    //console.warn('[Client] Unhandled promise rejection:', reason && reason.stack || reason);
     event.preventDefault();
 });
 

@@ -208,10 +208,18 @@ function registerModHandlers() {
 
     ipcMain.handle('mods:getFileSize', (_event, filename) => {
         try {
-            return fs.statSync(resolveModPath(filename)).size;
-        } catch {
-            return null;
+            const stats = fs.statSync(resolveModPath(filename));
+            return stats.size;
+        } catch (err) {
+            if (err.code === 'ENOENT' || err.code === 'ENOTDIR') return null;
+            throw err;
         }
+    });
+
+    // Open the mods folder in the system file explorer.
+    ipcMain.handle('mods:openFolder', () => {
+        const { shell } = require('electron');
+        shell.openPath(MODS_DIR);
     });
 }
 

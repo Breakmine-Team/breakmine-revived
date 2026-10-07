@@ -109,4 +109,10 @@ contextBridge.exposeInMainWorld('modsBridge', {
    * @returns {Promise<number|null>}
    */
   getFileSize: (filename) => ipcRenderer.invoke('mods:getFileSize', filename),
+
+  /**
+   * Open the mods folder in the system file explorer.
+   * @returns {Promise<void>}
+   */
+  openFolder: () => ipcRenderer.invoke('mods:openFolder'),
 });

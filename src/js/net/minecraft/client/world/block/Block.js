@@ -145,6 +145,24 @@ export default class Block {
         return 0;
     }
 
+    /**
+     * Returns a slide offset for face animation. The value should be between 0-16,
+     * where 0 means no slide and 8 means half-face slide (shifts right half left
+     * and left half right, wrapped). Override this to implement animated face sliding.
+     * Can also return an object mapping faces to offsets.
+     * 
+     * @param {EnumBlockFace} face - The face to slide
+     * @param {number} x - Block X position
+     * @param {number} y - Block Y position
+     * @param {number} z - Block Z position
+     * @param {World} world - The world instance
+     * @param {number} tick - Current tick for animation timing
+     * @returns {number|object} Slide offset between 0-16, or map of face->offset
+     */
+    doSlideFaceAnimate(face, x, y, z, world, tick) {
+        return 0;
+    }
+
     getTransparency() {
         return 0.0;
     }
