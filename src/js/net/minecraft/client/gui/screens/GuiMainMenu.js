@@ -89,7 +89,8 @@ export default class GuiMainMenu extends GuiScreen {
 
         this.buttonList.push(new GuiButton(this.minecraft, "Account", this.width / 2 - 100, y + 24 * 3, 98, 20, () => {
             this.minecraft.displayScreen(new GuiAccount(this));
-        }).setEnabled(false).setTooltip("Server not operational currently!\nWill be fixed soon."));
+        }));
+        //}).setEnabled(false).setTooltip("Server not operational currently!\nWill be fixed soon."));
 
         this.initPanoramaRenderer();
     }
