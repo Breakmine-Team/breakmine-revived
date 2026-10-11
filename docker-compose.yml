@@ -2,6 +2,7 @@
 #
 #   web   :8000  the client, served from the checkout (published on host 8080)
 #   auth  :6006  cors.js, with user data on a volume
+#         :6007  tunnel.js, the WebSocket game-traffic relay
 #
 # No traefik labels on purpose -- both Dokploy and Coolify route by domain, so
 # point each domain at the container port and let the panel own TLS:
@@ -33,12 +34,14 @@ services:
     environment:
       DATA_DIR: /data
       PORT: "6006"
+      TUNNEL_PORT: "6007"
     volumes:
       # Accounts (auth.db), the JWT secret and uploaded skins. Losing this
       # volume signs everyone out and orphans every uploaded skin.
       - auth_data:/data
     expose:
       - "6006"
+      - "6007"
 
 volumes:
   auth_data:

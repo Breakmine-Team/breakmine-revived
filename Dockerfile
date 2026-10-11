@@ -3,7 +3,8 @@
 # cors.js on :6006. It answers the API on every hostname, and additionally
 # serves the game client when the request is for the site hostname
 # (SITE_HOSTNAMES, default breakmine.com), so one container can back both
-# breakmine.com and api.breakmine.com.
+# breakmine.com and api.breakmine.com. tunnel.js runs alongside it on :6007
+# to relay WebSocket game traffic.
 
 # ---- asset generation stage --------------------------------------------------
 FROM node:24-slim AS assets
@@ -30,6 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV NODE_ENV=production \
     DATA_DIR=/data \
     PORT=6006 \
+    TUNNEL_PORT=6007 \
     SITE_DIR=/app/public \
     SITE_HOSTNAMES=breakmine.com
 
@@ -62,6 +64,11 @@ COPY _headers /app/public/_headers
 
 # --- the auth API -------------------------------------------------------------
 COPY cors.js ./
+
+# --- the WebSocket tunnel relay ----------------------------------------------
+# tunnel.js relays game traffic over WS on TUNNEL_PORT. It needs only the `ws`
+# package and node builtins, both already present.
+COPY tunnel.js ./
 # cors.js reads these from its own directory when serving the catalog,
 # rel=service-desc and rel=service-doc.
 COPY catalog.json openapi.json api-docs.html ./
@@ -81,9 +88,11 @@ RUN mkdir -p /data && chown -R node:node /data /app
 USER node
 
 VOLUME ["/data"]
-EXPOSE 6006
+EXPOSE 6006 6007
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||6006)+'/',{headers:{host:process.env.SITE_HOSTNAMES?.split(',')[0]||'breakmine.com'}}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["node", "cors.js"]
+# Run the API and the tunnel relay together. `kill 0` forwards SIGTERM/SIGINT
+# to the whole process group so both children shut down gracefully.
+CMD ["bash", "-c", "trap 'kill 0' SIGTERM SIGINT; node cors.js & node tunnel.js & wait"]
