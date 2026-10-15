@@ -14,10 +14,12 @@
     "devs:all": "concurrently \"npm run devs:https\" \"npm run devs:http\"",
     "build": "node scripts/build-assets.js && vite build",
     "build:single": "node scripts/build-assets.js --include-music && vite build --config vite.singlehtml.config.js",
+    "build:offline": "node scripts/build-assets.js --include-music && vite build --config vite.singlehtml.config.js",
     "dist": "node appbuild.js --linux --win",
     "dist:linux": "node appbuild.js --linux",
     "dist:win": "node appbuild.js --win",
     "preview": "vite preview",
+    "preview:single": "vite preview --config vite.singlehtml.config.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "server": "node server.js"
   },

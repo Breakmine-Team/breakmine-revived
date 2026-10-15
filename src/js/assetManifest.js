@@ -135,8 +135,8 @@ const toolMaterials = ['wooden', 'stone', 'iron', 'diamond', 'golden'];
 const toolTypes = ['pickaxe', 'sword', 'shovel', 'axe', 'hoe'];
 
 export const atlasItemTextures = [
-    "apple.png", "bread.png", "stick.png", "iron_ingot.png", "coal.png",
-    "diamond.png", "emerald.png", "gold_ingot.png", "bucket.png",
+    "apple.png", "bread.png", "burger.png", "stick.png", "iron_ingot.png", "coal.png",
+    "diamond.png", "emerald.png", "gold_ingot.png", "uranium_ingot.png", "bucket.png",
     "water_bucket.png", "lava_bucket.png", "oak_sign.png", "oak_door.png",
     "clay_ball.png",
     "white_dye.png", "orange_dye.png", "magenta_dye.png", "light_blue_dye.png",

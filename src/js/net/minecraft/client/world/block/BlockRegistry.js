@@ -25,6 +25,7 @@ import BlockBrick from "./type/BlockBrick.js";
 import BlockFurnace from "./type/BlockFurnace.js";
 import ItemApple from "./type/ItemApple.js";
 import ItemBread from "./type/ItemBread.js";
+import ItemBurger from "./type/ItemBurger.js";
 import ItemStick from "./type/ItemStick.js";
 import ItemGeneric from "./type/ItemGeneric.js";
 import ItemPickaxe from "./type/ItemPickaxe.js";
@@ -387,6 +388,7 @@ export class BlockRegistry {
         // --- ITEMS & TOOLS ---
         BlockRegistry.ITEM_APPLE = new ItemApple(83, 14);
         BlockRegistry.ITEM_BREAD = new ItemBread(84, 15);
+        BlockRegistry.ITEM_BURGER = new ItemBurger(244, 0);
         BlockRegistry.ITEM_STICK = new ItemStick(85, 16);
 
         BlockRegistry.ITEM_IRON = new ItemGeneric(86, 'iron_ingot', 'Iron Ingot');
@@ -394,6 +396,7 @@ export class BlockRegistry {
         BlockRegistry.ITEM_DIAMOND = new ItemGeneric(88, 'diamond', 'Diamond');
         BlockRegistry.ITEM_EMERALD = new ItemGeneric(89, 'emerald', 'Emerald');
         BlockRegistry.ITEM_GOLD = new ItemGeneric(90, 'gold_ingot', 'Gold Ingot');
+        BlockRegistry.ITEM_URANIUM = new ItemGeneric(243, 'uranium_ingot', 'Uranium Ingot');
         BlockRegistry.ITEM_CLAY_BALL = new ItemGeneric(188, 'clay_ball', 'Clay Ball');
 
         const dyeColors = [

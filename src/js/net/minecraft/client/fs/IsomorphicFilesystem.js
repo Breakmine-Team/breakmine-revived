@@ -5,9 +5,10 @@ import { inflate } from '../../lib/pako.js';
 // Node.js detection that stays false inside a Web Worker even if the bundle
 // polyfills a global `process` (real Node always exposes process.versions.node).
 const isNode =
-    typeof process !== 'undefined' &&
+    (typeof process !== 'undefined' &&
     !!process.versions &&
-    !!process.versions.node;
+    !!process.versions.node) &&
+    !process.env?.SINGLEFILE_BUILD;
 
 let nodeFs = null;
 let nodeFsSync = null;
