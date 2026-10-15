@@ -1,4 +1,5 @@
 import BlockLog from "./type/BlockLog.js";
+import BlockLogBark from "./type/BlockLogBark.js";
 import BlockStone from "./type/BlockStone.js";
 import BlockGrass from "./type/BlockGrass.js";
 import BlockDirt from "./type/BlockDirt.js";
@@ -180,6 +181,7 @@ export class BlockRegistry {
         // --- WOOD TYPES ---
         // Oak
         BlockRegistry.LOG = new BlockLog(17, 4, "oak", "Oak Log");
+        BlockRegistry.LOG_BARK = new BlockLogBark(238, 4, "oak", "Oak Bark");
         BlockRegistry.WOOD = new BlockWood(5, 10, "oak", "Oak Planks");
         BlockRegistry.OAK_STAIRS = new BlockStair(150, 0, 5, "Oak");
         BlockRegistry.WOOD_SLAB = new BlockSlab(71, 0, "oak_planks", "Oak Slab", Block.sounds.wood);
@@ -190,6 +192,7 @@ export class BlockRegistry {
 
         // Spruce
         BlockRegistry.SPRUCE_LOG = new BlockLog(59, 0, "spruce", "Spruce Log");
+        BlockRegistry.SPRUCE_LOG_BARK = new BlockLogBark(239, 0, "spruce", "Spruce Bark");
         BlockRegistry.SPRUCE_PLANKS = new BlockWood(58, 0, "spruce", "Spruce Planks");
         BlockRegistry.SPRUCE_STAIRS = new BlockStair(151, 0, 58, "Spruce");
         BlockRegistry.SPRUCE_SLAB = new BlockSlab(72, 0, "spruce_planks", "Spruce Slab", Block.sounds.wood);
@@ -197,6 +200,7 @@ export class BlockRegistry {
 
         // Birch
         BlockRegistry.BIRCH_LOG = new BlockLog(62, 0, "birch", "Birch Log");
+        BlockRegistry.BIRCH_LOG_BARK = new BlockLogBark(240, 0, "birch", "Birch Bark");
         BlockRegistry.BIRCH_PLANKS = new BlockWood(61, 0, "birch", "Birch Planks");
         BlockRegistry.BIRCH_STAIRS = new BlockStair(152, 0, 61, "Birch");
         BlockRegistry.BIRCH_SLAB = new BlockSlab(73, 0, "birch_planks", "Birch Slab", Block.sounds.wood);
@@ -204,6 +208,7 @@ export class BlockRegistry {
 
         // Jungle
         BlockRegistry.JUNGLE_LOG = new BlockLog(65, 0, "jungle", "Jungle Log");
+        BlockRegistry.JUNGLE_LOG_BARK = new BlockLogBark(241, 0, "jungle", "Jungle Bark");
         BlockRegistry.JUNGLE_PLANKS = new BlockWood(64, 0, "jungle", "Jungle Planks");
         BlockRegistry.JUNGLE_STAIRS = new BlockStair(153, 0, 64, "Jungle");
         BlockRegistry.JUNGLE_SLAB = new BlockSlab(74, 0, "jungle_planks", "Jungle Slab", Block.sounds.wood);
@@ -211,6 +216,7 @@ export class BlockRegistry {
 
         // Acacia
         BlockRegistry.ACACIA_LOG = new BlockLog(68, 0, "acacia", "Acacia Log");
+        BlockRegistry.ACACIA_LOG_BARK = new BlockLogBark(242, 0, "acacia", "Acacia Bark");
         BlockRegistry.ACACIA_PLANKS = new BlockWood(67, 0, "acacia", "Acacia Planks");
         BlockRegistry.ACACIA_STAIRS = new BlockStair(154, 0, 67, "Acacia");
         BlockRegistry.ACACIA_SLAB = new BlockSlab(75, 0, "acacia_planks", "Acacia Slab", Block.sounds.wood);
