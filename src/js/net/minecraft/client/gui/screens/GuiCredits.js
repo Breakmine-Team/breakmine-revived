@@ -8,10 +8,15 @@ export default class GuiCredits extends GuiScreen {
         this.previousScreen = previousScreen;
 
         this.credits = [
-            { name: "SpinningCubes", role: "Lead Developer" },
+            { name: "SpinningCubes", role: "Lead Developer & Designer" },
             { name: "Blaise", role: "Developer" },
             { name: "Paradoxism", role: "Developer" },
             { name: "Marw-Programmer", role: "Developer" },
+            { name: "Ulysses", role: "Early Tester & Designer" },
+            { name: "Sara", role: "Early Tester & Designer" },
+            { name: "Chloe", role: "Early Tester" },
+            { name: "Archer", role: "K. K. Slider" },
+            { name: "Soup", role: "Texture Artist & Early Tester" },
             { name: "ewanhowell5195", role: "Texture Artist" },
             { name: "Laby Studio", role: "js-minecraft base" },
         ];
