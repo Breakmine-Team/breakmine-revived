@@ -91,6 +91,12 @@ export default class ChunkProviderGenerateWorker extends ChunkProvider {
             chunk.heightMap[i] = result.heightMap[i];
         }
 
+        if (result.biomeMap) {
+            for (let i = 0; i < 256; i++) {
+                chunk.biomeMap[i] = result.biomeMap[i];
+            }
+        }
+
         chunk.setModifiedAllSections();
         return chunk;
     }

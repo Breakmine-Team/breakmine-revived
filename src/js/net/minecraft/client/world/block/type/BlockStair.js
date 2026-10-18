@@ -50,6 +50,13 @@ export default class BlockStair extends Block {
         return this.getBoundingBox(world, x, y, z);
     }
 
+    getPlacementMetadata(world, x, y, z, face, yaw = 0) {
+        const dirIndex = Math.floor((yaw * 4 / 360) + 0.5) & 3;
+        let data = [3, 0, 2, 1][dirIndex];
+        if (face === 0) data |= 4;
+        return data;
+    }
+
     onBlockPlaced(world, x, y, z, face) {
         if (face === null) return;
 

@@ -35,6 +35,9 @@ export default class Chunk {
         // Create height map
         this.heightMap = [];
 
+        // Create biome map (biome ID for each column)
+        this.biomeMap = new Array(256).fill(0);
+
         // Block entities located in this chunk. The world also keeps a global
         // position->entity map; this list is the chunk-local view used for
         // serialization and chunk unload.
@@ -98,23 +101,38 @@ export default class Chunk {
     }
 
     generateBlockLightMap() {
-        let targetY = 32;
-        for (let x = 0; x < 16; x++) {
-            for (let z = 0; z < 16; z++) {
-                for (let y = 0; y < World.TOTAL_HEIGHT; y++) {
-                    let section = this.getSection(y >> 4);
+        // Walk section-by-section so empty sections (air everywhere) are
+        // skipped entirely instead of looping all 256 y levels for all 256
+        // columns (the original layout re-scanned 65k voxels per chunk).
+        for (let sy = 0; sy < World.TOTAL_HEIGHT >> 4; sy++) {
+            let section = this.getSection(sy);
+            if (section.isEmpty()) continue;
 
-                    let typeId = section.getBlockAt(x, y & 15, z);
-                    let block = Block.getById(typeId);
-                    let blockLight = typeId === 0 ? 0 : block.getLightValue(this.world, x + this.x * 16, y, z + this.z * 16);
+            for (let x = 0; x < 16; x++) {
+                for (let z = 0; z < 16; z++) {
+                    for (let yInSection = 0; yInSection < 16; yInSection++) {
+                        let y = (sy << 4) + yInSection;
+                        let typeId = section.getBlockAt(x, yInSection, z);
+                        if (typeId === 0) continue;
 
-                    if (blockLight > 0) {
-                        section.setLightAt(EnumSkyBlock.BLOCK, x, y & 15, z, blockLight);
+                        let block = Block.getById(typeId);
+                        let blockLight = block.getLightValue(this.world, x + this.x * 16, y, z + this.z * 16);
+                        if (blockLight > 0) {
+                            section.setLightAt(EnumSkyBlock.BLOCK, x, yInSection, z, blockLight);
+                        }
                     }
                 }
+            }
+        }
 
+        // Attenuate block light vertically the way the original column loop
+        // did (starting just below sea level target), but bail out per column
+        // as soon as the light level is exhausted.
+        for (let x = 0; x < 16; x++) {
+            for (let z = 0; z < 16; z++) {
                 let level = 15;
-                for (let y = targetY - 2; y < 256 && level > 0;) {
+                let y = 30;
+                while (y < 256 && level > 0) {
                     y++;
 
                     let section = this.getSection(y >> 4);
@@ -145,8 +163,8 @@ export default class Chunk {
         }
 
         this.world.updateLight(EnumSkyBlock.BLOCK,
-            this.x * 16, targetY - 1, this.z * 16,
-            this.x * 16 + 16, targetY + 1, this.z * 16 + 16
+            this.x * 16, 31, this.z * 16,
+            this.x * 16 + 16, 33, this.z * 16 + 16
         );
         this.setModifiedAllSections();
     }
@@ -287,6 +305,20 @@ export default class Chunk {
      */
     getHighestBlockAt(x, z) {
         return this.getHeightAt(x, z) - 1;
+    }
+
+    /**
+     * Get biome ID at position
+     */
+    getBiomeAt(x, z) {
+        return this.biomeMap[z << 4 | x];
+    }
+
+    /**
+     * Set biome ID at position
+     */
+    setBiomeAt(x, z, biomeId) {
+        this.biomeMap[z << 4 | x] = biomeId;
     }
 
     setLightAt(sourceType, x, y, z, level) {
@@ -491,10 +523,10 @@ export default class Chunk {
             const skyLight = {};
 
             for (let i = 0; i < 4096; i++) {
-                if (i in section.blocks && section.blocks[i] !== 0) {
+                if (section.blocks[i] !== 0) {
                     blocks[i] = section.blocks[i];
                 }
-                if (i in section.blocksData && section.blocksData[i] !== 0) {
+                if (section.blocksData[i] !== 0) {
                     blocksData[i] = section.blocksData[i];
                 }
                 if (i in section.blockLight) {
@@ -518,6 +550,7 @@ export default class Chunk {
             z: this.z,
             sections: sections,
             heightMap: Array.from(this.heightMap),
+            biomeMap: Array.from(this.biomeMap),
             blockEntities: this.serializeBlockEntities()
         };
     }
@@ -578,6 +611,7 @@ export default class Chunk {
         }
 
         chunk.heightMap = data.heightMap.slice();
+        chunk.biomeMap = data.biomeMap ? data.biomeMap.slice() : new Array(256).fill(0);
 
         // Restore block entities from NBT objects, then push their state back
         // into the block data nibble (NBT is authoritative for entity state).

@@ -431,7 +431,21 @@ export default class PlayerEntity extends EntityLiving {
     }
 
     getBlockSlipperiness() {
-        return this.onGround ? 0.6 : 1.0;
+        if (!this.onGround) {
+            return 1.0;
+        }
+
+        let blockX = MathHelper.floor(this.x);
+        let blockY = MathHelper.floor(this.y - 0.2);
+        let blockZ = MathHelper.floor(this.z);
+        let blockId = this.world.getBlockAt(blockX, blockY, blockZ);
+        let block = Block.getById(blockId);
+
+        if (block && block.slipperiness !== undefined) {
+            return block.slipperiness;
+        }
+
+        return 0.6;
     }
 
     getAIMoveSpeed() {

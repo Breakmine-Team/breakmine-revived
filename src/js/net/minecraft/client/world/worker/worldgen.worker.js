@@ -3,6 +3,7 @@ import Long from "../../../../../../../libraries/long.js";
 import WorldGenerator from "../generator/WorldGenerator.js";
 import FlatWorldGenerator from "../generator/FlatWorldGenerator.js";
 import {BlockRegistry} from "../block/BlockRegistry.js";
+import {BiomeRegistry} from "../biome/BiomeRegistry.js";
 
 const WORLD_TOTAL_HEIGHT = 256;
 const SECTION_SIZE = 16;
@@ -39,6 +40,7 @@ const BLOCK_STUBS = {
     24: new BlockStub(24),                         // IRON_ORE
     30: new BlockStub(30),                         // EMERALD_ORE
     55: new BlockStub(55, { opacity: 0.01, lightValue: 15, solid: false }), // LAVA
+    234: new BlockStub(234),                       // SNOW
 };
 
 const _defaultBlock = new BlockStub(0);
@@ -53,13 +55,17 @@ if (!BlockRegistry.init) {
     BlockRegistry.create();
 }
 
+if (!BiomeRegistry.init) {
+    BiomeRegistry.create();
+}
+
 class ChunkSectionStub {
     constructor(x, y, z) {
         this.x = x;
         this.y = y;
         this.z = z;
-        this.blocks = [];
-        this.blocksData = [];
+        this.blocks = new Uint8Array(4096);
+        this.blocksData = new Uint8Array(4096);
         this.blockLight = [];
         this.skyLight = [];
         this.empty = true;
@@ -67,7 +73,7 @@ class ChunkSectionStub {
 
     getBlockAt(x, y, z) {
         const index = y << 8 | z << 4 | x;
-        return !this.empty && index in this.blocks ? this.blocks[index] : 0;
+        return this.empty ? 0 : this.blocks[index];
     }
 
     setBlockAt(x, y, z, typeId) {
@@ -113,6 +119,7 @@ class ChunkStub {
         }
 
         this.heightMap = [];
+        this.biomeMap = new Array(256).fill(0);
     }
 
     getSection(y) {
@@ -143,6 +150,14 @@ class ChunkStub {
 
     getHighestBlockAt(x, z) {
         return this.getHeightAt(x, z) - 1;
+    }
+
+    getBiomeAt(x, z) {
+        return this.biomeMap[z << 4 | x];
+    }
+
+    setBiomeAt(x, z, biomeId) {
+        this.biomeMap[z << 4 | x] = biomeId;
     }
 
     calculateHeightAt(x, z, startY) {
@@ -404,7 +419,12 @@ function serializeChunk(chunk) {
         heightMap[i] = chunk.heightMap[i] || 0;
     }
 
-    return { x: chunk.x, z: chunk.z, sectionMask, sections, heightMap };
+    const biomeMap = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) {
+        biomeMap[i] = chunk.biomeMap[i] || 0;
+    }
+
+    return { x: chunk.x, z: chunk.z, sectionMask, sections, heightMap, biomeMap };
 }
 
 function generateChunks(chunkCoords, seedData, worldType, onProgress) {

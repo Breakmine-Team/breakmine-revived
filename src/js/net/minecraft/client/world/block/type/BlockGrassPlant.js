@@ -1,4 +1,5 @@
 import BlockFlower from "./BlockFlower.js";
+import BlockGrass from "./BlockGrass.js";
 
 export default class BlockGrassPlant extends BlockFlower {
 
@@ -13,6 +14,14 @@ export default class BlockGrassPlant extends BlockFlower {
 
         let temperature = world.getTemperature(x, y, z);
         let humidity = world.getHumidity(x, y, z);
-        return world.minecraft.grassColorizer.getColor(temperature, humidity);
+        let color = world.minecraft.grassColorizer.getColor(temperature, humidity);
+
+        // Match the grass block: blue the closer to a Snowy biome
+        const snowDist = BlockGrass.getDistanceToSnowBiome(world, x, z);
+        if (snowDist < 5) {
+            color = BlockGrass.blendTowardBlue(color, (5 - snowDist) / 5);
+        }
+
+        return color;
     }
 }

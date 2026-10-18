@@ -60,6 +60,11 @@ export default class BlockTorch extends Block {
         }
     }
 
+    getPlacementMetadata(world, x, y, z, face, yaw = 0) {
+        // Mirrors the old server-side face->data table (0-5, 0 = bottom)
+        return { 1: 5, 2: 4, 3: 3, 4: 2, 5: 1 }[face] ?? 5;
+    }
+
     onBlockPlaced(world, x, y, z, face) {
         let data = world.getBlockDataAt(x, y, z);
 

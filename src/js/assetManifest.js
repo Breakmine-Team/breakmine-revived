@@ -73,7 +73,7 @@ export const atlasBlockTextures = [
     "bush2.png", "bush3.png", "destroy_stage_0.png", "destroy_stage_1.png",
     "destroy_stage_2.png", "destroy_stage_3.png", "destroy_stage_4.png",
     "destroy_stage_5.png", "destroy_stage_6.png", "destroy_stage_7.png",
-    "destroy_stage_8.png", "destroy_stage_9.png", "oak_leaves.png", "oak_log.png",
+    "destroy_stage_8.png", "destroy_stage_9.png", "oak_leaves.png", "spruce_leaves.png", "birch_leaves.png", "jungle_leaves.png", "acacia_leaves.png", "oak_log.png",
     "oak_log_top.png", "white_wool.png", "white_concrete.png",
     "white_concrete_powder.png", "white_terracotta.png", "orange_wool.png",
     "orange_concrete.png", "orange_concrete_powder.png", "orange_terracotta.png",
@@ -128,7 +128,8 @@ export const atlasBlockTextures = [
     "tnt_side.png", "tnt_bottom.png", "tnt_top.png", "bluestoneMemoryTopOn.png",
     "bluestoneMemoryTopOff.png", "bluestoneMemoryTopSetOffResetOffOn.png",
     "bluestoneMemoryTopSetOnResetOff.png", "bluestoneMemoryTopSetOnResetOnOff.png",
-    "bluestoneMemoryTopSetOffResetOn.png"
+    "bluestoneMemoryTopSetOffResetOn.png",
+    "ice.png", "packed_ice.png", "blue_ice.png"
 ];
 
 const toolMaterials = ['wooden', 'stone', 'iron', 'diamond', 'golden'];

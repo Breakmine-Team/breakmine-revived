@@ -13,6 +13,13 @@ export default class BlockLog extends Block {
         this.sound = Block.sounds.wood;
     }
     
+    getPlacementMetadata(world, x, y, z, face, yaw = 0) {
+        // Horizontal rotation: 0 upright, 1 X-axis, 2 Z-axis (0-5, 0 = bottom)
+        if (face === 4 || face === 5) return 1;
+        if (face === 2 || face === 3) return 2;
+        return 0;
+    }
+
     getPreferredToolType() {
         return 'axe';
     }

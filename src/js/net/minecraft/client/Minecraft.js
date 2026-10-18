@@ -13,6 +13,7 @@ import Block from "./world/block/Block.js";
 import ItemTool from "./world/block/type/ItemTool.js";
 import BoundingBox from "../util/BoundingBox.js";
 import {BlockRegistry} from "./world/block/BlockRegistry.js";
+import {BiomeRegistry} from "./world/biome/BiomeRegistry.js";
 import FontRenderer from "./render/gui/FontRenderer.js";
 import GrassColorizer from "./render/GrassColorizer.js";
 import ModLoader from "./ModLoader.js";
@@ -143,6 +144,7 @@ export default class Minecraft {
 
         // Create all blocks
         BlockRegistry.create();
+        BiomeRegistry.create();
         CraftingRegistry.reset();
         SmeltingRegistry.reset();
 

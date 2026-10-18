@@ -77,6 +77,7 @@ import BlockBluestoneLeverDust from "./type/BlockBluestoneLeverDust.js";
 import ItemBluestoneLeverPlacer from "./type/ItemBluestoneLeverPlacer.js";
 import ItemBluestoneDustPlacer from "./type/ItemBluestoneDustPlacer.js";
 import BlockSnow from "./type/BlockSnow.js";
+import BlockIce from "./type/BlockIce.js";
 import ItemFlint from "./type/ItemFlint.js";
 import ItemFlintAndSteel from "./type/ItemFlintAndSteel.js";
 import BlockTNT from "./type/BlockTNT.js";
@@ -172,7 +173,11 @@ export class BlockRegistry {
         BlockRegistry.DIRT = new BlockDirt(3, 2);
         BlockRegistry.BEDROCK = new BlockBedrock(7, 11);
         BlockRegistry.GRAVEL = new BlockGravel(13, 13);
-        BlockRegistry.LEAVE = new BlockLeave(18, 6);
+        BlockRegistry.LEAVE = new BlockLeave(18, 6, "oak", "Oak Leaves");
+        BlockRegistry.SPRUCE_LEAVES = new BlockLeave(248, 0, "spruce", "Spruce Leaves");
+        BlockRegistry.BIRCH_LEAVES = new BlockLeave(249, 0, "birch", "Birch Leaves");
+        BlockRegistry.JUNGLE_LEAVES = new BlockLeave(250, 0, "jungle", "Jungle Leaves");
+        BlockRegistry.ACACIA_LEAVES = new BlockLeave(251, 0, "acacia", "Acacia Leaves");
         BlockRegistry.GLASS = new BlockGlass(20, 12);
         BlockRegistry.WATER = new BlockWater(9, 7);
         BlockRegistry.SAND = new BlockSand(12, 8);
@@ -462,6 +467,9 @@ export class BlockRegistry {
         BlockRegistry.ITEM_BLUESTONE_LEVER_PLACER = new ItemBluestoneLeverPlacer(180, 0, "Bluestone Lever");
 
         BlockRegistry.SNOW = new BlockSnow(234, 0, "snow", "Snow");
+        BlockRegistry.ICE = new BlockIce(245, 0, "ice", "Ice", 0.5, 0.98);
+        BlockRegistry.PACKED_ICE = new BlockIce(246, 0, "packed_ice", "Packed Ice", 0.5, 0.98);
+        BlockRegistry.BLUE_ICE = new BlockIce(247, 0, "blue_ice", "Blue Ice", 0.5, 0.989);
         BlockRegistry.FLINT = new ItemFlint(235, 0, "flint", "Flint");
         BlockRegistry.FLINT_AND_STEEL = new ItemFlintAndSteel(236, 0, "flint_and_steel", "Flint and Steel");
         BlockRegistry.TNT = new BlockTNT(237, 0, "tnt", "TNT");

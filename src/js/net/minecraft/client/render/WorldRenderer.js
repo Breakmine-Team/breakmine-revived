@@ -572,8 +572,11 @@ export default class WorldRenderer {
             this.updateDynamicLights();
         }
 
-        // Rebuild chunk sections each tick
-        let rebuildCount = Math.min(32, this.chunkSectionUpdateQueue.length);
+        // Rebuild chunk sections each tick. 16 per tick keeps the frame
+        // budget low (the full meshing of one section is expensive); the
+        // queue holds flagged sections, and WorldRenderer re-queues from
+        // isModified every frame, so waiting sections are not lost.
+        let rebuildCount = Math.min(16, this.chunkSectionUpdateQueue.length);
         for (let i = 0; i < rebuildCount; i++) {
             if (this.chunkSectionUpdateQueue.length !== 0) {
                 let chunkSection = this.chunkSectionUpdateQueue.shift();
@@ -630,22 +633,33 @@ export default class WorldRenderer {
         let radius = 12; 
         let candidates = [];
 
-        // Scan exact blocks to find all light sources
+        // Scan exact blocks to find all light sources. Chunks are resolved
+        // once per (chunkX, chunkZ) with a cheap Map-existence probe so the
+        // scan can never ask the provider to synchronously generate whole
+        // chunks — that was blocking the main thread for seconds per scan
+        // while moving around.
+        const chunkAvailable = new Map();
         for (let x = px - radius; x <= px + radius; x++) {
-            for (let y = py - radius; y <= py + radius; y++) {
-                for (let z = pz - radius; z <= pz + radius; z++) {
-                    let typeId;
-                    try {
-                        typeId = world.getBlockAt(x, y, z);
-                    } catch (e) {
-                        continue; // Chunk not loaded or out of bounds
-                    }
-                    
+            const chunkX = x >> 4;
+            for (let z = pz - radius; z <= pz + radius; z++) {
+                const chunkZ = z >> 4;
+                const chunkKey = chunkX + chunkZ * 65536;
+                let available = chunkAvailable.get(chunkKey);
+                if (available === undefined) {
+                    available = world.chunkExists(chunkX, chunkZ);
+                    chunkAvailable.set(chunkKey, available);
+                }
+
+                if (!available) continue;
+
+                for (let y = py - radius; y <= py + radius; y++) {
+                    let typeId = world.getBlockAt(x, y, z);
+
                     if (typeId === 0) continue;
-                    
+
                     let block = Block.getById(typeId);
                     if (!block) continue;
-                    
+
                     let lightValue = 0;
                     try {
                         if (typeof block.getLightValue === 'function') {
@@ -654,17 +668,17 @@ export default class WorldRenderer {
                     } catch (e) {
                         continue;
                     }
-                    
+
                     if (lightValue > 0) {
                         let dx = x - player.x;
                         let dy = y - player.y;
                         let dz = z - player.z;
                         let distSq = dx * dx + dy * dy + dz * dz;
-                        candidates.push({ 
-                            x, y, z, 
-                            distSq, 
-                            lightValue, 
-                            key: `${x},${y},${z}` 
+                        candidates.push({
+                            x, y, z,
+                            distSq,
+                            lightValue,
+                            key: `${x},${y},${z}`
                         });
                     }
                 }

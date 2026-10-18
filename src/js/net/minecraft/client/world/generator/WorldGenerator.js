@@ -2,10 +2,12 @@ import NoiseGeneratorOctaves from "./noise/NoiseGeneratorOctaves.js";
 import Primer from "./Primer.js";
 import CaveGenerator from "./structure/CaveGenerator.js";
 import {BlockRegistry} from "../block/BlockRegistry.js";
+import Block from "../block/Block.js";
 import TreeGenerator from "./structure/TreeGenerator.js";
 import BigTreeGenerator from "./structure/BigTreeGenerator.js";
 import Generator from "./Generator.js";
 import UndergroundHouseGenerator from "./structure/UndergroundHouseGenerator.js";
+import {BiomeRegistry} from "../biome/BiomeRegistry.js";
 
 const AIR_ID = 0;
 
@@ -32,6 +34,7 @@ export default class WorldGenerator extends Generator {
         this.EMERALD_ORE_ID = BlockRegistry.EMERALD_ORE.getId();
         this.SAPPHIRE_ORE_ID = BlockRegistry.SAPPHIRE_ORE.getId();
         this.BLUESTONE_ORE_ID = BlockRegistry.BLUESTONE_ORE.getId();
+        this.SNOW_ID = BlockRegistry.SNOW.getId();
 
         this.COMMON_FLOWER_IDS = [
             BlockRegistry.FLOWER_ROSE.getId(),
@@ -67,7 +70,21 @@ export default class WorldGenerator extends Generator {
 
         this.populationNoiseGenerator = new NoiseGeneratorOctaves(this.random, 8);
 
+        this.biomeGenerator = new NoiseGeneratorOctaves(this.random, 4);
+
         this.seaLevel = 120;
+    }
+
+    getBiomeAt(x, z) {
+        let biomeNoise = this.biomeGenerator.perlin(x * 0.005, z * 0.005);
+        
+        if (biomeNoise < -0.3) {
+            return BiomeRegistry.SNOWY;
+        } else if (biomeNoise < 0.3) {
+            return BiomeRegistry.PLAINS;
+        } else {
+            return BiomeRegistry.FOREST;
+        }
     }
 
     newChunk(world, chunkX, chunkZ, ChunkClass) {
@@ -78,11 +95,28 @@ export default class WorldGenerator extends Generator {
 
         this.generateInChunk(chunkX, chunkZ, primer);
 
+        // Generate biomes for this chunk
+        this.generateBiomes(chunkX, chunkZ, chunk);
+
         // Init skylight
         chunk.generateSkylightMap();
         chunk.generateBlockLightMap();
 
         return chunk;
+    }
+
+    generateBiomes(chunkX, chunkZ, chunk) {
+        let absoluteX = chunkX * 16;
+        let absoluteZ = chunkZ * 16;
+
+        for (let x = 0; x < 16; x++) {
+            for (let z = 0; z < 16; z++) {
+                let worldX = absoluteX + x;
+                let worldZ = absoluteZ + z;
+                let biome = this.getBiomeAt(worldX, worldZ);
+                chunk.setBiomeAt(x, z, biome.id);
+            }
+        }
     }
 
     generateInChunk(chunkX, chunkZ, primer) {
@@ -111,16 +145,22 @@ export default class WorldGenerator extends Generator {
         // Tree generator
         let bigTree = this.random.nextInt(10) === 0;
         let treeSeed = this.random.seed;
-        let treeGenerator = bigTree ? new BigTreeGenerator(this.world, treeSeed) : new TreeGenerator(this.world, treeSeed);
 
-        // Plant the trees in the chunk
+        // Plant the trees in the chunk (Forest and Snowy biomes)
         for (let i = 0; i < amount; i++) {
             let totalX = absoluteX + this.random.nextInt(16) + 8;
             let totalZ = absoluteZ + this.random.nextInt(16) + 8;
             let totalY = this.world.getHeightAt(totalX, totalZ);
 
-            // Generate tree at position
-            treeGenerator.generateAtBlock(totalX, totalY, totalZ);
+            // Check biome
+            let biome = this.getBiomeAt(totalX, totalZ);
+            if (biome === BiomeRegistry.FOREST) {
+                let tg = bigTree ? new BigTreeGenerator(this.world, treeSeed) : new TreeGenerator(this.world, treeSeed, "oak");
+                tg.generateAtBlock(totalX, totalY, totalZ);
+            } else if (biome === BiomeRegistry.SNOWY) {
+                let tg = new TreeGenerator(this.world, treeSeed, "spruce");
+                tg.generateAtBlock(totalX, totalY, totalZ);
+            }
         }
 
         let houseGenerator = new UndergroundHouseGenerator(this.world, this.random.seed);
@@ -181,6 +221,10 @@ export default class WorldGenerator extends Generator {
                 if (this.world.getBlockAt(plantX, plantY - 1, plantZ) !== this.GRASS_ID) continue;
                 // Prevent generating inside tree blocks
                 if (this.world.getBlockAt(plantX, plantY, plantZ) !== 0) continue;
+                
+                // Don't generate flowers in snowy biomes
+                let biome = this.getBiomeAt(plantX, plantZ);
+                if (biome === BiomeRegistry.SNOWY) continue;
 
                 let plantId;
                 if (isDoubleType && this.random.nextInt(2) === 0) {
@@ -241,7 +285,51 @@ export default class WorldGenerator extends Generator {
                 if (this.world.getBlockAt(plantX, plantY - 1, plantZ) !== this.GRASS_ID) continue;
                 if (this.world.getBlockAt(plantX, plantY, plantZ) !== 0) continue;
 
+                // Don't generate grass plants in snowy biomes
+                let biome = this.getBiomeAt(plantX, plantZ);
+                if (biome === BiomeRegistry.SNOWY) continue;
+
                 this.world.setBlockAt(plantX, plantY, plantZ, this.GRASS_PLANT_ID);
+            }
+        }
+
+        // Snow layer generation in Snowy biome
+        for (let x = 0; x < 16; x++) {
+            for (let z = 0; z < 16; z++) {
+                let worldX = absoluteX + x;
+                let worldZ = absoluteZ + z;
+                let biome = this.getBiomeAt(worldX, worldZ);
+
+                if (biome === BiomeRegistry.SNOWY) {
+                    // Check multiple Y levels to catch under-cliff surfaces
+                    let blockBelow = 0;
+                    for (let y = this.seaLevel; y < 256; y++) {
+                        let blockAbove = this.world.getBlockAt(worldX, y + 1, worldZ);
+                        if (blockAbove !== 0) {
+                            blockBelow = blockAbove;
+                            continue;
+                        }
+                        let blockId = blockBelow;
+                        
+                        // Place snow on top of solid blocks if space above is air
+                        if (blockId !== 0) {
+                            let block = Block.getById(blockId);
+                            if (block && block.isSolid && block.isSolid()) {
+                                // Don't place snow on leaves, logs, or already snowy blocks
+                                if (blockId !== this.LEAVE_ID && 
+                                    blockId !== this.LOG_ID && 
+                                    blockId !== this.SNOW_ID) {
+                                    if (typeof this.world.setBlockAtNoEvents === "function") {
+                                        this.world.setBlockAtNoEvents(worldX, y + 1, worldZ, this.SNOW_ID);
+                                    } else {
+                                        this.world.setBlockAt(worldX, y + 1, worldZ, this.SNOW_ID);
+                                    }
+                                }
+                            }
+                        }
+                        blockBelow = blockAbove;
+                    }
+                }
             }
         }
 

@@ -4,9 +4,10 @@ import { BlockRegistry } from "../BlockRegistry.js";
 
 export default class BlockLeave extends Block {
 
-    constructor(id, textureSlotId) {
+    constructor(id, textureSlotId, woodType = "oak", displayName = "Oak Leaves") {
         super(id, textureSlotId);
-        this.description = "Oak Leaves";
+        this.description = displayName;
+        this.woodType = woodType;
         this.hardness = 0.2;
 
         // Sound
@@ -15,7 +16,7 @@ export default class BlockLeave extends Block {
     }
 
     getTextureForFace(face) {
-        return 'oak_leaves';
+        return `${this.woodType}_leaves`;
     }
 
     shouldRenderFace(world, x, y, z, face) {

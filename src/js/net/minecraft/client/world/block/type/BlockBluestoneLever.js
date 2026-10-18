@@ -68,6 +68,11 @@ export default class BlockBluestoneLever extends Block {
         this._scheduleNeighbors(world, x, y, z);
     }
 
+    getPlacementMetadata(world, x, y, z, face, yaw = 0) {
+        const faceData = [1, 0, 3, 2, 5, 4][face] ?? 0;
+        return faceData << 1;
+    }
+
     onBlockPlaced(world, x, y, z, face) {
         if (face == null) {
             return;

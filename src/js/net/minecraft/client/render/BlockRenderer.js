@@ -13,6 +13,10 @@ import { BlockRegistry } from "../world/block/BlockRegistry.js";
 import * as THREE from "../../../../../../libraries/three.module.js";
 import EnumCreativeInventoryTab from "../gui/EnumCreativeInventoryTab.js";
 
+// Hoisted once: EnumBlockFace.values() allocates a fresh array on every call,
+// and the mesh generator calls it per block.
+const FACES = EnumBlockFace.values();
+
 export default class BlockRenderer {
 
     constructor(worldRenderer) {
@@ -162,12 +166,11 @@ export default class BlockRenderer {
             }
             
             if (partBlock && bbox) {
-                let values = EnumBlockFace.values();
-                for (let j = 0; j < values.length; j++) {
-                    if (respectFaces && partBlock.shouldRenderFace(world, x, y, z, values[j]) === false) {
+                for (let j = 0; j < FACES.length; j++) {
+                    if (respectFaces && partBlock.shouldRenderFace(world, x, y, z, FACES[j]) === false) {
                         continue;
                     }
-                    this.renderFace(world, partBlock, bbox, values[j], false, x, y, z);
+                    this.renderFace(world, partBlock, bbox, FACES[j], false, x, y, z);
                 }
             }
         }
@@ -176,12 +179,15 @@ export default class BlockRenderer {
     renderSolidBlock(world, block, ambientOcclusion, x, y, z) {
         let boundingBox = block.getBoundingBox(world, x, y, z);
 
-        let values = EnumBlockFace.values();
-        for (let i = 0; i < values.length; i++) {
-            let face = values[i];
-            let neighborBlock = world ? Block.getById(world.getBlockAtFace(x, y, z, face)) : null;
+        // neighborId is fetched once per face here instead of inside
+        // shouldRenderFace() as well, halving the world-space block lookups
+        // performed by the single most executed loop in mesh generation.
+        for (let i = 0; i < FACES.length; i++) {
+            let face = FACES[i];
+            let neighborId = world ? world.getBlockAtFace(x, y, z, face) : undefined;
+            let neighborBlock = world ? Block.getById(neighborId) : null;
 
-            if (world === null || block.shouldRenderFace(world, x, y, z, face) || (neighborBlock !== null && (neighborBlock.path === true || neighborBlock.noFaceCull === true || neighborBlock.multipart === true))) {
+            if (world === null || block.shouldRenderFace(world, x, y, z, face, neighborId) || (neighborBlock !== null && (neighborBlock.path === true || neighborBlock.noFaceCull === true || neighborBlock.multipart === true))) {
                 this.renderFace(world, block, boundingBox, face, block.getAmbientOcclusion() && ambientOcclusion, x, y, z);
             }
         }
@@ -275,12 +281,12 @@ export default class BlockRenderer {
     renderPath(world, block, ambientOcclusion, x, y, z) {
         let boundingBox = new BoundingBox(0, 0, 0, 1, 1 - (1/16), 1);
 
-        let values = EnumBlockFace.values();
-        for (let i = 0; i < values.length; i++) {
-            let face = values[i];
-            let neighborBlock = world ? Block.getById(world.getBlockAtFace(x, y, z, face)) : null;
+        for (let i = 0; i < FACES.length; i++) {
+            let face = FACES[i];
+            let neighborId = world ? world.getBlockAtFace(x, y, z, face) : undefined;
+            let neighborBlock = world ? Block.getById(neighborId) : null;
 
-            if (world === null || block.shouldRenderFace(world, x, y, z, face) || (neighborBlock !== null && (neighborBlock.path === true || neighborBlock.noFaceCull === true || neighborBlock.multipart === true))) {
+            if (world === null || block.shouldRenderFace(world, x, y, z, face, neighborId) || (neighborBlock !== null && (neighborBlock.path === true || neighborBlock.noFaceCull === true || neighborBlock.multipart === true))) {
                 this.renderFace(world, block, boundingBox, face, block.getAmbientOcclusion() && ambientOcclusion, x, y, z);
             }
         }

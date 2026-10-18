@@ -118,6 +118,11 @@ export default class BlockDoor extends Block {
         return this.id === DOOR_TOP ? [DOOR_BOTTOM, 1] : [this.id, 1];
     }
 
+    getPlacementMetadata(world, x, y, z, face, yaw = 0) {
+        const dirIndex = Math.floor((yaw * 4 / 360) + 0.5) & 3;
+        return [2, 5, 3, 4][dirIndex];
+    }
+
     onBlockPlaced(world, x, y, z, face) {
         if (!world || !world.minecraft || !world.minecraft.player) {
             return;

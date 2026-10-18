@@ -10,6 +10,7 @@ import MetadataChunkBlock from "../../util/MetadataChunkBlock.js";
 import * as THREE from "../../../../../../libraries/three.module.js";
 import ContainerFurnace from "../inventory/container/ContainerFurnace.js";
 import BlockEntityRegistry from "./block/entity/BlockEntityRegistry.js";
+import {BiomeRegistry} from "./biome/BiomeRegistry.js";
 
 export default class World {
 
@@ -1178,11 +1179,43 @@ export default class World {
     }
 
     getTemperature(x, y, z) {
-        return 0.75; // TODO implement biomes
+        let chunk = this.getChunkAtBlock(x, z);
+        if (!chunk) return 0.75;
+
+        let localX = x & 15;
+        let localZ = z & 15;
+        
+        // Check if chunk has biome data (for backwards compatibility)
+        if (!chunk.biomeMap || typeof chunk.getBiomeAt !== 'function') {
+            return 0.75;
+        }
+
+        let biomeId = chunk.getBiomeAt(localX, localZ);
+
+        if (biomeId === 0) return 0.75;
+
+        let biome = BiomeRegistry.getById(biomeId);
+        return biome ? biome.getTemperature() : 0.75;
     }
 
     getHumidity(x, y, z) {
-        return 0.85; // TODO implement biomes
+        let chunk = this.getChunkAtBlock(x, z);
+        if (!chunk) return 0.85;
+
+        let localX = x & 15;
+        let localZ = z & 15;
+        
+        // Check if chunk has biome data (for backwards compatibility)
+        if (!chunk.biomeMap || typeof chunk.getBiomeAt !== 'function') {
+            return 0.85;
+        }
+
+        let biomeId = chunk.getBiomeAt(localX, localZ);
+
+        if (biomeId === 0) return 0.85;
+
+        let biome = BiomeRegistry.getById(biomeId);
+        return biome ? biome.getHumidity() : 0.85;
     }
 
     getSkyColor(x, z, partialTicks) {

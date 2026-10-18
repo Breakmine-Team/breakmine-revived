@@ -686,60 +686,19 @@ function handleBlockPlacement(player, buffer, offset) {
         }
         const blockId = heldItemId;
 
-        // Custom Stair Block IDs registered in BlockRegistry:
-        // 150: Oak, 151: Spruce, 152: Birch, 153: Jungle, 154: Acacia,
-        // 155: Cobblestone, 156: Mossy Cobblestone, 157: Brick
-        const isStair = [150, 151, 152, 153, 154, 155, 156, 157].includes(blockId);
-
-        // Calculate metadata based on block type and placement direction
+        // Ask the block itself for its placement metadata. Every directional
+        // block implements getPlacementMetadata() in its own class, so the
+        // server needs no per-block special cases here — mod blocks included.
+        const serverWorld = getServerWorld();
+        const heldBlockForMeta = Block.getById(blockId);
         let metadata = 0;
-
-        if (blockId === 50) { // Torch
-            if (direction === 1) metadata = 5;
-            else if (direction === 2) metadata = 4;
-            else if (direction === 3) metadata = 3;
-            else if (direction === 4) metadata = 2;
-            else if (direction === 5) metadata = 1;
-            else metadata = 5;
-        } else if (blockId === 17 || blockId === 59 || blockId === 62 || blockId === 65 || blockId === 68) { // Logs
-            if (direction === 4 || direction === 5) metadata = 1;
-            else if (direction === 2 || direction === 3) metadata = 2;
-            else metadata = 0;
-        } else if (blockId >= 70 && blockId <= 77) { // Slabs
-            if (direction === 0) metadata = 1;
-            else metadata = 0;
-        } else if (blockId === 32 || blockId === 34) { // Chest and Furnace
-            let yaw = player.yaw ?? player.rotationYaw ?? 0;
-            let dirIndex = Math.floor((yaw * 4 / 360) + 0.5) & 3;
-            metadata = [2, 5, 3, 4][dirIndex];
-        } else if (isStair) { // Custom Stair Rotation
-            let yaw = player.yaw ?? player.rotationYaw ?? 0;
-            let dirIndex = Math.floor((yaw * 4 / 360) + 0.5) & 3;
-            // Inverted array mapping (3: NORTH, 0: EAST, 2: SOUTH, 1: WEST) to match client placement
-            metadata = [3, 0, 2, 1][dirIndex];
-            // Upside-down stair if placed against bottom face of overhead block
-            if (direction === 0) metadata |= 4;
-        } else if (blockId === 121) { // BlockRegistry.SIGN
-            let yaw = player.yaw ?? player.rotationYaw ?? 0;
-            let dirIndex = Math.floor((yaw * 4 / 360) + 0.5) & 3;
-            // 0: South, 2: North -> X-axis rotation (data = 1); 1: West, 3: East -> Z-axis rotation (data = 0)
-            if (dirIndex === 0 || dirIndex === 2) {
-                metadata = 1;
-            } else {
-                metadata = 0;
-            }
-        } else if (blockId === 160) { // Oak Door (bottom half places the top half)
-            let yaw = player.yaw ?? player.rotationYaw ?? 0;
-            let dirIndex = Math.floor((yaw * 4 / 360) + 0.5) & 3;
-            metadata = [2, 5, 3, 4][dirIndex];
-        } else if (blockId === 168 || blockId === 169 || blockId === 182) { // Bluestone Repeater / Observer / Memory Cell
-            let yaw = player.yaw ?? player.rotationYaw ?? 0;
-            let dirIndex = Math.floor((yaw * 4 / 360) + 0.5) & 3;
-            // Direction stored in bits 1-2 (0: SOUTH, 1: WEST, 2: NORTH, 3: EAST)
-            metadata = dirIndex << 1;
-        } else if (blockId === 178) { // Bluestone Lever
-            // Mounted face (opposite of the clicked face) stored in bits 1-3
-            metadata = ([1, 0, 3, 2, 5, 4][direction] ?? 0) << 1;
+        if (heldBlockForMeta && typeof heldBlockForMeta.getPlacementMetadata === 'function') {
+            metadata = heldBlockForMeta.getPlacementMetadata(
+                serverWorld,
+                placeX, placeY, placeZ,
+                direction,
+                player.yaw ?? player.rotationYaw ?? 0
+            ) || 0;
         }
 
         addWorldChange(placeX, placeY, placeZ, blockId, metadata);
@@ -753,7 +712,6 @@ function handleBlockPlacement(player, buffer, offset) {
         // Trigger the block's server-side lifecycle + wake up neighbors so the
         // bluestone simulation (dust propagation, lamps, repeaters, observers,
         // doors) runs authoritatively on the server.
-        const serverWorld = getServerWorld();
         const placedBlock = Block.getById(blockId);
         if (placedBlock && typeof placedBlock.onBlockAdded === 'function') {
             try {

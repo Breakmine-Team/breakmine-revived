@@ -39,6 +39,10 @@ export default class BlockSlab extends Block {
         return this.getBoundingBox(world, x, y, z);
     }
 
+    getPlacementMetadata(world, x, y, z, face, yaw = 0) {
+        return face === 0 ? 1 : 0;
+    }
+
     onBlockPlaced(world, x, y, z, face) {
         let data = 0;
         if (face === EnumBlockFace.BOTTOM) {

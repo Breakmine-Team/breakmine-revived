@@ -31,9 +31,13 @@ export default class ChunkSection {
         this.isModified = true;
         this.isDirty = false;
 
-        this.blocks = [];
-        this.blocksData = [];
+        // Typed arrays: every get/set becomes a direct index read/write instead
+        // of a holey-array `in` operator probe (the single hottest path in both
+        // worldgen and meshing).
+        this.blocks = new Uint8Array(4096);
+        this.blocksData = new Uint8Array(4096);
         this.blockLight = [];
+        this.skyLight = [];
         this.skyLight = [];
         this.empty = true;
         
@@ -83,6 +87,25 @@ export default class ChunkSection {
     }
 
     rebuild(renderer) {
+        // Neighbor availability guard: meshing samples blocks one block past
+        // the section borders. If a neighboring chunk is not loaded yet, doing
+        // that sample would make the provider synchronously generate an entire
+        // chunk mid-mesh — the cause of the seconds-long spikes when moving.
+        // Instead, leave the section flagged (isModified) so WorldRenderer
+        // re-queues it once the neighbor chunk arrives.
+        const wx = this.x << 4;
+        const wz = this.z << 4;
+
+        if (this.world && (
+            !this.world.chunkExists(wx >> 4, wz >> 4) ||
+            !this.world.chunkExists((wx >> 4) + 1, wz >> 4) ||
+            !this.world.chunkExists((wx >> 4) - 1, wz >> 4) ||
+            !this.world.chunkExists(wx >> 4, (wz >> 4) + 1) ||
+            !this.world.chunkExists(wx >> 4, (wz >> 4) - 1)
+        )) {
+            return;
+        }
+
         this.isModified = false;
         this.group.clear();
         this.translucentMesh = null; // Reset on rebuild
@@ -90,10 +113,8 @@ export default class ChunkSection {
         let ambientOcclusion = this.world.minecraft.settings.ambientOcclusion;
         let tessellator = renderer.blockRenderer.tessellator;
 
-        // Convert section origin to world block coordinates
-        const wx = this.x << 4;
+        // Section origin world Y
         const wy = this.y << 4;
-        const wz = this.z << 4;
 
         // Fetch adjacent sections using world block offsets
         const north = this.world.getChunkAtBlock(wx, wy, wz - 1);
@@ -234,12 +255,12 @@ export default class ChunkSection {
 
     getBlockAt(x, y, z) {
         let index = y << 8 | z << 4 | x;
-        return !this.empty && index in this.blocks ? this.blocks[index] : 0;
+        return this.empty ? 0 : this.blocks[index];
     }
 
     getBlockDataAt(x, y, z) {
         let index = y << 8 | z << 4 | x;
-        return !this.empty && index in this.blocksData ? this.blocksData[index] : 0;
+        return this.empty ? 0 : this.blocksData[index];
     }
 
     setBlockAt(x, y, z, typeId, data) {

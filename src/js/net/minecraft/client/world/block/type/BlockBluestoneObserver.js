@@ -21,6 +21,11 @@ export default class BlockBluestoneObserver extends Block {
         return new BlockEntityBluestoneObserver(world, x, y, z);
     }
 
+    getPlacementMetadata(world, x, y, z, face, yaw = 0) {
+        const dirIndex = Math.floor((yaw * 4 / 360) + 0.5) & 3;
+        return dirIndex << 1;
+    }
+
     onBlockPlaced(world, x, y, z, face) {
         const player = world.minecraft?.player;
         if (!player) return;

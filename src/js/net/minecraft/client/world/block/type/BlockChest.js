@@ -39,6 +39,11 @@ export default class BlockChest extends Block {
         }
     }
 
+    getPlacementMetadata(world, x, y, z, face, yaw = 0) {
+        const dirIndex = Math.floor((yaw * 4 / 360) + 0.5) & 3;
+        return [2, 5, 3, 4][dirIndex];
+    }
+
     onBlockPlaced(world, x, y, z, face) {
         if (world && world.minecraft && world.minecraft.player) {
             let player = world.minecraft.player;

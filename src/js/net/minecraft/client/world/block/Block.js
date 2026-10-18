@@ -187,8 +187,8 @@ export default class Block {
         //
     }
 
-    shouldRenderFace(world, x, y, z, face) {
-        let typeId = world.getBlockAtFace(x, y, z, face);
+    shouldRenderFace(world, x, y, z, face, prefetchedTypeId) {
+        let typeId = prefetchedTypeId !== undefined ? prefetchedTypeId : world.getBlockAtFace(x, y, z, face);
         if (typeId === 0) {
             return true;
         }
@@ -262,6 +262,18 @@ export default class Block {
 
     onBlockPlaced(world, x, y, z, face) {
 
+    }
+
+    /**
+     * Pure placement metadata computation used by the server during block
+     * placement. Blocks that carry directional state override this, so the
+     * server never needs a hand-written list of special-cased block IDs.
+     *
+     * @param {number} face 0-5, 0 = bottom
+     * @param {number} yaw player yaw in degrees
+     */
+    getPlacementMetadata(world, x, y, z, face, yaw = 0) {
+        return 0;
     }
 
     collisionRayTrace(world, x, y, z, start, end) {

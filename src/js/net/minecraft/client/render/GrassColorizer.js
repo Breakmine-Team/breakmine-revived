@@ -21,6 +21,9 @@ export default class GrassColorizer {
         let green = this.bitMap[index + 1];
         let blue = this.bitMap[index + 2];
 
+        // Grass gets bluer the colder it is
+        blue = Math.min(255, blue + Math.floor((1.0 - temperature) * 180));
+
         return red << 16 | green << 8 | blue;
     }
 
