@@ -11,6 +11,10 @@ const fs = new IsomorphicFilesystem();
 
 // Change to data directory if set (for Docker persistence)
 if (process.env.DATA_DIR) {
+    const nodeFs = require('fs');
+    if (!nodeFs.existsSync(process.env.DATA_DIR)) {
+        nodeFs.mkdirSync(process.env.DATA_DIR, { recursive: true });
+    }
     process.chdir(process.env.DATA_DIR);
     log.info('Server', `Working directory set to ${process.env.DATA_DIR}`);
 }
