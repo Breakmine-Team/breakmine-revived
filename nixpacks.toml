@@ -2,9 +2,17 @@ providers = ["node"]
 
 [variables]
 NIXPACKS_NODE_VERSION = "22"
+DATA_DIR = "/data"
+SERVER_PORT = "6008"
 
 [phases.setup]
 nixPkgs = ["nodejs_22", "python3", "gcc", "gnumake"]
 
+[phases.build]
+cmds = ["node scripts/build-assets.js"]
+
 [start]
-cmd = "npx concurrently \"node cors.js\" \"node tunnel.js\" \"npx serve -s dist -l 3000\""
+cmd = "npx concurrently \"node cors.js\" \"node tunnel.js\" \"npx serve -s dist -l 3000\" \"node server.js\""
+
+[mounts]
+data = "/data"
