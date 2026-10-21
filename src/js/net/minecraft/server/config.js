@@ -2,13 +2,13 @@ import fs from '../client/fs/ServerFs.js';
 import path from '../util/path.js';
 
 const MODULE_DIR = new URL('.', import.meta.url).pathname;
-const PROJECT_ROOT = path.join(MODULE_DIR, '..', '..', '..', '..', '..');
+const PROJECT_ROOT = process.env.DATA_DIR || path.join(MODULE_DIR, '..', '..', '..', '..', '..');
 const WORLDS_DIR = path.join(PROJECT_ROOT, 'worlds');
 
 const defaults = {
     server: 'main',
     servers: [],
-    port: 6008,
+    port: parseInt(process.env.SERVER_PORT || '6008', 10),
     host: '0.0.0.0',
     default_gamemode: 'creative',
     default_op: true,

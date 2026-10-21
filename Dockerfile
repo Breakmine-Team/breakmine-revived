@@ -80,7 +80,11 @@ COPY catalog.json openapi.json api-docs.html ./
 COPY libraries/ ./libraries/
 COPY src/js/net/minecraft/client/fs/ ./src/js/net/minecraft/client/fs/
 COPY src/js/net/minecraft/lib/ ./src/js/net/minecraft/lib/
-COPY src/js/net/minecraft/server/logger.js ./src/js/net/minecraft/server/logger.js
+COPY src/js/net/minecraft/server/ ./src/js/net/minecraft/server/
+COPY src/js/net/minecraft/util/ ./src/js/net/minecraft/util/
+COPY src/js/net/minecraft/client/world/ ./src/js/net/minecraft/client/world/
+COPY src/js/net/minecraft/client/command/ ./src/js/net/minecraft/client/command/
+COPY server.js ./
 
 # Named volume target. secrets.json is generated here on first boot, so it is
 # never baked into the image; persisting /data keeps logins valid across rebuilds.
@@ -88,11 +92,12 @@ RUN mkdir -p /data && chown -R node:node /data /app
 USER node
 
 VOLUME ["/data"]
-EXPOSE 6006 6007
+EXPOSE 6006 6007 6008
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||6006)+'/',{headers:{host:process.env.SITE_HOSTNAMES?.split(',')[0]||'breakmine.com'}}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 # Run the API and the tunnel relay together. `kill 0` forwards SIGTERM/SIGINT
 # to the whole process group so both children shut down gracefully.
-CMD ["bash", "-c", "trap 'kill 0' SIGTERM SIGINT; node cors.js & node tunnel.js & wait"]
+# If SERVER_PORT is set, run the multiplayer server instead.
+CMD ["bash", "-c", "if [ -n \"$SERVER_PORT\" ]; then node /app/server.js; else trap 'kill 0' SIGTERM SIGINT; node cors.js & node tunnel.js & wait; fi"]

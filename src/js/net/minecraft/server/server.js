@@ -9,6 +9,12 @@ let log = Logger;
 const PORT = config.port;
 const fs = new IsomorphicFilesystem();
 
+// Change to data directory if set (for Docker persistence)
+if (process.env.DATA_DIR) {
+    process.chdir(process.env.DATA_DIR);
+    log.info('Server', `Working directory set to ${process.env.DATA_DIR}`);
+}
+
 // Initialize the world (loads config, world data, block registry, tick loop).
 initServer();
 

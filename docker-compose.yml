@@ -3,6 +3,7 @@
 #   web   :8000  the client, served from the checkout (published on host 8080)
 #   auth  :6006  cors.js, with user data on a volume
 #         :6007  tunnel.js, the WebSocket game-traffic relay
+#   server:6008  the multiplayer game server
 #
 # No traefik labels on purpose -- both Dokploy and Coolify route by domain, so
 # point each domain at the container port and let the panel own TLS:
@@ -43,6 +44,24 @@ services:
       - "6006"
       - "6007"
 
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: breakmine-server:latest
+    restart: unless-stopped
+    environment:
+      DATA_DIR: /data
+      SERVER_PORT: "6008"
+    volumes:
+      # World data, player data, and server configuration. Losing this
+      # volume deletes all worlds and player progress.
+      - server_data:/data
+    ports:
+      - "6008:6008"
+
 volumes:
   auth_data:
     name: breakmine-auth-data
+  server_data:
+    name: breakmine-server-data
