@@ -39,6 +39,7 @@
     "better-sqlite3": "^11.6.0",
     "buffer": "^6.0.3",
     "colors": "^1.4.0",
+    "concurrently": "^10.0.4",
     "cors": "^2.8.5",
     "discord-rpc": "^4.0.1",
     "express": "^4.21.1",
@@ -55,7 +56,6 @@
   },
   "devDependencies": {
     "@vitejs/plugin-basic-ssl": "^2.3.0",
-    "concurrently": "^10.0.4",
     "electron": "^43.2.0",
     "electron-builder": "^26.15.3",
     "vite": "^8.1.3",
