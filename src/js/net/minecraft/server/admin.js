@@ -180,7 +180,7 @@ function attachAdminPanel(server) {
 
 async function handleAdminRequest(req, res) {
         if (!ADMIN_PASSCODE) {
-            send(res, 404, 'Not found', 'text/plain');
+            send(res, 404, `<h2>Admin panel disabled</h2><p>Set the <code>ADMIN_PASSCODE</code> environment variable when starting the server to enable it:</p><p><code>ADMIN_PASSCODE=your-secret node server.js</code></p>`);
             return;
         }
         const parsed = url.parse(req.url, true);

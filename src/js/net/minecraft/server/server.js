@@ -53,6 +53,11 @@ const wss = new WebSocket.Server({ server: server });
 server.listen(PORT, config.host);
 log.info('Server', `Minecraft server running!!! (v47)`);
 log.info('Server', `Listening on ${server ? 'wss' : 'ws'}://${config.host}:${PORT}`);
+if (process.env.ADMIN_PASSCODE) {
+    log.info('Server', `Admin panel enabled at http://${config.host}:${PORT}/admin`);
+} else {
+    log.warn('Server', 'Admin panel disabled (set ADMIN_PASSCODE env variable to enable it)');
+}
 
 wss.on('connection', onConnection);
 

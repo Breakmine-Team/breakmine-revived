@@ -9,7 +9,9 @@ import { SubChunkStore, SECTION_DATA_BYTES } from './SubChunkStore.js';
 const log = Logger;
 
 const MODULE_DIR = new URL('.', import.meta.url).pathname;
-const PROJECT_ROOT = path.join(MODULE_DIR, '..', '..', '..', '..', '..');
+// Respect DATA_DIR (Docker persistence) the same way config.js does, so world
+// data and config always live in the same place.
+const PROJECT_ROOT = process.env.DATA_DIR || path.join(MODULE_DIR, '..', '..', '..', '..', '..');
 const WORLDS_DIR = path.join(PROJECT_ROOT, 'worlds');
 const DEFAULT_WORLD_DIR = PROJECT_ROOT;
 const DEFAULT_WORLD_FILE = path.join(PROJECT_ROOT, 'world_data.bin');
