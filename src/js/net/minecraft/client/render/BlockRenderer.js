@@ -418,8 +418,23 @@ export default class BlockRenderer {
 
         // Classic lightning
         if (!ambientOcclusion) {
-            // Use effective light level to prevent black faces next to non-AO blocks like fences
-            let level = world === null ? 15 : this.getEffectiveLightLevel(world, minX + face.x, minY + face.y, minZ + face.z);
+            // Sample the light from the block that is actually in front of the
+            // face. A face lying on the block boundary looks into the
+            // neighbouring block. But a face in the interior of a multipart
+            // block (stair steps, fence rails, door panels...) is only visible
+            // through that block's own air gaps, so it must sample the block's
+            // own position. It used to sample the neighbour block instead,
+            // whose internal light is 0 when solid, rendering inner faces black.
+            const EPS = 1e-6;
+            const onMin = (c) => c < EPS;
+            const onMax = (c) => c > 1 - EPS;
+            const sampleX = face.x < 0 ? (onMin(boundingBox.minX) ? x - 1 : x)
+                : face.x > 0 ? (onMax(boundingBox.maxX) ? x + 1 : x) : x;
+            const sampleY = face.y < 0 ? (onMin(boundingBox.minY) ? y - 1 : y)
+                : face.y > 0 ? (onMax(boundingBox.maxY) ? y + 1 : y) : y;
+            const sampleZ = face.z < 0 ? (onMin(boundingBox.minZ) ? z - 1 : z)
+                : face.z > 0 ? (onMax(boundingBox.maxZ) ? z + 1 : z) : z;
+            let level = world === null ? 15 : this.getEffectiveLightLevel(world, sampleX, sampleY, sampleZ);
             let brightness = 0.9 / 15.0 * level + 0.1;
             let shade = brightness * face.getShading();
             this.tessellator.setColor(red * shade, green * shade, blue * shade);
