@@ -39,10 +39,18 @@ try {
     log.error('Server', 'Failed to load SSL certificates: ' + e.message);
 }
 
-const wss = new WebSocket.Server({ server: server, port: !server ? PORT : undefined, host: config.host });
-if (server) {
-    server.listen(PORT, config.host);
+// Without certs: create a plain HTTP server so the admin panel and the
+// WebSocket can share the same port.
+if (!server) {
+    server = require('http').createServer();
 }
+
+// Admin panel (passcode-protected world upload/download) on the same port.
+const { attachAdminPanel } = require('./admin.js');
+attachAdminPanel(server);
+
+const wss = new WebSocket.Server({ server: server });
+server.listen(PORT, config.host);
 log.info('Server', `Minecraft server running!!! (v47)`);
 log.info('Server', `Listening on ${server ? 'wss' : 'ws'}://${config.host}:${PORT}`);
 

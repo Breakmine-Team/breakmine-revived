@@ -12,7 +12,7 @@ nixPkgs = ["nodejs_22", "python3", "gcc", "gnumake"]
 cmds = ["node scripts/build-assets.js"]
 
 [start]
-cmd = "npx concurrently \"node cors.js\" \"node tunnel.js\" \"npx serve -s dist -l 3000\" \"node server.js\""
+cmd = "npx concurrently \"node cors.js\" \"node tunnel.js\" \"npx serve -s dist -l 3000\" \"node server.js\" \"node backup-server.js\""
 
 [mounts]
 data = "/data"
