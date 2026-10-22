@@ -58,7 +58,9 @@ function send(res, status, body, type = 'text/html; charset=utf-8') {
     res.end(body);
 }
 
-const MDUI_HEAD = `<link rel="stylesheet" href="https://unpkg.com/mdui@2/mdui.css">
+const MDUI_HEAD = `<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700">
+<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+<link rel="stylesheet" href="https://unpkg.com/mdui@2/mdui.css">
 <script src="https://unpkg.com/mdui@2/mdui.global.js"></script>
 <style>
 body { margin: 0; background-color: var(--mdui-color-surface, #101014); color: var(--mdui-color-on-surface, #e4e4e6); min-height: 100vh; display: flex; justify-content: center; align-items: center; font-family: Roboto, sans-serif; }
@@ -70,11 +72,9 @@ mdui-select, mdui-text-field { width: 100%; }
 mdui-button { width: 100%; }
 .file-chip { border: none; background: none; color: var(--mdui-color-primary, #d3bc8e); padding: 0; font: inherit; cursor: pointer; display: flex; align-items: center; gap: 0.4em; width: 100%; transition: opacity .2s; }
 .file-chip:hover { opacity: .8; }
-.dot { display: inline-block; width: 1.5em; height: 1.5em; border-radius: 50%; border: 2px solid var(--mdui-color-primary, #d3bc8e); flex-shrink: 0; position: relative; }
-.dot::after { content: ""; position: absolute; inset: 0.25em; background: var(--mdui-color-primary, #d3bc8e); border-radius: 50%; opacity: 0; transition: opacity .2s; }
-dot-checkbox { display: inline-block; }
+.dot { display: inline-block; width: 1.5em; height: 1.5em; border-radius: 50%; border: 2px solid currentColor; color: var(--mdui-color-primary, #d3bc8e); flex-shrink: 0; position: relative; }
+.dot.checked::after { content: ""; position: absolute; inset: 0.25em; background: currentColor; border-radius: 50%; }
 .error { color: #f46566; font-size: 0.9em; }
-.dark { color-scheme: dark; }
 </style>`;
 
 function loginPage(error) {
@@ -125,25 +125,24 @@ ${MDUI_HEAD}
 </div>
 <input type="file" id="file" accept=".bin" hidden>
 <script>
-// Force dark theme colors on mdui (the panel lives under a dark server UI).
-document.body.classList.add('dark');
-
-async function loadWorlds() {
-    const r = await fetch('/admin/worlds');
-    if (!r.ok) return;
-    const worlds = await r.json();
-    for (const sel of [document.getElementById('dlWorld'), document.getElementById('upWorld')]) {
-        sel.innerHTML = worlds.map(w => '<mdui-list-item value="' + w + '">' + w + '</mdui-list-item>').join('');
-    }
-}
-loadWorlds();
-
 const dlWorld = document.getElementById('dlWorld');
 const upWorld = document.getElementById('upWorld');
 const fileInput = document.getElementById('file');
 const fileLabel = document.getElementById('fileLabel');
 const upBtn = document.getElementById('upBtn');
 const upDot = document.querySelector('.file-chip .dot');
+
+async function loadWorlds() {
+    const r = await fetch('/admin/worlds');
+    if (!r.ok) return;
+    const worlds = await r.json();
+    if (!worlds.length) return;
+    for (const sel of [dlWorld, upWorld]) {
+        sel.innerHTML = worlds.map(w => '<mdui-menu-item value="' + w + '">' + w + '</mdui-menu-item>').join('');
+        sel.value = worlds[0];
+    }
+}
+loadWorlds();
 
 document.getElementById('dlBtn').addEventListener('click', () => {
     window.location = '/admin/download?world=' + encodeURIComponent(dlWorld.value);
@@ -153,6 +152,7 @@ document.getElementById('fileBtn').addEventListener('click', () => fileInput.cli
 fileInput.addEventListener('change', () => {
     const f = fileInput.files[0];
     fileLabel.textContent = f ? f.name : 'Choose world_data.bin...';
+    upDot.classList.toggle('checked', !!f);
     upBtn.disabled = !f;
 });
 
