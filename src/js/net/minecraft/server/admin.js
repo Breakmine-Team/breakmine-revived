@@ -58,80 +58,144 @@ function send(res, status, body, type = 'text/html; charset=utf-8') {
     res.end(body);
 }
 
-const LOGIN_PAGE = `<!DOCTYPE html>
-<html>
-<head><title>Server Admin</title>
+const MDUI_HEAD = `<link rel="stylesheet" href="https://unpkg.com/mdui@2/mdui.css">
+<script src="https://unpkg.com/mdui@2/mdui.global.js"></script>
 <style>
-body { font-family: sans-serif; background: #1a1a1a; color: #eee; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-.box { background: #2a2a2a; padding: 2em; border-radius: 8px; width: 320px; }
-input, button, select { width: 100%; padding: 8px; margin: 4px 0; box-sizing: border-box; }
-button { background: #4a90d9; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
-button:hover { background: #3a7bc0; }
-.error { color: #f66; }
-.row { display: flex; gap: 8px; }
-a { color: #7ab8ff; }
-</style>
-<head>
-<body><div class="box">
-<h2>Server Admin Panel</h2>
-<form method="POST" action="/admin/download" id="dlForm">
-<h3>Download World</h3>
-<select id="dlWorld"></select>
-<button type="submit">Download</button>
+body { margin: 0; background-color: var(--mdui-color-surface, #101014); color: var(--mdui-color-on-surface, #e4e4e6); min-height: 100vh; display: flex; justify-content: center; align-items: center; font-family: Roboto, sans-serif; }
+.wrap { width: min(420px, 92vw); padding: 2em 0; }
+mdui-card { width: 100%; margin-bottom: 1em; }
+mdui-card div[part=heading] { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.4em; }
+.card-body { padding: 1.25em; display: flex; flex-direction: column; gap: 0.9em; }
+mdui-select, mdui-text-field { width: 100%; }
+mdui-button { width: 100%; }
+.file-chip { border: none; background: none; color: var(--mdui-color-primary, #d3bc8e); padding: 0; font: inherit; cursor: pointer; display: flex; align-items: center; gap: 0.4em; width: 100%; transition: opacity .2s; }
+.file-chip:hover { opacity: .8; }
+.dot { display: inline-block; width: 1.5em; height: 1.5em; border-radius: 50%; border: 2px solid var(--mdui-color-primary, #d3bc8e); flex-shrink: 0; position: relative; }
+.dot::after { content: ""; position: absolute; inset: 0.25em; background: var(--mdui-color-primary, #d3bc8e); border-radius: 50%; opacity: 0; transition: opacity .2s; }
+dot-checkbox { display: inline-block; }
+.error { color: #f46566; font-size: 0.9em; }
+.dark { color-scheme: dark; }
+</style>`;
+
+function loginPage(error) {
+    return `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Server Admin — Login</title>
+${MDUI_HEAD}
+</head>
+<body><div class="wrap">
+<mdui-card variant="filled">
+<mdui-card-content>
+<form method="POST" action="/admin/login" class="card-body">
+<div part="heading"><h2>Server Admin Panel</h2></div>
+${error ? '<div class="error">Wrong passcode.</div>' : ''}
+<mdui-text-field type="password" name="passcode" label="Passcode" variant="outlined" toggle-password autofocus required></mdui-text-field>
+<mdui-button type="submit" variant="filled" end-icon="arrow_forward">Login</mdui-button>
 </form>
-<form method="POST" action="/admin/upload" id="upForm" enctype="multipart/form-data">
-<h3>Upload World</h3>
-<select id="upWorld" name="world"></select>
-<input type="file" id="file" name="file" accept=".bin" required>
-<label><input type="checkbox" name="backup" checked value="1" style="width:auto"> Keep .bak of existing world</label>
-<button type="submit">Upload</button>
-</form>
-<p><a href="/admin/logout">Log out</a></p>
+</mdui-card-content>
+</mdui-card>
+</div></body></html>`;
+}
+
+const MAIN_PAGE = `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Server Admin</title>
+${MDUI_HEAD}
+</head>
+<body><div class="wrap">
+<h2 style="text-align:center">Server Admin Panel</h2>
+<mdui-card variant="outlined">
+<div class="card-body">
+<div part="heading">Download World</div>
+<mdui-select id="dlWorld" variant="filled" label="World"></mdui-select>
+<mdui-button id="dlBtn" variant="filled" icon="download">Download</mdui-button>
+</div>
+</mdui-card>
+<mdui-card variant="outlined">
+<div class="card-body">
+<div part="heading">Upload World</div>
+<mdui-select id="upWorld" variant="filled" label="World"></mdui-select>
+<button class="file-chip" id="fileBtn" type="button"><span class="dot"></span><span id="fileLabel">Choose world_data.bin...</span></button>
+<mdui-button id="upBtn" variant="filled" icon="upload" disabled>Upload</mdui-button>
+</div>
+</mdui-card>
+<mdui-button href="/admin/logout" variant="text" icon="logout" full-width>Log out</mdui-button>
+</div>
+<input type="file" id="file" accept=".bin" hidden>
 <script>
+// Force dark theme colors on mdui (the panel lives under a dark server UI).
+document.body.classList.add('dark');
+
 async function loadWorlds() {
     const r = await fetch('/admin/worlds');
     if (!r.ok) return;
     const worlds = await r.json();
     for (const sel of [document.getElementById('dlWorld'), document.getElementById('upWorld')]) {
-        sel.innerHTML = worlds.map(w => '<option>' + w + '</option>').join('');
+        sel.innerHTML = worlds.map(w => '<mdui-list-item value="' + w + '">' + w + '</mdui-list-item>').join('');
     }
 }
 loadWorlds();
-// Convert the multipart upload into a raw stream the server expects.
-document.getElementById('upForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const f = document.getElementById('upForm');
-    const world = document.getElementById('upWorld').value;
-    const file = document.getElementById('file').files[0];
-    const backup = f.backup.checked ? '&backup=1' : '';
-    const res = await fetch('/admin/upload?world=' + encodeURIComponent(world) + backup, {
-        method: 'POST',
-        body: file,
-        headers: { 'Content-Type': 'application/octet-stream' }
-    });
-    alert(await res.text());
-    if (res.ok) location.reload();
+
+const dlWorld = document.getElementById('dlWorld');
+const upWorld = document.getElementById('upWorld');
+const fileInput = document.getElementById('file');
+const fileLabel = document.getElementById('fileLabel');
+const upBtn = document.getElementById('upBtn');
+const upDot = document.querySelector('.file-chip .dot');
+
+document.getElementById('dlBtn').addEventListener('click', () => {
+    window.location = '/admin/download?world=' + encodeURIComponent(dlWorld.value);
 });
-document.getElementById('dlForm').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const world = document.getElementById('dlWorld').value;
-    window.location = '/admin/download?world=' + encodeURIComponent(world);
+
+document.getElementById('fileBtn').addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => {
+    const f = fileInput.files[0];
+    fileLabel.textContent = f ? f.name : 'Choose world_data.bin...';
+    upBtn.disabled = !f;
+});
+
+upBtn.addEventListener('click', async (e) => {
+    const f = fileInput.files[0];
+    if (!f) return;
+    upBtn.loading = true;
+    try {
+        const res = await fetch('/admin/upload?world=' + encodeURIComponent(upWorld.value) + '&backup=1', {
+            method: 'POST',
+            body: f,
+            headers: { 'Content-Type': 'application/octet-stream' }
+        });
+        const text = await res.text();
+        if (res.ok) {
+            upBtn.loading = false;
+            upBtn.innerHTML = '<mdui-icon name="check"></mdui-icon> Uploaded';
+            setTimeout(() => { location.reload(); }, 1200);
+        } else {
+            upBtn.loading = false;
+            upBtn.textContent = 'Upload failed';
+            console.error(text);
+        }
+    } catch (err) {
+        upBtn.loading = false;
+        upBtn.textContent = 'Upload failed';
+    }
 });
 </script>
-</div></body>
-</html>`;
+</body></html>`;
 
 function handleFileDownload(req, res, worldName) {
-    const worldFile = getWorldFile(worldName);
-    if (!nodeFs.existsSync(worldFile)) {
-        send(res, 404, 'World not found: ' + sanitizeWorldName(worldName), 'text/plain');
-        return;
-    }
-    // Make sure the in-memory world is flushed first so the download is fresh.
+    // Make sure the in-memory world is flushed first so the download is fresh
+    // (and so a never-saved world still produces a valid file to download).
     try {
         saveWorld();
     } catch (e) {
         log.warn('Admin', 'Failed to flush world before download: ' + e.message);
+    }
+    const worldFile = getWorldFile(worldName);
+    if (!nodeFs.existsSync(worldFile)) {
+        send(res, 404, 'World not found: ' + sanitizeWorldName(worldName), 'text/plain');
+        return;
     }
     const name = path.basename(worldFile);
     res.writeHead(200, {
@@ -180,7 +244,7 @@ function attachAdminPanel(server) {
 
 async function handleAdminRequest(req, res) {
         if (!ADMIN_PASSCODE) {
-            send(res, 404, `<h2>Admin panel disabled</h2><p>Set the <code>ADMIN_PASSCODE</code> environment variable when starting the server to enable it:</p><p><code>ADMIN_PASSCODE=your-secret node server.js</code></p>`);
+            send(res, 404, `<html><head>${MDUI_HEAD}</head><body><div class="wrap" style="width:min(560px,90vw);text-align:center"><mdui-card variant="outlined"><div class="card-body"><div part="heading">Admin panel disabled</div><p>Set the <code>ADMIN_PASSCODE</code> environment variable when starting the server to enable it:</p><p><code>ADMIN_PASSCODE=your-secret node server.js</code></p></div></mdui-card></div></body></html>`);
             return;
         }
         const parsed = url.parse(req.url, true);
@@ -197,7 +261,7 @@ async function handleAdminRequest(req, res) {
             for await (const chunk of req) body += chunk;
             const pass = new url.URLSearchParams(body).get('passcode');
             if (!pass || pass !== ADMIN_PASSCODE) {
-                return send(res, 401, `<!DOCTYPE html><html><body style="font-family:sans-serif;background:#1a1a1a;color:#eee;display:flex;justify-content:center;padding-top:20vh"><form method="POST" action="/admin/login" style="background:#2a2a2a;padding:2em;border-radius:8px"><h2>Server Admin Panel</h2><input type="password" name="passcode" placeholder="Passcode" autofocus><button>Login</button><p style="color:#f66">Wrong passcode.</p></form></body></html>`);
+                return send(res, 401, loginPage(true));
             }
             issueSession(res);
             res.writeHead(303, { Location: '/admin' });
@@ -205,7 +269,7 @@ async function handleAdminRequest(req, res) {
         }
 
         if (!isAuthed(req)) {
-            return send(res, 401, `<!DOCTYPE html><html><body style="font-family:sans-serif;background:#1a1a1a;color:#eee;display:flex;justify-content:center;padding-top:20vh"><form method="POST" action="/admin/login" style="background:#2a2a2a;padding:2em;border-radius:8px"><h2>Server Admin Panel</h2><input type="password" name="passcode" placeholder="Passcode" autofocus><button>Login</button></form></body></html>`);
+            return send(res, 401, loginPage(false));
         }
 
         if (pathname === '/admin/worlds') {
@@ -218,7 +282,7 @@ async function handleAdminRequest(req, res) {
             return handleFileUpload(req, res, parsed.query.world, parsed.query.backup);
         }
         if (pathname === '/admin' || pathname === '/') {
-            return send(res, 200, LOGIN_PAGE);
+            return send(res, 200, MAIN_PAGE);
         }
         send(res, 404, 'Not found', 'text/plain');
 }

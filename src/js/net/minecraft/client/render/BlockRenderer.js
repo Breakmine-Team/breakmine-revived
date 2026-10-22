@@ -587,7 +587,10 @@ export default class BlockRenderer {
         
         // Blocks that don't cast AO (like fences) block the light engine, 
         // so their internal light is 0. We fake it by checking neighbors.
-        if (!block.canCastAmbientOcclusion()) {
+        // Multipart blocks (stairs, fences, doors...) are also hollow: a face
+        // that looks into one must sample the light around that block instead
+        // of the 0 light inside it, or inner faces render black.
+        if (!block.canCastAmbientOcclusion() || block.multipart === true) {
             let maxSurroundingLight = 0;
             for (let i = 0; i < 6; i++) {
                 let light = world.getTotalLightAt(x + FACE_DX[i], y + FACE_DY[i], z + FACE_DZ[i]);
@@ -624,7 +627,10 @@ export default class BlockRenderer {
                         totalLightLevel += world.getTotalLightAt(bx, by, bz);
                         totalBlocks++;
                     } 
-                    else if (!block.canCastAmbientOcclusion()) {
+                    // Multipart blocks (stairs etc.) are hollow -- their internal
+                    // light is 0, so sample their surroundings instead. This keeps
+                    // inner faces (steps looking into another stair) from going black.
+                    else if (!block.canCastAmbientOcclusion() || block.multipart === true) {
                         let maxSurroundingLight = 0;
                         for (let i = 0; i < 6; i++) {
                             let light = world.getTotalLightAt(bx + FACE_DX[i], by + FACE_DY[i], bz + FACE_DZ[i]);

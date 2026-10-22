@@ -33,7 +33,7 @@ export default class GuiDisconnected extends GuiScreen {
             }
         }
 
-        return 'Disconnected from server';
+        return 'Disconnected from server (try rejoining)';
     }
 
     init() {
