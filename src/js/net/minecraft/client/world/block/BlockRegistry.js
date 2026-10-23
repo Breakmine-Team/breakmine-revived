@@ -470,7 +470,7 @@ export class BlockRegistry {
         BlockRegistry.ITEM_BLUESTONE_LEVER_PLACER = new ItemBluestoneLeverPlacer(180, 0, "Bluestone Lever");
 
         BlockRegistry.SNOW = new BlockSnow(234, 0, "snow", "Snow");
-        BlockRegistry.CHEESE = new BlockCheese(248, 0);
+        BlockRegistry.CHEESE = new BlockCheese(253, 0);
         BlockRegistry.ICE = new BlockIce(245, 0, "ice", "Ice", 0.5, 0.98);
         BlockRegistry.PACKED_ICE = new BlockIce(246, 0, "packed_ice", "Packed Ice", 0.5, 0.98);
         BlockRegistry.BLUE_ICE = new BlockIce(247, 0, "blue_ice", "Blue Ice", 0.5, 0.989);
