@@ -110,7 +110,7 @@ export const atlasBlockTextures = [
     "redstone_dust_line0.png", "redstone_dust_line1.png", "redstone_dust_cross.png",
     "redstone_dust_overlay.png", "none.png", "sapphire_ore.png", "sapphire_block.png",
     "bluestone_ore.png", "slime_block_nontransparent.png", "wire.png",
-    "stonebrick.png", "dark_stonebrick.png", "oak_door_top.png", "oak_door_bottom.png",
+    "stonebrick.png", "dark_stonebrick.png", "oak_door_top.png", "oak_door_bottom.png", "ladder.png",
     "bluestoneBlock.png", "bluestoneDust0000.png", "bluestoneDust0001.png",
     "bluestoneDust0010.png", "bluestoneDust0011.png", "bluestoneDust0100.png",
     "bluestoneDust0101.png", "bluestoneDust0110.png", "bluestoneDust0111.png",
@@ -129,7 +129,7 @@ export const atlasBlockTextures = [
     "bluestoneMemoryTopOff.png", "bluestoneMemoryTopSetOffResetOffOn.png",
     "bluestoneMemoryTopSetOnResetOff.png", "bluestoneMemoryTopSetOnResetOnOff.png",
     "bluestoneMemoryTopSetOffResetOn.png",
-    "ice.png", "packed_ice.png", "blue_ice.png"
+    "ice.png", "packed_ice.png", "blue_ice.png", "cheese.png"
 ];
 
 const toolMaterials = ['wooden', 'stone', 'iron', 'diamond', 'golden'];

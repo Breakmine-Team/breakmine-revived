@@ -57,6 +57,7 @@ import ItemBucketLava from "./type/ItemBucketLava.js";
 import BlockSign from "./type/BlockSign.js";
 import BlockDoor from "./type/BlockDoor.js";
 import ItemDoorPlacer from "./type/ItemDoorPlacer.js";
+import BlockLadder from "./type/BlockLadder.js";
 import BlockBluestoneDust from "./type/BlockBluestoneDust.js";
 import BlockBluestoneLamp from "./type/BlockBluestoneLamp.js";
 import BlockBluestoneBlock from "./type/BlockBlustoneBlock.js";
@@ -78,6 +79,7 @@ import ItemBluestoneLeverPlacer from "./type/ItemBluestoneLeverPlacer.js";
 import ItemBluestoneDustPlacer from "./type/ItemBluestoneDustPlacer.js";
 import BlockSnow from "./type/BlockSnow.js";
 import BlockIce from "./type/BlockIce.js";
+import BlockCheese from "./type/BlockCheese.js";
 import ItemFlint from "./type/ItemFlint.js";
 import ItemFlintAndSteel from "./type/ItemFlintAndSteel.js";
 import BlockTNT from "./type/BlockTNT.js";
@@ -195,6 +197,7 @@ export class BlockRegistry {
         BlockRegistry.OAK_DOOR = new BlockDoor(160, 0);
         BlockRegistry.OAK_DOOR_TOP = new BlockDoor(161, 0);
         BlockRegistry.ITEM_OAK_DOOR_PLACER = new ItemDoorPlacer(162, 0, "Oak Door")
+        BlockRegistry.OAK_LADDER = new BlockLadder(252, 0);
 
         // Spruce
         BlockRegistry.SPRUCE_LOG = new BlockLog(59, 0, "spruce", "Spruce Log");
@@ -467,6 +470,7 @@ export class BlockRegistry {
         BlockRegistry.ITEM_BLUESTONE_LEVER_PLACER = new ItemBluestoneLeverPlacer(180, 0, "Bluestone Lever");
 
         BlockRegistry.SNOW = new BlockSnow(234, 0, "snow", "Snow");
+        BlockRegistry.CHEESE = new BlockCheese(248, 0);
         BlockRegistry.ICE = new BlockIce(245, 0, "ice", "Ice", 0.5, 0.98);
         BlockRegistry.PACKED_ICE = new BlockIce(246, 0, "packed_ice", "Packed Ice", 0.5, 0.98);
         BlockRegistry.BLUE_ICE = new BlockIce(247, 0, "blue_ice", "Blue Ice", 0.5, 0.989);

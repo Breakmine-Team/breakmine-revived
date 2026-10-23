@@ -1876,7 +1876,9 @@ export default class Minecraft {
                         // in the world, and guessing one here would push an id the
                         // server cannot resolve into the save file.
                         let block = Block.getById(typeId);
-                        let placeable = typeId !== 0 && isReplaceable && block !== null && !block.isItem();
+                        let placeable = typeId !== 0 && isReplaceable && block !== null && !block.isItem() &&
+                            (typeof block.canPlaceAt !== "function" ||
+                                block.canPlaceAt(this.world, x, y, z, hitResult.face));
 
                         if (placeable) {
                             // Calculate block data for rotation

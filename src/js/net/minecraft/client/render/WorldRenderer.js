@@ -1652,7 +1652,8 @@ export default class WorldRenderer {
         let prevTypeId = world.getBlockAt(x, y, z);
         let prevBlock = Block.getById(prevTypeId);
         let isReplaceable = (prevBlock && prevBlock.isReplaceable(world, x, y, z)) || prevTypeId === 0;
-        if (!isReplaceable) return;
+        if (!isReplaceable || (typeof block.canPlaceAt === "function" &&
+            !block.canPlaceAt(world, x, y, z, hitResult.face))) return;
 
         // Clear existing preview meshes
         while (this.blockPreviewGroup.children.length > 0) {

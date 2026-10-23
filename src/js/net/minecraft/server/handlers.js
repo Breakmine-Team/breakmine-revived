@@ -686,10 +686,18 @@ function handleBlockPlacement(player, buffer, offset) {
         }
         const blockId = heldItemId;
 
+        const serverWorld = getServerWorld();
+        if (typeof heldBlock.canPlaceAt === 'function' &&
+            !heldBlock.canPlaceAt(serverWorld, placeX, placeY, placeZ, direction)) {
+            const currentBlockState = (getBlockAt(placeX, placeY, placeZ) << 4) |
+                (getBlockMetadata(placeX, placeY, placeZ) & 0xF);
+            sendBlockChange(player.ws, placeX, placeY, placeZ, currentBlockState);
+            return;
+        }
+
         // Ask the block itself for its placement metadata. Every directional
         // block implements getPlacementMetadata() in its own class, so the
         // server needs no per-block special cases here — mod blocks included.
-        const serverWorld = getServerWorld();
         const heldBlockForMeta = Block.getById(blockId);
         let metadata = 0;
         if (heldBlockForMeta && typeof heldBlockForMeta.getPlacementMetadata === 'function') {

@@ -220,6 +220,28 @@ export default class PlayerEntity extends EntityLiving {
         return this.world.getBlockAt(this.getBlockPosX(), this.getBlockPosY(), this.getBlockPosZ()) === BlockRegistry.WATER.getId();
     }
 
+    isOnLadder() {
+        const ladderDetectionPadding = 0.05;
+        const minX = MathHelper.floor(this.boundingBox.minX - ladderDetectionPadding);
+        const maxX = MathHelper.floor(this.boundingBox.maxX + ladderDetectionPadding);
+        const minY = MathHelper.floor(this.boundingBox.minY);
+        const maxY = MathHelper.floor(this.boundingBox.maxY - 1e-6);
+        const minZ = MathHelper.floor(this.boundingBox.minZ - ladderDetectionPadding);
+        const maxZ = MathHelper.floor(this.boundingBox.maxZ + ladderDetectionPadding);
+
+        for (let x = minX; x <= maxX; x++) {
+            for (let y = minY; y <= maxY; y++) {
+                for (let z = minZ; z <= maxZ; z++) {
+                    const block = Block.getById(this.world.getBlockAt(x, y, z));
+                    if (block?.isClimbable?.()) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     isInLava() {
         return this.world.getBlockAt(this.getBlockPosX(), this.getBlockPosY(), this.getBlockPosZ()) === BlockRegistry.LAVA.getId();
     }
@@ -319,6 +341,7 @@ export default class PlayerEntity extends EntityLiving {
         let prevZ = this.z;
 
         if (this === this.world.minecraft.player) {
+            const isOnLadder = !this.spectator && this.isOnLadder();
             let prevSlipperiness = this.getBlockSlipperiness() * 0.91;
 
             let value = 0.16277136 / (prevSlipperiness * prevSlipperiness * prevSlipperiness);
@@ -331,6 +354,9 @@ export default class PlayerEntity extends EntityLiving {
             }
 
             this.moveRelative(forward, vertical, strafe, friction);
+            if (isOnLadder) {
+                this.motionY = this.jumping ? 0.15 : this.isSneaking() ? -0.15 : 0;
+            }
 
             // Get new speed
             let slipperiness = this.getBlockSlipperiness() * 0.91;
@@ -349,7 +375,7 @@ export default class PlayerEntity extends EntityLiving {
             }
 
             // Gravity
-            if (!this.flying) {
+            if (!this.flying && !isOnLadder) {
                 this.motionY -= 0.08;
             }
 
@@ -359,8 +385,13 @@ export default class PlayerEntity extends EntityLiving {
             this.motionZ *= slipperiness;
 
             // Fall damage tracking
+            if (isOnLadder) {
+                this.fallDistance = 0;
+            }
             if (!this.creative && !this.spectator && !this.isDead) {
-                if (!this.onGround) {
+                if (isOnLadder) {
+                    this.wasOnGround = this.onGround;
+                } else if (!this.onGround) {
                     // Accumulate fall distance while in air
                     if (this.motionY < 0) {
                         this.fallDistance -= this.motionY;

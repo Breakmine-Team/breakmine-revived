@@ -333,7 +333,7 @@ export default class PlayerRenderer extends EntityRenderer {
             ctx.imageSmoothingEnabled = false;
 
             // Draw semi-transparent black background
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             // Render text using font renderer's internal method

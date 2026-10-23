@@ -37,7 +37,7 @@ export default class ContainerCreative extends Container {
         this.itemList = [];
         
         Block.blocks.forEach((block) => {
-            if (block.inventoryTab.id === tabIndex) {
+            if (block.inventoryTab && block.inventoryTab.id === tabIndex) {
                 if (block.id !== 99 && block.id !== 43 && block.id !== -1 && block.id !== 59) {
                     this.itemList.push(block.getId());
                 }
@@ -109,7 +109,7 @@ export default class ContainerCreative extends Container {
 
     initItems(offset) {
         Block.blocks.forEach((block) => {
-            if (block.id !== 99) {
+            if (block.id && block.id !== 99) {
                 if (Minecraft.MODE !== 1) {
                     if (block.id !== 43 && block.id !== -1 && block.id !== 59 && block.id > offset) {
                         this.itemList.push(block.getId());

@@ -47,6 +47,10 @@ export default class BlockDoor extends Block {
         return false;
     }
 
+    getOpacity() {
+        return 1 / 255;
+    }
+
     getDoorBoundingBox(data) {
         const t = DOOR_THICKNESS;
         const open = (data & 8) !== 0;

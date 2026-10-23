@@ -7,7 +7,8 @@
 // state change is persisted and broadcast to all connected players.
 import { getBlockAt, getBlockMetadata, addWorldChange } from './world.js';
 import { getPlayers } from './players.js';
-import { sendBlockChange } from './packets.js';
+import { addItemEntity } from './entities.js';
+import { createSpawnObjectPacket, sendBlockChange } from './packets.js';
 import Block from '../client/world/block/Block.js';
 
 const TICK_MS = 50; // 20 game ticks per second
@@ -87,6 +88,25 @@ class ServerWorld {
     // re-broadcasting the current state so every client re-renders it.
     onBlockChanged(x, y, z) {
         this.broadcastBlockChange(x, y, z, getBlockAt(x, y, z), getBlockMetadata(x, y, z));
+    }
+
+    dropItem(blockId, x, y, z) {
+        const entity = addItemEntity(
+            blockId,
+            x + 0.5,
+            y + 0.5,
+            z + 0.5,
+            (Math.random() - 0.5) * 0.15,
+            0.2,
+            (Math.random() - 0.5) * 0.15,
+            null
+        );
+        const packet = createSpawnObjectPacket(entity);
+        for (const player of getPlayers().values()) {
+            if (player.ws?.readyState === 1) {
+                player.ws.send(packet);
+            }
+        }
     }
 
     scheduleBlockTick(x, y, z, delay) {
