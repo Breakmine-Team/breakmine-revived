@@ -225,7 +225,7 @@ export default class Block {
         return false;
     }
 
-    getOpacity() {
+    getOpacity(world, x, y, z, block) {
         return 1.0;
     }
 

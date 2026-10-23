@@ -16,7 +16,7 @@ class BlockStub {
         this._solid = opts.solid ?? true;
     }
     getId() { return this.id; }
-    getOpacity() { return this._opacity; }
+    getOpacity(world, x, y, z, block) { return this._opacity; }
     getLightValue() { return this._lightValue; }
     isSolid() { return this._solid; }
     isTranslucent() { return false; }
@@ -166,7 +166,7 @@ class ChunkStub {
         while (y > 0 && iterations < 256) {
             const typeId = this.getBlockAt(x, y - 1, z);
             const block = Block.getById(typeId);
-            const opacity = typeId === 0 || block === null ? 0 : block.getOpacity();
+            const opacity = typeId === 0 || block === null ? 0 : block.getOpacity(this, x, y - 1, z, block);
             if (opacity !== 0) break;
             y--;
             iterations++;
@@ -238,7 +238,7 @@ class ChunkStub {
             h--;
             const typeId = this.getBlockAt(relX, h, relZ);
             const block = Block.getById(typeId);
-            let opacity = Math.floor(typeId === 0 ? 0 : block.getOpacity() * 255);
+            let opacity = Math.floor(typeId === 0 ? 0 : block.getOpacity(this, relX, h, relZ, block) * 255);
             if (opacity === 0) opacity = 1;
             lightLevel -= opacity;
             if (lightLevel < 0) lightLevel = 0;

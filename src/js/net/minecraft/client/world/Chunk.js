@@ -140,7 +140,7 @@ export default class Chunk {
                     let typeId = section.getBlockAt(x, y & 15, z);
                     let block = Block.getById(typeId);
 
-                    let opacity = typeId === 0 ? 0 : block.getOpacity();
+                    let opacity = typeId === 0 ? 0 : block.getOpacity(this.world, x + this.x * 16, y, z + this.z * 16, block);
                     let blockLight = typeId === 0 ? 0 : block.getLightValue(this.world, x + this.x * 16, y, z + this.z * 16);
 
                     if (opacity === 0) {
@@ -232,7 +232,7 @@ export default class Chunk {
             let typeId = this.getBlockID(relX, highestY, relZ);
             let block = Block.getById(typeId);
 
-            let opacity = Math.floor(typeId === 0 ? 0 : block.getOpacity() * 255);
+            let opacity = Math.floor(typeId === 0 ? 0 : block.getOpacity(this.world, x + this.x * 16, highestY, z + this.z * 16, block) * 255);
             if (opacity === 0) {
                 opacity = 1;
             }
@@ -259,7 +259,7 @@ export default class Chunk {
         while (y > 0 && iterations < 256) {
             let typeId = this.getBlockAt(x, y - 1, z);
             let block = Block.getById(typeId);
-            let opacity = typeId === 0 || block === null ? 0 : block.getOpacity();
+            let opacity = typeId === 0 || block === null ? 0 : block.getOpacity(this.world, x + this.x * 16, y - 1, z + this.z * 16, block);
 
             if (opacity !== 0) {
                 break;

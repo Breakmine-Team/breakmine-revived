@@ -252,12 +252,6 @@ export default class World {
             }
         }
 
-        if (block.isSolid()) {
-            let bb = new BoundingBox(x, y, z, x + 1, y + 1, z + 1);
-            bb.epsilon = World.COLLISION_EPSILON;
-            return [bb];
-        }
-
         // Liquids have no collision
         if (block.isLiquid()) {
             return [];
@@ -274,6 +268,12 @@ export default class World {
                 y + collisionBb.maxY,
                 z + collisionBb.maxZ
             );
+            bb.epsilon = World.COLLISION_EPSILON;
+            return [bb];
+        }
+
+        if (block.isSolid()) {
+            let bb = new BoundingBox(x, y, z, x + 1, y + 1, z + 1);
             bb.epsilon = World.COLLISION_EPSILON;
             return [bb];
         }
@@ -440,7 +440,7 @@ export default class World {
                     if (y < height) {
                         const typeId = this.getBlockAt(worldX + lx, y, worldZ + lz);
                         const block = Block.getById(typeId);
-                        let opacity = block === null || typeId === 0 ? 0 : Math.round(block.getOpacity() * 255);
+                        let opacity = block === null || typeId === 0 ? 0 : Math.round(block.getOpacity(this, worldX + lx, y, worldZ + lz, block) * 255);
                         if (opacity === 0) {
                             opacity = 1;
                         }

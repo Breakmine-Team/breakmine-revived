@@ -74,11 +74,11 @@ export default class ChunkSection {
     isOpaqueFullCube(block, x, y, z) {
         if (!block.isSolid() || block.isTranslucent()) return false;
         if (block.multipart || block.noFaceCull || block.path) return false;
-        if (block.getOpacity() < 1) return false;
-
         const wx = (this.x << 4) + x;
         const wy = (this.y << 4) + y;
         const wz = (this.z << 4) + z;
+        if (block.getOpacity(this.world, wx, wy, wz, block) < 1) return false;
+
         const bbox = block.getBoundingBox(this.world, wx, wy, wz);
         if (bbox === null) return false;
 
