@@ -418,23 +418,22 @@ export default class BlockRenderer {
 
         // Classic lightning
         if (!ambientOcclusion) {
-            // Sample the light from the block that is actually in front of the
-            // face. A face lying on the block boundary looks into the
-            // neighbouring block. But a face in the interior of a multipart
-            // block (stair steps, fence rails, door panels...) is only visible
-            // through that block's own air gaps, so it must sample the block's
-            // own position. It used to sample the neighbour block instead,
-            // whose internal light is 0 when solid, rendering inner faces black.
-            const EPS = 1e-6;
-            const onMin = (c) => c < EPS;
-            const onMax = (c) => c > 1 - EPS;
-            const sampleX = face.x < 0 ? (onMin(boundingBox.minX) ? x - 1 : x)
-                : face.x > 0 ? (onMax(boundingBox.maxX) ? x + 1 : x) : x;
-            const sampleY = face.y < 0 ? (onMin(boundingBox.minY) ? y - 1 : y)
-                : face.y > 0 ? (onMax(boundingBox.maxY) ? y + 1 : y) : y;
-            const sampleZ = face.z < 0 ? (onMin(boundingBox.minZ) ? z - 1 : z)
-                : face.z > 0 ? (onMax(boundingBox.maxZ) ? z + 1 : z) : z;
-            let level = world === null ? 15 : this.getEffectiveLightLevel(world, sampleX, sampleY, sampleZ);
+            // Bake the shading from the brightest light the block receives:
+            // the max over the block's own cell and its six surrounding cells.
+            // This keeps inner faces of hollow multipart blocks (stair steps,
+            // fence rails, door panels...) from sampling a dark cell, and top
+            // faces of short blocks (paths, slabs) from sampling the block
+            // itself. Face axis shading is still applied on top.
+            let level;
+            if (world === null) {
+                level = 15;
+            } else {
+                level = this.getEffectiveLightLevel(world, x, y, z);
+                for (let i = 0; i < 6; i++) {
+                    let l = this.getEffectiveLightLevel(world, x + FACE_DX[i], y + FACE_DY[i], z + FACE_DZ[i]);
+                    if (l > level) level = l;
+                }
+            }
             let brightness = 0.9 / 15.0 * level + 0.1;
             let shade = brightness * face.getShading();
             this.tessellator.setColor(red * shade, green * shade, blue * shade);

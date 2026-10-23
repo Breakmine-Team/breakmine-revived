@@ -2,13 +2,17 @@ import fs from '../client/fs/ServerFs.js';
 import path from '../util/path.js';
 
 const MODULE_DIR = new URL('.', import.meta.url).pathname;
-const PROJECT_ROOT = process.env.DATA_DIR || path.join(MODULE_DIR, '..', '..', '..', '..', '..');
+// process / env only exist under Node (electron, standalone server). Running
+// as an integrated server inside a browser worker there is no process, so
+// read the env through this guard instead of bare process.env.
+const ENV = (typeof process !== 'undefined' && process.env) || {};
+const PROJECT_ROOT = ENV.DATA_DIR || path.join(MODULE_DIR, '..', '..', '..', '..', '..');
 const WORLDS_DIR = path.join(PROJECT_ROOT, 'worlds');
 
 const defaults = {
     server: 'main',
     servers: [],
-    port: parseInt(process.env.SERVER_PORT || '6008', 10),
+    port: parseInt(ENV.SERVER_PORT || '6008', 10),
     host: '0.0.0.0',
     default_gamemode: 'creative',
     default_op: true,

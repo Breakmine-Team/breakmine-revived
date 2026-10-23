@@ -10,8 +10,10 @@ const log = Logger;
 
 const MODULE_DIR = new URL('.', import.meta.url).pathname;
 // Respect DATA_DIR (Docker persistence) the same way config.js does, so world
-// data and config always live in the same place.
-const PROJECT_ROOT = process.env.DATA_DIR || path.join(MODULE_DIR, '..', '..', '..', '..', '..');
+// data and config always live in the same place. Guarded: there is no
+// `process` in a browser worker (integrated server).
+const PROJECT_ROOT = ((typeof process !== 'undefined' && process.env) || {}).DATA_DIR
+    || path.join(MODULE_DIR, '..', '..', '..', '..', '..');
 const WORLDS_DIR = path.join(PROJECT_ROOT, 'worlds');
 const DEFAULT_WORLD_DIR = PROJECT_ROOT;
 const DEFAULT_WORLD_FILE = path.join(PROJECT_ROOT, 'world_data.bin');
