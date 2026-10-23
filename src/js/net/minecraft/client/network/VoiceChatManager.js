@@ -27,6 +27,19 @@ const HEARING_RANGE = 40;         // distance (blocks) at which voices fade out 
 const LINK_RETRY_DELAY = 8000;    // ms before re-dialing an outgoing link that has no audio yet
 const LINK_MAX_RETRIES = 6;       // how many times a dead link may be re-dialed
 
+// STUN servers map public IPs/ports to let peers route UDP traffic directly.
+// TURN servers relay the media stream when a direct peer-to-peer connection
+// cannot be established (symmetric NATs, guest Wi-Fi, some carrier networks).
+// Default TURN: the free public relay at openrelay.metered.ca. Self-hosting a
+// coturn instance is strongly recommended for heavy use; point the game
+// settings at it via voiceTurnUrls / voiceTurnUsername / voiceTurnPassword.
+const DEFAULT_ICE_SERVERS = [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
+    { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
+    { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" }
+];
+
 // Fast, dependency-free string hash used to derive a stable peerjs ID.
 function cyrb53(str, seed = 0) {
     let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
@@ -83,6 +96,30 @@ export default class VoiceChatManager {
     /** Stable peerjs ID derived from the username (a reconnect keeps its ID). */
     getPeerId() {
         return "bmvc-" + cyrb53(this.getUsername() + "|" + this.peerSuffix);
+    }
+
+    /** ICE servers for WebRTC: STUN for discovery + a TURN relay fallback.
+     *  The settings allow pointing at a self-hosted coturn instance. */
+    getIceServers() {
+        const settings = this.minecraft.settings;
+        const customUrls = (settings.voiceTurnUrls || "").trim();
+
+        if (customUrls) {
+            const urls = customUrls.split(",").map(url => url.trim()).filter(Boolean);
+            const username = (settings.voiceTurnUsername || "").trim();
+            const credential = (settings.voiceTurnPassword || "").trim();
+            if (urls.length) {
+                // STUN is still useful alongside a custom TURN server.
+                return [
+                    { urls: "stun:stun.l.google.com:19302" },
+                    username && credential
+                        ? { urls, username, credential }
+                        : { urls }
+                ];
+            }
+        }
+
+        return DEFAULT_ICE_SERVERS;
     }
 
     /** True when connected to a (real or integrated) multiplayer server. */
@@ -183,7 +220,9 @@ export default class VoiceChatManager {
 
         const peer = new Peer(this.getPeerId(), {
             // Log peerjs negotiation internals to the browser console.
-            debug: 2
+            debug: 2,
+            // WebRTC connection candidates: STUN + TURN relay fallback.
+            config: { iceServers: this.getIceServers() }
         });
         this.peer = peer;
 
@@ -516,6 +555,10 @@ export default class VoiceChatManager {
         const lines = [];
         lines.push("voice: " + (this.enabled ? "on" : "off") + " | talking: " + (this.talking ? "yes" : "no"));
         lines.push("peer id: " + (this.peer ? this.peer.id + (this.peer.open ? " (open)" : " (not open)") : "none"));
+        const turnUrls = this.getIceServers()
+            .filter(server => server.urls && String(server.urls).startsWith("turn"))
+            .map(server => server.urls);
+        lines.push("turn: " + (turnUrls.length ? turnUrls.join(", ") : "none"));
         lines.push("mic: " + (this.micTrack ? (this.micTrack.enabled ? "unmuted" : "muted") : "none"));
         lines.push("known peers: " + (this.byUsername.size ? [...this.byUsername].map(([u, p]) => u + " -> " + p).join(", ") : "none"));
         const callLines = [];

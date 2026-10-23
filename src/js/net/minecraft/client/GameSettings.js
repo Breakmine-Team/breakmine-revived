@@ -35,6 +35,13 @@ export default class GameSettings {
         this.showPreview = true;
         this.remoteSensitivity = 100;
 
+        // Voice chat (P2P, push-to-talk). TURN relay used when a direct
+        // WebRTC connection fails (symmetric NAT etc). Comma-separated URLs;
+        // leave empty to use the built-in free relay list.
+        this.voiceTurnUrls = '';
+        this.voiceTurnUsername = '';
+        this.voiceTurnPassword = '';
+
         this.tvmode = false;
 
         this.token = ''; // TODO: Make more secure
