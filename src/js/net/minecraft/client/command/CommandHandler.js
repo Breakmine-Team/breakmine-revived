@@ -8,6 +8,7 @@ import PlaceCommand from "./command/PlaceCommand.js"
 import HealCommand from "./command/HealCommand.js"
 import GiveCommand from "./command/GiveCommand.js"
 import SummonCommand from "./command/SummonCommand.js"
+import VoiceChatStatusCommand from "./command/VoiceChatStatusCommand.js"
 import CommandRegistry from "./CommandRegistry.js";
 
 export default class CommandHandler {
@@ -26,6 +27,7 @@ export default class CommandHandler {
         this.commands.push(new HealCommand());
         this.commands.push(new GiveCommand());
         this.commands.push(new SummonCommand());
+        this.commands.push(new VoiceChatStatusCommand());
     }
 
     /**
