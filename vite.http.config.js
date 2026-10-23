@@ -36,6 +36,7 @@ export default defineConfig({
             "libraries/bigint-mod-arith.js",
             "libraries/sha1.min.js",
             "libraries/pako.es5.min.js",
+            "libraries/peerjs.js",
         ],
     },
 });

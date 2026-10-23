@@ -1,4 +1,4 @@
-import { Peer } from "peerjs";
+import { Peer } from "../../../../../../libraries/peerjs.js";
 
 /**
  * P2P voice chat (push-to-talk).
