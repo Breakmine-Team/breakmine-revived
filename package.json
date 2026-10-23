@@ -48,11 +48,12 @@
     "jsonwebtoken": "^9.0.2",
     "jszip": "^3.10.1",
     "multer": "^1.4.5-lts.1",
+    "peerjs": "^1.5.5",
+    "serve": "^14.2.6",
     "sharp": "^0.35.3",
     "toml": "^5.0.0",
     "uuid": "^10.0.0",
-    "ws": "^8.21.0",
-    "serve": "^14.2.6"
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@vitejs/plugin-basic-ssl": "^2.3.0",

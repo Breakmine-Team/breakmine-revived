@@ -288,6 +288,11 @@ export default class NetworkManager {
                 } else {
                     this.pendingGamemode = payload;
                 }
+            } else if (payload.type === 'voice') {
+                // P2P voice chat peer discovery relay
+                if (this.minecraft?.voiceChat) {
+                    this.minecraft.voiceChat.handleRelayMessage(payload);
+                }
             } else if (payload.type === 'hurt' && this.minecraft?.world) {
                 const entity = this.minecraft.world.getEntityById(payload.eid);
                 if (entity && entity.renderer) {
@@ -450,10 +455,21 @@ export default class NetworkManager {
         }
 
         this.connected = false;
+
+        // Tear down the voice chat session when the connection drops.
+        if (this.minecraft?.voiceChat) {
+            this.minecraft.voiceChat.reset();
+        }
     }
 
     close() {
         this.connected = false;
+
+        // Tear down the voice chat session when leaving the server.
+        if (this.minecraft?.voiceChat) {
+            this.minecraft.voiceChat.reset();
+        }
+
         if (this.socket !== null) {
             this.socket.close();
         }

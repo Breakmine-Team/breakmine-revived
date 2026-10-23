@@ -204,6 +204,23 @@ export function onConnection(ws) {
                         }
                     }
                 }
+            } else if (payload && payload.type === 'voice' && player) {
+                // P2P voice chat peer discovery relay: forward announce payloads
+                // to every other player. Only tiny ID announcements pass through
+                // here; the actual audio flows directly between clients (WebRTC).
+                if (payload.action === 'announce') {
+                    const relay = JSON.stringify({
+                        type: 'voice',
+                        action: 'announce',
+                        username: String(payload.username || '').slice(0, 32),
+                        peerId: String(payload.peerId || '')
+                    });
+                    for (const [eid, p] of getPlayers()) {
+                        if (eid !== player.eid && p.ws.readyState === 1) {
+                            p.ws.send(relay);
+                        }
+                    }
+                }
             }
         } catch (err) {
             // Malformed packets and non-JSON text messages are handled here so

@@ -8,6 +8,7 @@ export default class GameSettings {
         this.keyOpenCommands = 'Slash';
         this.keyOpenInventory = 'KeyE';
         this.keyPlayerList = 'Tab';
+        this.keyVoiceChat = 'KeyO';
 
         this.session = null;
 

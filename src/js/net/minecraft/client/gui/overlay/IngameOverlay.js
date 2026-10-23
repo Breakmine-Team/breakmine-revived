@@ -70,6 +70,9 @@ export default class IngameOverlay extends Gui {
             this.renderHealth(stack, this.window.width / 2 - 91, this.window.height - 22 - 11)
         }
 
+        // Render voice chat talking indicator (above hotbar/armor)
+        this.renderVoiceIndicator(stack);
+
         // Render chat canvas
         stack.drawImage(this.window.canvasChat, 0, 0);
 
@@ -81,6 +84,33 @@ export default class IngameOverlay extends Gui {
         // Render player list
         if (Keyboard.isKeyDown(this.minecraft.settings.keyPlayerList) && !this.minecraft.isSingleplayer()) {
             this.playerListOverlay.renderPlayerList(stack, this.window.width);
+        }
+    }
+
+    /** Small banner above the hotbar listing everyone currently talking. */
+    renderVoiceIndicator(stack) {
+        const voiceChat = this.minecraft.voiceChat;
+        if (!voiceChat) return;
+
+        const talkers = voiceChat.getTalkers();
+        if (talkers.length === 0) return;
+
+        const centerX = this.window.width / 2;
+        const lineheight = 11;
+
+        for (let i = 0; i < talkers.length; i++) {
+            const name = talkers[i];
+            const isLocal = i === 0 && voiceChat.talking;
+            const text = isLocal ? name + " (you)" : name;
+
+            const nameWidth = this.getStringWidth(stack, text);
+            const boxWidth = nameWidth + 14;
+            const y = this.window.height - 44 - i * lineheight;
+
+            this.drawRect(stack, centerX - boxWidth / 2, y, centerX + boxWidth / 2, y + 10, '#000000', 0.5);
+            // Blinking green "mic" dot next to the name
+            this.drawRect(stack, centerX - boxWidth / 2 + 3, y + 2, centerX - boxWidth / 2 + 8, y + 8, '#00ff00', 0.5 + 0.5 * Math.abs(Math.sin(Date.now() / 100)));
+            this.drawString(stack, text, centerX - boxWidth / 2 + 10, y + 1, 0xffffffff, true, false);
         }
     }
 

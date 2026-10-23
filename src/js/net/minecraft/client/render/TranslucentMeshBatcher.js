@@ -31,6 +31,13 @@ export default class TranslucentMeshBatcher {
         this.mesh = new THREE.Mesh(this.geometry, material);
         this.mesh.frustumCulled = false;
         this.mesh.renderOrder = 9999;
+        // Translucent faces must not cast shadows: the shadow pass renders
+        // them as fully opaque geometry, so the water/leaf plane would hide
+        // its surroundings behind a solid shadow. applyShadowsToObject()
+        // skips objects tagged like this too.
+        this.mesh.userData.isTranslucent = true;
+        this.mesh.castShadow = false;
+        this.mesh.receiveShadow = true;
         scene.add(this.mesh);
 
         this.currentVertex = 0;

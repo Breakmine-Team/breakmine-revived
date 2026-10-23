@@ -32,6 +32,7 @@ import FocusStateType from "../util/FocusStateType.js";
 import Session from "../util/Session.js";
 import PlayerControllerMultiplayer from "./network/controller/PlayerControllerMultiplayer.js";
 import NetworkManager from "./network/NetworkManager.js";
+import VoiceChatManager from "./network/VoiceChatManager.js";
 import NetworkLoginHandler from "./network/handler/NetworkLoginHandler.js";
 import HandshakePacket from "./network/packet/handshake/client/HandshakePacket.js";
 import ProtocolState from "./network/ProtocolState.js";
@@ -186,6 +187,9 @@ export default class Minecraft {
         // Create sound manager
         this.soundManager = new SoundManager();
         this.musicManager = new MusicManager();
+
+        // Create P2P voice chat (push-to-talk)
+        this.voiceChat = new VoiceChatManager(this);
 
         // Wire up the Patchwork Sound API
         Sound.init(this);
@@ -1361,6 +1365,11 @@ export default class Minecraft {
 
             // Tick particle renderer
             this.particleRenderer.onTick();
+
+            // Tick voice chat (announce/prune/volume upkeep)
+            if (this.voiceChat) {
+                this.voiceChat.onTick();
+            }
         }
 
         // Tick the screen
@@ -1708,6 +1717,20 @@ export default class Minecraft {
         if (button === this.settings.keyOpenInventory) {
             if (this.player.spectator) return;
             this.displayScreen(this.player.creative ? new GuiContainerCreative(this.player) : new GuiPlayerInventory(this.player));
+        }
+
+        // Voice chat push-to-talk begins on key-down (ends on key-up)
+        if (button === this.settings.keyVoiceChat) {
+            if (this.voiceChat) {
+                this.voiceChat.onKeyPressed();
+            }
+        }
+    }
+
+    /** Key released while in game (no screen open). Used e.g. by push-to-talk. */
+    onKeyReleased(button) {
+        if (this.voiceChat && button === this.settings.keyVoiceChat) {
+            this.voiceChat.onKeyReleased();
         }
     }
 

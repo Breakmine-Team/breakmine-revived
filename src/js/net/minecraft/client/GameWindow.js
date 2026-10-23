@@ -220,6 +220,12 @@ export default class GameWindow {
             if (!payload.cancelled && currentScreen !== null) {
                 currentScreen.keyReleased(event.code);
             }
+
+            // Always notify the game about key releases, even while a screen is
+            // open, so held actions like push-to-talk don't get stuck.
+            if (!payload.cancelled) {
+                this.minecraft.onKeyReleased?.(event.code);
+            }
         });
         this.registerListener(document, 'contextmenu');
         this.registerListener(this.wrapper, 'wheel', event => {

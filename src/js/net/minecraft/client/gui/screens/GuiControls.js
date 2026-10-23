@@ -51,7 +51,11 @@ export default class GuiControls extends GuiScreen {
             settings.keyOpenInventory = key;
         }));
 
-        this.buttonList.push(new GuiButton(this.minecraft, "Done", this.width / 2 - 100, y + 130, 200, 20, () => {
+        this.buttonList.push(new GuiKeyButton("Voice Chat (Push-to-Talk)", settings.keyVoiceChat, this.width / 2 - 100, y + 24 * 5, 200, 20, key => {
+            settings.keyVoiceChat = key;
+        }));
+
+        this.buttonList.push(new GuiButton(this.minecraft, "Done", this.width / 2 - 100, y + 154, 200, 20, () => {
             this.minecraft.displayScreen(this.previousScreen);
         }));
 

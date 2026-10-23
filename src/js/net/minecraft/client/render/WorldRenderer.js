@@ -1445,7 +1445,11 @@ export default class WorldRenderer {
         root.traverse(child => {
             if (!child.isMesh) return;
 
-            child.castShadow = this.shadowsEnabled;
+            // Translucent geometry (water, glass, leaves...) never casts
+            // shadows: the shadow pass would render it as a fully opaque
+            // blob, throwing a solid shadow onto and below itself instead of
+            // a cutout. Transparent meshes only receive shadows.
+            child.castShadow = this.shadowsEnabled && !(child.userData && child.userData.isTranslucent);
             child.receiveShadow = this.shadowsEnabled;
 
             let materials = Array.isArray(child.material) ? child.material : [child.material];
