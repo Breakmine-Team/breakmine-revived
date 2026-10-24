@@ -77,7 +77,7 @@ contextBridge.exposeInMainWorld('modsBridge', {
 
   /**
    * Write a binary file to the virtual filesystem.
-   * @param {Uint8Array|string} data  — raw bytes or base64 string
+   * @param {Uint8Array|string} data  - raw bytes or base64 string
    * @param {string} filename
    */
   saveBinaryFile: (data, filename) => ipcRenderer.invoke('mods:saveBinaryFile', data, filename),

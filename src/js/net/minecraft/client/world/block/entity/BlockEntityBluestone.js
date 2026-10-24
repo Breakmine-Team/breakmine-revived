@@ -2,7 +2,7 @@ import BlockEntity from "../BlockEntity.js";
 import TagInt from "../../../../nbt/tag/builtin/IntTag.js";
 
 /**
- * BlockEntityBluestone — persistent state for any Bluestone (redstone-like)
+ * BlockEntityBluestone - persistent state for any Bluestone (redstone-like)
  * block. The block's data nibble stays the live runtime state (the renderer
  * and all existing Bluestone logic read it), while this entity mirrors that
  * value into NBT so it round-trips through the save system.

@@ -105,8 +105,15 @@ export default class BlockLadder extends Block {
         world.setBlockAt(x, y, z, 0);
         const [itemId, count] = this.getDrop(world, x, y, z);
         if (typeof world.dropItem === "function") {
+            // Authoritative server: spawn the item and broadcast it to clients.
             world.dropItem(itemId, x, y, z);
-        } else if (world.minecraft?.worldRenderer && typeof world.addEntity === "function") {
+        } else if (world.minecraft?.worldRenderer
+            && typeof world.addEntity === "function"
+            && (typeof world.minecraft.isSingleplayer !== "function" || world.minecraft.isSingleplayer())) {
+            // Only predict the drop in a purely local world. In an integrated
+            // or remote session the server runs the same neighbour hook and
+            // broadcasts its own item; adding one locally as well made a
+            // support break drop two ladders.
             for (let i = 0; i < count; i++) {
                 world.addEntity(new ItemEntity(world.minecraft, world, itemId, x, y, z));
             }

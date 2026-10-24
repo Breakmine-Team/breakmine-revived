@@ -2,16 +2,16 @@
 
 ## Context
 
-The project is a browser-based Minecraft clone built with Three.js and vanilla ES modules. Currently there is **zero build tooling** — all source files are served as raw static files, libraries are loaded via `<script type="module">` tags from a vendored `libraries/` directory, and asset paths are hardcoded strings like `"src/resources/sound/random/click.ogg"`. The project already has `vite` ^8.1.3 as a dependency but no configuration. Adding Vite enables a proper dev server with HMR, and a production build with bundling/minification.
+The project is a browser-based Minecraft clone built with Three.js and vanilla ES modules. Currently there is **zero build tooling** - all source files are served as raw static files, libraries are loaded via `<script type="module">` tags from a vendored `libraries/` directory, and asset paths are hardcoded strings like `"src/resources/sound/random/click.ogg"`. The project already has `vite` ^8.1.3 as a dependency but no configuration. Adding Vite enables a proper dev server with HMR, and a production build with bundling/minification.
 
 ## Challenges
 
-1. **Static asset paths** — Textures, sounds, and music are loaded via runtime `new Image()`, `new Audio()`, and `THREE.AudioLoader()` with hardcoded relative paths like `"src/resources/terrain/terrain.png"`. These must resolve correctly under Vite's dev server and production build.
-2. **Vendored libraries with global-scope patterns** — Libraries in `libraries/` use UMD/global-assignment patterns (`aesjs`, `ASN1`, `bigint-mod-arith`, `sha1`). The code accesses them via a `require()` shim that reads `window[module]`.
-3. **CSS background-image** — `style.css` references `url(src/resources/gui/title/splash.png)`.
-4. **Web Worker** — `worldgen.worker.js` is loaded via `new Worker(new URL(..., import.meta.url), { type: "module" })` — already Vite-compatible.
-5. **`prelaunch.html`** — A second HTML entry point that sets `window.isPreLaunch = true`.
-6. **CI/CD** — The Forgejo workflow currently copies the entire repo to a pages branch; after Vite, the deployable output will be `dist/`.
+1. **Static asset paths** - Textures, sounds, and music are loaded via runtime `new Image()`, `new Audio()`, and `THREE.AudioLoader()` with hardcoded relative paths like `"src/resources/terrain/terrain.png"`. These must resolve correctly under Vite's dev server and production build.
+2. **Vendored libraries with global-scope patterns** - Libraries in `libraries/` use UMD/global-assignment patterns (`aesjs`, `ASN1`, `bigint-mod-arith`, `sha1`). The code accesses them via a `require()` shim that reads `window[module]`.
+3. **CSS background-image** - `style.css` references `url(src/resources/gui/title/splash.png)`.
+4. **Web Worker** - `worldgen.worker.js` is loaded via `new Worker(new URL(..., import.meta.url), { type: "module" })` - already Vite-compatible.
+5. **`prelaunch.html`** - A second HTML entry point that sets `window.isPreLaunch = true`.
+6. **CI/CD** - The Forgejo workflow currently copies the entire repo to a pages branch; after Vite, the deployable output will be `dist/`.
 
 ## Plan
 
@@ -54,7 +54,7 @@ All files that reference `"src/resources/..."` need to be updated to `"/resource
 | `index.html` | `href="src/resources/favicon.ico"` → `href="/resources/favicon.ico"` |
 | `prelaunch.html` | `href="src/resources/favicon.ico"` → `href="/resources/favicon.ico"` |
 
-### Step 4: Update `index.html` — remove library script tags, single Vite entry
+### Step 4: Update `index.html` - remove library script tags, single Vite entry
 
 Remove the five library `<script type="module">` tags and the `src/js/Start.js` script tag. Replace with:
 
@@ -62,7 +62,7 @@ Remove the five library `<script type="module">` tags and the `src/js/Start.js` 
 <script type="module" src="/src/js/Start.js"></script>
 ```
 
-### Step 5: Update `prelaunch.html` — same changes as `index.html`
+### Step 5: Update `prelaunch.html` - same changes as `index.html`
 
 ### Step 6: Move `vite` from `dependencies` to `devDependencies`
 
@@ -116,10 +116,10 @@ Library export patterns (determined by inspecting source):
 - `asn1.js`: IIFE, assigns `window.ASN1` (actually `exports.ASN1` where `exports` is `window` in browser)
 - `bigint-mod-arith.js`: Assigns `window["bigint-mod-arith"]`
 - `sha1.min.js`: UMD, assigns `window.sha1`
-- `three.module.js`: ES module, `export default` / named exports — already imported correctly
-- `long.js`: ES module, `export default` — already imported correctly
-- `chat.js`: ES module, named exports — already imported correctly
-- `pako` (local copy at `src/js/net/minecraft/lib/pako.js`): ES module — already imported correctly
+- `three.module.js`: ES module, `export default` / named exports - already imported correctly
+- `long.js`: ES module, `export default` - already imported correctly
+- `chat.js`: ES module, named exports - already imported correctly
+- `pako` (local copy at `src/js/net/minecraft/lib/pako.js`): ES module - already imported correctly
 
 Changes per file:
 
@@ -154,16 +154,16 @@ import "../../../../../libraries/sha1.min.js";
 ```
 
 **`src/js/Start.js`**:
-- Remove `import * as aesjs from '../../libraries/aes.js'` (unused — aesjs is used only in NetworkManager)
+- Remove `import * as aesjs from '../../libraries/aes.js'` (unused - aesjs is used only in NetworkManager)
 - Keep the `require()` shim export so all `require()` calls in the codebase continue to work
 
 **Approach**: Use side-effect imports for the UMD libraries that set `window.*` globals, so the existing `require()` shim continues to work without modifying every call site. Only `NetworkManager.js` needs a direct import since it does `require("aesjs").ModeOfOperation` inline (not as a simple lookup).
 
 ### Step 11: Test
 
-1. `npm run dev` — verify game loads at `localhost:3000`
+1. `npm run dev` - verify game loads at `localhost:3000`
 2. Verify textures, sounds, music load correctly
-3. `npm run build && npm run preview` — verify production build
+3. `npm run build && npm run preview` - verify production build
 4. No console errors about missing assets or broken imports
 
 ## Files to create/modify

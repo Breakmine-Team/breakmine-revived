@@ -3,7 +3,7 @@ import TagString from "../../../nbt/tag/builtin/StringTag.js";
 import TagInt from "../../../nbt/tag/builtin/IntTag.js";
 
 /**
- * BlockEntity — per-block persistent state stored as NBT.
+ * BlockEntity - per-block persistent state stored as NBT.
  *
  * Equivalent to Minecraft's TileEntity. A block opts in by overriding
  * `Block.hasBlockEntity()` to return true and `Block.createBlockEntity()`
@@ -20,7 +20,7 @@ import TagInt from "../../../nbt/tag/builtin/IntTag.js";
  */
 export default class BlockEntity {
 
-    /** Unique string identifier — override in subclasses. */
+    /** Unique string identifier - override in subclasses. */
     static id = "BlockEntity";
 
     constructor(world, x, y, z) {

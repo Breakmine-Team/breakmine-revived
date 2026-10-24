@@ -108,7 +108,7 @@ export default class TextureAtlas {
 
     registerModTexture(namespacedKey, image) {
         if (!this.canvas) {
-            console.warn('[TextureAtlas] Cannot register mod texture — atlas not yet built.');
+            console.warn('[TextureAtlas] Cannot register mod texture - atlas not yet built.');
             return { x: 0, y: 0, index: 0 };
         }
 

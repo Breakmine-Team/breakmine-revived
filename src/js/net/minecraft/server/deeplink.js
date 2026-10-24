@@ -10,8 +10,8 @@ const { app, dialog } = require('electron');
  *
  *      breakmine-game://install?url=https://mods.breakmine.com/download/1/v/2&name=My%20Mod&version=1.2.0
  *
- *  Anything arriving here is untrusted — a link can be triggered by any web
- *  page the user visits — so the install is only ever performed after an
+ *  Anything arriving here is untrusted - a link can be triggered by any web
+ *  page the user visits - so the install is only ever performed after an
  *  explicit confirmation dialog, the download host must be on the allowlist
  *  below, and the archive is size-capped and extracted without following
  *  entries that escape the mods folder.
@@ -107,7 +107,7 @@ function findDeepLinkInArgv(argv) {
 /**
  * Read the static fields out of a ModData.js source string.
  *
- * Mirrors ModLoader._parseModDataSource — kept here because the main process
+ * Mirrors ModLoader._parseModDataSource - kept here because the main process
  * is CommonJS and cannot import the renderer's ESM module. Both only need the
  * four static metadata fields, and neither executes the mod itself.
  */
@@ -240,7 +240,7 @@ async function installModFromUrl(downloadUrl, modsDir, { allowReplace }) {
 
 /**
  * Show a message box, parented to the game window when there is one.
- * Electron takes two different overloads here — passing an explicit
+ * Electron takes two different overloads here - passing an explicit
  * `undefined` as the first argument is not the same as omitting it.
  */
 function showMessage(win, options) {
@@ -251,7 +251,7 @@ function showMessage(win, options) {
  * Install the mod a deep link points at.
  *
  * The user already answered "Do you want to install to Breakmine Desktop?"
- * on the wiki page, which is where that question makes sense — inside the app
+ * on the wiki page, which is where that question makes sense - inside the app
  * there is nobody to tell they do not have it. So the link installs directly
  * and this only reports the outcome.
  *

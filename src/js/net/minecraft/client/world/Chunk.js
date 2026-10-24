@@ -50,7 +50,7 @@ export default class Chunk {
 
     /**
      * Add a block entity to this chunk's tracking list. Called by
-     * World.setBlockEntity. Idempotent — adding the same entity twice is
+     * World.setBlockEntity. Idempotent - adding the same entity twice is
      * a no-op.
      */
     addBlockEntity(entity) {

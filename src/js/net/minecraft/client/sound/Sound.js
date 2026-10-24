@@ -1,4 +1,4 @@
-// Patchwork Sound API — static; no 'this' allowed.
+// Patchwork Sound API - static; no 'this' allowed.
 export default class Sound {
     static minecraft = null;
     static _modUrlCache = new Map();
@@ -9,8 +9,8 @@ export default class Sound {
 
     /**
      * Play a sound.
-     *   Sound.play('random.pop', 1.0)   — vanilla sound (by sound pool name)
-     *   Sound.play('mod:test.ogg', 1.0) — custom sound shipped by a mod
+     *   Sound.play('random.pop', 1.0)   - vanilla sound (by sound pool name)
+     *   Sound.play('mod:test.ogg', 1.0) - custom sound shipped by a mod
      *
      * @param {string} name
      * @param {number} volume

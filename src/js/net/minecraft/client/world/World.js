@@ -843,7 +843,7 @@ export default class World {
     /**
      * Move a block entity from one position to another (used when a piston
      * pushes a block that owns an entity). The block type at the new position
-     * must already match — this method only relocates the entity.
+     * must already match - this method only relocates the entity.
      */
     moveBlockEntity(fromX, fromY, fromZ, toX, toY, toZ) {
         let entity = this.removeBlockEntity(fromX, fromY, fromZ);
@@ -917,7 +917,7 @@ export default class World {
     }
 
     /**
-     * Called when a chunk is unloaded — removes all of its block entities
+     * Called when a chunk is unloaded - removes all of its block entities
      * from the world map so they don't keep ticking.
      */
     unloadBlockEntities(chunk) {

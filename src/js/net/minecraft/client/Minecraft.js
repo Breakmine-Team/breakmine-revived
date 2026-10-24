@@ -1988,7 +1988,7 @@ export default class Minecraft {
                             // Chest/furnace facing based on player yaw
                             if (block.constructor.name === 'BlockChest' || block.constructor.name === 'BlockFurnace') {
                                 let dirIndex = Math.floor((this.player.rotationYaw * 4 / 360) + 0.5) & 3;
-                                blockData = [2, 5, 3, 4][dirIndex]; // 2=N, 3=S, 4=W, 5=E — front faces player
+                                blockData = [2, 5, 3, 4][dirIndex]; // 2=N, 3=S, 4=W, 5=E - front faces player
                             }
 
                             // Place block into the summoned field when the hit

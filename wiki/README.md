@@ -8,7 +8,7 @@ uploads directory.
 
 This folder is part of the larger `js-minecraft` repo, which has its own
 `docker-compose.yml` at the repo root for the game client. That one is
-unrelated to the wiki — always start the wiki with `-f` pointing here:
+unrelated to the wiki - always start the wiki with `-f` pointing here:
 
 ```sh
 cp .env.example .env      # then set WIKI_ADMIN_PASSWORD
@@ -380,11 +380,11 @@ python3 app.py
 
 Data defaults to the current directory. Useful flags/env:
 
-- `WIKI_DATA_DIR` — where `wiki.db`, `mod_files/`, `mod_images/` and
+- `WIKI_DATA_DIR` - where `wiki.db`, `mod_files/`, `mod_images/` and
   `temp_mods/` live (default `.`).
-- `WIKI_ADMIN_PASSWORD` — set the `kai` password without an interactive prompt.
-- `WIKI_SECRET_KEY` — cookie signing key (default: built-in constant).
-- `WIKI_PORT` / `MODS_PORT` — listen ports (default 8001 / 8004).
-- `WIKI_DEBUG=1` — enable the Werkzeug debugger when waitress is not installed.
-- `--reset-kai-password` — set a new `kai` password; `--init-only` — create or
+- `WIKI_ADMIN_PASSWORD` - set the `kai` password without an interactive prompt.
+- `WIKI_SECRET_KEY` - cookie signing key (default: built-in constant).
+- `WIKI_PORT` / `MODS_PORT` - listen ports (default 8001 / 8004).
+- `WIKI_DEBUG=1` - enable the Werkzeug debugger when waitress is not installed.
+- `--reset-kai-password` - set a new `kai` password; `--init-only` - create or
   migrate the database and exit without serving.

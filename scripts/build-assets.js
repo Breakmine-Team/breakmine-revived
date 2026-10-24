@@ -31,7 +31,7 @@ const MIME_TYPES = {
 // Every asset the game actually uses, keyed the same way as base64Assets
 // (relative to src/resources/). Only these files get embedded.
 const wantedKeys = new Set([...uiTextures, clickSound]);
-// Keys that must exist on disk (sound pool variants are optional — the game
+// Keys that must exist on disk (sound pool variants are optional - the game
 // gracefully falls back when numbered/unnumbered variants are absent).
 const criticalKeys = new Set([...uiTextures, clickSound]);
 

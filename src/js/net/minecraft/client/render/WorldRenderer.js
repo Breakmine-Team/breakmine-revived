@@ -15,6 +15,152 @@ import TranslucentMeshBatcher from "./TranslucentMeshBatcher.js";
 import GuiFunctions from "../gui/screens/GuiFunctions.js";
 import SignTextRenderer from "./SignTextRenderer.js";
 
+// The old per-box outline inflated every box by 0.005 on each side to keep
+// the line off the block surface. That makes the shared edges of two parts
+// sit ~0.01 apart. Treat lines that close as the same edge; real block
+// features are at least 1/16 (0.0625) apart even after that inflation.
+const OUTLINE_MERGE_EPSILON = 0.011;
+const BLOCK_OUTLINE_EXPANSION = 0.005;
+
+function isNear(a, b) {
+    return Math.abs(a - b) <= OUTLINE_MERGE_EPSILON;
+}
+
+function isSameBox(a, b) {
+    return isNear(a.minX, b.minX) && isNear(a.minY, b.minY) && isNear(a.minZ, b.minZ)
+        && isNear(a.maxX, b.maxX) && isNear(a.maxY, b.maxY) && isNear(a.maxZ, b.maxZ);
+}
+
+function addOutlineSegment(segments, axis, fixedA, fixedB, start, end) {
+    if (end - start <= OUTLINE_MERGE_EPSILON) {
+        return;
+    }
+
+    // Coalesce touching collinear pieces so the outline is drawn as one line.
+    for (let segment of segments) {
+        if (segment.axis !== axis || !isNear(segment.fixedA, fixedA) || !isNear(segment.fixedB, fixedB)) {
+            continue;
+        }
+        if (start <= segment.end + OUTLINE_MERGE_EPSILON
+            && end >= segment.start - OUTLINE_MERGE_EPSILON) {
+            segment.start = Math.min(segment.start, start);
+            segment.end = Math.max(segment.end, end);
+            return;
+        }
+    }
+
+    segments.push({ axis, fixedA, fixedB, start, end });
+}
+
+/**
+ * Turn the boxes of one block's shape into outline line segments.
+ *
+ * Parts of a multipart block share edges where their boxes meet (both halves
+ * of a stair, for example). Drawing every box independently leaves those
+ * internal seams visible and makes the shape look like two stacked boxes.
+ * Any pair of collinear edges that overlap is removed from both boxes,
+ * leaving only the outside edges of the combined shape. Identical duplicate
+ * boxes are collapsed first so a shape that lists the same part twice still
+ * gets an outline.
+ *
+ * @param {BoundingBox[]} boxes Block-local to world-space bounding boxes
+ * @param {number} expansion How far to push the outline off the shape surface
+ * @returns {{axis: number, fixedA: number, fixedB: number, start: number, end: number}[]}
+ */
+export function mergeBlockOutlineEdges(boxes, expansion = 0) {
+    const uniqueBoxes = [];
+    for (let box of boxes) {
+        if (!uniqueBoxes.some((other) => isSameBox(box, other))) {
+            uniqueBoxes.push(box);
+        }
+    }
+
+    // axis 0 = along X, 1 = along Y, 2 = along Z. fixedA/fixedB are the two
+    // perpendicular coordinates that identify the line in space.
+    const edges = [];
+    for (let box of uniqueBoxes) {
+        let minX = Math.min(box.minX, box.maxX) - expansion;
+        let minY = Math.min(box.minY, box.maxY) - expansion;
+        let minZ = Math.min(box.minZ, box.maxZ) - expansion;
+        let maxX = Math.max(box.minX, box.maxX) + expansion;
+        let maxY = Math.max(box.minY, box.maxY) + expansion;
+        let maxZ = Math.max(box.minZ, box.maxZ) + expansion;
+
+        for (let y of [minY, maxY]) {
+            for (let z of [minZ, maxZ]) {
+                edges.push({ axis: 0, fixedA: y, fixedB: z, start: minX, end: maxX });
+            }
+        }
+        for (let x of [minX, maxX]) {
+            for (let z of [minZ, maxZ]) {
+                edges.push({ axis: 1, fixedA: x, fixedB: z, start: minY, end: maxY });
+            }
+        }
+        for (let x of [minX, maxX]) {
+            for (let y of [minY, maxY]) {
+                edges.push({ axis: 2, fixedA: x, fixedB: y, start: minZ, end: maxZ });
+            }
+        }
+    }
+
+    const visible = [];
+    for (let i = 0; i < edges.length; i++) {
+        let edge = edges[i];
+        let overlaps = [];
+
+        for (let j = 0; j < edges.length; j++) {
+            if (i === j) {
+                continue;
+            }
+
+            let other = edges[j];
+            if (other.axis !== edge.axis
+                || !isNear(other.fixedA, edge.fixedA)
+                || !isNear(other.fixedB, edge.fixedB)) {
+                continue;
+            }
+
+            let start = Math.max(edge.start, other.start);
+            let end = Math.min(edge.end, other.end);
+            if (end - start > OUTLINE_MERGE_EPSILON) {
+                overlaps.push({ start, end });
+            }
+        }
+
+        if (overlaps.length === 0) {
+            addOutlineSegment(visible, edge.axis, edge.fixedA, edge.fixedB, edge.start, edge.end);
+            continue;
+        }
+
+        overlaps.sort((a, b) => a.start - b.start);
+        let mergedOverlaps = [];
+        for (let overlap of overlaps) {
+            let previous = mergedOverlaps[mergedOverlaps.length - 1];
+            if (previous && overlap.start <= previous.end + OUTLINE_MERGE_EPSILON) {
+                previous.end = Math.max(previous.end, overlap.end);
+            } else {
+                mergedOverlaps.push({ start: overlap.start, end: overlap.end });
+            }
+        }
+
+        // Remove the shared portions; both boxes contribute the same internal
+        // seam, and only the exposed remainder is part of the outer shape.
+        let cursor = edge.start;
+        for (let overlap of mergedOverlaps) {
+            let start = Math.max(edge.start, overlap.start);
+            if (start - cursor > OUTLINE_MERGE_EPSILON) {
+                addOutlineSegment(visible, edge.axis, edge.fixedA, edge.fixedB, cursor, start);
+            }
+            cursor = Math.max(cursor, overlap.end);
+        }
+        if (edge.end - cursor > OUTLINE_MERGE_EPSILON) {
+            addOutlineSegment(visible, edge.axis, edge.fixedA, edge.fixedB, cursor, edge.end);
+        }
+    }
+
+    return visible;
+}
+
 export default class WorldRenderer {
 
     static THIRD_PERSON_DISTANCE = 4;
@@ -274,7 +420,7 @@ export default class WorldRenderer {
             await this.minecraft.modLoader.loadAllMods();
 
             // Temporary dev mod from URL (?dev-mod=http://localhost:8080/mod.zip),
-            // held in memory only — never stored.
+            // held in memory only - never stored.
             const devModUrl = new URLSearchParams(window.location.search).get('dev-mod');
             if (devModUrl) {
                 try {
@@ -653,7 +799,7 @@ export default class WorldRenderer {
         // Scan exact blocks to find all light sources. Chunks are resolved
         // once per (chunkX, chunkZ) with a cheap Map-existence probe so the
         // scan can never ask the provider to synchronously generate whole
-        // chunks — that was blocking the main thread for seconds per scan
+        // chunks - that was blocking the main thread for seconds per scan
         // while moving around.
         const chunkAvailable = new Map();
         for (let x = px - radius; x <= px + radius; x++) {
@@ -1621,23 +1767,48 @@ export default class WorldRenderer {
                     this.blockHitBox.remove(this.blockHitBox.children[0]);
                 }
 
-                // Create line segments for each bounding box
-                for (let bbox of boxes) {
-                    let width = bbox.maxX - bbox.minX + 0.01;
-                    let height = bbox.maxY - bbox.minY + 0.01;
-                    let depth = bbox.maxZ - bbox.minZ + 0.01;
+                // Build one outline for the whole shape. Multipart blocks
+                // (stairs, fences, ...) share edges between their boxes; the
+                // merger removes those internal seams so the highlight wraps
+                // the combined silhouette instead of every part separately.
+                let segments = mergeBlockOutlineEdges(boxes, BLOCK_OUTLINE_EXPANSION);
+                if (segments.length > 0) {
+                    let positions = new Float32Array(segments.length * 6);
+                    let offset = 0;
 
-                    let geometry = new THREE.BoxGeometry(width, height, depth);
-                    let edges = new THREE.EdgesGeometry(geometry);
-                    let line = new THREE.LineSegments(edges, this.blockHitBoxMaterial);
+                    for (let segment of segments) {
+                        let start = segment.start;
+                        let end = segment.end;
+                        let fixedA = segment.fixedA;
+                        let fixedB = segment.fixedB;
 
-                    line.position.set(
-                        bbox.minX + (bbox.maxX - bbox.minX) / 2,
-                        bbox.minY + (bbox.maxY - bbox.minY) / 2,
-                        bbox.minZ + (bbox.maxZ - bbox.minZ) / 2
-                    );
+                        if (segment.axis === 0) {
+                            positions[offset++] = start;
+                            positions[offset++] = fixedA;
+                            positions[offset++] = fixedB;
+                            positions[offset++] = end;
+                            positions[offset++] = fixedA;
+                            positions[offset++] = fixedB;
+                        } else if (segment.axis === 1) {
+                            positions[offset++] = fixedA;
+                            positions[offset++] = start;
+                            positions[offset++] = fixedB;
+                            positions[offset++] = fixedA;
+                            positions[offset++] = end;
+                            positions[offset++] = fixedB;
+                        } else {
+                            positions[offset++] = fixedA;
+                            positions[offset++] = fixedB;
+                            positions[offset++] = start;
+                            positions[offset++] = fixedA;
+                            positions[offset++] = fixedB;
+                            positions[offset++] = end;
+                        }
+                    }
 
-                    this.blockHitBox.add(line);
+                    let geometry = new THREE.BufferGeometry();
+                    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                    this.blockHitBox.add(new THREE.LineSegments(geometry, this.blockHitBoxMaterial));
                 }
 
                 // A hit on the summoned field addresses cells in local space:
@@ -1812,7 +1983,7 @@ export default class WorldRenderer {
                     case 'setBlockDataAt':
                         return (x, y, z, data) => { if (isTarget(x, y, z)) blockData = data; };
                     case 'setBlockAt':
-                        return () => { /* e.g. doors place their top half here — not part of the preview */ };
+                        return () => { /* e.g. doors place their top half here - not part of the preview */ };
                     case 'getChunkSectionAt':
                         return (cx, cy, cz) => {
                             const section = target.getChunkSectionAt(cx, cy, cz);
@@ -1867,7 +2038,7 @@ export default class WorldRenderer {
         // Chest/furnace facing based on player yaw
         if (block.constructor.name === 'BlockChest' || block.constructor.name === 'BlockFurnace') {
             let dirIndex = Math.floor((this.minecraft.player.rotationYaw * 4 / 360) + 0.5) & 3;
-            blockData = [2, 5, 3, 4][dirIndex]; // 2=N, 3=S, 4=W, 5=E — front faces player
+            blockData = [2, 5, 3, 4][dirIndex]; // 2=N, 3=S, 4=W, 5=E - front faces player
         }
 
         return blockData;

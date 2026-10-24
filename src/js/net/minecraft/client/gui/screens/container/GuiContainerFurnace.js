@@ -44,7 +44,7 @@ export default class GuiContainerFurnace extends GuiContainer {
 
         const container = this.container;
 
-        // Fuel burn indicator (flame) — stays full while fuel is in the slot, drains only after consumption
+        // Fuel burn indicator (flame) - stays full while fuel is in the slot, drains only after consumption
         const inv = container.tileEntity;
         const fuelStack = inv.getItemInSlot(1);
         let burnPct;
@@ -74,7 +74,7 @@ export default class GuiContainerFurnace extends GuiContainer {
             );
         }
 
-        // Cook progress indicator (arrow) — left portion visible, clipped from right
+        // Cook progress indicator (arrow) - left portion visible, clipped from right
         const cookPct = Math.min(inv.cookTime / 200, 1);
         if (cookPct > 0) {
             const w = this.textureArrow.naturalWidth;

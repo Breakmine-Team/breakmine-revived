@@ -9,7 +9,7 @@ export default class SoundManager {
         this.audioListener = null;
         this.soundPool = {};
 
-        // Audio failed to initialize — all methods become no-ops.
+        // Audio failed to initialize - all methods become no-ops.
         this.disabled = false;
 
         // Set once sounds prove to be unavailable as a whole (e.g. singlefile

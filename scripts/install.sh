@@ -3,7 +3,7 @@
 # Breakmine Desktop installer for Linux.
 #
 # The AppImage is built by appbuild.js (npm run dist:linux) and published as a
-# release asset, so this script normally just downloads it — no Node, no npm,
+# release asset, so this script normally just downloads it - no Node, no npm,
 # no compiler. Pass --source to build from a git checkout instead, which needs
 # Node 22+, npm and a few minutes.
 #
@@ -277,7 +277,7 @@ done
 if [ "$FUSE_OK" -eq 1 ]; then
   info "FUSE present."
 else
-  warn "libfuse not detected — the AppImage may refuse to start."
+  warn "libfuse not detected - the AppImage may refuse to start."
   warn "Debian/Ubuntu: sudo apt install libfuse2t64   (or: libfuse2)"
   warn "Fedora: sudo dnf install fuse   |   Arch: sudo pacman -S fuse2"
   warn "No root? The AppImage still runs with --appimage-extract-and-run"
@@ -398,7 +398,7 @@ EOF
 step "Registering the launcher"
 mkdir -p "$DESKTOP_DIR" "$ICON_DIR"
 
-# Absolute Exec path — the launcher is started from an unknown working
+# Absolute Exec path - the launcher is started from an unknown working
 # directory, and mods live next to the binary.
 cat > "$DESKTOP_DIR/breakmine.desktop" <<EOF
 [Desktop Entry]

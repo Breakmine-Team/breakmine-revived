@@ -129,7 +129,7 @@ export default class GuiMods extends GuiScreen {
         const hasSelection = this.selectedIndex >= 0 && this.selectedIndex < this.mods.length;
         const mod = hasSelection ? this.mods[this.selectedIndex] : null;
         // Folder mods live in the physical mods/ directory, which the game
-        // never writes to — deleting them is a filesystem action, not a UI one.
+        // never writes to - deleting them is a filesystem action, not a UI one.
         const isDiskMod = !!mod?.disk;
 
         this.buttonToggle.enabled = hasSelection;

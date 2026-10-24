@@ -69,7 +69,7 @@ function isSolidBlock(blockId) {
 let log = Logger;
 
 // A failed world save (disk full, sandboxed FS, ...) must never take down the
-// connection or interrupt gameplay — log it and continue.
+// connection or interrupt gameplay - log it and continue.
 function doSaveWorld() {
     try {
         saveWorld();
@@ -178,7 +178,7 @@ function handlePacket(player, buffer) {
         const who = player.username || 'unknown';
         if (err instanceof MalformedPacketError) {
             log.warn('Server', `Rejected malformed packet from ${who}: ${err.message}`);
-            // Protocol violations are unrecoverable — drop the connection.
+            // Protocol violations are unrecoverable - drop the connection.
             try {
                 if (player.ws && player.ws.readyState === 1) {
                     player.ws.close();
@@ -250,7 +250,7 @@ function handleLoginPacket(player, packetId, buffer, offset) {
 
         if (!config.allowMods && player.mods && player.mods.length > 0) {
             const modNames = player.mods.map(m => m.name).join(', ');
-            log.info('Server', `${username} kicked — mods not allowed (has: ${modNames})`);
+            log.info('Server', `${username} kicked - mods not allowed (has: ${modNames})`);
             if (player.ws.readyState === 1) {
                 player.ws.send(createDisconnectPacket(`§cThis server does not allow mods. Please disable your mods to join.`));
                 player.ws.close();
@@ -761,7 +761,7 @@ function handleBlockPlacement(player, buffer, offset) {
 
         // Ask the block itself for its placement metadata. Every directional
         // block implements getPlacementMetadata() in its own class, so the
-        // server needs no per-block special cases here — mod blocks included.
+        // server needs no per-block special cases here - mod blocks included.
         const heldBlockForMeta = Block.getById(blockId);
         let metadata = 0;
         if (heldBlockForMeta && typeof heldBlockForMeta.getPlacementMetadata === 'function') {

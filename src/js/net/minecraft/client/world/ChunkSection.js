@@ -95,7 +95,7 @@ export default class ChunkSection {
         // Neighbor availability guard: meshing samples blocks one block past
         // the section borders. If a neighboring chunk is not loaded yet, doing
         // that sample would make the provider synchronously generate an entire
-        // chunk mid-mesh — the cause of the seconds-long spikes when moving.
+        // chunk mid-mesh - the cause of the seconds-long spikes when moving.
         // Instead, leave the section flagged (isModified) so WorldRenderer
         // re-queues it once the neighbor chunk arrives.
         const wx = this.x << 4;

@@ -1,7 +1,7 @@
 import BlockEntity from "../BlockEntity.js";
 
 /**
- * BlockEntityRegistry — maps string ids to BlockEntity subclasses so that
+ * BlockEntityRegistry - maps string ids to BlockEntity subclasses so that
  * save files can be decoded without knowing the concrete class up front.
  *
  * Usage:

@@ -40,7 +40,7 @@ export default class BlockBluestonePusherHead extends Block {
             if (baseBlock && baseBlock.isPusher) {
                 // The base clears its own extended bit (data & 1) *before*
                 // removing the head during a normal retract, so an extended
-                // base below us means the head was broken by hand — destroy
+                // base below us means the head was broken by hand - destroy
                 // the whole pusher. Otherwise just let the base retract.
                 if ((world.getBlockDataAt(x, y - 1, z) & 1) === 1) {
                     world.setBlockAt(x, y - 1, z, 0);

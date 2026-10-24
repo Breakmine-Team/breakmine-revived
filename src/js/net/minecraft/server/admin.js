@@ -81,7 +81,7 @@ function loginPage(error) {
     return `<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Server Admin — Login</title>
+<title>Server Admin - Login</title>
 ${MDUI_HEAD}
 </head>
 <body><div class="wrap">

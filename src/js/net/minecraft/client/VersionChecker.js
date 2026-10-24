@@ -67,7 +67,7 @@ export async function fetchLatestVersion() {
 /**
  * @returns {Promise<{current: string, currentClean: string, latest: string,
  *                    latestClean: string, available: boolean, error: ?string}>}
- *          Never rejects — a failed check just reports `error`, because a
+ *          Never rejects - a failed check just reports `error`, because a
  *          missing update prompt must not break the main menu.
  */
 export async function checkForUpdate() {

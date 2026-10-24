@@ -1,7 +1,7 @@
 import Command from "../Command.js";
 
-// /unbreakable            — how many unbreakable ingots you are carrying
-// /unbreakable give <n>   — give yourself n ingots
+// /unbreakable            - how many unbreakable ingots you are carrying
+// /unbreakable give <n>   - give yourself n ingots
 //
 // Commands from commands/*.js are registered for the client and the server
 // alike. Set `this.opOnly = true` in the constructor when the server should

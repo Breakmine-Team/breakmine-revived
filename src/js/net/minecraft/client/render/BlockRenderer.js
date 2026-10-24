@@ -17,6 +17,9 @@ import EnumCreativeInventoryTab from "../gui/EnumCreativeInventoryTab.js";
 // and the mesh generator calls it per block.
 const FACES = EnumBlockFace.values();
 
+// Bounding boxes use 1/16-block steps, so this only absorbs float noise.
+const PART_FACE_EPSILON = 1e-6;
+
 export default class BlockRenderer {
 
     constructor(worldRenderer) {
@@ -144,12 +147,13 @@ export default class BlockRenderer {
     };
 
     renderMultipart(world, block, x, y, z) {
-        this.renderParts(world, block.getMultipart(world, x, y, z), x, y, z);
+        this.renderParts(world, block.getMultipart(world, x, y, z), x, y, z, false, true, block);
     }
 
-    renderParts(world, parts, x, y, z, respectFaces = false) {
-        if (!Array.isArray(parts)) return;
+    resolveParts(parts) {
+        if (!Array.isArray(parts)) return [];
 
+        let resolvedParts = [];
         for (let i = 0; i < parts.length; i++) {
             let partBlock = null;
             let bbox = null;
@@ -166,14 +170,197 @@ export default class BlockRenderer {
             }
             
             if (partBlock && bbox) {
-                for (let j = 0; j < FACES.length; j++) {
-                    if (respectFaces && partBlock.shouldRenderFace(world, x, y, z, FACES[j]) === false) {
-                        continue;
-                    }
-                    this.renderFace(world, partBlock, bbox, FACES[j], false, x, y, z);
-                }
+                resolvedParts.push({ partBlock, bbox });
             }
         }
+        return resolvedParts;
+    }
+
+    renderParts(world, parts, x, y, z, respectFaces = false, cullHidden = false, multipartBlock = null) {
+        let resolvedParts = this.resolveParts(parts);
+
+        // Collect occluders for boundary faces lazily: not every shape has a
+        // part touching every side of its cell. Full opaque cubes are the
+        // common case; two parts of the same multipart block (neighbouring
+        // stairs, for example) can also fully cover each other's boundary.
+        let neighborOccluders = null;
+        let neighborOccludersResolved = null;
+        if (cullHidden && world !== null) {
+            neighborOccluders = new Array(FACES.length);
+            neighborOccludersResolved = new Array(FACES.length).fill(false);
+        }
+
+        for (let i = 0; i < resolvedParts.length; i++) {
+            let partBlock = resolvedParts[i].partBlock;
+            let bbox = resolvedParts[i].bbox;
+            for (let j = 0; j < FACES.length; j++) {
+                let face = FACES[j];
+
+                if (respectFaces && partBlock.shouldRenderFace(world, x, y, z, face) === false) {
+                    continue;
+                }
+
+                if (cullHidden && world !== null) {
+                    // Interior faces must not use the boundary test: the part
+                    // may sit well inside the block while its neighbour is
+                    // solid.
+                    if (this.isPartFaceAtBoundary(bbox, face)) {
+                        if (!neighborOccludersResolved[j]) {
+                            neighborOccluders[j] = this.getNeighborFaceOccluders(world, multipartBlock, x, y, z, face);
+                            neighborOccludersResolved[j] = true;
+                        }
+
+                        let occluders = neighborOccluders[j];
+                        if (occluders !== null && this.isPartFaceCoveredByPart(occluders, -1, bbox, face)) {
+                            continue;
+                        }
+                    }
+                    if (this.isPartFaceCoveredByPart(resolvedParts, i, bbox, face)) {
+                        continue;
+                    }
+                }
+
+                this.renderFace(world, partBlock, bbox, face, false, x, y, z);
+            }
+        }
+    }
+
+    /**
+     * Resolve the boxes in front of a block-boundary face. Returns null when
+     * nothing can occlude it, otherwise a part list in this block's local
+     * coordinates.
+     */
+    getNeighborFaceOccluders(world, multipartBlock, x, y, z, face) {
+        let nx = x + face.x;
+        let ny = y + face.y;
+        let nz = z + face.z;
+        let neighborId = world.getBlockAt(nx, ny, nz);
+        if (neighborId === 0) {
+            return null;
+        }
+
+        let neighborBlock = Block.getById(neighborId);
+        if (neighborBlock === null) {
+            return null;
+        }
+
+        if (this.isOpaqueFullCube(neighborBlock, world, nx, ny, nz)) {
+            return [{
+                partBlock: neighborBlock,
+                bbox: new BoundingBox(face.x, face.y, face.z, face.x + 1, face.y + 1, face.z + 1)
+            }];
+        }
+
+        // The same multipart block uses the same part layout, so its boxes can
+        // be shifted into this block's coordinates and tested directly. This
+        // removes the faces hidden where two stair blocks meet.
+        if (neighborBlock === multipartBlock) {
+            return this.resolveParts(multipartBlock.getMultipart(world, nx, ny, nz)).map((part) => ({
+                partBlock: part.partBlock,
+                bbox: new BoundingBox(
+                    part.bbox.minX + face.x, part.bbox.minY + face.y, part.bbox.minZ + face.z,
+                    part.bbox.maxX + face.x, part.bbox.maxY + face.y, part.bbox.maxZ + face.z
+                )
+            }));
+        }
+
+        return null;
+    }
+
+    /**
+     * True when another part of this multipart block fully covers `bbox`'s
+     * face and extends out through it. Covers the seam between a stair's step
+     * and its base (the step's bottom face) and rail ends buried in a fence
+     * post, while leaving partially covered faces (a stair base's top) alone.
+     */
+    isPartFaceCoveredByPart(parts, partIndex, bbox, face) {
+        let minA, maxA, minU, maxU, minV, maxV;
+        if (face.x !== 0) {
+            minA = 'minX'; maxA = 'maxX';
+            minU = 'minY'; maxU = 'maxY';
+            minV = 'minZ'; maxV = 'maxZ';
+        } else if (face.y !== 0) {
+            minA = 'minY'; maxA = 'maxY';
+            minU = 'minX'; maxU = 'maxX';
+            minV = 'minZ'; maxV = 'maxZ';
+        } else {
+            minA = 'minZ'; maxA = 'maxZ';
+            minU = 'minX'; maxU = 'maxX';
+            minV = 'minY'; maxV = 'maxY';
+        }
+
+        let positive = face.x > 0 || face.y > 0 || face.z > 0;
+        let plane = positive ? bbox[maxA] : bbox[minA];
+
+        for (let i = 0; i < parts.length; i++) {
+            if (i === partIndex) {
+                continue;
+            }
+
+            let otherBlock = parts[i].partBlock;
+            if (otherBlock && otherBlock.isTranslucent()) {
+                continue;
+            }
+
+            let other = parts[i].bbox;
+
+            // The other part must reach this face's plane from the outward
+            // side. A box that only lies behind the face cannot hide it.
+            if (positive) {
+                if (other[minA] > plane + PART_FACE_EPSILON
+                    || other[maxA] <= plane + PART_FACE_EPSILON) {
+                    continue;
+                }
+            } else {
+                if (other[maxA] < plane - PART_FACE_EPSILON
+                    || other[minA] >= plane - PART_FACE_EPSILON) {
+                    continue;
+                }
+            }
+
+            if (other[minU] > bbox[minU] + PART_FACE_EPSILON
+                || other[maxU] < bbox[maxU] - PART_FACE_EPSILON
+                || other[minV] > bbox[minV] + PART_FACE_EPSILON
+                || other[maxV] < bbox[maxV] - PART_FACE_EPSILON) {
+                continue;
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    isPartFaceAtBoundary(bbox, face) {
+        if (face.x !== 0) {
+            return face.x > 0
+                ? Math.abs(bbox.maxX - 1) <= PART_FACE_EPSILON
+                : Math.abs(bbox.minX) <= PART_FACE_EPSILON;
+        }
+        if (face.y !== 0) {
+            return face.y > 0
+                ? Math.abs(bbox.maxY - 1) <= PART_FACE_EPSILON
+                : Math.abs(bbox.minY) <= PART_FACE_EPSILON;
+        }
+        return face.z > 0
+            ? Math.abs(bbox.maxZ - 1) <= PART_FACE_EPSILON
+            : Math.abs(bbox.minZ) <= PART_FACE_EPSILON;
+    }
+
+    isOpaqueFullCube(block, world, x, y, z) {
+        if (block === null || block.multipart || block.path
+            || block.isTranslucent() || !block.isSolid()) {
+            return false;
+        }
+
+        let bbox = block.getBoundingBox(world, x, y, z);
+        return bbox !== null
+            && bbox.minX <= PART_FACE_EPSILON
+            && bbox.minY <= PART_FACE_EPSILON
+            && bbox.minZ <= PART_FACE_EPSILON
+            && bbox.maxX >= 1 - PART_FACE_EPSILON
+            && bbox.maxY >= 1 - PART_FACE_EPSILON
+            && bbox.maxZ >= 1 - PART_FACE_EPSILON;
     }
 
     renderSolidBlock(world, block, ambientOcclusion, x, y, z) {

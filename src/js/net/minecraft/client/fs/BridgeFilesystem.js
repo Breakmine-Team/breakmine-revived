@@ -1,11 +1,11 @@
 /**
- * BridgeFilesystem — reads mods straight from the physical `mods/` folder.
+ * BridgeFilesystem - reads mods straight from the physical `mods/` folder.
  *
  * In the Electron build the renderer is sandboxed, so the `mods/` folder on
  * disk is reached through the preload `modsBridge` (see server/preload.js and
  * the `mods:*` IPC handlers in server/main.js). This class adapts that bridge
  * to the small read-only contract the mod loading pipeline expects from a
- * filesystem — the same one MemoryFilesystem provides for dev mods:
+ * filesystem - the same one MemoryFilesystem provides for dev mods:
  *
  *   loadFile(path)        → Promise<string|null>
  *   loadBinaryFile(path)  → Promise<Uint8Array|null>

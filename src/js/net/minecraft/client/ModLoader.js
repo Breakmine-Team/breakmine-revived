@@ -15,23 +15,23 @@ const ENABLED_MODS_KEY = 'breakmine_enabled_mods';
 const DISABLED_MODS_KEY = 'breakmine_disabled_mods';
 
 /**
- * ModLoader — discovers, installs, and registers mods.
+ * ModLoader - discovers, installs, and registers mods.
  *
  * Supported mod layout (inside a ZIP or folder):
- *   ModData.js           — metadata (static NAME, ID, AUTHOR, VERSION)
- *   ModLoad.js           — lifecycle hook (static onLoad(world))
- *   blocks/*.js          — block classes (extend Block)
- *   items/*.js           — item classes (extend Item / ItemGeneric / ItemEdible / ItemTool)
- *   crafting/*.js        — crafting recipe classes
- *   smelting/*.js        — smelting recipe classes
- *   gui/*.js             — GUI screen classes (extend GuiScreen / GuiContainer)
- *   commands/*.js        — chat commands (extend Command); registered for
+ *   ModData.js           - metadata (static NAME, ID, AUTHOR, VERSION)
+ *   ModLoad.js           - lifecycle hook (static onLoad(world))
+ *   blocks/*.js          - block classes (extend Block)
+ *   items/*.js           - item classes (extend Item / ItemGeneric / ItemEdible / ItemTool)
+ *   crafting/*.js        - crafting recipe classes
+ *   smelting/*.js        - smelting recipe classes
+ *   gui/*.js             - GUI screen classes (extend GuiScreen / GuiContainer)
+ *   commands/*.js        - chat commands (extend Command); registered for
  *                           client and server use, op-only with `this.opOnly = true`
- *   tabs/*.js            — custom creative inventory tab classes (with static
+ *   tabs/*.js            - custom creative inventory tab classes (with static
  *                           NAME and ICON_BLOCK_ID properties)
- *   gui_textures/*.png   — GUI background textures (accessible via 'gui/&lt;modId&gt;/&lt;name&gt;')
- *   textures/*.png       — 16×16 block/item textures
- *   sounds/*.ogg         — custom sounds (playable via Sound.play('&lt;modId&gt;:&lt;name&gt;.ogg', volume))
+ *   gui_textures/*.png   - GUI background textures (accessible via 'gui/&lt;modId&gt;/&lt;name&gt;')
+ *   textures/*.png       - 16×16 block/item textures
+ *   sounds/*.ogg         - custom sounds (playable via Sound.play('&lt;modId&gt;:&lt;name&gt;.ogg', volume))
  *
  * Modding API exposed to block/item/GUI/command code:
  *   Block, BlockRegistry, BoundingBox, EnumBlockFace, EnumCreativeInventoryTab,
@@ -84,7 +84,7 @@ export default class ModLoader {
         this._blockBaseClass = null;    // cached Block class for eval sandbox
         this._commandBaseClass = null;  // cached Command class for mod command sandboxes
         this._modModuleCache = new Map(); // 'modId/filePath' → evaluated exports
-        this.renderHooks = new Map();    // hook name → [{ fn, modId, priority, hook }] — world-render hook targets
+        this.renderHooks = new Map();    // hook name → [{ fn, modId, priority, hook }] - world-render hook targets
         this._modRegistrations = new Map(); // modId → { commands: Set, hooks: Set } for cleanup
         this._activeModId = null;       // mod currently being loaded (attributes registrations)
         this._modApis = new Map();      // modId → ModAPI facade handed to mod sandboxes
@@ -233,12 +233,12 @@ export default class ModLoader {
 
     /**
      * Hook a world-render function. WorldRenderer emits these points:
-     *   'beforeRender'      — once per frame before the camera is oriented
-     *   'renderChunks'      — before the visible chunks are drawn
-     *   'renderSky'         — before the sky is drawn
-     *   'renderBlockHitBox' — before the block outline is drawn
-     *   'afterRender'       — once per frame after everything is drawn
-     *   'onTick'            — once per client tick, before renderer updates
+     *   'beforeRender'      - once per frame before the camera is oriented
+     *   'renderChunks'      - before the visible chunks are drawn
+     *   'renderSky'         - before the sky is drawn
+     *   'renderBlockHitBox' - before the block outline is drawn
+     *   'afterRender'       - once per frame after everything is drawn
+     *   'onTick'            - once per client tick, before renderer updates
      * A handler receives a single context object:
      *   { hook, minecraft, worldRenderer, partialTicks, ...payload }
      * `priority` runs lower numbers first (default 0).
@@ -480,9 +480,9 @@ export default class ModLoader {
     /**
      * Temporarily load a mod from a ZIP file served over HTTP (dev mode).
      * Triggered by a `?dev-mod=<url>` query parameter. The mod is held in
-     * memory only — nothing is written to the filesystem, so it is gone on
+     * memory only - nothing is written to the filesystem, so it is gone on
      * the next page load.
-     * @param {string} url  — e.g. 'http://localhost:8080/mod.zip'
+     * @param {string} url  - e.g. 'http://localhost:8080/mod.zip'
      * @returns {Promise<string>} the modId
      */
     async loadDevModFromUrl(url) {
@@ -545,7 +545,7 @@ export default class ModLoader {
     /**
      * Load a mod from a folder of pre-extracted files (dev mode).
      * @param {string} modId
-     * @param {object} fileMap — { relativePath: stringContent | ArrayBuffer }
+     * @param {object} fileMap - { relativePath: stringContent | ArrayBuffer }
      */
     async loadModFromFolder(modId, fileMap) {
         console.log(`[Patchwork] Loading mod from folder: ${modId}`);
@@ -720,7 +720,7 @@ export default class ModLoader {
      * Load a mod's texture as an HTMLImageElement from IndexedDB.
      * @param {string} modId
      * @param {string} textureName  e.g. 'unbreakable_block'
-     * @param {object} fs  — filesystem to read from (defaults to persisted store)
+     * @param {object} fs  - filesystem to read from (defaults to persisted store)
      * @returns {Promise<HTMLImageElement>}
      */
     async loadModTexture(modId, textureName, fs = this.filesystem) {
@@ -740,7 +740,7 @@ export default class ModLoader {
     }
 
     /* ------------------------------------------------------------------
-     *  Internal — load a single mod from IndexedDB
+     *  Internal - load a single mod from IndexedDB
      * ------------------------------------------------------------------ */
 
     async _loadMod(modId, fs = this.filesystem) {
@@ -857,11 +857,11 @@ export default class ModLoader {
         // 11. Store
         this.mods.set(modId, entry);
 
-        console.log(`[Patchwork] Loaded mod '${entry.name}' — ${entry.blockIds.length} block(s), ${entry.itemIds.length} item(s), ${entry.textureNames.length} texture(s), ${entry.soundNames.length} sound(s)`);
+        console.log(`[Patchwork] Loaded mod '${entry.name}' - ${entry.blockIds.length} block(s), ${entry.itemIds.length} item(s), ${entry.textureNames.length} texture(s), ${entry.soundNames.length} sound(s)`);
     }
 
     /* ------------------------------------------------------------------
-     *  Internal — register mod textures into TextureAtlas
+     *  Internal - register mod textures into TextureAtlas
      * ------------------------------------------------------------------ */
 
     async _registerModTextures(modId, entry, fs = this.filesystem) {
@@ -883,7 +883,7 @@ export default class ModLoader {
     }
 
     /* ------------------------------------------------------------------
-     *  Internal — load block JS files, eval classes, register with BlockRegistry
+     *  Internal - load block JS files, eval classes, register with BlockRegistry
      * ------------------------------------------------------------------ */
 
     async _registerModBlocks(modId, entry, blockFiles, fs = this.filesystem) {
@@ -959,7 +959,7 @@ export default class ModLoader {
     }
 
     /* ------------------------------------------------------------------
-     *  Internal — load item JS files, eval classes, register with BlockRegistry
+     *  Internal - load item JS files, eval classes, register with BlockRegistry
      * ------------------------------------------------------------------ */
 
     async _registerModItems(modId, entry, itemFiles, fs = this.filesystem) {
@@ -1019,7 +1019,7 @@ export default class ModLoader {
     }
 
     /* ------------------------------------------------------------------
-     *  Internal — register crafting recipes
+     *  Internal - register crafting recipes
      * ------------------------------------------------------------------ */
 
     async _registerModCrafting(modId, entry, craftingFiles, fs = this.filesystem) {
@@ -1105,7 +1105,7 @@ export default class ModLoader {
     }
 
     /* ------------------------------------------------------------------
-     *  Internal — register smelting recipes
+     *  Internal - register smelting recipes
      * ------------------------------------------------------------------ */
 
     async _registerModSmelting(modId, entry, smeltingFiles, fs = this.filesystem) {
@@ -1178,7 +1178,7 @@ export default class ModLoader {
     }
 
     /* ------------------------------------------------------------------
-     *  Internal — register GUI textures into minecraft.resources
+     *  Internal - register GUI textures into minecraft.resources
      * ------------------------------------------------------------------ */
 
     async _registerModGuiTextures(modId, entry, fs = this.filesystem) {
@@ -1207,7 +1207,7 @@ export default class ModLoader {
     }
 
     /* ------------------------------------------------------------------
-     *  Internal — dynamically import GUI base classes for mod sandboxing
+     *  Internal - dynamically import GUI base classes for mod sandboxing
      * ------------------------------------------------------------------ */
 
     async _getGuiDeps(modId = null) {
@@ -1252,7 +1252,7 @@ export default class ModLoader {
     }
 
     /* ------------------------------------------------------------------
-     *  Internal — load GUI JS files and store class constructors
+     *  Internal - load GUI JS files and store class constructors
      * ------------------------------------------------------------------ */
 
     async _registerModGuis(modId, entry, guiFiles, fs = this.filesystem) {
@@ -1276,7 +1276,7 @@ export default class ModLoader {
     }
 
     /* ------------------------------------------------------------------
-     *  Internal — load commands/*.js and register them in CommandRegistry
+     *  Internal - load commands/*.js and register them in CommandRegistry
      * ------------------------------------------------------------------ */
 
     /**
@@ -1331,7 +1331,7 @@ export default class ModLoader {
     }
 
     /* ------------------------------------------------------------------
-     *  Internal — load tabs/*.js and register custom creative tabs
+     *  Internal - load tabs/*.js and register custom creative tabs
      * ------------------------------------------------------------------ */
 
     /**
@@ -1378,7 +1378,7 @@ export default class ModLoader {
     }
 
     /* ------------------------------------------------------------------
-     *  Internal — call ModLoad.onLoad if present
+     *  Internal - call ModLoad.onLoad if present
      * ------------------------------------------------------------------ */
 
     async _callModLoad(modId, entry, fs = this.filesystem) {
@@ -1422,7 +1422,7 @@ export default class ModLoader {
     }
 
     /* ------------------------------------------------------------------
-     *  Internal — eval a class from source string with provided dependencies
+     *  Internal - eval a class from source string with provided dependencies
      * ------------------------------------------------------------------ */
 
     /**
@@ -1431,11 +1431,11 @@ export default class ModLoader {
      * Relative imports that resolve to other files in the same mod are loaded
      * and evaluated automatically, and their exports are injected into deps.
      *
-     * @param {string} source  — JavaScript source with `export default class`
-     * @param {Object<string, Function>} deps  — map of variable names to actual classes
-     * @param {string|null} modId  — id of the mod the file belongs to (for same-mod imports)
-     * @param {string|null} filePath  — mod-relative path of the file (e.g. 'blocks/BlockFoo.js')
-     * @param {object} fs  — filesystem to read from
+     * @param {string} source  - JavaScript source with `export default class`
+     * @param {Object<string, Function>} deps  - map of variable names to actual classes
+     * @param {string|null} modId  - id of the mod the file belongs to (for same-mod imports)
+     * @param {string|null} filePath  - mod-relative path of the file (e.g. 'blocks/BlockFoo.js')
+     * @param {object} fs  - filesystem to read from
      * @returns {Function|null}
      */
     async _evalClass(source, deps, modId = null, filePath = null, fs = this.filesystem) {
@@ -1486,7 +1486,7 @@ export default class ModLoader {
     }
 
     /* ------------------------------------------------------------------
-     *  Internal — same-mod imports
+     *  Internal - same-mod imports
      * ------------------------------------------------------------------ */
 
     /**
@@ -1534,8 +1534,8 @@ export default class ModLoader {
      * mod-relative path. Returns a normalized mod-relative path, or null if
      * the specifier would escape the mod directory (game code, provided via deps).
      *
-     * @param {string} fromPath  — mod-relative path of the importing file
-     * @param {string} specifier — relative import path from the source
+     * @param {string} fromPath  - mod-relative path of the importing file
+     * @param {string} specifier - relative import path from the source
      * @returns {string|null}
      */
     _resolveImportPath(fromPath, specifier) {
@@ -1562,11 +1562,11 @@ export default class ModLoader {
      * Imports that point outside the mod (game classes) are left for deps.
      *
      * @param {string} source
-     * @param {Object<string, Function>} deps  — mutated in place
+     * @param {Object<string, Function>} deps  - mutated in place
      * @param {string} modId
-     * @param {string} filePath  — mod-relative path of the importing file
-     * @param {Set<string>} stack  — files currently being processed (cycle detection)
-     * @param {object} fs  — filesystem to read from
+     * @param {string} filePath  - mod-relative path of the importing file
+     * @param {Set<string>} stack  - files currently being processed (cycle detection)
+     * @param {object} fs  - filesystem to read from
      */
     async _resolveModImports(source, deps, modId, filePath, stack, fs = this.filesystem) {
         for (const imp of this._parseImports(source)) {
@@ -1600,10 +1600,10 @@ export default class ModLoader {
      * imports recursively. Results are cached per mod file.
      *
      * @param {string} modId
-     * @param {string} filePath  — mod-relative path of the module file
+     * @param {string} filePath  - mod-relative path of the module file
      * @param {Object<string, Function>} deps
      * @param {Set<string>} stack
-     * @param {object} fs  — filesystem to read from
+     * @param {object} fs  - filesystem to read from
      * @returns {Promise<Object|null>}  exports object: { __default, ...named }
      */
     async _loadModModule(modId, filePath, deps, stack, fs = this.filesystem) {
@@ -1635,7 +1635,7 @@ export default class ModLoader {
      * @param {string} modId
      * @param {string} filePath
      * @param {Set<string>} stack
-     * @param {object} fs  — filesystem to read from
+     * @param {object} fs  - filesystem to read from
      * @returns {Promise<Object|null>}  exports object: { __default, ...named }
      */
     async _evalModModule(source, deps, modId, filePath, stack, fs = this.filesystem) {
@@ -1716,7 +1716,7 @@ export default class ModLoader {
     }
 
     /* ------------------------------------------------------------------
-     *  Internal — read ModData from ZIP
+     *  Internal - read ModData from ZIP
      * ------------------------------------------------------------------ */
 
     async _readModDataFromZip(zip) {
@@ -1755,7 +1755,7 @@ export default class ModLoader {
     }
 
     /* ------------------------------------------------------------------
-     *  Internal — utilities
+     *  Internal - utilities
      * ------------------------------------------------------------------ */
 
     /**
@@ -1908,7 +1908,7 @@ export default class ModLoader {
     }
 
     /* ------------------------------------------------------------------
-     *  Internal — persistence of enabled set
+     *  Internal - persistence of enabled set
      * ------------------------------------------------------------------ */
 /**
      * The read-only view of the physical `mods/` folder, or null when running
@@ -1926,8 +1926,8 @@ export default class ModLoader {
     }
 
     /**
-     * Load every enabled mod — both ZIPs installed into IndexedDB and folders
-     * in the physical mods/ directory — and register their content.
+     * Load every enabled mod - both ZIPs installed into IndexedDB and folders
+     * in the physical mods/ directory - and register their content.
      * Call this once during game startup, after BlockRegistry.create().
      */
     async loadAllMods() {
@@ -1986,7 +1986,7 @@ export default class ModLoader {
     }
 
     /* ------------------------------------------------------------------
-     *  Internal — persistence of enabled set
+     *  Internal - persistence of enabled set
      * ------------------------------------------------------------------ */
 
     async _loadEnabledSet() {
@@ -2006,7 +2006,7 @@ export default class ModLoader {
 
             // A mod installed from the wiki lands in mods/ as a folder, and
             // this enabled set was written before it existed. Enable it
-            // unless the user has since switched it off — without this a
+            // unless the user has since switched it off - without this a
             // deep-link install would need a manual enable every time.
             const disk = this._getDiskFilesystem();
             if (disk) {

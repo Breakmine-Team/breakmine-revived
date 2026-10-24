@@ -9,7 +9,7 @@ const DOOR_TOP = 161;
 
 /**
  * Oak door. The bottom half (id 160) places a linked top half (id 161) above
- * itself; both share the same data format — rotation in bits 0-2
+ * itself; both share the same data format - rotation in bits 0-2
  * (2=N, 3=S, 4=W, 5=E, matching chests/furnaces), open state in bit 3.
  */
 export default class BlockDoor extends Block {
@@ -208,7 +208,7 @@ export default class BlockDoor extends Block {
     onBlockAdded(world, x, y, z) {
         // Intentionally a no-op (base class). Do NOT schedule a self-tick here:
         // setBlockDataAt() routes through Chunk.setBlockAt(), which fires
-        // onBlockAdded on every data change — including the manual toggle in
+        // onBlockAdded on every data change - including the manual toggle in
         // onMouseButton(). A self-tick would re-run updateState() and
         // immediately close an unpowered door that was just opened by hand.
         // Initial power checks on placement and power-source changes are

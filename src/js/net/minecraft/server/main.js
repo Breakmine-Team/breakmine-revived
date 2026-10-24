@@ -9,7 +9,7 @@ const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
 app.commandLine.appendSwitch('disable-pointer-lock-options');
 
 /* ------------------------------------------------------------------ *
- *  Mods bridge — physical `mods/` folder access for the renderer
+ *  Mods bridge - physical `mods/` folder access for the renderer
  *
  *  Mods can live as plain folders in `mods/` next to the game instead of
  *  only as .zip files uploaded into IndexedDB. The renderer is sandboxed
@@ -26,7 +26,7 @@ app.commandLine.appendSwitch('disable-pointer-lock-options');
 // In development that is the project root, so `mods/` sits next to index.html.
 // A packaged build cannot use the same place: an AppImage is a read-only
 // squashfs mounted under /tmp/.mount_*, and an installed Windows app lives in
-// Program Files — neither is writable, and AppImage contents vanish on exit.
+// Program Files - neither is writable, and AppImage contents vanish on exit.
 // Packaged builds therefore keep mods/ under the per-user data directory,
 // which survives updates and uninstalling without needing write access to the
 // install location.
@@ -67,7 +67,7 @@ function resolveModPath(relPath) {
     let normalized = relPath.replace(/\\/g, '/').replace(/^\.?\//, '');
 
     // Collapse '.' segments and reject '..' outright rather than trying to
-    // resolve them — a mods file never legitimately needs to go up.
+    // resolve them - a mods file never legitimately needs to go up.
     const segments = normalized.split('/').filter((s) => s !== '' && s !== '.');
     if (segments.some((s) => s === '..')) {
         throw new Error('Path traversal is not allowed');
@@ -380,7 +380,7 @@ if (!gotInstanceLock) {
     if (deeplinks) {
       deeplinks.handleSecondInstance(argv);
     } else {
-      // Arrived before whenReady — replay it once the handler exists.
+      // Arrived before whenReady - replay it once the handler exists.
       deferredInstanceArgv = argv;
     }
   });

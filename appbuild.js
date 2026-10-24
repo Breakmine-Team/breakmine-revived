@@ -124,7 +124,7 @@ if (!fs.existsSync(RENDERER_ENTRY)) {
  * Stage, commit and push before anything is built or published.
  *
  * Order matters. The pre-commit hook bumps src/resources/version.js as part of
- * the commit, so the version has to be read *after* this runs — otherwise the
+ * the commit, so the version has to be read *after* this runs - otherwise the
  * release would be tagged with the version of the commit it is superseding,
  * and the update check in the game would never see it as newer.
  *
@@ -167,7 +167,7 @@ function gitCommitAndPush() {
 
 /**
  * electron-builder takes `${version}` from package.json, and this repo never
- * updates that field — the pre-commit hook only bumps src/resources/version.js.
+ * updates that field - the pre-commit hook only bumps src/resources/version.js.
  * Left alone, every artifact is named Breakmine-1.0.0.AppImage inside a
  * release tagged 4.8.5a.
  *

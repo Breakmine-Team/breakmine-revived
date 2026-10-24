@@ -11,7 +11,7 @@ const { app } = require('electron');
  *  files live inside the AppImage / install directory, so `location.reload()`
  *  just re-runs the frozen bundle that is already there.
  *
- *  There is nothing to download either — this repo publishes no release
+ *  There is nothing to download either - this repo publishes no release
  *  assets. So the update is done the only way that actually works: run the
  *  repository's own installer, which re-downloads the source, rebuilds and
  *  reinstalls, then quit once it finishes.
@@ -82,7 +82,7 @@ async function fetchInstaller(ref) {
 function buildCommand(installerPath, ref) {
     if (process.platform === 'win32') {
         // NSIS cannot overwrite the .exe that is currently running, so the
-        // installer has to wait for this process to exit first — otherwise the
+        // installer has to wait for this process to exit first - otherwise the
         // update fails with a sharing violation the moment it is applied.
         // PowerShell single-quoted strings are literal, so only a literal
         // quote needs escaping.

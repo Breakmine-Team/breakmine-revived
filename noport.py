@@ -456,7 +456,7 @@ class TunnelClient:
 def main():
     parser = argparse.ArgumentParser(
         prog='noport',
-        description='NoPort — tunnel local ports through a server you can reach',
+        description='NoPort - tunnel local ports through a server you can reach',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"""
 examples:
