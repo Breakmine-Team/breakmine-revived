@@ -39,10 +39,9 @@ export default class BlockLiquid extends Block {
         return -1;
     }
 
-    // Water + lava => cobblestone. Converts the adjacent opposite-liquid cell
-    // (below or one of the four horizontal neighbors). Only the neighbor cell
-    // changes, so a later tick on that position looks up the new (solid) block
-    // and never reacts again.
+    // Water + lava => cobblestone in the base implementation. Subclasses
+    // (BlockLava / BlockWater) override to also produce obsidian when source
+    // blocks touch.
     checkContact(world, x, y, z) {
         const oppositeId = this.getOppositeLiquidId();
         const cobbleId = this.getSolidificationId();

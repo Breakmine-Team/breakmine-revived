@@ -64,7 +64,8 @@ class ChunkSectionStub {
         this.x = x;
         this.y = y;
         this.z = z;
-        this.blocks = new Uint8Array(4096);
+        // Matches ChunkSection: block ids exceed 255, so widen the store.
+        this.blocks = new Uint16Array(4096);
         this.blocksData = new Uint8Array(4096);
         this.blockLight = [];
         this.skyLight = [];

@@ -9,6 +9,8 @@ import HealCommand from "./command/HealCommand.js"
 import GiveCommand from "./command/GiveCommand.js"
 import SummonCommand from "./command/SummonCommand.js"
 import VoiceChatStatusCommand from "./command/VoiceChatStatusCommand.js"
+import OffGridBlockRendererCommand from "./command/OffGridBlockRendererCommand.js";
+import { OffGridShortcutCommand, OffGridClearShortcutCommand } from "./command/OffGridShortcutCommands.js";
 import CommandRegistry from "./CommandRegistry.js";
 
 export default class CommandHandler {
@@ -28,6 +30,9 @@ export default class CommandHandler {
         this.commands.push(new GiveCommand());
         this.commands.push(new SummonCommand());
         this.commands.push(new VoiceChatStatusCommand());
+        this.commands.push(new OffGridBlockRendererCommand());
+        this.commands.push(new OffGridShortcutCommand());
+        this.commands.push(new OffGridClearShortcutCommand());
     }
 
     /**

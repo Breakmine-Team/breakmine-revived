@@ -75,19 +75,26 @@ export default class TranslucentMeshBatcher {
 
         // Ensure world matrix is up-to-date (newly rebuilt meshes have identity matrixWorld)
         chunkMesh.updateWorldMatrix(true, false);
-        let mx = chunkMesh.matrixWorld.elements[12];
-        let my = chunkMesh.matrixWorld.elements[13];
-        let mz = chunkMesh.matrixWorld.elements[14];
+
+        // Keep the transform matrix around: chunk section meshes carry a pure
+        // translation (so the rotation columns are identity and the math
+        // below equals the old +m path), but posed off-grid field meshes carry
+        // a rotation that must rotate the vertices (and normals) into world
+        // space instead of just being added.
+        const matrixElements = chunkMesh.matrixWorld.elements;
 
         let vOffset = this.currentVertex;
         let iOffset = this.currentIndex;
 
-        // 1. Copy positions into WORLD space
+        // 1. Copy positions into WORLD space (through the full pose matrix)
         for (let i = 0; i < vertexCount; i++) {
-            let dstIdx = (vOffset + i) * 3;
-            this.positions[dstIdx]     = posAttr.getX(i) + mx;
-            this.positions[dstIdx + 1] = posAttr.getY(i) + my;
-            this.positions[dstIdx + 2] = posAttr.getZ(i) + mz;
+            const dstIdx = (vOffset + i) * 3;
+            const lx = posAttr.getX(i);
+            const ly = posAttr.getY(i);
+            const lz = posAttr.getZ(i);
+            this.positions[dstIdx]     = matrixElements[0] * lx + matrixElements[4] * ly + matrixElements[8]  * lz + matrixElements[12];
+            this.positions[dstIdx + 1] = matrixElements[1] * lx + matrixElements[5] * ly + matrixElements[9]  * lz + matrixElements[13];
+            this.positions[dstIdx + 2] = matrixElements[2] * lx + matrixElements[6] * ly + matrixElements[10] * lz + matrixElements[14];
         }
 
         // 2. Copy colors (RGBA)
@@ -123,13 +130,22 @@ export default class TranslucentMeshBatcher {
         // needs its face normal derived from the winding instead.
         let nrmAttr = geo.getAttribute('normal');
         if (nrmAttr) {
-            // Chunk meshes carry translation only, so the normals are already
-            // in world space - same assumption addMesh() makes for positions.
+            // Rotate normals through the pose matrix too: chunk meshes have an
+            // identity rotation (so this is a copy, same as before), posed
+            // field meshes rotate the normals into world space.
             for (let i = 0; i < vertexCount; i++) {
-                let dstIdx = (vOffset + i) * 3;
-                this.normals[dstIdx]     = nrmAttr.getX(i);
-                this.normals[dstIdx + 1] = nrmAttr.getY(i);
-                this.normals[dstIdx + 2] = nrmAttr.getZ(i);
+                const dstIdx = (vOffset + i) * 3;
+                const lx = nrmAttr.getX(i);
+                const ly = nrmAttr.getY(i);
+                const lz = nrmAttr.getZ(i);
+                let nx = matrixElements[0] * lx + matrixElements[4] * ly + matrixElements[8]  * lz;
+                let ny = matrixElements[1] * lx + matrixElements[5] * ly + matrixElements[9]  * lz;
+                let nz = matrixElements[2] * lx + matrixElements[6] * ly + matrixElements[10] * lz;
+                const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+                if (len > 0) { nx /= len; ny /= len; nz /= len; }
+                this.normals[dstIdx]     = nx;
+                this.normals[dstIdx + 1] = ny;
+                this.normals[dstIdx + 2] = nz;
             }
         } else {
             for (let i = 0; i < vertexCount; i++) {

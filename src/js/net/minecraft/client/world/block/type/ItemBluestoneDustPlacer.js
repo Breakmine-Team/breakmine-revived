@@ -39,6 +39,12 @@ export default class ItemBluestoneDustPlacer extends ItemGeneric {
     // own; without this packet the server never learns the dust exists, so it
     // is never persisted, never ticked, and disappears on the next chunk load.
     notifyServerPlacement(world, x, y, z, hitFace, blockId) {
+        if (world && world.isFieldLocalWorld) {
+            // Placement went into the summoned field through its local proxy
+            // world - summoned cells are client-side only, so the server must
+            // not be told about them (or it would persist an invisible block).
+            return;
+        }
         const minecraft = world.minecraft;
         if (!minecraft || !hitFace || !minecraft.playerController ||
             typeof minecraft.playerController.sendBlockPlacementPacket !== 'function') {

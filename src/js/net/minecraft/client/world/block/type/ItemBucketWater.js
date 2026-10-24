@@ -31,6 +31,7 @@ export default class ItemBucketWater extends ItemGeneric {
     }
 
     notifyServerPlacement(world, x, y, z, hitFace, blockId) {
+        if (world && world.isFieldLocalWorld) return; // see ItemBluestoneDustPlacer
         const minecraft = world.minecraft;
         if (!minecraft || !hitFace || !minecraft.playerController ||
             typeof minecraft.playerController.sendBlockPlacementPacket !== 'function') {

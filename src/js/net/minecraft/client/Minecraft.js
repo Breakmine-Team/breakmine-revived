@@ -1504,7 +1504,15 @@ export default class Minecraft {
             this.lastBlockPos = { x: hitResult.x, y: hitResult.y, z: hitResult.z };
         }
 
-        let typeId = this.world.getBlockAt(hitResult.x, hitResult.y, hitResult.z);
+        // A hit on the summoned field addresses cells in the field's local
+        // space - read the cell from the field so hardness and drops follow
+        // the summoned block, not whatever real terrain sits at the grid key.
+        let miningField = hitResult.fieldCell && this.world.offGridField
+            ? this.world.offGridField : null;
+        let typeId = miningField
+            ? miningField.getBlockAt(hitResult.x, hitResult.y, hitResult.z)
+            : this.world.getBlockAt(hitResult.x, hitResult.y, hitResult.z);
+        if (typeId < 0) typeId = 0;
         if (typeId === 0) {
             this.miningTimer = 0;
             this.lastBlockPos = null;
@@ -1555,6 +1563,10 @@ export default class Minecraft {
     }
 
     breakTargetBlock(hitResult, typeId) {
+        // Summoned cells are client-side only: a dig/drop packet at the
+        // cell's local grid coordinates would make the server break real
+        // terrain (or spawn server items) there for every player.
+        let isFieldHit = !!(hitResult.fieldCell && this.world.offGridField);
         let block = Block.getById(typeId);
         let droppedBlock = [0, 0];
 
@@ -1577,15 +1589,18 @@ export default class Minecraft {
 
         this.soundManager.playSoundMono(soundName, 1.0, 1.0);
 
-        this.particleRenderer.spawnBlockBreakParticle(this.world, hitResult.x, hitResult.y, hitResult.z);
+        this.particleRenderer.spawnBlockBreakParticle(this.world, hitResult.x, hitResult.y, hitResult.z,
+            hitResult.fieldCell && this.world.offGridField
+                ? this.world.offGridField.getParticlePose()
+                : null);
 
         // Play drop sound
         this.soundManager.playSoundMono('random.pop', 1.0, 1.0);
 
         this.world.setBlockAt(hitResult.x, hitResult.y, hitResult.z, 0);
         for (let index = 0; index < droppedBlock[1]; index++) {
-            if (this.isSingleplayer()) {
-                // Singleplayer: create entity locally
+            if (this.isSingleplayer() || isFieldHit) {
+                // Singleplayer or summoned cell: create entity locally
                 this.world.addEntity(new ItemEntity(this, this.world, droppedBlock[0], hitResult.x, hitResult.y, hitResult.z));
             } else {
                 // Multiplayer: tell server to spawn item for all players at the
@@ -1595,7 +1610,7 @@ export default class Minecraft {
         }
         this.player.swingArm();
 
-        if (!this.isSingleplayer()) {
+        if (!this.isSingleplayer() && !isFieldHit) {
             let blockPos = new BlockPosition(hitResult.x, hitResult.y, hitResult.z);
             this.playerController.sendBlockDiggingPacket(2, blockPos, 0);
         }
@@ -1764,12 +1779,42 @@ export default class Minecraft {
 
                 if (hitResult != null) {
                     if (this.player.creative) {
+                        // A hit on the posed summoned field addresses cells in
+                        // the field's local space: destroy the cell in the field
+                        // (client-side only) and never touch the real world or
+                        // the server at those coordinates.
+                        let field = hitResult.fieldCell && this.world.offGridField
+                            ? this.world.offGridField : null;
+
+                        if (field) {
+                            let cellId = field.getBlockAt(hitResult.x, hitResult.y, hitResult.z);
+                            let cellBlock = Block.getById(cellId);
+                            if (cellId !== 0 && cellBlock !== null &&
+                                typeof cellBlock.onMouseButton === 'function' &&
+                                cellBlock.onMouseButton(field.createLocalWorld(), hitResult.x, hitResult.y, hitResult.z, button)) {
+                                return;
+                            }
+
+                            let sound = cellBlock ? cellBlock.getSound().getBreakSound() : null;
+                            if (sound) this.soundManager.playSoundMono(sound, 1.0, 1.0);
+
+                            this.particleRenderer.spawnBlockBreakParticle(this.world, hitResult.x, hitResult.y, hitResult.z,
+                                field.getParticlePose());
+
+                            field.applyWrite(hitResult.x, hitResult.y, hitResult.z, 0);
+                            this.player.swingArm();
+                            return;
+                        }
+
                         // Get previous block
                         let typeId = this.world.getBlockAt(hitResult.x, hitResult.y, hitResult.z);
                         let block = Block.getById(typeId);
-                        if (block.onMouseButton(this.world, hitResult.x, hitResult.y, hitResult.z, button)) return;
+                        // The type can read 0 (air) with a valid hit (e.g. field
+                        // edge cases or raced chunk updates) and unregisterd ids
+                        // resolve to null - guard the interaction call.
+                        if (block != null && block.onMouseButton(this.world, hitResult.x, hitResult.y, hitResult.z, button)) return;
 
-                        if (typeId !== 0) {
+                        if (typeId !== 0 && block != null) {
                             let soundName = block.getSound().getBreakSound();
 
                             // Play sound
@@ -1779,7 +1824,7 @@ export default class Minecraft {
                             let blockId = this.world.getBlockAt(hitResult.x, hitResult.y, hitResult.z);
                             let droppedBlock = Block.getById(blockId).getDrop(this.world, hitResult.x, hitResult.y, hitResult.z)
 
-                            this.particleRenderer.spawnBlockBreakParticle(this.world, hitResult.x, hitResult.y, hitResult.z);
+                            this.particleRenderer.spawnBlockBreakParticle(this.world, hitResult.x, hitResult.y, hitResult.z, null);
 
                             // Destroy block
                             this.world.setBlockAt(hitResult.x, hitResult.y, hitResult.z, 0);
@@ -1838,7 +1883,21 @@ export default class Minecraft {
                         y = hitResult.y + hitResult.face.y;
                         z = hitResult.z + hitResult.face.z;
                     }
-                    Block.getById(heldItem.getType()).onUse(this.world, x, y, z, heldItem, hitResult.face);
+                    // hitResult can be null (using an item while aiming at the
+                    // sky): x/y/z are undefined then, and so is the face -
+                    // reading hitResult.face here crashed the click handler.
+                    // A hit on the summoned field addresses cells in the
+                    // field's LOCAL space, so placer items must read and
+                    // write through the field's proxy world instead of the
+                    // real one (which would write to the world grid at the
+                    // local coordinates and packet the server about a
+                    // placement that never rendered there).
+                    let itemWorld = this.world;
+                    if (hitResult != null && hitResult.fieldCell && this.world.offGridField) {
+                        itemWorld = this.world.offGridField.createLocalWorld();
+                    }
+                    Block.getById(heldItem.getType()).onUse(itemWorld, x, y, z, heldItem,
+                        hitResult != null ? hitResult.face : undefined);
                     return;
                 }
 
@@ -1847,29 +1906,45 @@ export default class Minecraft {
                     let y = hitResult.y + hitResult.face.y;
                     let z = hitResult.z + hitResult.face.z;
 
-                    let blockCheck = Block.getById(this.world.getBlockAt(hitResult.x, hitResult.y, hitResult.z));
-                    if (blockCheck && blockCheck.onMouseButton && blockCheck.onMouseButton(this.world, hitResult.x, hitResult.y, hitResult.z, button)) {
+                    // A hit on the posed summoned field addresses cells in the
+                    // field's local space - edit the field directly instead of
+                    // writing the real world at those (grid) coordinates.
+                    let field = hitResult.fieldCell ? this.world.offGridField : null;
+                    let queryWorld = field ? field.createLocalWorld() : this.world;
+
+                    let blockCheck = Block.getById(queryWorld.getBlockAt(hitResult.x, hitResult.y, hitResult.z));
+                    if (blockCheck && blockCheck.onMouseButton && blockCheck.onMouseButton(queryWorld, hitResult.x, hitResult.y, hitResult.z, button)) {
                         // In multiplayer, tell the server so the interaction
                         // (e.g. door toggle) is applied authoritatively and
-                        // broadcast to all players.
-                        if (!this.isSingleplayer()) {
+                        // broadcast to all players. Summoned cells are
+                        // client-side only, so never for the field.
+                        if (!field && !this.isSingleplayer()) {
                             let blockPos = new BlockPosition(hitResult.x, hitResult.y, hitResult.z);
                             this.playerController.sendBlockPlacementPacket(blockPos, 255, { id: -1 });
                         }
                         return;
                     }
 
-                    let placedBoundingBox = new BoundingBox(x, y, z, x + 1, y + 1, z + 1);
+                    let blockedByPlayer;
+                    if (field) {
+                        // Test against the cell's posed world bounds - local grid
+                        // coordinates say nothing about where the block sits.
+                        let cellBounds = field.cellWorldBounds(x, y, z);
+                        blockedByPlayer = !!cellBounds && cellBounds.intersects(this.player.boundingBox);
+                    } else {
+                        let placedBoundingBox = new BoundingBox(x, y, z, x + 1, y + 1, z + 1);
+                        blockedByPlayer = placedBoundingBox.intersects(this.player.boundingBox);
+                    }
 
                     // Don't place blocks if the player is standing there
-                    if (!placedBoundingBox.intersects(this.player.boundingBox)) {
+                    if (!blockedByPlayer) {
                         let typeId = this.player.inventory.getItemInSelectedSlot();
                         typeId = typeId.getType() || 0;
 
                         // Get previous block
-                        let prevTypeId = this.world.getBlockAt(x, y, z);
+                        let prevTypeId = queryWorld.getBlockAt(x, y, z);
                         let prevBlock = Block.getById(prevTypeId);
-                        let isReplaceable = (prevBlock && prevBlock.isReplaceable(this.world, x, y, z)) || prevTypeId === 0;
+                        let isReplaceable = (prevBlock && prevBlock.isReplaceable(queryWorld, x, y, z)) || prevTypeId === 0;
 
                         // Only real blocks can be placed. An empty hand or a
                         // non-block item (bucket, flint, ...) has no block to put
@@ -1878,7 +1953,7 @@ export default class Minecraft {
                         let block = Block.getById(typeId);
                         let placeable = typeId !== 0 && isReplaceable && block !== null && !block.isItem() &&
                             (typeof block.canPlaceAt !== "function" ||
-                                block.canPlaceAt(this.world, x, y, z, hitResult.face));
+                                block.canPlaceAt(queryWorld, x, y, z, hitResult.face));
 
                         if (placeable) {
                             // Calculate block data for rotation
@@ -1906,8 +1981,14 @@ export default class Minecraft {
                                 blockData = [2, 5, 3, 4][dirIndex]; // 2=N, 3=S, 4=W, 5=E — front faces player
                             }
 
-                            // Place block
-                            this.world.setBlockAt(x, y, z, typeId, blockData);
+                            // Place block (into the summoned field when the hit
+                            // was on it - the field is client-side only, so it
+                            // never writes the real world at grid coordinates)
+                            if (field) {
+                                field.applyWrite(x, y, z, typeId, blockData);
+                            } else {
+                                this.world.setBlockAt(x, y, z, typeId, blockData);
+                            }
 
                             // Remove from inventory in survival mode
                             if (!this.player.creative) {
@@ -1918,22 +1999,28 @@ export default class Minecraft {
                             this.player.swingArm();
 
                             // Handle block abilities
-                            block.onBlockPlaced(this.world, x, y, z, hitResult.face);
+                            block.onBlockPlaced(queryWorld, x, y, z, hitResult.face);
 
-                            // Play sound
+                            // Play sound (at the posed world position of the
+                            // target cell when editing the summoned field)
                             let sound = block.getSound();
                             let soundName = sound.getStepSound();
+                            let soundPos = field
+                                ? field.localToWorld({ x: x + 0.5, y: y + 0.5, z: z + 0.5 })
+                                : { x: hitResult.x + 0.5, y: hitResult.y + 0.5, z: hitResult.z + 0.5 };
                             this.soundManager.playSound(
                                 soundName,
-                                hitResult.x + 0.5,
-                                hitResult.y + 0.5,
-                                hitResult.z + 0.5,
+                                soundPos.x,
+                                soundPos.y,
+                                soundPos.z,
                                 1.0,
                                 sound.getPitch() * 0.8
                             );
 
-                            // Send block placement packet in multiplayer
-                            if (!this.isSingleplayer()) {
+                            // Send block placement packet in multiplayer. The
+                            // summoned field is client-side only, so field
+                            // edits never reach the server.
+                            if (!field && !this.isSingleplayer()) {
                                 let blockPos = new BlockPosition(hitResult.x, hitResult.y, hitResult.z);
                                 let direction = this.getFaceValue(hitResult.face);
                                 let heldItem = { id: typeId };

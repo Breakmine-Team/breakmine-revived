@@ -38,6 +38,7 @@ export default class ItemDoorPlacer extends ItemGeneric {
     // server never learns about the door, so it is not persisted and its
     // upper half is never created server-side.
     notifyServerPlacement(world, x, y, z, hitFace, blockId) {
+        if (world && world.isFieldLocalWorld) return; // see ItemBluestoneDustPlacer
         const minecraft = world.minecraft;
         if (!minecraft || !hitFace || !minecraft.playerController ||
             typeof minecraft.playerController.sendBlockPlacementPacket !== 'function') {

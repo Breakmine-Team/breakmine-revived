@@ -80,6 +80,8 @@ import ItemBluestoneDustPlacer from "./type/ItemBluestoneDustPlacer.js";
 import BlockSnow from "./type/BlockSnow.js";
 import BlockIce from "./type/BlockIce.js";
 import BlockCheese from "./type/BlockCheese.js";
+import BlockObsidian from "./type/BlockObsidian.js";
+import BlockCryingObsidian from "./type/BlockCryingObsidian.js";
 import ItemFlint from "./type/ItemFlint.js";
 import ItemFlintAndSteel from "./type/ItemFlintAndSteel.js";
 import BlockTNT from "./type/BlockTNT.js";
@@ -474,6 +476,8 @@ export class BlockRegistry {
         BlockRegistry.ICE = new BlockIce(245, 0, "ice", "Ice", 0.5, 0.98);
         BlockRegistry.PACKED_ICE = new BlockIce(246, 0, "packed_ice", "Packed Ice", 0.5, 0.98);
         BlockRegistry.BLUE_ICE = new BlockIce(247, 0, "blue_ice", "Blue Ice", 0.5, 0.989);
+        BlockRegistry.OBSIDIAN = new BlockObsidian(256, 0);
+        BlockRegistry.CRYING_OBSIDIAN = new BlockCryingObsidian(257, 0);
         BlockRegistry.FLINT = new ItemFlint(235, 0, "flint", "Flint");
         BlockRegistry.FLINT_AND_STEEL = new ItemFlintAndSteel(236, 0, "flint_and_steel", "Flint and Steel");
         BlockRegistry.TNT = new BlockTNT(237, 0, "tnt", "TNT");

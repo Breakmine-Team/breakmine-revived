@@ -72,6 +72,22 @@ export default class PlayerControllerMultiplayer extends PlayerController {
     }
 
     sendChatMessage(message) {
+        // Client-only commands (e.g. /offgridrenderer) affect local rendering
+        // only and have no server-side equivalent, so run them here instead of
+        // forwarding a chat packet the server would answer with "unknown
+        // command". This also covers singleplayer, which drives the
+        // integrated server through this same controller.
+        if (message.startsWith("/")) {
+            const handler = this.minecraft && this.minecraft.commandHandler;
+            if (handler) {
+                const name = message.substring(1).split(" ")[0].toLowerCase();
+                const command = handler.getCommands().find(cmd => cmd.command === name);
+                if (command && command.clientOnly) {
+                    handler.handleMessage(message.substring(1));
+                    return;
+                }
+            }
+        }
         this.networkHandler.sendPacket(new ClientChatPacket(message));
     }
 

@@ -39,7 +39,15 @@ export default class ParticleRenderer {
         }
     }
 
-    spawnBlockBreakParticle(world, x, y, z) {
+    /**
+     * Spawn the 4x4x4 break-particle cloud inside the block cell at (x,y,z).
+     *
+     * `pose` is optional: when the cell belongs to a posed summoned field it
+     * maps cell-local positions to world space (point) and rotates local
+     * directions (delta), so the cloud appears on the rendered block instead
+     * of at its grid key. Null/undefined = identity.
+     */
+    spawnBlockBreakParticle(world, x, y, z, pose = null) {
         let typeId = world.getBlockAt(x, y, z);
         if (typeId === 0) {
             return;
@@ -58,6 +66,18 @@ export default class ParticleRenderer {
                     let motionX = targetX - x - 0.5;
                     let motionY = targetY - y - 0.5;
                     let motionZ = targetZ - z - 0.5;
+
+                    if (pose) {
+                        const p = pose.point(targetX, targetY, targetZ);
+                        targetX = p.x;
+                        targetY = p.y;
+                        targetZ = p.z;
+
+                        const m = pose.delta(motionX, motionY, motionZ);
+                        motionX = m.x;
+                        motionY = m.y;
+                        motionZ = m.z;
+                    }
 
                     this.spawnParticle(new ParticleDigging(
                         this.minecraft,

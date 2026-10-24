@@ -34,7 +34,12 @@ export default class ChunkSection {
         // Typed arrays: every get/set becomes a direct index read/write instead
         // of a holey-array `in` operator probe (the single hottest path in both
         // worldgen and meshing).
-        this.blocks = new Uint8Array(4096);
+        //
+        // Type ids are not bytes: the wire/disk block state packs the id into
+        // the upper 12 bits of a u16 (4 bits are metadata), so ids up to 4095
+        // are valid. A Uint8Array silently truncated ids above 255 into other
+        // blocks, so widen the store.
+        this.blocks = new Uint16Array(4096);
         this.blocksData = new Uint8Array(4096);
         this.blockLight = [];
         this.skyLight = [];
@@ -160,6 +165,18 @@ export default class ChunkSection {
                         let typeId = this.getBlockAt(x, y, z);
 
                         if (typeId !== 0) {
+                            // A flat summoned overlay living at this grid cell
+                            // renders instead of the real block; drawing both
+                            // puts two coplanar meshes at the same world
+                            // coordinates (z-fighting).
+                            const overlay = this.world.offGridField;
+                            if (overlay && !overlay.isPosed() && overlay.covers(
+                                    this.x * ChunkSection.SIZE + x,
+                                    this.y * ChunkSection.SIZE + y,
+                                    this.z * ChunkSection.SIZE + z)) {
+                                continue;
+                            }
+
                             let block = Block.getById(typeId);
                             if (block === null || block.isTranslucent() !== isTranslucentRenderPhase) {
                                 continue;

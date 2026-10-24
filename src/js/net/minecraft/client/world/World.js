@@ -52,6 +52,15 @@ export default class World {
         // Keyed by `${x},${y},${z}` -> BlockEntity instance.
         this.blockEntities = new Map();
 
+        // Summoned debug blocks (OffGridBlockField), or null. When set, the
+        // field answers reads/writes for the positions it covers so summoned
+        // blocks behave like real ones (collision, raytrace, placement
+        // preview, server sync) without touching chunk storage.
+        this.offGridField = null;
+
+        // Set by getRayTraceBlockAt so traceWorldRay can tag hits with.
+        this.rayTraceFieldCell = false;
+
         // Store interval ID for cleanup
         this.lightUpdateInterval = null;
 
@@ -143,6 +152,13 @@ export default class World {
         // Process scheduled block ticks
         this.processBlockTicks();
 
+        // Drain the summoned field's own (local-space) tick queue so
+        // bluestone placed in an off-grid structure propagates like real
+        // blocks do.
+        if (this.offGridField !== null && this.offGridField.cells.size > 0) {
+            this.offGridField.tickBlocks();
+        }
+
         // Tick NBT-backed block entities
         this.tickBlockEntities();
 
@@ -215,10 +231,24 @@ export default class World {
                 }
             }
         }
+
+        // Summoned blocks: contribute posed boxes for the whole region at
+        // once (a per-position lookup cannot see a rotated structure).
+        if (this.offGridField !== null && this.offGridField.cells.size > 0) {
+            this.offGridField.addCollisionBoxes(region, boundingBoxList);
+        }
+
         return boundingBoxList;
     }
 
     getBlockCollisionBoxesAt(x, y, z) {
+        // Summoned cells contribute through the field's pose-aware seam
+        // (getCollisionBoxes -> offGridField.addCollisionBoxes), which knows
+        // where the structure actually sits after a move/rotate.
+        if (this.offGridField !== null && this.offGridField.covers(x, y, z)) {
+            return [];
+        }
+
         let typeId = this.getBlockAt(x, y, z);
         if (typeId === 0) {
             return [];
@@ -357,6 +387,13 @@ export default class World {
                 }
             }
         }
+
+        // Summoned blocks: contribute posed boxes for the whole region at
+        // once (a per-position lookup cannot see a rotated structure).
+        if (this.offGridField !== null && this.offGridField.cells.size > 0) {
+            this.offGridField.addCollisionBoxes(region, boundingBoxList);
+        }
+
         return boundingBoxList;
     }
 
@@ -599,6 +636,19 @@ export default class World {
         let oldTypeId = this.getBlockAt(x, y, z);
         let oldBlock = Block.getById(oldTypeId);
 
+        // Summoned debug blocks live only in the field overlay: mirror the
+        // change there and leave chunk storage untouched (so the section mesh
+        // and the field mesh never double-render the same cell). The optional
+        // callbacks below address the REAL world; running them at these
+        // (field-local) coordinates would remove real-world block entities
+        // and notify/tick unrelated neighbours at a grid position nothing
+        // changed on, desyncing rendering and chained updates - so for the
+        // field the overlay mirrors the write and stops right here.
+        if (this.offGridField !== null && this.offGridField.covers(x, y, z)) {
+            this.offGridField.applyWrite(x, y, z, type, data);
+            return;
+        }
+
         let chunk = this.getChunkAt(x >> 4, z >> 4);
         chunk.setBlockAt(x & 15, y, z & 15, type, data);
 
@@ -639,6 +689,21 @@ export default class World {
                         }
                     }
                 }
+
+                // onBlockAdded parity with the server (handlers.js fires it
+                // on every placement): blocks that spin up their behavior on
+                // placement - bluestone dust propagation, lever/rod scheduling,
+                // pusher bases - must run client-side too, or locally placed
+                // networks stay unpowered/inert until some later neighbour
+                // event happens to tick them. Server-driven block changes go
+                // through setBlockAtNoEvents, so they never double-fire here.
+                if (typeof newBlock.onBlockAdded === "function") {
+                    try {
+                        newBlock.onBlockAdded(this, x, y, z);
+                    } catch (e) {
+                        console.error(`onBlockAdded error at ${x},${y},${z}:`, e);
+                    }
+                }
             }
 
             // Tell surrounding blocks that a new block appeared next to them
@@ -652,7 +717,7 @@ export default class World {
             this.notifyNeighborBlockChange(x, y, z);
         }
 
-        // Rebuild chunk
+        // Rebuild chunk meshes after a real (non-field) write.
         this.onBlockChanged(x, y, z);
     }
 
@@ -666,6 +731,14 @@ export default class World {
      */
     setBlockAtNoEvents(x, y, z, type, data = 0) {
         if (y < 0 || y >= World.TOTAL_HEIGHT) {
+            return;
+        }
+
+        // Server sync landing on a summoned cell: mirror it into the field
+        // (this is how breaking/placing against summoned blocks flows back in
+        // from the server) and skip chunk storage, lighting and rebuilds.
+        if (this.offGridField !== null && this.offGridField.covers(x, y, z)) {
+            this.offGridField.applyWrite(x, y, z, type, data);
             return;
         }
 
@@ -946,6 +1019,12 @@ export default class World {
     }
 
     setBlockDataAt(x, y, z, data) {
+        // Metadata write on a summoned cell: keep it in the field overlay.
+        if (this.offGridField !== null && this.offGridField.covers(x, y, z)) {
+            this.offGridField.applyWrite(x, y, z, this.offGridField.getBlockAt(x, y, z), data);
+            return;
+        }
+
         this.getChunkAt(x >> 4, z >> 4).setBlockDataAt(x & 15, y, z & 15, data);
 
         // Keep the block entity (if any) in sync with the data nibble so NBT
@@ -957,11 +1036,26 @@ export default class World {
     }
 
     getBlockAt(x, y, z) {
+        if (this.offGridField !== null && !this.offGridField.isPosed()) {
+            // Flat overlay cells sit exactly at these grid coordinates, so
+            // world reads see the overlay instead of the terrain underneath.
+            // Once posed the cells live elsewhere: answering with them here
+            // made real chunk meshes cull ground at the grid keys (faces
+            // stop rendering) and lose to the overlay (z-fight).
+            const fieldTypeId = this.offGridField.getBlockAt(x, y, z);
+            if (fieldTypeId !== -1) return fieldTypeId;
+        }
         let chunkSection = this.getChunkAtBlock(x, y, z);
         return chunkSection == null ? 0 : chunkSection.getBlockAt(x & 15, y & 15, z & 15);
     }
 
     getBlockDataAt(x, y, z) {
+        if (this.offGridField !== null && !this.offGridField.isPosed()) {
+            // See getBlockAt: the overlay is only read through the world
+            // while it lies exactly on the grid.
+            const fieldData = this.offGridField.getBlockDataAt(x, y, z);
+            if (fieldData !== -1) return fieldData;
+        }
         let chunkSection = this.getChunkAtBlock(x, y, z);
         return chunkSection == null ? 0 : chunkSection.getBlockDataAt(x & 15, y & 15, z & 15);
     }
@@ -1016,7 +1110,55 @@ export default class World {
         }
     }
 
-   rayTraceBlocks(from, to, slab = false) {
+    /**
+     * Trace a ray against the world and, when the summoned block field is
+     * posed, against the posed structure as well - the nearer hit wins.
+     */
+    rayTraceBlocks(from, to, slab = false) {
+        const field = this.offGridField;
+        if (field === null || field.cells.size === 0 || !field.isPosed()) {
+            return this.traceWorldRay(from, to, slab);
+        }
+
+        const fieldHit = field.rayTrace(from, to, slab);
+        if (fieldHit === null) return this.traceWorldRay(from, to, slab);
+        // Slab mode returns 0/1 sentinels instead of a hit object.
+        if (typeof fieldHit === "number") return fieldHit;
+
+        const worldHit = this.traceWorldRay(from, to, slab);
+        if (worldHit === null) return fieldHit;
+        if (typeof worldHit === "number") return worldHit;
+
+        const fieldDistance = from.squareDistanceTo(fieldHit.vector);
+        const worldDistance = from.squareDistanceTo(worldHit.vector);
+        return fieldDistance <= worldDistance ? fieldHit : worldHit;
+    }
+
+    /**
+     * Read for the integer-grid raytrace: when the summoned field is posed,
+     * its cells no longer sit at their grid keys, so the grid pass must see
+     * air there (the posed structure is traced by OffGridBlockField.rayTrace).
+     */
+    getRayTraceBlockAt(x, y, z) {
+        const field = this.offGridField;
+        if (field !== null && field.cells.size > 0 && field.covers(x, y, z)) {
+            if (field.isPosed()) {
+                // The posed structure lives elsewhere; the grid pass must
+                // see air here (the pose is traced separately and the real
+                // terrain at the grid keys cannot be hidden by the overlay).
+                this.rayTraceFieldCell = false;
+                return 0;
+            }
+            // Flat overlay: the grid pass hits it directly, and editing that
+            // hit must go to the field - never to the terrain underneath it.
+            this.rayTraceFieldCell = true;
+            return field.getBlockAt(x, y, z);
+        }
+        this.rayTraceFieldCell = false;
+        return this.getBlockAt(x, y, z);
+    }
+
+   traceWorldRay(from, to, slab = false) {
         let toX = MathHelper.floor(to.x);
         let toY = MathHelper.floor(to.y);
         let toZ = MathHelper.floor(to.z);
@@ -1025,12 +1167,13 @@ export default class World {
         let y = MathHelper.floor(from.y);
         let z = MathHelper.floor(from.z);
     
-        let blockId = this.getBlockAt(x, y, z);
+        let blockId = this.getRayTraceBlockAt(x, y, z);
         let block = Block.getById(blockId);
     
         if (block != null && block.canInteract()) {
             let hit = block.collisionRayTrace(this, x, y, z, from, to);
             if (hit != null) {
+                hit.fieldCell = this.rayTraceFieldCell;
                 // Check for slab condition
                 //console.log(slab, from.y, y);
                 if (slab) {
@@ -1132,12 +1275,12 @@ export default class World {
             y = MathHelper.floor(from.y) - (face === EnumBlockFace.TOP ? 1 : 0);
             z = MathHelper.floor(from.z) - (face === EnumBlockFace.SOUTH ? 1 : 0);
     
-            blockId = this.getBlockAt(x, y, z);
+            blockId = this.getRayTraceBlockAt(x, y, z);
             block = Block.getById(blockId);
             //console.log(blockId);
 
             if (blockId === 0) { 
-                let blockBelowId = this.getBlockAt(x, y - 1, z);
+                let blockBelowId = this.getRayTraceBlockAt(x, y - 1, z);
                 //console.log(blockBelowId);
                 
                 if (blockBelowId !== 0) { 
@@ -1153,6 +1296,7 @@ export default class World {
             if (block != null && block.canInteract()) {
                 let hit = block.collisionRayTrace(this, x, y, z, from, to);
                 if (hit != null) {
+                    hit.fieldCell = this.rayTraceFieldCell;
                     // Check for slab condition
                     //console.log(slab, from.y, y);
                     if (slab) {
@@ -1371,6 +1515,13 @@ export default class World {
     }
 
     getTotalLightAt(x, y, z) {
+        // Summoned cells are not part of the real light map (the storage
+        // underneath may be air or deep stone); treat them as fully lit so
+        // they stay visible anywhere, while AO still varies with neighbours.
+        if (this.offGridField !== null && !this.offGridField.isPosed() && this.offGridField.covers(x, y, z)) {
+            return 15;
+        }
+
         if (!this.blockExists(x, y, z)) {
             return 15;
         }

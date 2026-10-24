@@ -710,7 +710,15 @@ export default class PlayerEntity extends EntityLiving {
         let to = from.addVector(direction.x * blockReachDistance, direction.y * blockReachDistance, direction.z * blockReachDistance);
 
         let blockHit = this.world.rayTraceBlocks(from, to);
-        let currentReach = blockHit ? from.distanceTo(new Vector3(blockHit.x, blockHit.y, blockHit.z)) : blockReachDistance;
+        // Summoned field hits carry LOCAL coordinates (the structure may be
+        // posed); measure reach against the world-space hit point for those.
+        let reachPoint = null;
+        if (blockHit) {
+            reachPoint = blockHit.fieldCell
+                ? blockHit.vector
+                : new Vector3(blockHit.x, blockHit.y, blockHit.z);
+        }
+        let currentReach = reachPoint ? from.distanceTo(reachPoint) : blockReachDistance;
 
         //let entityHit = this.world.rayTraceEntities(from, to, currentReach);
 

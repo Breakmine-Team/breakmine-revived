@@ -469,6 +469,23 @@ export default class WorldRenderer {
             }
         }
 
+        // 2b. The summoned field's translucent meshes (bluestone dust, water,
+        // glass...) go through the same batcher, or they would draw wherever
+        // in the scene traversal order they happen to sit - visually "out of
+        // order" versus everything else. The field's meshes may carry the
+        // field pose (rotation/offset), which addMesh() now transforms.
+        const field = this.minecraft.world && this.minecraft.world.offGridField;
+        if (field && field.regions) {
+            for (const region of field.regions.values()) {
+                for (const child of region.group.children) {
+                    if (child.isMesh && child.userData.isTranslucent) {
+                        this.translucentBatcher.addMesh(child);
+                        child.visible = false;
+                    }
+                }
+            }
+        }
+
         // 3. Sort the entire world's translucent faces perfectly and upload to GPU
         this.translucentBatcher.finalize(cameraPos);
 
@@ -1570,9 +1587,15 @@ export default class WorldRenderer {
             let y = hitResult.y;
             let z = hitResult.z;
 
-            // Get block type
             let world = this.minecraft.world;
-            let typeId = world.getBlockAt(x, y, z);
+
+            // Get block type. A hit on the summoned field reports the hit in
+            // the field's LOCAL space, so the real world would read whatever
+            // terrain lies at those (grid) coordinates - usually air - and
+            // the outline silently disappeared. Ask the field instead.
+            let field = (hitResult.fieldCell && world.offGridField)
+                ? world.offGridField : null;
+            let typeId = field ? field.getBlockAt(x, y, z) : world.getBlockAt(x, y, z);
 
             if (typeId !== 0) {
                 let block = Block.getById(typeId);
@@ -1580,7 +1603,11 @@ export default class WorldRenderer {
                 // Get bounding boxes for the selection highlight
                 let boxes = world.getBlockCollisionBoxesAt(x, y, z);
                 if (boxes.length === 0 && block) {
-                    let bbox = block.getBoundingBox(world, x, y, z);
+                    // Summoned cells are addressed in the field's local space;
+                    // sample their neighbours through the local proxy.
+                    let bboxWorld = (hitResult.fieldCell && world.offGridField)
+                        ? world.offGridField.createLocalWorld() : world;
+                    let bbox = block.getBoundingBox(bboxWorld, x, y, z);
                     if (bbox) {
                         boxes = [new BoundingBox(
                             x + bbox.minX, y + bbox.minY, z + bbox.minZ,
@@ -1612,6 +1639,19 @@ export default class WorldRenderer {
 
                     this.blockHitBox.add(line);
                 }
+
+                // A hit on the summoned field addresses cells in local space:
+                // pose the outline group so the box wraps the block where it
+                // actually is, and reset it for ordinary world hits.
+                if (hitResult.fieldCell && field) {
+                    let pose = field.getPoseTransform();
+                    this.blockHitBox.position.set(pose.position.x, pose.position.y, pose.position.z);
+                    this.blockHitBox.rotation.set(pose.rotation.x, pose.rotation.y, pose.rotation.z);
+                } else {
+                    this.blockHitBox.position.set(0, 0, 0);
+                    this.blockHitBox.rotation.set(0, 0, 0);
+                }
+                this.blockHitBox.updateMatrix();
             }
         }
 
@@ -1644,25 +1684,46 @@ export default class WorldRenderer {
 
         let world = this.minecraft.world;
 
+        // A hit on the summoned block field addresses cells in the field's
+        // local space; the ghost is posed with the field so it tracks the
+        // (possibly rotated/offset) structure.
+        let field = hitResult.fieldCell ? world.offGridField : null;
+        let queryWorld = field ? field.createLocalWorld() : world;
+
         // Mirror the placement checks from Minecraft.js so the ghost only shows
         // where the block could actually be placed
-        let placedBoundingBox = new BoundingBox(x, y, z, x + 1, y + 1, z + 1);
-        if (placedBoundingBox.intersects(player.boundingBox)) return;
+        if (field) {
+            let cellBounds = field.cellWorldBounds(x, y, z);
+            if (cellBounds && cellBounds.intersects(player.boundingBox)) return;
+        } else {
+            let placedBoundingBox = new BoundingBox(x, y, z, x + 1, y + 1, z + 1);
+            if (placedBoundingBox.intersects(player.boundingBox)) return;
+        }
 
-        let prevTypeId = world.getBlockAt(x, y, z);
+        let prevTypeId = queryWorld.getBlockAt(x, y, z);
         let prevBlock = Block.getById(prevTypeId);
-        let isReplaceable = (prevBlock && prevBlock.isReplaceable(world, x, y, z)) || prevTypeId === 0;
+        let isReplaceable = (prevBlock && prevBlock.isReplaceable(queryWorld, x, y, z)) || prevTypeId === 0;
         if (!isReplaceable || (typeof block.canPlaceAt === "function" &&
-            !block.canPlaceAt(world, x, y, z, hitResult.face))) return;
+            !block.canPlaceAt(queryWorld, x, y, z, hitResult.face))) return;
 
         // Clear existing preview meshes
         while (this.blockPreviewGroup.children.length > 0) {
             this.blockPreviewGroup.remove(this.blockPreviewGroup.children[0]);
         }
 
-        // Block renderer emits chunk-local coordinates, so move the group to
-        // the chunk origin that contains the target position
-        this.blockPreviewGroup.position.set(x >> 4 << 4, y >> 4 << 4, z >> 4 << 4);
+        if (field) {
+            // Pose the ghost group with the field; the mesh below is placed at
+            // the local chunk origin so the composed transform lands it on the
+            // posed structure exactly like the field's own meshes.
+            let pose = field.getPoseTransform();
+            this.blockPreviewGroup.position.set(pose.position.x, pose.position.y, pose.position.z);
+            this.blockPreviewGroup.rotation.set(pose.rotation.x, pose.rotation.y, pose.rotation.z);
+        } else {
+            // Block renderer emits chunk-local coordinates, so move the group to
+            // the chunk origin that contains the target position.
+            this.blockPreviewGroup.position.set(x >> 4 << 4, y >> 4 << 4, z >> 4 << 4);
+            this.blockPreviewGroup.rotation.set(0, 0, 0);
+        }
         // draw() disables matrixAutoUpdate on the group, so bake the transform
         // manually or the ghost stays pinned to chunk 0,0
         this.blockPreviewGroup.updateMatrix();
@@ -1671,7 +1732,7 @@ export default class WorldRenderer {
 
         // Render against a proxy world that reports the placement block data
         // and shape for the target position, without touching real chunk storage.
-        let fakeWorld = this.createPreviewWorld(world, typeId, x, y, z, this.getBlockPlacementData(block, hitResult));
+        let fakeWorld = this.createPreviewWorld(queryWorld, typeId, x, y, z, this.getBlockPlacementData(block, hitResult));
 
         // Blocks like stairs, torches and door compute their orientation in
         // onBlockPlaced; run it against the fake world so the ghost matches.
@@ -1686,6 +1747,11 @@ export default class WorldRenderer {
 
         if (tessellator.addedVertices > 0) {
             let mesh = tessellator.draw(this.blockPreviewGroup);
+            if (field) {
+                // Vertices are chunk-local; move the mesh back to local world
+                // space so the posed group transform maps it correctly.
+                mesh.position.set(x >> 4 << 4, y >> 4 << 4, z >> 4 << 4);
+            }
             mesh.material.transparent = true;
             mesh.material.opacity = previewOpacity;
             mesh.material.depthWrite = false;
