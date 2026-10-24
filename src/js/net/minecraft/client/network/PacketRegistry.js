@@ -49,6 +49,16 @@ import ServerSpawnObjectPacket from "./packet/play/server/ServerSpawnObjectPacke
 import ClientUpdateSignTextPacket from "./packet/play/client/ClientUpdateSignTextPacket.js";
 import ClientModListPacket from "./packet/play/client/ClientModListPacket.js";
 import ServerUpdateSignTextPacket from "./packet/play/server/ServerUpdateSignTextPacket.js";
+import ServerOffGridStatePacket from "./packet/play/server/ServerOffGridStatePacket.js";
+import ServerOffGridUpdatePacket from "./packet/play/server/ServerOffGridUpdatePacket.js";
+import ClientOffGridRequestPacket from "./packet/play/client/ClientOffGridRequestPacket.js";
+import ClientOffGridCellPacket from "./packet/play/client/ClientOffGridCellPacket.js";
+import {
+    OFF_GRID_CELL_PACKET_ID,
+    OFF_GRID_REQUEST_PACKET_ID,
+    OFF_GRID_STATE_PACKET_ID,
+    OFF_GRID_UPDATE_PACKET_ID
+} from "../../util/OffGridConstants.js";
 
 export default class PacketRegistry {
 
@@ -99,6 +109,8 @@ export default class PacketRegistry {
         this.registerServer(ProtocolState.PLAY, 0x47, ServerPlayerListDataPacket);
         this.registerServer(ProtocolState.PLAY, 0x48, ServerResetWorldPacket);
         this.registerServer(ProtocolState.PLAY, 0x49, ServerUpdateSignTextPacket);
+        this.registerServer(ProtocolState.PLAY, OFF_GRID_STATE_PACKET_ID, ServerOffGridStatePacket);
+        this.registerServer(ProtocolState.PLAY, OFF_GRID_UPDATE_PACKET_ID, ServerOffGridUpdatePacket);
 
         this.registerClient(ProtocolState.PLAY, 0x00, ClientKeepAlivePacket);
         this.registerClient(ProtocolState.PLAY, 0x01, ClientChatPacket);
@@ -115,6 +127,8 @@ export default class PacketRegistry {
         this.registerClient(ProtocolState.PLAY, 0x0E, ClientUpdateSignTextPacket);
         this.registerClient(ProtocolState.PLAY, 0x0D, ClientPickupItemPacket);
         this.registerClient(ProtocolState.PLAY, 0x1F, ClientModListPacket);
+        this.registerClient(ProtocolState.PLAY, OFF_GRID_REQUEST_PACKET_ID, ClientOffGridRequestPacket);
+        this.registerClient(ProtocolState.PLAY, OFF_GRID_CELL_PACKET_ID, ClientOffGridCellPacket);
     }
 
     registerClient(state, id, packet) {

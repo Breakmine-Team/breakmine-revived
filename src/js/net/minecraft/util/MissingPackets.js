@@ -77,6 +77,8 @@ export default class MissingPackets {
         this.map(71, "ServerPlayerListDataPacket");
         this.map(72, "ServerResourcePackSendPacket");
         this.map(73, "ServerEntityNBTUpdatePacket");
+        this.map(96, "ServerOffGridStatePacket");
+        this.map(97, "ServerOffGridUpdatePacket");
     }
 
     map(id, name) {

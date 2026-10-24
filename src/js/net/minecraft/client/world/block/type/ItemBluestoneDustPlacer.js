@@ -41,8 +41,9 @@ export default class ItemBluestoneDustPlacer extends ItemGeneric {
     notifyServerPlacement(world, x, y, z, hitFace, blockId) {
         if (world && world.isFieldLocalWorld) {
             // Placement went into the summoned field through its local proxy
-            // world - summoned cells are client-side only, so the server must
-            // not be told about them (or it would persist an invisible block).
+            // world. The field mirrors that cell write to the server itself,
+            // in local-grid coordinates; a vanilla placement packet here would
+            // place a real block at unrelated world coordinates.
             return;
         }
         const minecraft = world.minecraft;

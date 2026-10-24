@@ -3,16 +3,14 @@ import OffGridBlockRendererCommand from "./OffGridBlockRendererCommand.js";
 import { BlockRegistry } from "../../world/block/BlockRegistry.js";
 
 /**
- * Client-side helpers that mirror the chat interface directly through the
- * OffGridBlockRendererCommand machinery (OffGridBlockField). Both are
- * clientOnly like /offgridrenderer, since they render instead of editing
- * server state.
+ * Shortcut helpers for the off-grid block field. In a running game the server
+ * handles /ofr and /ofrclear authoritatively (see server/offgridCommands.js);
+ * this class keeps the direct local path and the shared field binding helpers.
  */
 class OffGridShortcutCommand extends Command {
 
     constructor() {
         super("ofr", "")
-        this.clientOnly = true;
         this.helper = new OffGridBlockRendererCommand();
     }
 
@@ -78,7 +76,6 @@ class OffGridClearShortcutCommand extends Command {
 
     constructor() {
         super("ofrclear", "");
-        this.clientOnly = true;
         this.helper = new OffGridBlockRendererCommand();
     }
 

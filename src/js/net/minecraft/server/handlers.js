@@ -31,6 +31,15 @@ import Logger from './logger.js';
 import getServerWorld from './World.js';
 import Block from '../client/world/block/Block.js';
 import { NO_MODULES } from '../util/environment.js';
+import {
+    OFF_GRID_CELL_PACKET_ID,
+    OFF_GRID_REQUEST_PACKET_ID
+} from '../util/OffGridConstants.js';
+import {
+    applyCellEdit as applyOffGridCellEdit,
+    broadcastCellEdit as broadcastOffGridCellEdit,
+    sendState as sendOffGridState
+} from './offgrid.js';
 
 // Sign-text censoring. The bad-words package is never loaded when the server
 // runs without Node modules (singleplayer integrated server), so sign text is
@@ -534,8 +543,63 @@ function handlePlayPacket(player, packetId, buffer, offset) {
             break;
         }
 
+        case OFF_GRID_REQUEST_PACKET_ID: { // Client requests the current off-grid state
+            sendOffGridState(player);
+            break;
+        }
+
+        case OFF_GRID_CELL_PACKET_ID: { // Client edited one summoned cell
+            handleOffGridCellEdit(player, buffer, offset);
+            break;
+        }
+
 
     }
+}
+
+/**
+ * Apply one interactive edit made against a summoned cell. The client sends
+ * local grid coordinates (what its field and raytrace address), so the server
+ * can validate and store the edit without knowing the client's pose.
+ */
+function handleOffGridCellEdit(player, buffer, offset) {
+    if (isSpectator(player)) {
+        return;
+    }
+
+    ensureReadable(buffer, offset, 4);
+    const x = buffer.readInt32BE(offset);
+    offset += 4;
+
+    let y;
+    let bytes;
+    [y, bytes] = readVarInt(buffer, offset);
+    offset += bytes;
+
+    ensureReadable(buffer, offset, 4);
+    const z = buffer.readInt32BE(offset);
+    offset += 4;
+
+    let typeId;
+    [typeId, bytes] = readVarInt(buffer, offset);
+    typeId = typeId >>> 0;
+    offset += bytes;
+
+    ensureReadable(buffer, offset, 1);
+    const data = buffer.readUInt8(offset);
+
+    const result = applyOffGridCellEdit(x, y, z, typeId, data);
+    if (!result.valid) {
+        // Reject the write and send the authoritative state back so the
+        // client's optimistic local edit is reverted.
+        sendOffGridState(player);
+        return;
+    }
+    if (!result.changed) {
+        return;
+    }
+
+    broadcastOffGridCellEdit(x, y, z, typeId === 0 ? 0 : typeId, typeId === 0 ? 0 : data);
 }
 
 

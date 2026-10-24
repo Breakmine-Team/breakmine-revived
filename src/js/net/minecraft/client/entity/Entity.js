@@ -23,6 +23,11 @@ export default class Entity {
         this.motionY = 0;
         this.motionZ = 0;
 
+        // Summoned off-grid blocks use a rotated-collision approximation that
+        // is far too expensive to evaluate for short-lived visual particles.
+        // They can opt out of that layer while still colliding with terrain.
+        this.collidesWithOffGridField = true;
+
         this.stepHeight = 0.0;
 
         this.onGround = false;
@@ -146,8 +151,10 @@ export default class Entity {
         let originalTargetY = targetY;
         let originalTargetZ = targetZ;
 
+        const includeOffGrid = this.collidesWithOffGridField;
+
         if (this.onGround && this.isSneaking()) {
-            for (; targetX !== 0.0 && this.world.getCollisionBoxes(this.boundingBox.offset(targetX, -this.stepHeight, 0.0)).length === 0; originalTargetX = targetX) {
+            for (; targetX !== 0.0 && this.world.getCollisionBoxes(this.boundingBox.offset(targetX, -this.stepHeight, 0.0), includeOffGrid).length === 0; originalTargetX = targetX) {
                 if (targetX < 0.05 && targetX >= -0.05) {
                     targetX = 0.0;
                 } else if (targetX > 0.0) {
@@ -157,7 +164,7 @@ export default class Entity {
                 }
             }
 
-            for (; targetZ !== 0.0 && this.world.getCollisionBoxes(this.boundingBox.offset(0.0, -this.stepHeight, targetZ)).length === 0; originalTargetZ = targetZ) {
+            for (; targetZ !== 0.0 && this.world.getCollisionBoxes(this.boundingBox.offset(0.0, -this.stepHeight, targetZ), includeOffGrid).length === 0; originalTargetZ = targetZ) {
                 if (targetZ < 0.05 && targetZ >= -0.05) {
                     targetZ = 0.0;
                 } else if (targetZ > 0.0) {
@@ -167,7 +174,7 @@ export default class Entity {
                 }
             }
 
-            for (; targetX !== 0.0 && targetZ !== 0.0 && this.world.getCollisionBoxes(this.boundingBox.offset(targetX, -this.stepHeight, targetZ)).length === 0; originalTargetZ = targetZ) {
+            for (; targetX !== 0.0 && targetZ !== 0.0 && this.world.getCollisionBoxes(this.boundingBox.offset(targetX, -this.stepHeight, targetZ), includeOffGrid).length === 0; originalTargetZ = targetZ) {
                 if (targetX < 0.05 && targetX >= -0.05) {
                     targetX = 0.0;
                 } else if (targetX > 0.0) {
@@ -196,7 +203,7 @@ export default class Entity {
         let isClimbable = false;
 
         // Calculate target Y
-        let boundingBoxList = this.world.getCollisionBoxes(movingBox.expand(0.0, targetY, 0.0));
+        let boundingBoxList = this.world.getCollisionBoxes(movingBox.expand(0.0, targetY, 0.0), includeOffGrid);
         collisionBoxes.push(...boundingBoxList);
         for (let aABB of boundingBoxList) {
             targetY = aABB.clipYCollide(movingBox, targetY);
@@ -209,7 +216,7 @@ export default class Entity {
         movingBox.move(0.0, targetY, 0.0);
 
         // Calculate target X
-        boundingBoxList = this.world.getCollisionBoxes(movingBox.expand(targetX, 0.0, 0.0));
+        boundingBoxList = this.world.getCollisionBoxes(movingBox.expand(targetX, 0.0, 0.0), includeOffGrid);
         collisionBoxes.push(...boundingBoxList);
         for (let aABB of boundingBoxList) {
             // Skip collision check for half blocks on ground
@@ -224,7 +231,7 @@ export default class Entity {
         movingBox.move(targetX, 0.0, 0.0);
 
         // Calculate target Z
-        boundingBoxList = this.world.getCollisionBoxes(movingBox.expand(0.0, 0.0, targetZ));
+        boundingBoxList = this.world.getCollisionBoxes(movingBox.expand(0.0, 0.0, targetZ), includeOffGrid);
         collisionBoxes.push(...boundingBoxList);
         for (let aABB of boundingBoxList) {
             // Skip collision check for half blocks on ground

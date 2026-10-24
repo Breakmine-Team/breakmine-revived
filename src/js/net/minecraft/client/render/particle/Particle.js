@@ -29,6 +29,12 @@ export default class Particle extends Entity {
         this.maxTicksExisted = Math.floor(4 / (this.random.nextFloat() * 0.9 + 0.1))
         this.color = -1;
 
+        // Never pay for the off-grid field's rotated-collision approximation
+        // here: 64 break particles issue three collision queries each per
+        // tick, which could stall a frame for close to a second. Particles
+        // still collide with ordinary terrain.
+        this.collidesWithOffGridField = false;
+
         this.group = null;
     }
 

@@ -55,7 +55,7 @@ export default class World {
         // Summoned debug blocks (OffGridBlockField), or null. When set, the
         // field answers reads/writes for the positions it covers so summoned
         // blocks behave like real ones (collision, raytrace, placement
-        // preview, server sync) without touching chunk storage.
+        // preview, cell sync) without touching chunk storage.
         this.offGridField = null;
 
         // Set by getRayTraceBlockAt so traceWorldRay can tag hits with.
@@ -211,7 +211,7 @@ export default class World {
         }
     }
 
-    getCollisionBoxes(region) {
+    getCollisionBoxes(region, includeOffGrid = true) {
         let boundingBoxList = [];
 
         let minX = MathHelper.floor(region.minX);
@@ -234,7 +234,9 @@ export default class World {
 
         // Summoned blocks: contribute posed boxes for the whole region at
         // once (a per-position lookup cannot see a rotated structure).
-        if (this.offGridField !== null && this.offGridField.cells.size > 0) {
+        // Particles opt out: their tiny, constantly-moving boxes are the
+        // worst case for the rotated-box lattice.
+        if (includeOffGrid && this.offGridField !== null && this.offGridField.cells.size > 0) {
             this.offGridField.addCollisionBoxes(region, boundingBoxList);
         }
 
@@ -367,7 +369,7 @@ export default class World {
         return chunk.getSection(sectionY);
     }
 
-    getCollisionBoxes(region) {
+    getCollisionBoxes(region, includeOffGrid = true) {
         let boundingBoxList = [];
 
         let minX = MathHelper.floor(region.minX);
@@ -390,7 +392,9 @@ export default class World {
 
         // Summoned blocks: contribute posed boxes for the whole region at
         // once (a per-position lookup cannot see a rotated structure).
-        if (this.offGridField !== null && this.offGridField.cells.size > 0) {
+        // Particles opt out: their tiny, constantly-moving boxes are the
+        // worst case for the rotated-box lattice.
+        if (includeOffGrid && this.offGridField !== null && this.offGridField.cells.size > 0) {
             this.offGridField.addCollisionBoxes(region, boundingBoxList);
         }
 
@@ -728,17 +732,13 @@ export default class World {
      * simulation, so clients must trust the received state verbatim instead of
      * re-running placement logic (which would e.g. recompute a door's facing
      * from the local player's yaw and desync it from the server).
+     *
+     * This path always writes real chunk storage, even when an off-grid cell
+     * covers the position: server block changes describe terrain, while
+     * summoned cells travel through the off-grid state/update packets.
      */
     setBlockAtNoEvents(x, y, z, type, data = 0) {
         if (y < 0 || y >= World.TOTAL_HEIGHT) {
-            return;
-        }
-
-        // Server sync landing on a summoned cell: mirror it into the field
-        // (this is how breaking/placing against summoned blocks flows back in
-        // from the server) and skip chunk storage, lighting and rebuilds.
-        if (this.offGridField !== null && this.offGridField.covers(x, y, z)) {
-            this.offGridField.applyWrite(x, y, z, type, data);
             return;
         }
 

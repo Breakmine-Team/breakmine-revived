@@ -1563,9 +1563,10 @@ export default class Minecraft {
     }
 
     breakTargetBlock(hitResult, typeId) {
-        // Summoned cells are client-side only: a dig/drop packet at the
-        // cell's local grid coordinates would make the server break real
-        // terrain (or spawn server items) there for every player.
+        // Summoned cells live in the field's local grid, not in server chunk
+        // storage: a dig/drop packet at those coordinates would make the
+        // server break real terrain (or spawn server items) there. The cell
+        // removal itself is synced by OffGridClientSync.
         let isFieldHit = !!(hitResult.fieldCell && this.world.offGridField);
         let block = Block.getById(typeId);
         let droppedBlock = [0, 0];
@@ -1592,7 +1593,8 @@ export default class Minecraft {
         this.particleRenderer.spawnBlockBreakParticle(this.world, hitResult.x, hitResult.y, hitResult.z,
             hitResult.fieldCell && this.world.offGridField
                 ? this.world.offGridField.getParticlePose()
-                : null);
+                : null,
+            isFieldHit ? block : null);
 
         // Play drop sound
         this.soundManager.playSoundMono('random.pop', 1.0, 1.0);
@@ -1781,8 +1783,8 @@ export default class Minecraft {
                     if (this.player.creative) {
                         // A hit on the posed summoned field addresses cells in
                         // the field's local space: destroy the cell in the field
-                        // (client-side only) and never touch the real world or
-                        // the server at those coordinates.
+                        // and never touch the real world grid. The field's own
+                        // cell-sync hook tells the server about the removal.
                         let field = hitResult.fieldCell && this.world.offGridField
                             ? this.world.offGridField : null;
 
@@ -1799,7 +1801,7 @@ export default class Minecraft {
                             if (sound) this.soundManager.playSoundMono(sound, 1.0, 1.0);
 
                             this.particleRenderer.spawnBlockBreakParticle(this.world, hitResult.x, hitResult.y, hitResult.z,
-                                field.getParticlePose());
+                                field.getParticlePose(), cellBlock);
 
                             field.applyWrite(hitResult.x, hitResult.y, hitResult.z, 0);
                             this.player.swingArm();
@@ -1849,8 +1851,15 @@ export default class Minecraft {
             // Pick block
             if (button === 1 && this.player.creative) {
                 if (hitResult != null) {
-                    let typeId = this.world.getBlockAt(hitResult.x, hitResult.y, hitResult.z);
-                    if (typeId !== 0) {
+                    // A summoned-cell hit is reported in the field's LOCAL
+                    // coordinates, so the real world usually reads air there.
+                    // Pick the cell's block instead.
+                    let field = hitResult.fieldCell && this.world.offGridField
+                        ? this.world.offGridField : null;
+                    let typeId = field
+                        ? field.getBlockAt(hitResult.x, hitResult.y, hitResult.z)
+                        : this.world.getBlockAt(hitResult.x, hitResult.y, hitResult.z);
+                    if (typeId > 0) {
                         let block = Block.getById(typeId);
                         if (block === null) return;
                         let pickedItemId = block.pickedItem();
@@ -1916,8 +1925,9 @@ export default class Minecraft {
                     if (blockCheck && blockCheck.onMouseButton && blockCheck.onMouseButton(queryWorld, hitResult.x, hitResult.y, hitResult.z, button)) {
                         // In multiplayer, tell the server so the interaction
                         // (e.g. door toggle) is applied authoritatively and
-                        // broadcast to all players. Summoned cells are
-                        // client-side only, so never for the field.
+                        // broadcast to all players. A summoned cell's data
+                        // write is synced through OffGridClientSync instead,
+                        // so the vanilla packet must not use local coordinates.
                         if (!field && !this.isSingleplayer()) {
                             let blockPos = new BlockPosition(hitResult.x, hitResult.y, hitResult.z);
                             this.playerController.sendBlockPlacementPacket(blockPos, 255, { id: -1 });
@@ -1981,9 +1991,10 @@ export default class Minecraft {
                                 blockData = [2, 5, 3, 4][dirIndex]; // 2=N, 3=S, 4=W, 5=E — front faces player
                             }
 
-                            // Place block (into the summoned field when the hit
-                            // was on it - the field is client-side only, so it
-                            // never writes the real world at grid coordinates)
+                            // Place block into the summoned field when the hit
+                            // was on it: its cells use their own coordinate
+                            // space and sync through the field's cell hook, so
+                            // the real world grid is never written here.
                             if (field) {
                                 field.applyWrite(x, y, z, typeId, blockData);
                             } else {
@@ -2017,9 +2028,10 @@ export default class Minecraft {
                                 sound.getPitch() * 0.8
                             );
 
-                            // Send block placement packet in multiplayer. The
-                            // summoned field is client-side only, so field
-                            // edits never reach the server.
+                            // Send the vanilla placement packet only for real
+                            // world blocks. Field edits already went through
+                            // applyWrite(), whose cell-sync hook sends the
+                            // local-grid edit to the server.
                             if (!field && !this.isSingleplayer()) {
                                 let blockPos = new BlockPosition(hitResult.x, hitResult.y, hitResult.z);
                                 let direction = this.getFaceValue(hitResult.face);

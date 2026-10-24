@@ -6,6 +6,8 @@ import { getPlayers, isOp, savePlayerData, loadPlayerData, normalizeInventorySta
 import { sendResetWorldPacket, sendRespawn, sendChunks, sendSpawnPosition, sendPlayerPositionLook } from './packets.js';
 import { initWorld, saveWorld, getCurrentWorldName, getSpawnPosition } from './world.js';
 import { cleanupPlayerChunks } from './handlers.js';
+import { handleOffGridCommand } from './offgridCommands.js';
+import { sendState as sendOffGridState } from './offgrid.js';
 import config from './config.js';
 
 const log = Logger;
@@ -19,7 +21,10 @@ const commandHandler = new CommandHandler(null);
 
 // Commands that mutate shared state or affect other players. Non-ops get a
 // permission error instead of the command executing.
-const OP_ONLY_COMMANDS = new Set(['tp', 'gamemode', 'heal', 'give', 'setblock', 'place', 'summon', 'util']);
+const OP_ONLY_COMMANDS = new Set([
+    'tp', 'gamemode', 'heal', 'give', 'setblock', 'place', 'summon', 'util',
+    'offgridrenderer', 'ofr', 'ofrclear'
+]);
 
 // Mods register their commands into CommandRegistry, the same registry the
 // client reads. A mod marks a command op-only by setting `opOnly` when it
@@ -49,6 +54,14 @@ function handleCommand(player, command) {
     // Server-specific commands that have no client-side equivalent.
     if (cmd === 'server' || cmd === 'world') {
         handleServer(player, args);
+        return;
+    }
+
+    // Off-grid state is shared and owned by the server, so these commands must
+    // run here even though the client also registers command classes for
+    // offline/local use.
+    if (cmd === 'offgridrenderer' || cmd === 'ofr' || cmd === 'ofrclear') {
+        handleOffGridCommand(player, cmd, args);
         return;
     }
 
@@ -194,6 +207,9 @@ function handleServer(player, args) {
 
         // Send position update
         sendPlayerPositionLook(p);
+
+        // The new world has its own off-grid state (loaded by initWorld).
+        sendOffGridState(p);
     }
 }
 

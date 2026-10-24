@@ -1,6 +1,9 @@
 import Command from "../Command.js";
-import OffGridBlockRenderer from "../../render/OffGridBlockRenderer.js";
 import OffGridBlockField from "../../render/OffGridBlockField.js";
+import {
+    getOrBindField as bindOffGridField,
+    getOrBindRenderer as bindOffGridRenderer
+} from "../../render/OffGridClientSync.js";
 import Block from "../../world/block/Block.js";
 import World from "../../world/World.js";
 import { BlockRegistry } from "../../world/block/BlockRegistry.js";
@@ -15,8 +18,8 @@ import { BlockRegistry } from "../../world/block/BlockRegistry.js";
  *   /offgridrenderer fill <x> <y> <z> <w> <h> <d> <block> [data]
  *       Summon a whole range of blocks at the corner (x,y,z). Summoned
  *       blocks behave like real ones - collision, breaking, placement
- *       preview, AO - and can be edited in place, client-side, in both
- *       singleplayer and multiplayer.
+ *       preview, AO - and can be edited in place. In a running game the
+ *       server validates and owns the shared cells and pose.
  *
  *   /offgridrenderer move <dx> <dy> <dz>
  *       Move the whole summoned group. Decimals are allowed: whole blocks
@@ -30,16 +33,17 @@ import { BlockRegistry } from "../../world/block/BlockRegistry.js";
  *   /offgridrenderer clear
  *       Remove every summoned block and off-grid rendering.
  *
- * Marked clientOnly: rendering only exists on the client, so
- * PlayerControllerMultiplayer runs this locally instead of forwarding the
- * chat packet to the server (which has no worldRenderer).
+ * In a running game the server owns the shared off-grid state and runs the
+ * authoritative version of this command (see server/offgridCommands.js), then
+ * broadcasts the resulting state to every client through the off-grid
+ * packets. This class remains the local path for a client with no server (and
+ * the storage/interaction helpers used by the /ofr shortcuts).
  */
 export default class OffGridBlockRendererCommand extends Command {
 
     constructor() {
         super("offgridrenderer",
             "<x> <y> <z> <rx> <ry> <rz> [block] | fill <x> <y> <z> <w> <h> <d> <block> [data] | move <dx> <dy> <dz> | rotate <deg> [x|y|z] | clear",);
-        this.clientOnly = true;
     }
 
     execute(minecraft, args) {
@@ -315,14 +319,7 @@ export default class OffGridBlockRendererCommand extends Command {
     }
 
     getOrBindRenderer(minecraft) {
-        if (!minecraft.offGridBlockRenderer) {
-            minecraft.offGridBlockRenderer = new OffGridBlockRenderer(minecraft.world, minecraft);
-        } else {
-            // Update world reference (a world switch leaves the old one stale)
-            minecraft.offGridBlockRenderer.world = minecraft.world;
-            minecraft.offGridBlockRenderer.minecraft = minecraft;
-        }
-        return minecraft.offGridBlockRenderer;
+        return bindOffGridRenderer(minecraft);
     }
 
     /**
@@ -331,19 +328,7 @@ export default class OffGridBlockRendererCommand extends Command {
      * dropped together with its meshes instead of resurrected.
      */
     getOrBindField(minecraft) {
-        let field = minecraft.offGridBlockField;
-        if (field && field.world === minecraft.world) {
-            // Re-attach in case WorldRenderer.reset() dropped the group.
-            field.bind(minecraft.world);
-            return field;
-        }
-        if (field) {
-            field.dispose();
-        }
-        field = new OffGridBlockField(minecraft);
-        field.bind(minecraft.world);
-        minecraft.offGridBlockField = field;
-        return field;
+        return bindOffGridField(minecraft);
     }
 
 }

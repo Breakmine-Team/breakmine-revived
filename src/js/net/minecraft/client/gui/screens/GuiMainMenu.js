@@ -57,7 +57,13 @@ export default class GuiMainMenu extends GuiScreen {
         }));
         let btntemp = new GuiButton(this.minecraft, "Multiplayer", this.width / 2 - 100, y + 24, 200, 20, () => {
             this.minecraft.displayScreen(new GuiMultiplayer(this));
-        }).setEnabled(this.minecraft.settings.loggedIn);
+        });
+        
+        if (new URLSearchParams(window.location.search).get('dev')) {
+            btntemp.setEnabled(true);
+        } else {
+            btntemp.setEnabled(this.minecraft.settings.loggedIn);
+        }
         this.buttonList.push(btntemp);
 
         this.buttonList.push(new GuiButton(this.minecraft, "Mods", this.width / 2 - 100, y + 24 * 2, 200, 20, () => {
@@ -83,7 +89,7 @@ export default class GuiMainMenu extends GuiScreen {
             window.close();
         }).setEnabled(isElectron));
 
-        if (!this.minecraft.settings.loggedIn) {
+        if (!this.minecraft.settings.loggedIn && !(new URLSearchParams(window.location.search).get('dev'))) {
             this.buttonList.push(new GuiTooltip(this.minecraft, "You must be logged in\n§7Don't worry, it's free!", this.width / 2 - 100, y + 24, 200, 20));
         }
 

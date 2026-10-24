@@ -15,3 +15,5 @@ dist-single/
 release/
 serverconfig.conf
 current_world.txt
+offgrid.json
+offgrid.json.tmp

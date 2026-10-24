@@ -3,6 +3,16 @@ import { writeLongBE } from './binary.js';
 import { makePacket, writeVarInt, writeString, broadcast, varIntSize } from './protocol.js';
 import { getPlayers, getPlayerCount } from './players.js';
 import { generateFlatChunkColumn, getWorldType, getSpawnPosition } from './world.js';
+import {
+    OFF_GRID_PROTOCOL_VERSION,
+    OFF_GRID_STATE_PACKET_ID,
+    OFF_GRID_UPDATE_ADD_GHOST,
+    OFF_GRID_UPDATE_CLEAR_FIELD,
+    OFF_GRID_UPDATE_CLEAR_GHOSTS,
+    OFF_GRID_UPDATE_PACKET_ID,
+    OFF_GRID_UPDATE_POSE,
+    OFF_GRID_UPDATE_SET_CELL
+} from '../util/OffGridConstants.js';
 
 function createDisconnectPacket(reason) {
     const message = JSON.stringify({ text: reason || 'Disconnected from server' });
@@ -365,6 +375,153 @@ function sendPlayerListEntry(players, action = 0) {
     return makePacket(0x38, data.subarray(0, offset));
 }
 
+// Growable big-endian writer for the custom off-grid packets. The vanilla
+// packets above are fixed-size, but a field snapshot is 0..8192 cells, so
+// sizing them by hand would be error-prone.
+class PacketDataWriter {
+    constructor() {
+        this.parts = [];
+        this.size = 0;
+    }
+
+    write(part) {
+        this.parts.push(part);
+        this.size += part.length;
+    }
+
+    byte(value) {
+        const part = Buffer.alloc(1);
+        part.writeUInt8(value & 0xFF, 0);
+        this.write(part);
+    }
+
+    bool(value) {
+        this.byte(value ? 1 : 0);
+    }
+
+    int(value) {
+        const part = Buffer.alloc(4);
+        part.writeInt32BE(Number.isFinite(value) ? (value | 0) : 0, 0);
+        this.write(part);
+    }
+
+    float(value) {
+        const part = Buffer.alloc(4);
+        part.writeFloatBE(Number.isFinite(value) ? value : 0, 0);
+        this.write(part);
+    }
+
+    varInt(value) {
+        const part = Buffer.alloc(5);
+        // Treat ids/counts as unsigned 32-bit: mod block ids are registry
+        // hashes and can be above 2^31. `value | 0` would turn those into
+        // negative numbers and encode a bogus zero.
+        const unsigned = Number.isFinite(value) ? (Math.trunc(value) >>> 0) : 0;
+        const length = writeVarInt(part, unsigned, 0);
+        this.write(part.subarray(0, length));
+    }
+
+    toBuffer() {
+        return Buffer.concat(this.parts, this.size);
+    }
+}
+
+/** Full off-grid state: summoned cells, pose and ghost-block renders. */
+function createOffGridStatePacket(state) {
+    const writer = new PacketDataWriter();
+    const cells = Array.isArray(state.cells) ? state.cells : [];
+    const ghosts = Array.isArray(state.ghosts) ? state.ghosts : [];
+    const rotation = state.rotation || { x: 0, y: 0, z: 0 };
+    const offset = state.offset || { x: 0, y: 0, z: 0 };
+    const pivot = state.pivot || null;
+
+    writer.varInt(OFF_GRID_PROTOCOL_VERSION);
+    writer.varInt(cells.length);
+    for (const cell of cells) {
+        writer.int(cell.x);
+        writer.varInt(cell.y);
+        writer.int(cell.z);
+        writer.varInt(cell.typeId);
+        writer.byte(cell.data & 0xF);
+    }
+
+    writer.float(rotation.x);
+    writer.float(rotation.y);
+    writer.float(rotation.z);
+    writer.float(offset.x);
+    writer.float(offset.y);
+    writer.float(offset.z);
+    writer.bool(pivot !== null);
+    if (pivot !== null) {
+        writer.float(pivot.x);
+        writer.float(pivot.y);
+        writer.float(pivot.z);
+    }
+
+    writer.varInt(ghosts.length);
+    for (const ghost of ghosts) {
+        writer.float(ghost.x);
+        writer.float(ghost.y);
+        writer.float(ghost.z);
+        writer.varInt(ghost.typeId);
+        writer.byte(ghost.data & 0xF);
+    }
+
+    return makePacket(OFF_GRID_STATE_PACKET_ID, writer.toBuffer());
+}
+
+/** One incremental off-grid change (cell edit, pose, ghost add/clear, ...). */
+function createOffGridUpdatePacket(update) {
+    const writer = new PacketDataWriter();
+    const action = update.action;
+    writer.byte(action);
+
+    switch (action) {
+        case OFF_GRID_UPDATE_SET_CELL:
+            writer.int(update.x);
+            writer.varInt(update.y);
+            writer.int(update.z);
+            writer.varInt(update.typeId);
+            writer.byte(update.data & 0xF);
+            break;
+
+        case OFF_GRID_UPDATE_POSE: {
+            const rotation = update.rotation || { x: 0, y: 0, z: 0 };
+            const offset = update.offset || { x: 0, y: 0, z: 0 };
+            const pivot = update.pivot || null;
+            writer.float(rotation.x);
+            writer.float(rotation.y);
+            writer.float(rotation.z);
+            writer.float(offset.x);
+            writer.float(offset.y);
+            writer.float(offset.z);
+            writer.bool(pivot !== null);
+            if (pivot !== null) {
+                writer.float(pivot.x);
+                writer.float(pivot.y);
+                writer.float(pivot.z);
+            }
+            break;
+        }
+
+        case OFF_GRID_UPDATE_ADD_GHOST:
+            writer.float(update.x);
+            writer.float(update.y);
+            writer.float(update.z);
+            writer.varInt(update.typeId);
+            writer.byte(update.data & 0xF);
+            break;
+
+        case OFF_GRID_UPDATE_CLEAR_FIELD:
+        case OFF_GRID_UPDATE_CLEAR_GHOSTS:
+        default:
+            // Action-only packets carry no payload.
+            break;
+    }
+
+    return makePacket(OFF_GRID_UPDATE_PACKET_ID, writer.toBuffer());
+}
+
 function sendPlayerListData(header = null, footer = null) {
     const data = Buffer.alloc(512);
     let offset = 0;
@@ -398,5 +555,7 @@ export {
     createAnimationPacket,
     createSpawnObjectPacket,
     sendPlayerListEntry,
-    sendPlayerListData
+    sendPlayerListData,
+    createOffGridStatePacket,
+    createOffGridUpdatePacket
 };

@@ -30,6 +30,42 @@ const blockInventories = new Map();
 let currentWorldName = 'main';
 let worldTime = 0; // In-game time (0-24000 ticks)
 
+// World-scoped modules (currently the off-grid state) register here instead
+// of world.js importing them: that keeps the world storage module free of
+// feature-specific code and lets those modules load/save next to the world
+// file, including on a /server switch.
+const worldLoadHooks = [];
+const worldSaveHooks = [];
+
+function registerWorldLifecycle(hooks) {
+    if (hooks && typeof hooks.onLoad === 'function') {
+        worldLoadHooks.push(hooks.onLoad);
+    }
+    if (hooks && typeof hooks.onSave === 'function') {
+        worldSaveHooks.push(hooks.onSave);
+    }
+}
+
+function runWorldLoadHooks(worldName, worldDir) {
+    for (const hook of worldLoadHooks) {
+        try {
+            hook(worldName, worldDir);
+        } catch (e) {
+            log.error('World', `World load hook failed: ${e.message}`);
+        }
+    }
+}
+
+function runWorldSaveHooks(worldName, worldDir) {
+    for (const hook of worldSaveHooks) {
+        try {
+            hook(worldName, worldDir);
+        } catch (e) {
+            log.error('World', `World save hook failed: ${e.message}`);
+        }
+    }
+}
+
 // Ensure worlds directory exists
 if (!fs.existsSync(WORLDS_DIR)) {
     fs.mkdirSync(WORLDS_DIR, { recursive: true });
@@ -312,6 +348,7 @@ function initWorld(worldName = 'main') {
     if (!fs.existsSync(worldFile)) {
         log.info('World', `Creating new world (${worldName})...`);
         worldTime = 0;
+        runWorldLoadHooks(worldName, worldDir);
         return;
     }
 
@@ -333,6 +370,7 @@ function initWorld(worldName = 'main') {
     }
 
     log.info('World', `Finished loading world (${worldName})`);
+    runWorldLoadHooks(worldName, worldDir);
 }
 
 function loadCurrentWorld() {
@@ -437,6 +475,11 @@ function saveWorld() {
         }
         throw e;
     }
+
+    // World-scoped sidecars (off-grid state) save alongside the world file.
+    // The hooks catch their own errors, so a sidecar failure cannot make a
+    // successful world write look failed to the caller.
+    runWorldSaveHooks(currentWorldName, worldDir);
     //log.info('World', `World saved (${currentWorldName})`);
 }
 
@@ -581,5 +624,6 @@ export {
     setWorldTime,
     tickWorldTime,
     loadCurrentWorld,
-    deleteBlockInventory
+    deleteBlockInventory,
+    registerWorldLifecycle
 };

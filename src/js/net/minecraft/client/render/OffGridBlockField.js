@@ -6,16 +6,23 @@ import BoundingBox from "../../util/BoundingBox.js";
 import EnumBlockFace from "../../util/EnumBlockFace.js";
 import MovingObjectPosition from "../../util/MovingObjectPosition.js";
 import Vector3 from "../../util/Vector3.js";
+import {
+    OFF_GRID_MAX_CELLS,
+    OFF_GRID_MAX_DIM,
+    OFF_GRID_WORLD_HEIGHT
+} from "../../util/OffGridConstants.js";
 
 /**
- * Summoned block field: a sparse set of client-side blocks that behave like
- * real ones without touching chunk storage.
+ * Summoned block field: a sparse set of server-owned blocks rendered on the
+ * client that behave like real ones without touching chunk storage.
  *
  * The field is bound to a World as `world.offGridField`. World reads
- * (getBlockAt / getBlockDataAt / getTotalLightAt) and writes
- * (setBlockAt / setBlockAtNoEvents / setBlockDataAt) consult the field first
- * for covered positions, which is what makes summoned blocks work with every
- * system that already goes through the World API:
+ * (getBlockAt / getBlockDataAt / getTotalLightAt) and local writes
+ * (setBlockAt / setBlockDataAt) consult the field first for covered
+ * positions, which is what makes summoned blocks work with every system that
+ * already goes through the World API. Server-authoritative chunk updates
+ * (setBlockAtNoEvents) deliberately bypass the field: those describe real
+ * terrain, not summoned cells, which arrive through the off-grid packets.
  *
  *   - collision        (World.getCollisionBoxes -> offGridField.addCollisionBoxes)
  *   - block raytrace   (World.rayTraceBlocks -> offGridField.rayTrace) ->
@@ -29,8 +36,9 @@ import Vector3 from "../../util/Vector3.js";
  * runs in local space through the inverse pose, and the rebuild/preview
  * proxies answer in local space while sampling the real world underneath the
  * pose.
- *   - server block sync (NetworkPlayHandler -> setBlockAtNoEvents) so edits
- *     made in singleplayer/multiplayer flow back into the field
+ *   - server-authoritative state (ServerOffGridStatePacket / UpdatePacket via
+ *     OffGridClientSync), so every player sees the same summoned structure
+ *     and interactive edits are validated once by the server
  *
  * Rendering mimics ChunkSection.rebuild(): cells are batched per 16^3 region,
  * tessellated through the real BlockRenderer (so AO, face culling, multipart
@@ -41,8 +49,8 @@ import Vector3 from "../../util/Vector3.js";
 export default class OffGridBlockField {
 
     /** Safety caps for the debug command: per axis, and per summon. */
-    static MAX_DIM = 64;
-    static MAX_CELLS = 8192;
+    static MAX_DIM = OFF_GRID_MAX_DIM;
+    static MAX_CELLS = OFF_GRID_MAX_CELLS;
 
     /** Lattice step of the rotated-box collision approximation (world units). */
     static COLLISION_STEP = 1 / 6;
@@ -109,6 +117,12 @@ export default class OffGridBlockField {
         // renderer's every block/face read.
         this._localWorld = null;
         this._localWorldWorld = null;
+
+        // Bulk population (fill/snapshot) and remote writes bypass
+        // setLocalBlock(), so the power hooks are replayed separately. Those
+        // replays must not echo every recomputed power nibble back to the
+        // server.
+        this._suppressCellSync = false;
     }
 
     /** Attach this field to a world (idempotent) and to the current scene. */
@@ -200,11 +214,12 @@ export default class OffGridBlockField {
     }
 
     /**
-     * Mirror a write aimed at a covered position (server block sync or local
-     * edit) into the field and re-tessellate the affected regions.
+     * Mirror a local write aimed at a covered position into the field and
+     * re-tessellate the affected regions. Server-authored writes use
+     * applyRemoteWrite() so they are not echoed back to the server.
      * @returns {boolean} true when the field actually changed.
      */
-    applyWrite(xRaw, yRaw, zRaw, typeId, data = 0) {
+    applyWrite(xRaw, yRaw, zRaw, typeId, data = 0, fromNetwork = false) {
         // Same integer-grid rule as fill(): fractional coordinates would
         // silently produce cells no interaction seam can reach.
         const x = Math.floor(xRaw);
@@ -236,7 +251,185 @@ export default class OffGridBlockField {
         // agreeing with the overlay (hidden faces under placed cells, shown
         // terrain under broken ones).
         this.markWorldSectionsDirty(x, y, z, x, y, z);
+
+        // Local interactive writes are mirrored to the server; server writes
+        // arrive through applyRemoteWrite() and must not echo back. Replays of
+        // the block lifecycle after a bulk load also stay local.
+        if (!fromNetwork && !this._suppressCellSync && typeof this.onCellChanged === "function") {
+            try {
+                this.onCellChanged(x, y, z, typeId ? typeId : 0, typeId ? (data || 0) : 0);
+            } catch (e) {
+                console.error(`offGridField cell sync error at ${x},${y},${z}:`, e);
+            }
+        }
         return true;
+    }
+
+    /** Apply an authoritative write from the server without echoing it back. */
+    applyRemoteWrite(x, y, z, typeId, data = 0) {
+        const changed = this.applyWrite(x, y, z, typeId, data, true);
+        // A remote placement bypasses the local placement hooks, so a
+        // bluestone source placed by another player would never wake the
+        // wires around it. Re-run only the power-relevant lifecycle here.
+        if (changed) this.initializeBlockState(Math.floor(x), Math.floor(y), Math.floor(z));
+        return changed;
+    }
+
+    /**
+     * Re-run the power-relevant block hooks for one cell. Bulk fills and
+     * server snapshots populate cells directly (and remote writes skip
+     * setLocalBlock's placement callbacks), so without this a bluestone
+     * source loaded into an off-grid structure never schedules the adjacent
+     * wires and the structure stays unpowered until an unrelated update.
+     *
+     * Placement hooks (onBlockPlaced) are deliberately not replayed: door
+     * orientation and other authoritative data already arrived from the
+     * server and must not be recomputed from the local player's context.
+     */
+    initializeBlockState(xRaw, yRaw, zRaw) {
+        const x = Math.floor(xRaw);
+        const y = Math.floor(yRaw);
+        const z = Math.floor(zRaw);
+        const cell = this.cells.get(x + "," + y + "," + z);
+        if (cell === undefined) return;
+
+        const block = Block.getById(cell.typeId) || BlockRegistry.get(cell.typeId);
+        if (!block) return;
+
+        // Wires are intentionally not scheduled here. A source (or consumer)
+        // wakes its own neighbours, and one wire tick settles its whole
+        // connected network synchronously; scheduling every wire in a large
+        // fill would re-walk the same network thousands of times.
+        if (!block.isPowerSource && !block.isBluestoneConsumer) return;
+
+        const localWorld = this.createLocalWorld();
+        if (!localWorld) return;
+
+        const wasSuppressed = this._suppressCellSync;
+        this._suppressCellSync = true;
+        try {
+            if (typeof block.onBlockAdded === 'function') {
+                block.onBlockAdded(localWorld, x, y, z);
+            } else if (typeof block.onBlockTick === 'function') {
+                // Queue instead of running immediately: a large fill can hold
+                // many consumers, and tickBlocks() drains in bounded batches.
+                this.scheduleLocalTick(x, y, z, 1);
+            }
+        } catch (e) {
+            console.error(`offGridField block init error at ${x},${y},${z}:`, e);
+        } finally {
+            this._suppressCellSync = wasSuppressed;
+        }
+    }
+
+    /** Initialize every power-related cell after a bulk population. */
+    initializeBlockStates() {
+        for (const cell of this.cells.values()) {
+            this.initializeBlockState(cell.x, cell.y, cell.z);
+        }
+    }
+
+    /**
+     * Replace the whole field with a server snapshot. The cells and pose are
+     * copied verbatim (no local re-anchoring), then all affected regions are
+     * tessellated once, so a join or a command cannot leave stale meshes or a
+     * pose that only matches the client's own history.
+     */
+    applyNetworkSnapshot(cells, rotation, offset, pivot) {
+        this.clear();
+
+        const list = Array.isArray(cells) ? cells : [];
+        for (let i = 0; i < list.length && this.cells.size < OFF_GRID_MAX_CELLS; i++) {
+            const cell = list[i];
+            if (!cell) continue;
+
+            const x = Math.trunc(cell.x);
+            const y = Math.trunc(cell.y);
+            const z = Math.trunc(cell.z);
+            const typeId = Math.trunc(cell.typeId);
+            if (!Number.isInteger(x) || !Number.isInteger(y) || !Number.isInteger(z)) continue;
+            if (y < 0 || y >= OFF_GRID_WORLD_HEIGHT) continue;
+            if (!Number.isInteger(typeId) || typeId <= 0) continue;
+            // A server-side mod can persist block ids this client does not
+            // have. Keeping such a cell would make every interaction seam
+            // (raytrace, collision, break) see a block with no definition;
+            // drop it instead so the rest of the state still renders.
+            if (!Block.getById(typeId) && !BlockRegistry.get(typeId)) continue;
+
+            const data = Number.isInteger(cell.data) ? (cell.data & 0xF) : 0;
+            this.cells.set(x + "," + y + "," + z, { x, y, z, typeId, data });
+            this.addToRegionIndex(x, y, z);
+        }
+
+        const numberOrZero = (value) => typeof value === 'number' && Number.isFinite(value) ? value : 0;
+        this.rotation = {
+            x: numberOrZero(rotation && rotation.x),
+            y: numberOrZero(rotation && rotation.y),
+            z: numberOrZero(rotation && rotation.z)
+        };
+        this.offset = {
+            x: numberOrZero(offset && offset.x),
+            y: numberOrZero(offset && offset.y),
+            z: numberOrZero(offset && offset.z)
+        };
+        this.pivot = pivot && Number.isFinite(pivot.x) && Number.isFinite(pivot.y) && Number.isFinite(pivot.z)
+            ? { x: pivot.x, y: pivot.y, z: pivot.z }
+            : null;
+
+        const bounds = this.getBounds();
+        if (bounds) {
+            this.markWorldSectionsDirty(
+                bounds.minX, bounds.minY, bounds.minZ,
+                bounds.maxX, bounds.maxY, bounds.maxZ);
+        }
+
+        // Tessellate after the pose is applied: neighbour sampling reads the
+        // real terrain through the posed position, exactly like a local edit.
+        this.applyTransform();
+        for (const key of [...this.regionCells.keys()]) {
+            const parts = key.split(",");
+            this.rebuildRegion(parseInt(parts[0]), parseInt(parts[1]), parseInt(parts[2]));
+        }
+
+        // Bulk-loaded bluestone has never run its placement hooks, so make
+        // sources schedule their neighbours and let the wires settle.
+        this.initializeBlockStates();
+    }
+
+    /**
+     * Replace the pose without touching the cells. Used by incremental pose
+     * updates; every region is re-tessellated because face culling/AO sample
+     * the real world under the new pose.
+     */
+    setPose(rotation, offset, pivot) {
+        const bounds = this.getBounds();
+        const numberOrZero = (value) => typeof value === 'number' && Number.isFinite(value) ? value : 0;
+
+        this.rotation = {
+            x: numberOrZero(rotation && rotation.x),
+            y: numberOrZero(rotation && rotation.y),
+            z: numberOrZero(rotation && rotation.z)
+        };
+        this.offset = {
+            x: numberOrZero(offset && offset.x),
+            y: numberOrZero(offset && offset.y),
+            z: numberOrZero(offset && offset.z)
+        };
+        this.pivot = pivot && Number.isFinite(pivot.x) && Number.isFinite(pivot.y) && Number.isFinite(pivot.z)
+            ? { x: pivot.x, y: pivot.y, z: pivot.z }
+            : null;
+
+        if (bounds) {
+            this.markWorldSectionsDirty(
+                bounds.minX, bounds.minY, bounds.minZ,
+                bounds.maxX, bounds.maxY, bounds.maxZ);
+        }
+
+        this.applyTransform();
+        for (const key of [...this.regionCells.keys()]) {
+            const parts = key.split(",");
+            this.rebuildRegion(parseInt(parts[0]), parseInt(parts[1]), parseInt(parts[2]));
+        }
     }
 
     // ------------------------------------------------------------------
@@ -498,6 +691,11 @@ export default class OffGridBlockField {
             const [rx, ry, rz] = key.split(",");
             this.rebuildRegion(parseInt(rx), parseInt(ry), parseInt(rz));
         }
+
+        // Cells written in bulk skipped setLocalBlock(), so initialize the
+        // bluestone network explicitly (a filled source must power a wire
+        // filled next to it).
+        this.initializeBlockStates();
 
         return sizeX * sizeY * sizeZ;
     }
@@ -939,6 +1137,12 @@ export default class OffGridBlockField {
             this.disposeRegion(region);
             this.regions.delete(regionKey);
         }
+
+        // A region group added after applyTransform() has never had its
+        // matrixWorld composed with the field's posed matrix. Without this
+        // refresh the join snapshot rendered the structure unrotated until a
+        // later edit forced another transform update.
+        this.group.updateMatrixWorld(true);
     }
 
     // ------------------------------------------------------------------
@@ -1596,9 +1800,11 @@ export default class OffGridBlockField {
                                 target.onBlockChanged(w.x, w.y, w.z);
                             }
                         };
-                    // Marker for placer items: suppress the server placement
-                    // packet - summoned cells are client-side only and the
-                    // server would persist a block nobody can see.
+                    // Marker for placer items: suppress the vanilla placement
+                    // packet. Field writes are mirrored to the server by
+                    // onCellChanged() in local-grid coordinates; sending the
+                    // placer at these world coordinates would place a real
+                    // block on top of unrelated terrain.
                     case "isFieldLocalWorld":
                         return true;
                 }

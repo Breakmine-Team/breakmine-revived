@@ -7,6 +7,8 @@ import ClientPlayerPositionRotationPacket from "../packet/play/client/ClientPlay
 import PlayerEntity from "../../entity/PlayerEntity.js";
 import ServerAnimationPacket from "../packet/play/server/ServerAnimationPacket.js";
 import ClientConfirmTransactionPacket from "../packet/play/client/ClientConfirmTransactionPacket.js";
+import ClientOffGridRequestPacket from "../packet/play/client/ClientOffGridRequestPacket.js";
+import { applyOffGridState, applyOffGridUpdate } from "../../render/OffGridClientSync.js";
 import ItemEntity from "../../entity/ItemEntity.js";
 
 export default class NetworkPlayHandler extends PacketHandler {
@@ -30,6 +32,10 @@ export default class NetworkPlayHandler extends PacketHandler {
         let world = new WorldClient(this.minecraft);
         this.minecraft.loadWorld(world);
         this.minecraft.ingameOverlay.chatOverlay.clearChat();
+
+        // Ask for the authoritative off-grid state now that the client has a
+        // world to bind the field to. The server answers with a snapshot.
+        this.networkManager.sendPacket(new ClientOffGridRequestPacket());
     }
 
     handleServerChat(packet) {
@@ -106,6 +112,11 @@ export default class NetworkPlayHandler extends PacketHandler {
     handleResetWorld(packet) {
         // Clear all chunks from the world
         this.minecraft.world.clearChunks();
+
+        // The server switches worlds by resetting the chunks rather than
+        // recreating the World object, so the off-grid field must be replaced
+        // with the new world's state explicitly.
+        this.networkManager.sendPacket(new ClientOffGridRequestPacket());
     }
 
     handleTimeUpdate(packet) {
@@ -368,6 +379,14 @@ export default class NetworkPlayHandler extends PacketHandler {
                 );
             }
         }
+    }
+
+    handleServerOffGridState(packet) {
+        applyOffGridState(this.minecraft, packet.getState());
+    }
+
+    handleServerOffGridUpdate(packet) {
+        applyOffGridUpdate(this.minecraft, packet.getUpdate());
     }
 
     handleDisconnect(packet) {

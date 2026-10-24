@@ -12,7 +12,9 @@ import * as THREE from "../../../../../../libraries/three.module.js";
  * other position) somewhere near the player for debugging.
  *
  * Because it tessellates on demand, render() must be called on the client
- * render thread (i.e. from a client-side command), never from the server.
+ * render thread (from a command or a network handler), never from the server.
+ * Ghost-block renders are shared through the off-grid packets; see
+ * server/offgrid.js and client/render/OffGridClientSync.js.
  */
 export default class OffGridBlockRenderer {
 
