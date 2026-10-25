@@ -131,7 +131,10 @@ export const atlasBlockTextures = [
     "bluestoneMemoryTopOff.png", "bluestoneMemoryTopSetOffResetOffOn.png",
     "bluestoneMemoryTopSetOnResetOff.png", "bluestoneMemoryTopSetOnResetOnOff.png",
     "bluestoneMemoryTopSetOffResetOn.png",
-    "ice.png", "packed_ice.png", "blue_ice.png", "cheese.png"
+    "ice.png", "packed_ice.png", "blue_ice.png", "cheese.png",
+    "farmland.png", "farmland_moist.png",
+    "wheat_stage0.png", "wheat_stage1.png", "wheat_stage2.png", "wheat_stage3.png",
+    "wheat_stage4.png", "wheat_stage5.png", "wheat_stage6.png", "wheat_stage7.png"
 ];
 
 const toolMaterials = ['wooden', 'stone', 'iron', 'diamond', 'golden'];
@@ -147,6 +150,7 @@ export const atlasItemTextures = [
     "light_gray_dye.png", "cyan_dye.png", "purple_dye.png", "blue_dye.png",
     "brown_dye.png", "green_dye.png", "red_dye.png", "black_dye.png",
     "flint.png", "flint_and_steel.png",
+    "seeds_wheat.png", "wheat.png",
     ...toolMaterials.flatMap(mat => toolTypes.map(type => `${mat}_${type}.png`))
 ];
 

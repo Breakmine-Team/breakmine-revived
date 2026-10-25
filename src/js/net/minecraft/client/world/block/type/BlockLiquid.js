@@ -3,6 +3,9 @@ import BlockRenderType from "../../../../util/BlockRenderType.js";
 
 export default class BlockLiquid extends Block {
 
+    static MAX_LEVEL = 7;
+    static FALLING_FLAG = 8;
+
     constructor(id, textureSlotId, liquidType = 'water') {
         super(id, textureSlotId);
         this.liquidType = liquidType;
@@ -126,14 +129,23 @@ export default class BlockLiquid extends Block {
         }
 
         const currentData = world.getBlockDataAt(x, y, z);
-        const currentLevel = currentData & 7; // Level 0 (source) to 7
-        const isFalling = (currentData & 8) !== 0;
+        const currentLevel = currentData & BlockLiquid.MAX_LEVEL; // Level 0 (source) to 7
+        const isFalling = (currentData & BlockLiquid.FALLING_FLAG) !== 0;
+
+        // A source block never dries up. Every other liquid block has to keep
+        // finding a source upstream; once that source is removed it loses one
+        // level per tick, and its neighbours are woken so the whole stream
+        // recedes with it until no water is left.
+        if (!this.isSourceData(currentData) && !this.hasSourceSupply(world, x, y, z)) {
+            this.decay(world, x, y, z, currentLevel);
+            return;
+        }
 
         // 1. Try flowing straight down
         const targetY = y - 1;
         if (this.canFlowInto(world, x, targetY, z)) {
             // Data flag 8 marks falling liquid
-            this.flowInto(world, x, targetY, z, 8);
+            this.flowInto(world, x, targetY, z, BlockLiquid.FALLING_FLAG);
             
             // Flowing straight down prevents spreading horizontally at this level
             return;
@@ -160,9 +172,12 @@ export default class BlockLiquid extends Block {
                 }
             }
         }
+    }
 
-        // 3. Check if current liquid block should dry up / decay
-        this.checkDecay(world, x, y, z, currentLevel, isFalling);
+    /** True for a source block: level 0 and not part of a falling stream. */
+    isSourceData(data) {
+        return (data & BlockLiquid.FALLING_FLAG) === 0
+            && (data & BlockLiquid.MAX_LEVEL) === 0;
     }
 
     canFlowInto(world, x, y, z) {
@@ -172,12 +187,17 @@ export default class BlockLiquid extends Block {
         if (typeId === 0) return true; // Air
         if (typeId === this.getOppositeLiquidId()) return false; // Never flow into the opposite liquid (reacts instead)
 
+        // A source is never overwritten by a neighbouring stream. Flowing
+        // liquid may merge into other flowing liquid, though.
+        if (typeId === this.id) {
+            return !this.isSourceData(world.getBlockDataAt(x, y, z));
+        }
+
         const block = Block.getById(typeId);
         if (block === null) return true;
 
-        // Can flow into replaceable blocks (grass, flowers) or existing liquid with higher level
-        return block.isReplaceable(world, x, y, z) || 
-              (typeId === this.id && (world.getBlockDataAt(x, y, z) & 7) > 0);
+        // Can flow into replaceable blocks (grass, flowers)
+        return block.isReplaceable(world, x, y, z);
     }
 
     flowInto(world, x, y, z, levelData) {
@@ -221,43 +241,81 @@ export default class BlockLiquid extends Block {
     }
 
     /**
-     * Reduces level or removes the block if no longer supplied by a source/higher block.
+     * Loses one level of water. Called once per tick while the block cannot
+     * find a source upstream, so a stream dries up one level at a time and is
+     * removed after level 7. Neighbours are woken so the whole stream decays
+     * together, not one block at a time.
      */
-    checkDecay(world, x, y, z, currentLevel, isFalling) {
-        if (currentLevel === 0 && !isFalling) return; // Source blocks don't decay
+    decay(world, x, y, z, currentLevel) {
+        const nextLevel = currentLevel + 1;
 
-        const neighbors = [
-            { x: x + 1, y: y, z: z },
-            { x: x - 1, y: y, z: z },
-            { x: x, y: y, z: z + 1 },
-            { x: x, y: y, z: z - 1 },
-            { x: x, y: y + 1, z: z } // Check block directly above
+        if (nextLevel > BlockLiquid.MAX_LEVEL) {
+            world.setBlockAt(x, y, z, 0, 0); // Completely dried up
+        } else {
+            world.setBlockAt(x, y, z, this.id, nextLevel);
+            world.scheduleBlockTick(x, y, z, this.tickRate);
+        }
+
+        if (typeof world.scheduleNeighborTicks === 'function') {
+            world.scheduleNeighborTicks(x, y, z);
+        }
+    }
+
+    /**
+     * Walks upstream through the connected liquid looking for a source block.
+     * Liquid is fed from directly above (falling streams) or from a horizontal
+     * neighbour one level closer to the source. When the only source is
+     * removed every flowing block fails this search and starts decaying, so
+     * the stream recedes evenly until nothing is left.
+     */
+    hasSourceSupply(world, x, y, z) {
+        const directions = [
+            { x: 1, z: 0 },
+            { x: -1, z: 0 },
+            { x: 0, z: 1 },
+            { x: 0, z: -1 }
         ];
 
-        let hasSupplier = false;
-        for (const n of neighbors) {
-            if (world.getBlockAt(n.x, n.y, n.z) === this.id) {
-                const nData = world.getBlockDataAt(n.x, n.y, n.z);
-                const nLevel = nData & 7;
-                const nFalling = (nData & 8) !== 0;
+        const seen = new Set();
+        const queue = [];
 
-                if (n.y > y) {
-                    hasSupplier = true;
-                    break;
-                } else if (nLevel < currentLevel || nFalling) {
-                    hasSupplier = true;
-                    break;
-                }
+        const consider = (nx, ny, nz, maxLevel) => {
+            if (ny < 0 || ny >= 256) return false;
+            if (world.getBlockAt(nx, ny, nz) !== this.id) return false;
+
+            const data = world.getBlockDataAt(nx, ny, nz);
+            if (this.isSourceData(data)) return true;
+            if ((data & BlockLiquid.MAX_LEVEL) >= maxLevel) return false;
+
+            const key = `${nx},${ny},${nz}`;
+            if (seen.has(key)) return false;
+            // Fail safe: a huge body is treated as supplied rather than
+            // wiping out a legitimate body of water on a search limit.
+            if (seen.size >= 1024) return true;
+
+            seen.add(key);
+            queue.push({ x: nx, y: ny, z: nz, level: data & BlockLiquid.MAX_LEVEL });
+            return false;
+        };
+
+        // Directly above always feeds (it is what makes a falling stream).
+        if (consider(x, y + 1, z, BlockLiquid.MAX_LEVEL + 1)) return true;
+
+        const ownLevel = world.getBlockDataAt(x, y, z) & BlockLiquid.MAX_LEVEL;
+        for (const dir of directions) {
+            if (consider(x + dir.x, y, z + dir.z, ownLevel)) return true;
+        }
+
+        while (queue.length > 0) {
+            const node = queue.shift();
+
+            if (consider(node.x, node.y + 1, node.z, BlockLiquid.MAX_LEVEL + 1)) return true;
+
+            for (const dir of directions) {
+                if (consider(node.x + dir.x, node.y, node.z + dir.z, node.level)) return true;
             }
         }
 
-        if (!hasSupplier) {
-            if (currentLevel < 7) {
-                world.setBlockAt(x, y, z, this.id, currentLevel + 1);
-                world.scheduleBlockTick(x, y, z, this.tickRate);
-            } else {
-                world.setBlockAt(x, y, z, 0, 0); // Completely dried up
-            }
-        }
+        return false;
     }
 }

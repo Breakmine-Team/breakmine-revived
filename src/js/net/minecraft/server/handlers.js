@@ -687,10 +687,24 @@ function handleBlockPlacement(player, buffer, offset) {
     // (right-click). Blocks that change state when activated (doors) are
     // handled here so the change is authoritative and broadcast to everyone.
     if (direction === 255) {
+        const serverWorld = getServerWorld();
+
+        // Held items that act on a block (hoes tilling soil, seeds planting on
+        // farmland) run their authoritative hook on the clicked block instead
+        // of the client's local prediction.
+        const heldBlock = heldItemId > 0 ? Block.getById(heldItemId) : null;
+        if (heldBlock && typeof heldBlock.onUseOnBlockServer === 'function') {
+            try {
+                heldBlock.onUseOnBlockServer(serverWorld, x, y, z, player);
+            } catch (e) {
+                log.error('Server', `onUseOnBlockServer error at ${x},${y},${z}: ${e.message}`);
+            }
+            return;
+        }
+
         const targetId = getBlockAt(x, y, z);
         const targetBlock = Block.getById(targetId);
         if (targetBlock && typeof targetBlock.onMouseButton === 'function') {
-            const serverWorld = getServerWorld();
             try {
                 targetBlock.onMouseButton(serverWorld, x, y, z, 2);
             } catch (e) {

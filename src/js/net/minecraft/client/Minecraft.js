@@ -1569,7 +1569,7 @@ export default class Minecraft {
         // removal itself is synced by OffGridClientSync.
         let isFieldHit = !!(hitResult.fieldCell && this.world.offGridField);
         let block = Block.getById(typeId);
-        let droppedBlock = [0, 0];
+        let drops = [];
 
         let heldItem = this.player.inventory.getItemInSelectedSlot()
         let heldTypeId = heldItem ? heldItem.getType() : null
@@ -1578,11 +1578,11 @@ export default class Minecraft {
 
         let minLevel = block.minimumToolLevel()
         if (!minLevel) {
-            droppedBlock = block.getDrop(this.world, hitResult.x, hitResult.y, hitResult.z);
+            drops = Block.normalizeDrops(block.getDrop(this.world, hitResult.x, hitResult.y, hitResult.z));
         } else if (tool) {
             let toolMaterial = tool.material
             if (ItemTool.materials.indexOf(toolMaterial) >= ItemTool.materials.indexOf(minLevel)) {
-                droppedBlock = block.getDrop(this.world, hitResult.x, hitResult.y, hitResult.z);
+                drops = Block.normalizeDrops(block.getDrop(this.world, hitResult.x, hitResult.y, hitResult.z));
             }
         }
 
@@ -1600,14 +1600,16 @@ export default class Minecraft {
         this.soundManager.playSoundMono('random.pop', 1.0, 1.0);
 
         this.world.setBlockAt(hitResult.x, hitResult.y, hitResult.z, 0);
-        for (let index = 0; index < droppedBlock[1]; index++) {
-            if (this.isSingleplayer() || isFieldHit) {
-                // Singleplayer or summoned cell: create entity locally
-                this.world.addEntity(new ItemEntity(this, this.world, droppedBlock[0], hitResult.x, hitResult.y, hitResult.z));
-            } else {
-                // Multiplayer: tell server to spawn item for all players at the
-                // broken block's position
-                this.playerController.getNetworkHandler().sendPacket(new ClientDropItemPacket(droppedBlock[0], hitResult.x, hitResult.y, hitResult.z));
+        for (const [dropId, dropCount] of drops) {
+            for (let index = 0; index < dropCount; index++) {
+                if (this.isSingleplayer() || isFieldHit) {
+                    // Singleplayer or summoned cell: create entity locally
+                    this.world.addEntity(new ItemEntity(this, this.world, dropId, hitResult.x, hitResult.y, hitResult.z));
+                } else {
+                    // Multiplayer: tell server to spawn item for all players at the
+                    // broken block's position
+                    this.playerController.getNetworkHandler().sendPacket(new ClientDropItemPacket(dropId, hitResult.x, hitResult.y, hitResult.z));
+                }
             }
         }
         this.player.swingArm();
@@ -1831,9 +1833,11 @@ export default class Minecraft {
                             // Destroy block
                             this.world.setBlockAt(hitResult.x, hitResult.y, hitResult.z, 0);
 
-                            // Drop item (add to player inventory)
-                            if (!this.player.creative && droppedBlock && droppedBlock.length === 2) {
-                                this.player.inventory.addItem(droppedBlock[0], droppedBlock[1]);
+                            // Drop items (add to player inventory)
+                            if (!this.player.creative) {
+                                for (const [dropId, dropCount] of Block.normalizeDrops(droppedBlock)) {
+                                    this.player.inventory.addItem(dropId, dropCount);
+                                }
                             }
 
                             // Send block digging packet in multiplayer

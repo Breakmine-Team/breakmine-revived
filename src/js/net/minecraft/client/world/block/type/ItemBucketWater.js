@@ -24,7 +24,9 @@ export default class ItemBucketWater extends ItemGeneric {
             return;
         }
 
-        world.setBlockAt(x, y, z, BlockRegistry.WATER.getId());
+        // Data 0 marks a source block; only the flow simulation may create
+        // weaker (higher-level) blocks from it.
+        world.setBlockAt(x, y, z, BlockRegistry.WATER.getId(), 0);
         itemstack.typeId = BlockRegistry.ITEM_BUCKET_EMPTY.getId();
         if (!world.minecraft.player.creative) itemstack.count = Math.max(1, itemstack.count || 1);
         this.notifyServerPlacement(world, x, y, z, hitFace, BlockRegistry.WATER.getId());
@@ -37,8 +39,12 @@ export default class ItemBucketWater extends ItemGeneric {
             typeof minecraft.playerController.sendBlockPlacementPacket !== 'function') {
             return;
         }
+        // The packet carries the *clicked* block, and the server applies the
+        // face offset itself. x/y/z here are already the adjacent block the
+        // water went into, so sending them would place it one block further
+        // (one block above when using the bucket on a top face).
         minecraft.playerController.sendBlockPlacementPacket(
-            new BlockPosition(x, y, z),
+            new BlockPosition(x - hitFace.x, y - hitFace.y, z - hitFace.z),
             minecraft.getFaceValue(hitFace),
             { id: blockId }
         );

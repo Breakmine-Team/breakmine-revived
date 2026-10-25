@@ -1,10 +1,20 @@
 import BlockFlower from "./BlockFlower.js";
 import BlockGrass from "./BlockGrass.js";
+import { BlockRegistry } from "../BlockRegistry.js";
 
 export default class BlockGrassPlant extends BlockFlower {
 
     constructor(id, textureSlotId, textureName, name) {
         super(id, textureSlotId, textureName, name);
+    }
+
+    getDrop(world, x, y, z) {
+        // Grass is the natural source of wheat seeds. Sometimes it gives the
+        // plant itself instead (green dye), so the drop is not guaranteed.
+        if (Math.random() < 0.35) {
+            return [BlockRegistry.ITEM_WHEAT_SEEDS.getId(), 1];
+        }
+        return [this.id, 1];
     }
 
     getColor(world, x, y, z, face) {

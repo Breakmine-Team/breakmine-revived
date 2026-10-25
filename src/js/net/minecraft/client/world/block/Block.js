@@ -117,6 +117,29 @@ export default class Block {
         return [this.id, 1];
     }
 
+    /**
+     * Normalize a getDrop() result into a list of [itemId, count] pairs. The
+     * classic shape is a single [itemId, count]; blocks that drop several
+     * different items (mature wheat: wheat + seeds) return a list of them.
+     */
+    static normalizeDrops(drop) {
+        if (!Array.isArray(drop) || drop.length === 0) {
+            return [];
+        }
+
+        if (typeof drop[0] === 'number') {
+            return drop.length >= 2 && drop[1] > 0 ? [[drop[0], drop[1]]] : [];
+        }
+
+        const drops = [];
+        for (const entry of drop) {
+            if (Array.isArray(entry) && typeof entry[0] === 'number' && entry[1] > 0) {
+                drops.push([entry[0], entry[1]]);
+            }
+        }
+        return drops;
+    }
+
     getMultipart(world, x, y, z) {
         return null;
     }

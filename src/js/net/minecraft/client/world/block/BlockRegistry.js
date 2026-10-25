@@ -85,6 +85,9 @@ import BlockCryingObsidian from "./type/BlockCryingObsidian.js";
 import ItemFlint from "./type/ItemFlint.js";
 import ItemFlintAndSteel from "./type/ItemFlintAndSteel.js";
 import BlockTNT from "./type/BlockTNT.js";
+import BlockFarmland from "./type/BlockFarmland.js";
+import BlockWheat from "./type/BlockWheat.js";
+import ItemSeeds from "./type/ItemSeeds.js";
 
 export class BlockRegistry {
 
@@ -187,6 +190,12 @@ export class BlockRegistry {
         BlockRegistry.SAND = new BlockSand(12, 8);
         BlockRegistry.TORCH = new BlockTorch(50, 9);
         BlockRegistry.GRASS_PATH = new BlockGrassPath(19, 15);
+
+        // --- FARMING ---
+        BlockRegistry.FARMLAND = new BlockFarmland(258, 0);
+        BlockRegistry.WHEAT_CROP = new BlockWheat(259, 0);
+        BlockRegistry.ITEM_WHEAT_SEEDS = new ItemSeeds(260, "seeds_wheat", "Wheat Seeds");
+        BlockRegistry.ITEM_WHEAT = new ItemGeneric(261, "wheat", "Wheat");
 
         // --- WOOD TYPES ---
         // Oak
