@@ -83,11 +83,16 @@ import BlockCheese from "./type/BlockCheese.js";
 import BlockObsidian from "./type/BlockObsidian.js";
 import BlockCryingObsidian from "./type/BlockCryingObsidian.js";
 import ItemFlint from "./type/ItemFlint.js";
+import ItemKnife from "./type/ItemKnife.js";
 import ItemFlintAndSteel from "./type/ItemFlintAndSteel.js";
 import BlockTNT from "./type/BlockTNT.js";
 import BlockFarmland from "./type/BlockFarmland.js";
+import BlockCrop from "./type/BlockCrop.js";
 import BlockWheat from "./type/BlockWheat.js";
+import BlockStem from "./type/BlockStem.js";
+import BlockFruit from "./type/BlockFruit.js";
 import ItemSeeds from "./type/ItemSeeds.js";
+import ItemFood from "./type/ItemFood.js";
 
 export class BlockRegistry {
 
@@ -194,8 +199,100 @@ export class BlockRegistry {
         // --- FARMING ---
         BlockRegistry.FARMLAND = new BlockFarmland(258, 0);
         BlockRegistry.WHEAT_CROP = new BlockWheat(259, 0);
+        BlockRegistry.CARROT_CROP = new BlockCrop(262, 0, {
+            description: "Carrots",
+            texturePrefix: "carrots_stage",
+            maxStage: 3,
+            plantItemKey: "ITEM_CARROT",
+            produceItemKey: "ITEM_CARROT",
+            produceMin: 1,
+            produceMax: 4
+        });
+        BlockRegistry.POTATO_CROP = new BlockCrop(263, 0, {
+            description: "Potatoes",
+            texturePrefix: "potatoes_stage",
+            maxStage: 3,
+            plantItemKey: "ITEM_POTATO",
+            produceItemKey: "ITEM_POTATO",
+            produceMin: 1,
+            produceMax: 4
+        });
+        BlockRegistry.BEETROOT_CROP = new BlockCrop(264, 0, {
+            description: "Beetroots",
+            texturePrefix: "beetroots_stage",
+            maxStage: 3,
+            plantItemKey: "ITEM_BEETROOT_SEEDS",
+            produceItemKey: "ITEM_BEETROOT",
+            produceMin: 1,
+            produceMax: 1,
+            seedDropMin: 0,
+            seedDropMax: 3
+        });
+        BlockRegistry.CABBAGE_CROP = new BlockCrop(265, 0, {
+            description: "Cabbages",
+            texturePrefix: "cabbages_stage",
+            maxStage: 7,
+            plantItemKey: "ITEM_CABBAGE",
+            produceItemKey: "ITEM_CABBAGE",
+            produceMin: 1,
+            produceMax: 2
+        });
+        BlockRegistry.TOMATO_CROP = new BlockCrop(266, 0, {
+            description: "Tomatoes",
+            texturePrefix: "tomatoes_stage",
+            maxStage: 3,
+            plantItemKey: "ITEM_TOMATO_SEEDS",
+            produceItemKey: "ITEM_TOMATO",
+            produceMin: 1,
+            produceMax: 3,
+            seedDropMin: 1,
+            seedDropMax: 2
+        });
+        BlockRegistry.PUMPKIN = new BlockFruit(274, 0, {
+            description: "Pumpkin",
+            sideTexture: "pumpkin_side",
+            topTexture: "pumpkin_top",
+            stemKey: "PUMPKIN_STEM",
+            dropItemKey: "PUMPKIN",
+            dropMin: 1,
+            dropMax: 1
+        });
+        BlockRegistry.MELON = new BlockFruit(275, 0, {
+            description: "Melon",
+            sideTexture: "melon_side",
+            topTexture: "melon_top",
+            stemKey: "MELON_STEM",
+            dropItemKey: "ITEM_MELON_SLICE",
+            dropMin: 3,
+            dropMax: 7
+        });
+        BlockRegistry.PUMPKIN_STEM = new BlockStem(276, 0, {
+            description: "Pumpkin Stem",
+            stemTexture: "pumpkin_stem",
+            attachedTexture: "attached_pumpkin_stem",
+            seedItemKey: "ITEM_PUMPKIN_SEEDS",
+            fruitKey: "PUMPKIN"
+        });
+        BlockRegistry.MELON_STEM = new BlockStem(277, 0, {
+            description: "Melon Stem",
+            stemTexture: "melon_stem",
+            attachedTexture: "attached_melon_stem",
+            seedItemKey: "ITEM_MELON_SEEDS",
+            fruitKey: "MELON"
+        });
         BlockRegistry.ITEM_WHEAT_SEEDS = new ItemSeeds(260, "seeds_wheat", "Wheat Seeds");
         BlockRegistry.ITEM_WHEAT = new ItemGeneric(261, "wheat", "Wheat");
+        BlockRegistry.ITEM_CARROT = new ItemSeeds(267, "carrot", "Carrot", "CARROT_CROP", 2);
+        BlockRegistry.ITEM_POTATO = new ItemSeeds(268, "potato", "Potato", "POTATO_CROP", 1);
+        BlockRegistry.ITEM_BEETROOT = new ItemSeeds(269, "beetroot", "Beetroot", "BEETROOT_CROP", 1);
+        BlockRegistry.ITEM_BEETROOT_SEEDS = new ItemSeeds(270, "beetroot_seeds", "Beetroot Seeds", "BEETROOT_CROP");
+        BlockRegistry.ITEM_CABBAGE = new ItemSeeds(271, "cabbage", "Cabbage", "CABBAGE_CROP", 2);
+        BlockRegistry.ITEM_TOMATO = new ItemSeeds(272, "tomato", "Tomato", "TOMATO_CROP", 2);
+        BlockRegistry.ITEM_TOMATO_SEEDS = new ItemSeeds(273, "tomato_seeds", "Tomato Seeds", "TOMATO_CROP");
+        BlockRegistry.ITEM_PUMPKIN_SEEDS = new ItemSeeds(278, "pumpkin_seeds", "Pumpkin Seeds", "PUMPKIN_STEM");
+        BlockRegistry.ITEM_MELON_SEEDS = new ItemSeeds(279, "melon_seeds", "Melon Seeds", "MELON_STEM");
+        BlockRegistry.ITEM_PUMPKIN_SLICE = new ItemFood(280, "pumpkin_slice", "Pumpkin Slice", 1);
+        BlockRegistry.ITEM_MELON_SLICE = new ItemFood(281, "melon_slice", "Melon Slice", 2);
 
         // --- WOOD TYPES ---
         // Oak
@@ -490,6 +587,14 @@ export class BlockRegistry {
         BlockRegistry.FLINT = new ItemFlint(235, 0, "flint", "Flint");
         BlockRegistry.FLINT_AND_STEEL = new ItemFlintAndSteel(236, 0, "flint_and_steel", "Flint and Steel");
         BlockRegistry.TNT = new BlockTNT(237, 0, "tnt", "TNT");
+
+        toolId = 238;
+        for (const mat of toolMaterials) {
+            const matName = mat === 'wood' ? 'Wooden' : mat.charAt(0).toUpperCase() + mat.slice(1);
+            const itemName = mat === 'gold' ? 'Golden' : mat;
+            const texName = mat === 'gold' ? 'golden' : mat === 'wood' ? 'wooden' : mat;
+            BlockRegistry[`${mat.toUpperCase()}_KNIFE`] = new ItemKnife(toolId++, `${texName}_knife`, `${matName} Knife`, mat);
+        }
 
         for (const [key, val] of Object.entries(BlockRegistry)) {
             if (val && typeof val === "object" && val.id !== undefined) {

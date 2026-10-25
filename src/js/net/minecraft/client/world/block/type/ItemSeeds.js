@@ -1,32 +1,66 @@
-import ItemGeneric from "./ItemGeneric.js";
+import ItemEdible from "../ItemEdible.js";
 import EnumCreativeInventoryTab from "../../../gui/EnumCreativeInventoryTab.js";
 import EnumBlockFace from "../../../../util/EnumBlockFace.js";
 import BlockPosition from "../../../../util/BlockPosition.js";
 import { BlockRegistry } from "../BlockRegistry.js";
 
-export default class ItemSeeds extends ItemGeneric {
+/**
+ * Plantable item. Most crops plant a seed (healAmount 0), while carrots,
+ * potatoes, beetroots, cabbages and tomatoes are planted with the vegetable
+ * itself and remain edible when not used on farmland (healAmount > 0).
+ */
+export default class ItemSeeds extends ItemEdible {
 
-    constructor(id, textureName, description) {
-        super(id, 0, description);
+    constructor(id, textureName, description, cropKey = "WHEAT_CROP", healAmount = 0) {
+        super(id, 0);
         this.tex = textureName;
-        this.inventoryTab = EnumCreativeInventoryTab.MATERIALS;
+        this.description = description;
+        this.cropKey = cropKey;
+        this.healAmount = healAmount;
+        this.inventoryTab = healAmount > 0
+            ? EnumCreativeInventoryTab.FOODSTUFFS
+            : EnumCreativeInventoryTab.MATERIALS;
+    }
+
+    getTextureForFace(face) {
+        return this.tex;
+    }
+
+    getDescription() {
+        return this.healAmount > 0 ? super.getDescription() : this.description;
     }
 
     onUse(world, x, y, z, itemstack, hitFace) {
+        if (this.tryPlant(world, x, y, z, itemstack, hitFace)) {
+            return true;
+        }
+
+        if (this.healAmount > 0) {
+            super.onUse(world, x, y, z, itemstack);
+        }
+        return false;
+    }
+
+    tryPlant(world, x, y, z, itemstack, hitFace) {
         if (!world || x === undefined || y === undefined || z === undefined || !itemstack || !hitFace) {
-            return;
+            return false;
         }
 
         // Seeds only go on top of farmland.
         if (hitFace !== EnumBlockFace.TOP || y < 1) {
-            return;
+            return false;
         }
         if (world.getBlockAt(x, y - 1, z) !== BlockRegistry.FARMLAND.id ||
             world.getBlockAt(x, y, z) !== 0) {
-            return;
+            return false;
         }
 
-        world.setBlockAt(x, y, z, BlockRegistry.WHEAT_CROP.getId(), 0);
+        const crop = BlockRegistry[this.cropKey];
+        if (!crop) {
+            return false;
+        }
+
+        world.setBlockAt(x, y, z, crop.getId(), 0);
 
         const minecraft = world.minecraft;
         if (minecraft?.player) {
@@ -37,6 +71,7 @@ export default class ItemSeeds extends ItemGeneric {
         }
 
         this.notifyServerPlanting(world, x, y - 1, z);
+        return true;
     }
 
     notifyServerPlanting(world, x, y, z) {
@@ -62,7 +97,12 @@ export default class ItemSeeds extends ItemGeneric {
             return;
         }
 
-        world.setBlockAt(x, y + 1, z, BlockRegistry.WHEAT_CROP.getId(), 0);
-        BlockRegistry.WHEAT_CROP.onBlockAdded(world, x, y + 1, z);
+        const crop = BlockRegistry[this.cropKey];
+        if (!crop) {
+            return;
+        }
+
+        world.setBlockAt(x, y + 1, z, crop.getId(), 0);
+        crop.onBlockAdded(world, x, y + 1, z);
     }
 }

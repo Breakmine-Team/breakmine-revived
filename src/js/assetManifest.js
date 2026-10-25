@@ -134,11 +134,20 @@ export const atlasBlockTextures = [
     "ice.png", "packed_ice.png", "blue_ice.png", "cheese.png",
     "farmland.png", "farmland_moist.png",
     "wheat_stage0.png", "wheat_stage1.png", "wheat_stage2.png", "wheat_stage3.png",
-    "wheat_stage4.png", "wheat_stage5.png", "wheat_stage6.png", "wheat_stage7.png"
+    "wheat_stage4.png", "wheat_stage5.png", "wheat_stage6.png", "wheat_stage7.png",
+    "carrots_stage0.png", "carrots_stage1.png", "carrots_stage2.png", "carrots_stage3.png",
+    "potatoes_stage0.png", "potatoes_stage1.png", "potatoes_stage2.png", "potatoes_stage3.png",
+    "beetroots_stage0.png", "beetroots_stage1.png", "beetroots_stage2.png", "beetroots_stage3.png",
+    "tomatoes_stage0.png", "tomatoes_stage1.png", "tomatoes_stage2.png", "tomatoes_stage3.png",
+    "cabbages_stage0.png", "cabbages_stage1.png", "cabbages_stage2.png", "cabbages_stage3.png",
+    "cabbages_stage4.png", "cabbages_stage5.png", "cabbages_stage6.png", "cabbages_stage7.png",
+    "pumpkin_side.png", "pumpkin_top.png", "melon_side.png", "melon_top.png",
+    "pumpkin_stem.png", "attached_pumpkin_stem.png",
+    "melon_stem.png", "attached_melon_stem.png"
 ];
 
 const toolMaterials = ['wooden', 'stone', 'iron', 'diamond', 'golden'];
-const toolTypes = ['pickaxe', 'sword', 'shovel', 'axe', 'hoe'];
+const toolTypes = ['pickaxe', 'sword', 'shovel', 'axe', 'hoe', 'knife'];
 
 export const atlasItemTextures = [
     "apple.png", "bread.png", "burger.png", "stick.png", "iron_ingot.png", "coal.png",
@@ -151,6 +160,9 @@ export const atlasItemTextures = [
     "brown_dye.png", "green_dye.png", "red_dye.png", "black_dye.png",
     "flint.png", "flint_and_steel.png",
     "seeds_wheat.png", "wheat.png",
+    "carrot.png", "potato.png", "beetroot.png", "beetroot_seeds.png",
+    "cabbage.png", "tomato.png", "tomato_seeds.png",
+    "pumpkin_seeds.png", "melon_seeds.png", "pumpkin_slice.png", "melon_slice.png",
     ...toolMaterials.flatMap(mat => toolTypes.map(type => `${mat}_${type}.png`))
 ];
 

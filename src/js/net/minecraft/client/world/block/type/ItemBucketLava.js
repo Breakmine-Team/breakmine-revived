@@ -28,7 +28,7 @@ export default class ItemBucketLava extends ItemGeneric {
         // Data 0 marks a source block; only the flow simulation may create
         // weaker (higher-level) blocks from it.
         world.setBlockAt(x, y, z, BlockRegistry.LAVA.getId(), 0);
-        itemstack.typeId = BlockRegistry.ITEM_BUCKET_EMPTY.getId();
+        if (!world.minecraft.player.creative) itemstack.typeId = BlockRegistry.ITEM_BUCKET_EMPTY.getId();
         if (!world.minecraft.player.creative) itemstack.count = Math.max(1, itemstack.count || 1);
         this.notifyServerPlacement(world, x, y, z, hitFace, BlockRegistry.LAVA.getId());
     }

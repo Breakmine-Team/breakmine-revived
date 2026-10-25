@@ -634,8 +634,10 @@ export default class BlockRenderer {
         let chunkY = y >> 4;
         let chunkZ = z >> 4;
 
-        // UV mapping from the texture atlas
-        let textureName = block.getTextureForFace(EnumBlockFace.NORTH, 0, x, y, z, world);
+        // UV mapping from the texture atlas. Decoration blocks such as crops
+        // keep their growth stage in the metadata nibble.
+        let blockData = world ? world.getBlockDataAt(x, y, z) : 0;
+        let textureName = block.getTextureForFace(EnumBlockFace.NORTH, blockData, x, y, z, world);
         let minU, maxU, minV, maxV;
         if (this.worldRenderer.textureAtlas && this.worldRenderer.textureAtlas.isLoaded()) {
             let uvs = this.worldRenderer.textureAtlas.getUVs(textureName);
@@ -644,7 +646,7 @@ export default class BlockRenderer {
             minV = uvs.minV;
             maxV = uvs.maxV;
         } else {
-            let textureIndex = block.getTextureForFace(EnumBlockFace.NORTH, 0, x, y, z, world);
+            let textureIndex = block.getTextureForFace(EnumBlockFace.NORTH, blockData, x, y, z, world);
             minU = (textureIndex % 16) / 16.0;
             maxU = minU + (16 / 256);
             minV = Math.floor(textureIndex / 16) / 16.0;
