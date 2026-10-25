@@ -59,6 +59,7 @@ import { Version } from "../../../../resources/version.js";
 import { createErrorWindow } from './gui/WindowDraggable.js';
 import * as AuthLib from "./network/AuthLib.js";
 import { TunnelLib } from "../util/TunnelLib.js";
+import I18n from "./i18n/I18n.js";
 
 export default class Minecraft {
 
@@ -101,6 +102,7 @@ export default class Minecraft {
 
         this.settings = new GameSettings();
         this.settings.load();
+        this.settings.language = I18n.setLanguage(this.settings.language);
 
         AuthLib.setApiBaseUrl(this.settings.apiUrl);
 

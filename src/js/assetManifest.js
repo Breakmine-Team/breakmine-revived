@@ -1,6 +1,7 @@
 export const uiTextures = [
     "misc/grasscolor.png",
     "gui/font.png",
+    "gui/accented.png",
     "gui/gui.png",
     "gui/background.png",
     "gui/icons.png",

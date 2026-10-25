@@ -1,4 +1,5 @@
 import Item from "./Item.js";
+import { ICON_FOOD_FULL, ICON_FOOD_HALF } from "../../render/gui/FontIcons.js";
 
 export default class ItemEdible extends Item {
 
@@ -9,7 +10,7 @@ export default class ItemEdible extends Item {
     }
 
     getDescription() {
-        let healSymbol = '\u00c8'.repeat(Math.floor(this.healAmount / 2)) + '\u00cb'.repeat(Math.ceil(this.healAmount % 2));
+        let healSymbol = ICON_FOOD_FULL.repeat(Math.floor(this.healAmount / 2)) + ICON_FOOD_HALF.repeat(Math.ceil(this.healAmount % 2));
         return this.description + `\n§7${healSymbol} ${this.healAmount} HP`;
     }
 

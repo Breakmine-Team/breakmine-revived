@@ -8,6 +8,7 @@ import GuiListButton from "../widgets/GuiListButton.js";
 import GuiTextField from "../widgets/GuiTextField.js";
 import GuiTooltip from "../widgets/GuiTooltip.js";
 import GuiControls from "./GuiControls.js";
+import I18n from "../../i18n/I18n.js";
 
 export default class GuiOptions extends GuiScreen {
 
@@ -116,6 +117,18 @@ export default class GuiOptions extends GuiScreen {
                         tooltip: "This feature can cause lag and\nis still in development.",
                         onchange: (_v, mc) => mc.worldRenderer.setShadowsEnabled(_v)
                     },
+                    {
+                        name: "Language",
+                        settingKey: "language",
+                        type: "list",
+                        options: I18n.getLanguageOptions(),
+                        tooltip: "Choose the language used by the game UI",
+                        onchange: (value, mc) => {
+                            mc.settings.language = value;
+                            I18n.setLanguage(value);
+                            mc.settings.save();
+                        }
+                    }
                 ]
             }
         ];

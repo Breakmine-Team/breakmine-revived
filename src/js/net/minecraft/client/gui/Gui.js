@@ -4,7 +4,9 @@ import EnumBlockFace from "../../util/EnumBlockFace.js";
 
 export default class Gui {
 
-    static spriteCache = {};
+    // texture -> Map(colour key -> tinted canvas). Keyed by texture so that two
+    // sheets (font.png and accented.png, for instance) never share a tinted copy.
+    static spriteCache = new WeakMap();
     static backgroundCache = null;
 
     constructor(minecraft = null) {
@@ -181,14 +183,12 @@ export default class Gui {
     }
 
     static colorize(image, r, g, b) {
-        const imageSize = image.width;
-
-        const offscreen = new OffscreenCanvas(imageSize, imageSize);
+        const offscreen = new OffscreenCanvas(image.width, image.height);
         const ctx = offscreen.getContext("2d");
 
         ctx.drawImage(image, 0, 0);
 
-        const imageData = ctx.getImageData(0, 0, imageSize, imageSize);
+        const imageData = ctx.getImageData(0, 0, image.width, image.height);
 
         for (let i = 0; i < imageData.data.length; i += 4) {
             imageData.data[i + 0] *= r;
@@ -202,13 +202,20 @@ export default class Gui {
     }
 
     static drawSpriteRGB(stack, texture, spriteX, spriteY, spriteWidth, spriteHeight, x, y, width, height, r, g, b, alpha = 1.0) {
-        const cacheKey = `${texture.id}_${r.toFixed(3)}_${g.toFixed(3)}_${b.toFixed(3)}`; 
+        let cache = Gui.spriteCache.get(texture);
 
-        let coloredTexture = Gui.spriteCache[cacheKey];
+        if (!cache) {
+            cache = new Map();
+            Gui.spriteCache.set(texture, cache);
+        }
+
+        const cacheKey = `${r.toFixed(3)}_${g.toFixed(3)}_${b.toFixed(3)}`;
+
+        let coloredTexture = cache.get(cacheKey);
 
         if (!coloredTexture) {
             coloredTexture = Gui.colorize(texture, r, g, b);
-            Gui.spriteCache[cacheKey] = coloredTexture;
+            cache.set(cacheKey, coloredTexture);
         }
 
         Gui.drawSprite(stack, coloredTexture, spriteX, spriteY, spriteWidth, spriteHeight, x, y, width, height, alpha);

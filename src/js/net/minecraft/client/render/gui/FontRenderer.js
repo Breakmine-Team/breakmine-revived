@@ -1,5 +1,8 @@
 import Gui from "../../gui/Gui.js";
 import MathHelper from "../../../util/MathHelper.js";
+import I18n from "../../i18n/I18n.js";
+import { ACCENTED_GLYPHS, ACCENTED_CELL_WIDTH, ACCENTED_CELL_HEIGHT, ACCENTED_ASCENT } from "./AccentedGlyphs.js";
+import { FONT_ICONS } from "./FontIcons.js";
 
 export default class FontRenderer {
 
@@ -9,7 +12,7 @@ export default class FontRenderer {
     static FIELD_SIZE = 8;
 
     static COLOR_CODE_INDEX_LOOKUP = "0123456789abcdef";
-    static CHAR_INDEX_LOOKUP = "\u00c0\u00c1\u00c2\u00c8\u00ca\u00cb\u00cd\u00d3\u00d4\u00d5\u00da\u00df\u00e3\u00f5\u011f\u0130\u0131\u0152\u0153\u015e\u015f\u0174\u0175\u017e\u0207\u0000\u0000\u0000\u0000\u0000\u0000\u0000 !\"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\u0000\u00c7\u00fc\u00e9\u00e2\u00e4\u00e0\u00e5\u00e7\u00ea\u00eb\u00e8\u00ef\u00ee\u00ec\u00c4\u00c5\u00c9\u00e6\u00c6\u00f4\u00f6\u00f2\u00fb\u00f9\u00ff\u00d6\u00dc\u00f8\u00a3\u00d8\u00d7\u0192\u00e1\u00ed\u00f3\u00fa\u00f1\u00d1\u00aa\u00ba\u00bf\u00ae\u00ac\u00bd\u00bc\u00a1\u00ab\u00bb\u2591\u2592\u2593\u2502\u2524\u2561\u2562\u2556\u2555\u2563\u2551\u2557\u255d\u255c\u255b\u2510\u2514\u2534\u252c\u251c\u2500\u253c\u255e\u255f\u255a\u2554\u2569\u2566\u2560\u2550\u256c\u2567\u2568\u2564\u2565\u2559\u2558\u2552\u2553\u256b\u256a\u2518\u250c\u2588\u2584\u258c\u2590\u2580\u03b1\u03b2\u0393\u03c0\u03a3\u03c3\u03bc\u03c4\u03a6\u0398\u03a9\u03b4\u221e\u2205\u2208\u2229\u2261\u00b1\u2265\u2264\u2320\u2321\u00f7\u2248\u00b0\u2219\u00b7\u221a\u207f\u00b2\u25a0\u0000";
+    static CHAR_INDEX_LOOKUP = "\u00c0\u00c1\u00c2\u00c8\u00ca\u00cb\u00cd\u00d3\u00d4\u00d5\u00da\u00df\u00e3\u00f5\u011f\u0130\u0131\u0152\u0153\u015e\u015f\u0174\u0175\u017e\u0207\u0151\u0171\u0150\u0170\u0000\u0000\u0000 !\"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\u0000\u00c7\u00fc\u00e9\u00e2\u00e4\u00e0\u00e5\u00e7\u00ea\u00eb\u00e8\u00ef\u00ee\u00ec\u00c4\u00c5\u00c9\u00e6\u00c6\u00f4\u00f6\u00f2\u00fb\u00f9\u00ff\u00d6\u00dc\u00f8\u00a3\u00d8\u00d7\u0192\u00e1\u00ed\u00f3\u00fa\u00f1\u00d1\u00aa\u00ba\u00bf\u00ae\u00ac\u00bd\u00bc\u00a1\u00ab\u00bb\u2591\u2592\u2593\u2502\u2524\u2561\u2562\u2556\u2555\u2563\u2551\u2557\u255d\u255c\u255b\u2510\u2514\u2534\u252c\u251c\u2500\u253c\u255e\u255f\u255a\u2554\u2569\u2566\u2560\u2550\u256c\u2567\u2568\u2564\u2565\u2559\u2558\u2552\u2553\u256b\u256a\u2518\u250c\u2588\u2584\u258c\u2590\u2580\u03b1\u03b2\u0393\u03c0\u03a3\u03c3\u03bc\u03c4\u03a6\u0398\u03a9\u03b4\u221e\u2205\u2208\u2229\u2261\u00b1\u2265\u2264\u2320\u2321\u00f7\u2248\u00b0\u2219\u00b7\u221a\u207f\u00b2\u25a0\u0000";
     static COLOR_PREFIX = '\u00a7';
 
     static COLOR_HEX_MAP = {
@@ -51,10 +54,40 @@ export default class FontRenderer {
         this.isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
         this.texture = minecraft.resources["gui/font.png"];
 
+        // Accented letters are rendered from their own atlas. font.png only has
+        // plain ASCII in slots that hold real glyphs; the slots that used to
+        // carry those accented letters are icons now.
+        this.accentedTexture = minecraft.resources["gui/accented.png"];
+
         let bitMap = this.createBitMap(this.texture);
 
-        for (let i = 0; i < 256; i++) {
-            this.charWidths[i] = this.calculateCharacterWidthAt(bitMap, i % FontRenderer.BITMAP_SIZE, Math.floor(i / FontRenderer.BITMAP_SIZE)) + 2;
+        // Widths are indexed by the character's code point, not by its slot in
+        // the bitmap. Accented characters (á, ő, ş, ...) live in a different
+        // slot than their Unicode value, so measuring the slot that happens to
+        // equal the code point is wrong.
+        for (let index = 0; index < FontRenderer.CHAR_INDEX_LOOKUP.length; index++) {
+            const character = FontRenderer.CHAR_INDEX_LOOKUP.charAt(index);
+            if (character === "\u0000" || character === "") continue;
+
+            this.charWidths[character.charCodeAt(0)] = this.calculateCharacterWidthAt(
+                bitMap,
+                index % FontRenderer.BITMAP_SIZE,
+                Math.floor(index / FontRenderer.BITMAP_SIZE)
+            ) + 2;
+        }
+
+        // An icon is addressed by a private-use code point but drawn from the
+        // font.png slot it lives in, so it keeps that slot's advance. This has
+        // to happen before the accented widths below, which replace the widths
+        // of the very slots these icons occupy.
+        for (const code in FONT_ICONS) {
+            this.charWidths[code] = this.charWidths[FONT_ICONS[code]];
+        }
+
+        // Accented characters advance by the width their atlas cell records,
+        // overriding whatever width the (icon) slot in font.png would report.
+        for (const code in ACCENTED_GLYPHS) {
+            this.charWidths[code] = ACCENTED_GLYPHS[code][2];
         }
     }
 
@@ -78,6 +111,7 @@ export default class FontRenderer {
     }
 
     drawString(stack, string, x, y, color = -1, shadow = true, noColor = true) {
+        string = I18n.t(string);
         if (shadow) {
             this.drawStringRaw(stack, string, x + 1, y + 1, color, true, "8", noColor);
         }
@@ -154,8 +188,39 @@ export default class FontRenderer {
             let index = FontRenderer.CHAR_INDEX_LOOKUP.indexOf(character);
             let code = character.charCodeAt(0);
             let charWidth = this.charWidths[code] || 2;
+            let iconSlot = FONT_ICONS[code];
+            let accented = !iconSlot && this.accentedTexture ? ACCENTED_GLYPHS[code] : undefined;
+            let drewGlyph = false;
 
-            if (index !== -1) {
+            // The slot an icon lives in is also an accented letter's code
+            // point, so resolve the icon to that slot explicitly and skip the
+            // accent atlas for it.
+            if (iconSlot !== undefined) {
+                index = FontRenderer.CHAR_INDEX_LOOKUP.indexOf(String.fromCharCode(iconSlot));
+            }
+
+            if (accented) {
+                // The atlas cell already contains the letter with its accent, so
+                // the whole cell is drawn, lifted by the cell's ascent.
+                const drawAccentedAt = (offsetX) => {
+                    Gui.drawSpriteRGB(
+                        stack, this.accentedTexture,
+                        accented[0], accented[1],
+                        ACCENTED_CELL_WIDTH, ACCENTED_CELL_HEIGHT,
+                        Math.floor(localX + offsetX), Math.floor(y - ACCENTED_ASCENT),
+                        ACCENTED_CELL_WIDTH, ACCENTED_CELL_HEIGHT,
+                        this.r, this.g, this.b, 1.0
+                    );
+                };
+
+                drawAccentedAt(0);
+
+                if (bold) {
+                    drawAccentedAt(1);
+                }
+
+                drewGlyph = true;
+            } else if (index !== -1) {
                 let textureOffsetX = (index % FontRenderer.BITMAP_SIZE) * FontRenderer.FIELD_SIZE;
                 let textureOffsetY = Math.floor(index / FontRenderer.BITMAP_SIZE) * FontRenderer.FIELD_SIZE;
 
@@ -191,17 +256,19 @@ export default class FontRenderer {
                     drawGlyphAt(1);
                 }
 
-                if (underline) {
-                    let totalWidth = charWidth + (bold ? 1 : 0);
-                    Gui.drawSpriteRGB(
-                        stack, this.texture,
-                        solidU, solidV,
-                        FontRenderer.FIELD_SIZE, FontRenderer.FIELD_SIZE,
-                        Math.floor(localX), Math.floor(y + FontRenderer.FONT_HEIGHT + 1),
-                        totalWidth, 1,
-                        this.r, this.g, this.b, 1.0
-                    );
-                }
+                drewGlyph = true;
+            }
+
+            if (underline && drewGlyph) {
+                let totalWidth = charWidth + (bold ? 1 : 0);
+                Gui.drawSpriteRGB(
+                    stack, this.texture,
+                    solidU, solidV,
+                    FontRenderer.FIELD_SIZE, FontRenderer.FIELD_SIZE,
+                    Math.floor(localX), Math.floor(y + FontRenderer.FONT_HEIGHT + 1),
+                    totalWidth, 1,
+                    this.r, this.g, this.b, 1.0
+                );
             }
 
             localX += charWidth + (bold ? 1 : 0);
@@ -215,6 +282,7 @@ export default class FontRenderer {
             string = stack;
         }
         if (typeof string !== "string") string = String(string ?? "");
+        string = I18n.t(string);
         let length = 0;
         let bold = false;
 
@@ -269,6 +337,7 @@ export default class FontRenderer {
     }
 
     listFormattedStringToWidth(text, wrapWidth) {
+        text = I18n.t(text);
         let resultLines = [];
         let hardLines = text.split("\n");
 

@@ -8,6 +8,7 @@ import GuiTooltip from "../widgets/GuiTooltip.js";
 import fs from "../../fs/ServerFs.js";
 import path from "../../../util/path.js";
 import { loadJSZip } from "../../JSZipLoader.js";
+import { ICON_DOWNLOAD, ICON_UPLOAD } from "../../render/gui/FontIcons.js";
 
 export default class GuiSelectWorld extends GuiScreen {
 
@@ -59,7 +60,7 @@ export default class GuiSelectWorld extends GuiScreen {
                 }));
             }
         });
-        this.buttonExport = new GuiButton(this.minecraft, "\u00cd", this.width / 2 - 154, this.height - 28, 20, 20, () => {
+        this.buttonExport = new GuiButton(this.minecraft, ICON_DOWNLOAD, this.width / 2 - 154, this.height - 28, 20, 20, () => {
             if (this.selectedWorld !== -1) {
                 this.exportWorld(this.saveList[this.selectedWorld]);
             }
@@ -68,7 +69,7 @@ export default class GuiSelectWorld extends GuiScreen {
         this.buttonList.push(new GuiButton(this.minecraft, "Create New World", this.width / 2 + 4, this.height - 52, 150, 20, () => {
             this.minecraft.displayScreen(new GuiCreateWorld(this));
         }));
-        this.buttonList.push(new GuiButton(this.minecraft, "\u00d3", this.width / 2 - 130, this.height - 28, 20, 20, () => {
+        this.buttonList.push(new GuiButton(this.minecraft, ICON_UPLOAD, this.width / 2 - 130, this.height - 28, 20, 20, () => {
             this.importWorld();
         }));
         this.buttonList.push(new GuiButton(this.minecraft, "Cancel", this.width / 2 + 4, this.height - 28, 150, 20, () => {

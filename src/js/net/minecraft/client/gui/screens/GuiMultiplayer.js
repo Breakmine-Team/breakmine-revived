@@ -7,6 +7,7 @@ import GuiServerSlot from "../widgets/GuiServerSlot.js";
 import GuiYesNo from "./GuiYesNo.js";
 import Minecraft from "../../Minecraft.js";
 import { SplashTexts } from "../../../../../../resources/splashes.js";
+import { ICON_SERVER } from "../../render/gui/FontIcons.js";
 
 export default class GuiMultiplayer extends GuiScreen {
 
@@ -81,13 +82,13 @@ export default class GuiMultiplayer extends GuiScreen {
         if (this.minecraft.settings.showPublix) {
             this.saveList.push(
                 {
-                    name: "\u00ca Publix Creative",
+                    name: ICON_SERVER + " Publix Creative",
                     date: "",
                     details: "play.breakmine.com",
                     motd: "Create epic things at Publix Creative!"
                 },
                 {
-                    name: "\u00ca Publix SMP",
+                    name: ICON_SERVER + " Publix SMP",
                     date: "",
                     details: "playsmp.breakmine.com",
                     motd: "Survive and fight in the new Publix SMP!"

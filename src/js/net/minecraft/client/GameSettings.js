@@ -12,6 +12,8 @@ export default class GameSettings {
 
         this.session = null;
 
+        this.language = 'en';
+
         this.thirdPersonView = 0;
         this.fov = 70;
         this.viewBobbing = true;
