@@ -80,6 +80,8 @@ import ItemBluestoneDustPlacer from "./type/ItemBluestoneDustPlacer.js";
 import BlockSnow from "./type/BlockSnow.js";
 import BlockIce from "./type/BlockIce.js";
 import BlockCheese from "./type/BlockCheese.js";
+import BlockMoldyCheese from "./type/BlockMoldyCheese.js";
+import BlockFlintCardoor from "./type/BlockFlintCardoor.js";
 import BlockObsidian from "./type/BlockObsidian.js";
 import BlockCryingObsidian from "./type/BlockCryingObsidian.js";
 import ItemFlint from "./type/ItemFlint.js";
@@ -604,6 +606,9 @@ export class BlockRegistry {
                 BlockRegistry.register(nameKey, val);
             }
         }
+
+        BlockRegistry.MOLDY_CHEESE = new BlockMoldyCheese(312, 0);
+        BlockRegistry.FLINT_CARDOOR = new BlockFlintCardoor(313, 0);
 
         BlockRegistry.registry.set("oak_planks", BlockRegistry.WOOD);
         BlockRegistry.registry.set("breakmine:oak_planks", BlockRegistry.WOOD);
