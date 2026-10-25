@@ -79,6 +79,14 @@ export default class CraftingRegistry {
         this.registerShapedRecipe(BlockRegistry.ITEM_BREAD.id, 1, 3, 1, [
             BlockRegistry.ITEM_WHEAT.id, BlockRegistry.ITEM_WHEAT.id, BlockRegistry.ITEM_WHEAT.id
         ]);
+        this.registerShapelessRecipe(BlockRegistry.ITEM_PUMPKIN_SLICE.id, 4, [BlockRegistry.PUMPKIN.id]);
+        this.registerShapelessRecipe(BlockRegistry.ITEM_MELON_SLICE.id, 9, [BlockRegistry.MELON.id]);
+        this.registerShapelessRecipe(BlockRegistry.ITEM_PUMPKIN_PIE.id, 1, [
+            BlockRegistry.PUMPKIN.id, BlockRegistry.ITEM_WHEAT.id, BlockRegistry.ITEM_WHEAT.id
+        ]);
+        this.registerShapelessRecipe(BlockRegistry.ITEM_PUMPKIN_SOUP.id, 1, [
+            BlockRegistry.ITEM_PUMPKIN_SLICE.id, BlockRegistry.ITEM_PUMPKIN_SLICE.id, BlockRegistry.ITEM_PUMPKIN_SLICE.id
+        ]);
         this.registerShapedRecipe(BlockRegistry.OAK_LADDER.id, 3, 3, 3, [
             BlockRegistry.ITEM_STICK.id, 0, BlockRegistry.ITEM_STICK.id,
             BlockRegistry.ITEM_STICK.id, 0, BlockRegistry.ITEM_STICK.id,

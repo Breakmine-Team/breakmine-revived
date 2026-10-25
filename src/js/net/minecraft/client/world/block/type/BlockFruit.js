@@ -26,7 +26,7 @@ export default class BlockFruit extends Block {
 
         this.hardness = options.hardness ?? 1.0;
         this.sound = options.sound ?? Block.sounds.wood;
-        this.inventoryTab = EnumCreativeInventoryTab.BUILDING_BLOCKS;
+        this.inventoryTab = EnumCreativeInventoryTab.FOODSTUFFS;
     }
 
     getPreferredToolType() {

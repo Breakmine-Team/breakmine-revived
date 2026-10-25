@@ -163,6 +163,7 @@ export const atlasItemTextures = [
     "carrot.png", "potato.png", "beetroot.png", "beetroot_seeds.png",
     "cabbage.png", "tomato.png", "tomato_seeds.png",
     "pumpkin_seeds.png", "melon_seeds.png", "pumpkin_slice.png", "melon_slice.png",
+    "pumpkin_pie.png", "pumpkin_soup.png",
     ...toolMaterials.flatMap(mat => toolTypes.map(type => `${mat}_${type}.png`))
 ];
 

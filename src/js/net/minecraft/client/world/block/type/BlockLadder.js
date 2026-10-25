@@ -30,6 +30,10 @@ export default class BlockLadder extends Block {
         return 0;
     }
 
+    shouldRenderFace(world, x, y, z, face, prefetchedTypeId) {
+        return true;
+    }
+
     canPlaceAt(world, x, y, z, face) {
         const direction = BlockLadder.getFaceDirection(face);
         if (direction < 2 || direction > 5) {

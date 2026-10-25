@@ -293,6 +293,8 @@ export class BlockRegistry {
         BlockRegistry.ITEM_MELON_SEEDS = new ItemSeeds(279, "melon_seeds", "Melon Seeds", "MELON_STEM");
         BlockRegistry.ITEM_PUMPKIN_SLICE = new ItemFood(280, "pumpkin_slice", "Pumpkin Slice", 1);
         BlockRegistry.ITEM_MELON_SLICE = new ItemFood(281, "melon_slice", "Melon Slice", 2);
+        BlockRegistry.ITEM_PUMPKIN_PIE = new ItemFood(282, "pumpkin_pie", "Pumpkin Pie", 8);
+        BlockRegistry.ITEM_PUMPKIN_SOUP = new ItemFood(283, "pumpkin_soup", "Pumpkin Soup", 10);
 
         // --- WOOD TYPES ---
         // Oak
