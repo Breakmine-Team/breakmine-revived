@@ -729,6 +729,11 @@ export default class WorldRenderer {
     onTick() {
         this.emitRenderHook('onTick');
 
+        // Animated block textures (water) run at the fixed 20 Hz tick rate.
+        if (this.textureAtlas) {
+            this.textureAtlas.updateAnimations(50);
+        }
+
         this.dynamicLightUpdateTimer++;
         if (this.dynamicLightUpdateTimer >= 5) {
             this.dynamicLightUpdateTimer = 0;

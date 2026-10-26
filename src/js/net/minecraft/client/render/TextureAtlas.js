@@ -4,6 +4,10 @@ import { atlasBlockTextures, atlasItemTextures } from "../../../../assetManifest
 
 export default class TextureAtlas {
 
+    // Milliseconds each frame of an animated texture is shown. Minecraft's
+    // water strip uses frametime 2, i.e. two 20 Hz ticks.
+    static ANIMATION_FRAME_MS = 100;
+
     constructor(minecraft, texturePath = "terrain/pack/minecraft/textures/blocks/") {
         this.minecraft = minecraft;
         this.texturePath = texturePath;
@@ -14,6 +18,9 @@ export default class TextureAtlas {
         this.textureMap = new Map();
         this.reverseTextureMap = new Map();
         this.textureNameToSlotId = new Map();
+        // Animated tiles (water, lava...) stay a single atlas cell; the cell is
+        // redrawn from the source strip as the animation advances.
+        this.animatedTextures = new Map();
         this.canvas = null;
         this.texture = null;
         this.loaded = false;
@@ -60,6 +67,8 @@ export default class TextureAtlas {
         const ctx = this.canvas.getContext('2d');
         ctx.imageSmoothingEnabled = false;
 
+        this.animatedTextures.clear();
+
         const textureFiles = await this.getTextureFiles();
         
         let index = 0;
@@ -75,8 +84,24 @@ export default class TextureAtlas {
                 
                 const x = (index % this.texturesPerRow) * this.textureSize;
                 const y = Math.floor(index / this.texturesPerRow) * this.textureSize;
-                
-                ctx.drawImage(image, x, y, this.textureSize, this.textureSize);
+
+                const frameCount = this.getAnimationFrameCount(image);
+                if (frameCount > 1) {
+                    // Animated strip (water_still.png holds 32 frames stacked
+                    // vertically): only frame 0 goes into the atlas cell, the
+                    // rest are drawn over it by updateAnimations().
+                    ctx.drawImage(image, 0, 0, this.textureSize, this.textureSize, x, y, this.textureSize, this.textureSize);
+                    this.animatedTextures.set(textureName, {
+                        image,
+                        x,
+                        y,
+                        frames: frameCount,
+                        frame: 0,
+                        elapsed: 0
+                    });
+                } else {
+                    ctx.drawImage(image, x, y, this.textureSize, this.textureSize);
+                }
                 
                 this.textureMap.set(textureName, { x, y, index });
                 if (textureName === "oak_planks") {
@@ -104,6 +129,52 @@ export default class TextureAtlas {
         console.log(`Texture atlas loaded with ${index} textures`);
         
         return this.texture;
+    }
+
+    /**
+     * Animated block textures are a single 16px-wide image with one 16x16 frame
+     * per 16px of height. Anything else is a regular texture.
+     */
+    getAnimationFrameCount(image) {
+        const width = image.naturalWidth || image.width;
+        const height = image.naturalHeight || image.height;
+        if (width !== this.textureSize) return 1;
+        if (height <= this.textureSize || height % this.textureSize !== 0) return 1;
+        return height / this.textureSize;
+    }
+
+    /**
+     * Advance every animated tile by deltaMs and redraw its atlas cell in place.
+     * The atlas is uploaded to the GPU again only when a frame actually changes,
+     * so water ripples without rebuilding meshes; there is no per-face cost.
+     */
+    updateAnimations(deltaMs) {
+        if (!this.texture || !this.canvas || this.animatedTextures.size === 0) return;
+
+        const ctx = this.canvas.getContext('2d');
+        let changed = false;
+
+        for (const animation of this.animatedTextures.values()) {
+            animation.elapsed += deltaMs;
+            if (animation.elapsed < TextureAtlas.ANIMATION_FRAME_MS) continue;
+
+            animation.elapsed %= TextureAtlas.ANIMATION_FRAME_MS;
+            animation.frame = (animation.frame + 1) % animation.frames;
+
+            const sourceY = animation.frame * this.textureSize;
+            ctx.imageSmoothingEnabled = false;
+            ctx.clearRect(animation.x, animation.y, this.textureSize, this.textureSize);
+            ctx.drawImage(
+                animation.image,
+                0, sourceY, this.textureSize, this.textureSize,
+                animation.x, animation.y, this.textureSize, this.textureSize
+            );
+            changed = true;
+        }
+
+        if (changed) {
+            this.texture.needsUpdate = true;
+        }
     }
 
     registerModTexture(namespacedKey, image) {

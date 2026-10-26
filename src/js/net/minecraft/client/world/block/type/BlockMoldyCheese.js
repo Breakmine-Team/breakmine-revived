@@ -69,8 +69,7 @@ export default class BlockMoldyCheese extends Block {
     }
 
     shouldRenderFace(world, x, y, z, face) {
-        let typeId = world.getBlockAtFace(x, y, z, face);
-        return typeId === 0 || typeId === this.id;
+        return true;
     }
 
 }

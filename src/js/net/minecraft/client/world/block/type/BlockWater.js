@@ -15,6 +15,12 @@ export default class BlockWater extends BlockLiquid {
         return 'water_still';
     }
 
+    // The water texture is greyscale, so the blue comes entirely from this
+    // multiplier (vanilla's default water colour).
+    getColor(world, x, y, z, face) {
+        return 0x3F76E4;
+    }
+
     getOppositeLiquidId() {
         return BlockRegistry.LAVA.getId();
     }
