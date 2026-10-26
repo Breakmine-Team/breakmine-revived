@@ -36,5 +36,6 @@ canvas {
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    cursor: wait;
     z-index: 10000;
 }

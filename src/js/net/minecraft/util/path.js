@@ -75,6 +75,26 @@ function extname(p) {
     return name.slice(idx);
 }
 
+/**
+ * The directory of the module that calls this, as an absolute path.
+ *
+ * `new URL('.', import.meta.url)` is the obvious way to write that, but it
+ * throws `TypeError: Failed to construct 'URL': Invalid URL` when the module
+ * URL cannot act as a base for a relative reference. A worker that was inlined
+ * into a build (a single-file build runs its workers from a `blob:` URL) has
+ * exactly that kind of URL, so the throw used to kill the worker at startup.
+ * The paths derived from this value are only ever used as browser-virtual
+ * filesystem keys in that environment, so the root is a usable answer instead
+ * of a crash.
+ */
+function moduleDir() {
+    try {
+        return new URL('.', import.meta.url).pathname;
+    } catch (e) {
+        return SEP;
+    }
+}
+
 export default {
     sep: SEP,
     posix: null,
@@ -84,5 +104,6 @@ export default {
     isAbsolute,
     dirname,
     basename,
-    extname
+    extname,
+    moduleDir
 };

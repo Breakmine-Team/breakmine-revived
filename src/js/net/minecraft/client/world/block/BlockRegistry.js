@@ -44,6 +44,7 @@ import BlockConcrete from "./type/BlockConcrete.js";
 import BlockConcretePowder from "./type/BlockConcretePowder.js";
 import BlockClay from "./type/BlockClay.js";
 import BlockTerracotta from "./type/BlockTerracotta.js";
+import BlockPainting from "./type/BlockPainting.js";
 import BlockFlower from "./type/BlockFlower.js";
 import BlockGrassPlant from "./type/BlockGrassPlant.js";
 import BlockLava from "./type/BlockLava.js";
@@ -489,6 +490,9 @@ export class BlockRegistry {
 
         // Tan
         BlockRegistry.TAN_WOOL = new BlockWool(57, 0, "tan_wool", "Tan Wool");
+
+        // --- PAINTINGS (wall hangings, one block per painting texture) ---
+        BlockRegistry.PAINTING_SALAD_PLATE = new BlockPainting(284, 0, "salad_plate", "Salad Plate");
 
         // --- FLOWERS ---
         BlockRegistry.FLOWER_ROSE = new BlockFlower(189, 0, "poppy", "Rose");

@@ -5,6 +5,7 @@ import {
     uiTextures,
     atlasBlockTextures,
     atlasItemTextures,
+    atlasPaintingTextures,
     musicTracks,
     soundPools,
     clickSound,
@@ -57,6 +58,10 @@ for (const name of atlasBlockTextures) {
 for (const name of atlasItemTextures) {
     wantedKeys.add(`terrain/pack/minecraft/textures/items/${name}`);
     criticalKeys.add(`terrain/pack/minecraft/textures/items/${name}`);
+}
+for (const name of atlasPaintingTextures) {
+    wantedKeys.add(`terrain/pack/minecraft/textures/painting/${name}`);
+    criticalKeys.add(`terrain/pack/minecraft/textures/painting/${name}`);
 }
 
 function walkDir(dir, fileList = []) {

@@ -1875,6 +1875,9 @@ export default class Minecraft {
                             let itemStack = this.player.inventory.getItemInSlot(i);
                             if (!itemStack.isEmpty() && itemStack.getType() === pickedItemId) {
                                 this.player.inventory.selectedSlotIndex = i;
+                                if (this.player.inventory.itemRenderer) {
+                                    this.player.inventory.itemRenderer.scheduleDirty("hotbar");
+                                }
                                 return;
                             }
                         }

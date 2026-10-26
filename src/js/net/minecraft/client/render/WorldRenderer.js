@@ -1631,6 +1631,7 @@ export default class WorldRenderer {
 
     rebuildAll() {
         let world = this.minecraft.world;
+        if (!world) return;
         for (let [index, chunk] of world.getChunkProvider().getChunks()) {
             chunk.setModifiedAllSections();
         }

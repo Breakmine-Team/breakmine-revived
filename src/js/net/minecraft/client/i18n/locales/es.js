@@ -424,6 +424,7 @@ const translations = {
     "Redstone Dust": "Polvo de redstone",
     "Red Tulip": "Tulipán rojo",
     "Rose": "Rosa",
+    "Salad Plate": "Plato de ensalada",
     "Sand": "Arena",
     "Sapphire Block": "Bloque de zafiro",
     "Sapphire Ore": "Mena de zafiro",

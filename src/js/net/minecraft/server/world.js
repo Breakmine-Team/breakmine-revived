@@ -8,7 +8,7 @@ import { SubChunkStore, SECTION_DATA_BYTES } from './SubChunkStore.js';
 
 const log = Logger;
 
-const MODULE_DIR = new URL('.', import.meta.url).pathname;
+const MODULE_DIR = path.moduleDir();
 // Respect DATA_DIR (Docker persistence) the same way config.js does, so world
 // data and config always live in the same place. Guarded: there is no
 // `process` in a browser worker (integrated server).

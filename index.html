@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <title>Breakmine</title>
+    <meta charset="utf-8">
     <meta name="viewport"
           content="user-scalable=no, initial-scale=1, maximum-scale=1, minimum-scale=1, width=device-width, height=device-height"/>
     <link rel="shortcut icon" href="src/resources/favicon.ico" type="image/x-icon">
@@ -127,10 +128,34 @@
                 console.groupEnd();
             };
 
-            globalObj.console.log = (...args) => formatAndHideLink(false, null, 'info', args);
-            globalObj.console.info = (...args) => formatAndHideLink(false, null, 'info', args);
-            globalObj.console.warn = (...args) => formatAndHideLink(false, null, 'warn', args);
-            globalObj.console.error = (...args) => formatAndHideLink(false, null, 'error', args);
+            globalObj.console.log = (...args) => { 
+              formatAndHideLink(false, null, 'info', args); 
+              const logEvent = new CustomEvent('logOccured', {
+                detail: args.join(' ')
+              });
+              document.dispatchEvent(logEvent);
+            };
+            globalObj.console.info = (...args) => { 
+              formatAndHideLink(false, null, 'info', args); 
+              const logEvent = new CustomEvent('logOccured', {
+                detail: args.join(' ')
+              });
+              document.dispatchEvent(logEvent);
+            };
+            globalObj.console.warn = (...args) => {
+              formatAndHideLink(false, null, 'warn', args);
+              const warnEvent = new CustomEvent('warnOccured', {
+                detail: args.join(' ')
+              });
+              document.dispatchEvent(warnEvent);
+            };
+            globalObj.console.error = (...args) => {
+              formatAndHideLink(false, null, 'error', args);
+              const errorEvent = new CustomEvent('errorOccured', {
+                detail: args.join(' ')
+              });
+              document.dispatchEvent(errorEvent);
+            };
             globalObj.console.fakeLog = (logL, ...args) => formatAndHideLink(true, logL, 'info', args);
             globalObj.console.fakeError = (logL, ...args) => formatAndHideLink(true, logL, 'error', args);
             globalObj.console.fakeWarn = (logL, ...args) => formatAndHideLink(true, logL, 'warn', args);
@@ -138,7 +163,6 @@
             globalObj.console.__isMinecraftified = true;
         })();
     </script>
-    <link rel="stylesheet" href="https://unpkg.com/98.css">
     <style>
         body {
             position: relative;
@@ -178,6 +202,371 @@ if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) && navigator.ma
 </script>
 
 </body>
+
+<!-- winlibJS -->
+<script>
+const WindowManager = (function () {
+  let highestZIndex = 100;
+  let stylesInjected = false;
+
+  // Dynamically inject CSS styles into the <head>
+  function injectStyles() {
+    if (stylesInjected) return;
+    stylesInjected = true;
+
+    const css = `
+      .win-container {
+        position: absolute;
+        background: #ffffff;
+        border: 1px solid #b2b2b2;
+        border-radius: 6px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        min-width: 150px;
+        min-height: 100px;
+        user-select: none;
+        box-sizing: border-box;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+
+      .win-titlebar {
+        background: linear-gradient(to bottom, #ececec 0%, #d8d8d8 100%);
+        border-bottom: 1px solid #b5b5b5;
+        padding: 6px 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: move;
+        font-size: 13px;
+        font-weight: 600;
+        color: #4a4a4a;
+        text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
+      }
+
+      .win-title {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .win-close {
+        width: 14px;
+        height: 14px;
+        line-height: 12px;
+        text-align: center;
+        font-size: 14px;
+        font-weight: bold;
+        color: #777;
+        cursor: pointer;
+        border-radius: 3px;
+      }
+
+      .win-close:hover {
+        color: #000;
+        background: rgba(0, 0, 0, 0.1);
+      }
+
+      .win-body {
+        padding: 16px;
+        flex: 1;
+        overflow: auto;
+        user-select: none;
+        font-size: 15px;
+      }
+
+      .win-resize-handle {
+        position: absolute;
+        width: 12px;
+        height: 12px;
+        right: 0;
+        bottom: 0;
+        cursor: se-resize;
+      }
+    `;
+
+    const styleEl = document.createElement("style");
+    styleEl.type = "text/css";
+    styleEl.appendChild(document.createTextNode(css));
+    document.head.appendChild(styleEl);
+  }
+
+  class WindowInstance {
+    constructor(options = {}) {
+      injectStyles();
+
+      this.titleText = options.title || "Window";
+      this.width = options.width || 320;
+      this.height = options.height || 220;
+      this.x = options.x !== undefined ? options.x : 50;
+      this.y = options.y !== undefined ? options.y : 50;
+      this.content = options.content || "";
+      this.closable = options.closable || true;
+      this.resizeable = options.resizeable || true;
+      this.isHidden = options.hidden || false;
+      this.noOverflow = options.noOverflow || false;
+
+      this._createDOM();
+      this._initEvents();
+      this.bringToFront();
+    }
+
+    _createDOM() {
+      // Main window container
+      this.el = document.createElement("div");
+      this.el.className = "win-container";
+      this.el.style.width = this.width + "px";
+      this.el.style.height = this.height + "px";
+      this.el.style.left = this.x + "px";
+      this.el.style.top = this.y + "px";
+
+      // Titlebar
+      this.titleBar = document.createElement("div");
+      this.titleBar.className = "win-titlebar";
+
+      this.titleEl = document.createElement("span");
+      this.titleEl.className = "win-title";
+      this.titleEl.innerHTML = this.titleText;
+
+      this.titleBar.appendChild(this.titleEl);
+
+      if (this.closable) {
+        this.closeBtn = document.createElement("span");
+        this.closeBtn.className = "win-close";
+        this.closeBtn.innerHTML = "&#10005;"; // '✖' icon
+        this.titleBar.appendChild(this.closeBtn);
+      }
+
+      // Content body
+      this.bodyEl = document.createElement("div");
+      this.bodyEl.style.overflow = this.noOverflow ? "hidden" : "auto";
+      this.bodyEl.className = "win-body";
+      this.setContent(this.content);
+
+      // Resize Handle
+      if (this.resizeable) {
+        this.resizeHandle = document.createElement("div");
+        this.resizeHandle.className = "win-resize-handle";
+      }
+
+      // Assemble window
+      this.el.appendChild(this.titleBar);
+      this.el.appendChild(this.bodyEl);
+      this.el.appendChild(this.resizeHandle);
+
+      document.body.appendChild(this.el);
+    }
+
+    _initEvents() {
+      // Focus on click
+      this.el.addEventListener("mousedown", (event) => {
+        event.stopImmediatePropagation();
+        this.bringToFront();
+      });
+
+      // Close button
+      if (this.closeBtn) {
+        this.closeBtn.addEventListener("click", (event) => {
+          event.stopImmediatePropagation();
+          this.close();
+        });
+      }
+
+      // Dragging logic
+      let isDragging = false;
+      let dragStartX, dragStartY, initialX, initialY;
+
+      this.titleBar.addEventListener("mousedown", (e) => {
+        e.stopImmediatePropagation();
+        if (e.target === this.closeBtn) return;
+        isDragging = true;
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+        initialX = this.el.offsetLeft;
+        initialY = this.el.offsetTop;
+
+        const onMouseMove = (moveEvent) => {
+          if (!isDragging) return;
+          const dx = moveEvent.clientX - dragStartX;
+          const dy = moveEvent.clientY - dragStartY;
+          this.el.style.left = `${initialX + dx}px`;
+          this.el.style.top = `${initialY + dy}px`;
+        };
+
+        const onMouseUp = () => {
+          isDragging = false;
+          document.removeEventListener("mousemove", onMouseMove);
+          document.removeEventListener("mouseup", onMouseUp);
+        };
+
+        document.addEventListener("mousemove", onMouseMove);
+        document.addEventListener("mouseup", onMouseUp);
+      });
+
+      // Resizing logic
+      let isResizing = false;
+      let resizeStartX, resizeStartY, initialWidth, initialHeight;
+
+      if (this.resizeHandle) {
+        this.resizeHandle.addEventListener("mousedown", (e) => {
+          e.stopPropagation();
+          isResizing = true;
+          resizeStartX = e.clientX;
+          resizeStartY = e.clientY;
+          initialWidth = this.el.offsetWidth;
+          initialHeight = this.el.offsetHeight;
+
+          const onMouseMove = (moveEvent) => {
+            if (!isResizing) return;
+            const newWidth = Math.max(150, initialWidth + (moveEvent.clientX - resizeStartX));
+            const newHeight = Math.max(100, initialHeight + (moveEvent.clientY - resizeStartY));
+            this.el.style.width = `${newWidth}px`;
+            this.el.style.height = `${newHeight}px`;
+          };
+
+          const onMouseUp = () => {
+            isResizing = false;
+            document.removeEventListener("mousemove", onMouseMove);
+            document.removeEventListener("mouseup", onMouseUp);
+          };
+
+          document.addEventListener("mousemove", onMouseMove);
+          document.addEventListener("mouseup", onMouseUp);
+        });
+      }
+      if (this.isHidden) {
+        this.el.style.display = "none";
+      }
+    }
+
+    setHidden(hidden) {
+      this.isHidden = hidden;
+      if (this.isHidden) {
+        this.el.style.display = "none";
+      } else {
+        this.el.style.display = "flex";
+      }
+    }
+
+    bringToFront() {
+      highestZIndex += 1;
+      this.el.style.zIndex = highestZIndex;
+    }
+
+    setContent(htmlOrNode) {
+      if (typeof htmlOrNode === "string") {
+        this.bodyEl.innerHTML = htmlOrNode;
+      } else if (htmlOrNode instanceof HTMLElement) {
+        this.bodyEl.innerHTML = "";
+        this.bodyEl.appendChild(htmlOrNode);
+      }
+    }
+
+    setTitle(text) {
+      this.titleEl.textContent = text;
+    }
+
+    close() {
+      if (this.el && this.el.parentNode) {
+        this.el.parentNode.removeChild(this.el);
+      }
+    }
+  }
+
+  return {
+    create: (options) => new WindowInstance(options)
+  };
+
+  window.WindowManager = this;
+})();
+</script>
+
+<script>
+// Error Logger
+document.addEventListener('errorOccured', (event) => {
+  const title = encodeURIComponent("Bug: [SUMMARY]");
+  const body = encodeURIComponent(`How it happened:    
+[DESCRIPTION OF HOW IT HAPPENED]
+
+Version this occured on: [VERSION HERE]    
+
+Log at time of error (don't change this):    
+\`\`\`
+${event.detail}
+\`\`\`
+
+*Before posting, check if there are any duplicate issues!*`);
+  const uri_generated = `https://github.com/Breakmine-Team/breakmine-revived/issues/new?title=${title}&body=${body}`;
+  const win = WindowManager.create({
+    title: `Error - <a href="${uri_generated}">Report on Github</a>`,
+    x: 60,
+    y: 40,
+    width: 520,
+    height: 150,
+    content: `<p style="margin:0;padding:0;white-space: pre-line;">${event.detail}</p>`
+  });
+});
+</script>
+
+<script>
+// TinyTools (Integrated)
+window.devtoolsWindow = WindowManager.create({
+  title: `TinyTools (Integrated) - <a href="#" onclick="window.openTinyToolsAbout(); return false;">About</a>`,
+  x: 90,
+  y: 60,
+  width: 820,
+  height: 470,
+  hidden: true,
+  content: `<div style="margin:0;padding:0;white-space:pre-line;" id="loggerWindowElements"></div>`
+});
+
+window.openTinyToolsAbout = () => {
+  WindowManager.create({
+    title: `About TinyTools`,
+    x: 100,
+    y: 100,
+    width: 200,
+    height: 215,
+    resizeable: false,
+    noOverflow: true,
+    content: `
+      <p style="margin:0;padding:0;"><center>
+        <img src="tinytoollogo.png" alt="TinyTools Logo" style="width: 100px; height: 100px;"><br>
+        <i>TinyTools</i><br>
+        Version 1.0.0<br>
+        © 2026 SpinningCubes
+      </center>
+    </p>`
+  });
+};
+
+document.addEventListener('keydown', (event) => {
+  if (event.ctrlKey && event.key === '`') {
+    event.preventDefault();
+    window.devtoolsWindow.setHidden(!window.devtoolsWindow.isHidden);
+    window.devtoolsWindow.bringToFront();
+  }
+});
+
+document.addEventListener('errorOccured', (event) => {
+  const logElement = document.createElement('div');
+  logElement.innerHTML = `<p style="margin:0;padding:2px 0;color:red;border-bottom: 1px solid lightgrey;">${event.detail}</p>`;
+  document.getElementById('loggerWindowElements').appendChild(logElement);
+});
+
+document.addEventListener('warnOccured', (event) => {
+  const logElement = document.createElement('div');
+  logElement.innerHTML = `<p style="margin:0;padding:2px 0;color:orange;border-bottom: 1px solid lightgrey;">${event.detail}</p>`;
+  document.getElementById('loggerWindowElements').appendChild(logElement);
+});
+
+document.addEventListener('logOccured', (event) => {
+  const logElement = document.createElement('div');
+  logElement.innerHTML = `<p style="margin:0;padding:2px 0;color:black;border-bottom: 1px solid lightgrey;">${event.detail}</p>`;
+  document.getElementById('loggerWindowElements').appendChild(logElement);
+});
+</script>
 
 <!-- Libraries -->
 <script type="module" src="libraries/pako.es5.min.js"></script>

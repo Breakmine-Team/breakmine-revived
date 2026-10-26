@@ -1,7 +1,7 @@
 import fs from '../client/fs/ServerFs.js';
 import path from '../util/path.js';
 
-const MODULE_DIR = new URL('.', import.meta.url).pathname;
+const MODULE_DIR = path.moduleDir();
 // process / env only exist under Node (electron, standalone server). Running
 // as an integrated server inside a browser worker there is no process, so
 // read the env through this guard instead of bare process.env.

@@ -18,7 +18,7 @@ import { serverNameForKey, parseServerConfig, gamemodeName } from './shared.js';
 
 // worldKey is always 'w_<timestamp>_<random>'
 
-const MODULE_DIR = new URL('.', import.meta.url).pathname;
+const MODULE_DIR = path.moduleDir();
 const PROJECT_ROOT = path.join(MODULE_DIR, '..', '..', '..', '..', '..');
 const WORLDS_DIR = path.join(PROJECT_ROOT, 'worlds');
 

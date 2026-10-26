@@ -424,6 +424,7 @@ const translations = {
     "Redstone Dust": "Vöröskő por",
     "Red Tulip": "Piros tulipán",
     "Rose": "Rózsa",
+    "Salad Plate": "Salátás tányér",
     "Sand": "Homok",
     "Sapphire Block": "Zafírblokk",
     "Sapphire Ore": "Zafírérc",

@@ -1,6 +1,6 @@
 import * as THREE from "../../../../../../libraries/three.module.js";
 import { base64Assets } from "../../../../../resources.js";
-import { atlasBlockTextures, atlasItemTextures } from "../../../../assetManifest.js";
+import { atlasBlockTextures, atlasItemTextures, atlasPaintingTextures } from "../../../../assetManifest.js";
 
 export default class TextureAtlas {
 
@@ -212,17 +212,20 @@ export default class TextureAtlas {
     async getTextureFiles() {
         const blockTextures = atlasBlockTextures;
         const itemTextures = atlasItemTextures;
+        const paintingTextures = atlasPaintingTextures;
 
         if (this.texturePath.startsWith('texture_packs/')) {
             return [
                 ...blockTextures.map(name => 'blocks/' + name),
-                ...itemTextures.map(name => 'items/' + name)
+                ...itemTextures.map(name => 'items/' + name),
+                ...paintingTextures.map(name => 'painting/' + name)
             ];
         }
 
         return [
             ...blockTextures.map(name => 'terrain/pack/minecraft/textures/blocks/' + name),
-            ...itemTextures.map(name => 'terrain/pack/minecraft/textures/items/' + name)
+            ...itemTextures.map(name => 'terrain/pack/minecraft/textures/items/' + name),
+            ...paintingTextures.map(name => 'terrain/pack/minecraft/textures/painting/' + name)
         ];
     }
 
@@ -303,7 +306,7 @@ export default class TextureAtlas {
             defaultPath = 'terrain/pack/minecraft/textures/blocks/' + path;
         } else if (path.startsWith('blocks/')) {
             defaultPath = 'terrain/pack/minecraft/textures/' + path;
-        } else if (path.startsWith('items/')) {
+        } else if (path.startsWith('items/') || path.startsWith('painting/')) {
             defaultPath = 'terrain/pack/minecraft/textures/' + path;
         } else {
             defaultPath = path.replace(/^texture_packs\/[^\/]+\//, 'terrain/pack/minecraft/textures/blocks/');

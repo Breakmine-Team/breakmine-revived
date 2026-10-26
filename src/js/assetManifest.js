@@ -125,7 +125,7 @@ export const atlasBlockTextures = [
     "piston_top_sticky.png", "cobblestone_frame.png", "cobblestone_frame_on.png",
     "bluestoneRepeaterFront.png", "bluestoneRepeaterBack.png",
     "bluestoneObserverFront.png", "bluestoneObserverBackOn.png",
-    "bluestoneObserverBackOff.png", "oak_planks_green.png", "oak_planks_sticky.png",
+    "bluestoneObserverBackOff.png", "oak_planks_sticky.png",
     "bluestoneRepeaterTopOff.png", "bluestoneRepeaterTopOn.png", "lever.png",
     "cobblestone_lever_base.png", "snow.png", "grass_block_snow.png",
     "tnt_side.png", "tnt_bottom.png", "tnt_top.png", "bluestoneMemoryTopOn.png",
@@ -167,6 +167,10 @@ export const atlasItemTextures = [
     "pumpkin_seeds.png", "melon_seeds.png", "pumpkin_slice.png", "melon_slice.png",
     "pumpkin_pie.png", "pumpkin_soup.png",
     ...toolMaterials.flatMap(mat => toolTypes.map(type => `${mat}_${type}.png`))
+];
+
+export const atlasPaintingTextures = [
+    "salad_plate.png"
 ];
 
 // ---------------------------------------------------------------------------

@@ -8,7 +8,7 @@ export default class BlockConcrete extends Block {
         this.description = name;
         this.textureName = textureName;
         this.hardness = 0.8;
-        this.inventoryTab = EnumCreativeInventoryTab.DECORATION;
+        this.inventoryTab = EnumCreativeInventoryTab.BUILDING_BLOCKS;
     }
 
     getTextureForFace(face) {

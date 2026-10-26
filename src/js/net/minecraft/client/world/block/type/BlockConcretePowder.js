@@ -1,5 +1,6 @@
 import { BlockRegistry } from "../BlockRegistry.js";
 import BlockSand from "./BlockSand.js";
+import EnumCreativeInventoryTab from "../../../gui/EnumCreativeInventoryTab.js";
 
 export default class BlockConcretePowder extends BlockSand {
 
@@ -9,6 +10,9 @@ export default class BlockConcretePowder extends BlockSand {
         this.textureName = textureName;
         this.concreteId = concreteId;
         this.hardness = 0.4;
+        // Follows its hardened block into Building Blocks rather than staying
+        // behind with the decorative sand family.
+        this.inventoryTab = EnumCreativeInventoryTab.BUILDING_BLOCKS;
     }
 
     getTextureForFace(face) {

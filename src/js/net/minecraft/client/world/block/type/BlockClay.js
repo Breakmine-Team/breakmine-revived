@@ -10,7 +10,7 @@ export default class BlockClay extends Block {
         this.textureName = textureName;
         this.hardness = 0.6;
         this.sound = Block.sounds.gravel;
-        this.inventoryTab = EnumCreativeInventoryTab.DECORATION;
+        this.inventoryTab = EnumCreativeInventoryTab.BUILDING_BLOCKS;
     }
 
     getDrop(world, x, y, z) {

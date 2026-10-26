@@ -68,6 +68,10 @@ export default class InventoryPlayer extends Inventory {
         } else {
             this.items[this.selectedSlotIndex] = itemStack.copy();
         }
+        if (this.itemRenderer) {
+            this.itemRenderer.rebuildAllItems();
+            this.itemRenderer.scheduleDirty("hotbar");
+        }
         this.notifyInventoryChanged();
     }
 
@@ -174,6 +178,10 @@ export default class InventoryPlayer extends Inventory {
             this.items[index] = new ItemStack(itemStack, 1);
         } else {
             this.items[index] = itemStack.copy();
+        }
+        if (this.itemRenderer && index < 9) {
+            this.itemRenderer.rebuildAllItems();
+            this.itemRenderer.scheduleDirty("hotbar");
         }
         this.notifyInventoryChanged();
     }

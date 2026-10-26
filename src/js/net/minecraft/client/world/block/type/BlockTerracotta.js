@@ -9,7 +9,7 @@ export default class BlockTerracotta extends Block {
         this.textureName = textureName;
         this.hardness = 1.25;
         this.sound = Block.sounds.stone;
-        this.inventoryTab = EnumCreativeInventoryTab.DECORATION;
+        this.inventoryTab = EnumCreativeInventoryTab.BUILDING_BLOCKS;
     }
 
     getTextureForFace(face) {

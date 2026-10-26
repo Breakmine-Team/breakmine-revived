@@ -15,8 +15,11 @@ export default class ChunkProviderGenerateWorker extends ChunkProvider {
         this.pendingBatchProgress = new Map();
         this._nextBatchId = 0;
 
-        const workerUrl = new URL("../worker/worldgen.worker.js", import.meta.url);
-        this.worker = new Worker(workerUrl, { type: "module" });
+        // Keep this spelled as `new Worker(new URL(...))`. Assigning the URL to
+        // a variable first makes the bundler treat the file as a plain asset and
+        // copy the source verbatim, so the worker shipped with bare `import`
+        // statements and could never load. This form is bundled instead.
+        this.worker = new Worker(new URL("../worker/worldgen.worker.js", import.meta.url), { type: "module" });
 
         this.worker.onmessage = (e) => this._onWorkerMessage(e.data);
         this.worker.onerror = (e) => {
