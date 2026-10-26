@@ -21,6 +21,7 @@ export default class GameSettings {
         this.shadows = false;
         this.sensitivity = 100;
         this.viewDistance = 4;
+        this.fogType = 'modern';
         this.debugOverlay = false;
         this.showChunkBoundaries = false;
         this.showEntityBoundingBoxes = false;

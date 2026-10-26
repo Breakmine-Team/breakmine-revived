@@ -1263,8 +1263,17 @@ export default class WorldRenderer {
             // Update background color
             this.background.background = new THREE.Color(red, green, blue);
 
-            // Update fog color
-            this.scene.fog = new THREE.Fog(new THREE.Color(red, green, blue), 0.0025, viewDistance * 2);
+            // Update fog color based on fog type setting
+            const fogColorRgb = new THREE.Color(red, green, blue);
+            if (this.minecraft.settings.fogType === 'classic') {
+                // Classic fog: exponential fog that completely obscures past render distance
+                // Using higher density to ensure complete obscurity at render distance
+                const fogDensity = 2.0 / viewDistance;
+                this.scene.fog = new THREE.FogExp2(fogColorRgb, fogDensity);
+            } else {
+                // Modern fog: linear fog with gradual fade
+                this.scene.fog = new THREE.Fog(fogColorRgb, 0.0025, viewDistance * 2);
+            }
 
             let skyMesh = this.listSky.children[0];
             let voidMesh = this.listVoid.children[0];

@@ -118,6 +118,16 @@ export default class GuiOptions extends GuiScreen {
                         onchange: (_v, mc) => mc.worldRenderer.setShadowsEnabled(_v)
                     },
                     {
+                        name: "Fog Type",
+                        settingKey: "fogType",
+                        type: "list",
+                        options: [
+                            { key: "modern", name: "Modern" },
+                            { key: "classic", name: "Classic" }
+                        ],
+                        tooltip: "Modern: Gradual fog\nClassic: Exponential fog"
+                    },
+                    {
                         name: "Language",
                         settingKey: "language",
                         type: "list",

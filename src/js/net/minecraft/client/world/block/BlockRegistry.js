@@ -45,6 +45,7 @@ import BlockConcretePowder from "./type/BlockConcretePowder.js";
 import BlockClay from "./type/BlockClay.js";
 import BlockTerracotta from "./type/BlockTerracotta.js";
 import BlockPainting from "./type/BlockPainting.js";
+import BlockCounter from "./type/BlockCounter.js";
 import BlockFlower from "./type/BlockFlower.js";
 import BlockGrassPlant from "./type/BlockGrassPlant.js";
 import BlockLava from "./type/BlockLava.js";
@@ -387,6 +388,7 @@ export class BlockRegistry {
         BlockRegistry.SIGN = new BlockSign(121, 0);
         BlockRegistry.LAVA = new BlockLava(55, 0);
         BlockRegistry.LOGIC = new BlockLogic(56, 0);
+        BlockRegistry.COUNTER = new BlockCounter(285, 0);
 
         // --- COLORED BLOCKS (grouped by color) ---
         BlockRegistry.CLAY = new BlockClay(138, 0, "clay", "Clay");
