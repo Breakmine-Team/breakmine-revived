@@ -284,6 +284,21 @@ const WindowManager = (function () {
         bottom: 0;
         cursor: se-resize;
       }
+
+      button {
+        background: linear-gradient(to bottom, #ececec 0%, #d8d8d8 100%);
+        border: 1px solid #b5b5b5;
+        border-radius: 3px;
+        padding: 5px 15px;
+        cursor: pointer;
+        font-weight: 600;
+        color: #4a4a4a;
+        text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
+      }
+
+      button:hover {
+        background: linear-gradient(to bottom, #d8d8d8 0%, #c4c4c4 100%);
+      }
     `;
 
     const styleEl = document.createElement("style");
@@ -306,6 +321,7 @@ const WindowManager = (function () {
       this.resizeable = options.resizeable || true;
       this.isHidden = options.hidden || false;
       this.noOverflow = options.noOverflow || false;
+      this.hideOnClose = options.hideOnClose || false;
 
       this._createDOM();
       this._initEvents();
@@ -468,6 +484,10 @@ const WindowManager = (function () {
     }
 
     close() {
+      if (this.hideOnClose) {
+        this.setHidden(true);
+        return;
+      }
       if (this.el && this.el.parentNode) {
         this.el.parentNode.removeChild(this.el);
       }
@@ -518,21 +538,291 @@ window.devtoolsWindow = WindowManager.create({
   width: 820,
   height: 470,
   hidden: true,
-  content: `<div style="margin:0;padding:0;white-space:pre-line;" id="loggerWindowElements"></div>`
+  hideOnClose: true,
+  content: `
+    <div style="display:flex;flex-direction:column;height:100%;min-height:0;">
+      <div id="loggerWindowElements" style="margin:0;padding:0;white-space:pre-line;flex:1;min-height:0;overflow:auto;user-select:text;"></div>
+      <div style="display:flex;gap:6px;margin-top:8px;flex:none;">
+        <input id="tinyConsoleInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Enter JavaScript (variables persist)" style="flex:1;min-width:0;padding:5px 8px;user-select:text;border:1px solid #b5b5b5;border-radius:4px;background:linear-gradient(to bottom, #d0d0d0 0%, #f4f4f4 100%);box-shadow:inset 0 1px 3px rgba(0,0,0,0.18);outline:none;" />
+        <button type="button" id="tinyConsoleSend" style="padding:4px 14px;">Send</button>
+      </div>
+    </div>
+  `
 });
 
+// TinyTools JS console: executes in the page's real global scope. Expressions
+// are evaluated for their value; everything else is injected as a script so
+// top-level var/let/const/function/class declarations persist between runs.
+(function setupTinyToolsConsole() {
+  const logEl = document.getElementById('loggerWindowElements');
+  const input = document.getElementById('tinyConsoleInput');
+  const sendBtn = document.getElementById('tinyConsoleSend');
+  if (!logEl || !input) return;
+
+  const history = [];
+  let historyIndex = 0;
+  let scriptRun = 0;
+
+  function appendLog(text, color, weight) {
+    const line = document.createElement('div');
+    line.textContent = text;
+    line.style.padding = '2px 0';
+    line.style.borderBottom = '1px solid lightgrey';
+    if (color) line.style.color = color;
+    if (weight) line.style.fontWeight = weight;
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function formatValue(value, depth, seen) {
+    depth = depth || 0;
+    if (typeof value === 'string') return JSON.stringify(value);
+    if (typeof value === 'undefined') return 'undefined';
+    if (typeof value === 'function') return value.toString();
+    if (value === null) return 'null';
+    if (typeof value !== 'object') return String(value);
+
+    if (value === window) return '[object Window]';
+    if (value instanceof Error) return formatError(value);
+    if (value instanceof RegExp) return String(value);
+    if (value instanceof Node) {
+      if (value instanceof Element) return value.outerHTML.slice(0, 4000);
+      return String(value);
+    }
+    if (value instanceof Date) {
+      try { return value.toISOString(); } catch (e) { return String(value); }
+    }
+
+    const tag = Object.prototype.toString.call(value);
+    if (tag === '[object Map]') return 'Map(' + value.size + ')';
+    if (tag === '[object Set]') return 'Set(' + value.size + ')';
+
+    const isArray = Array.isArray(value);
+    let isPlain = false;
+    try {
+      const proto = Object.getPrototypeOf(value);
+      isPlain = proto === Object.prototype || proto === null;
+    } catch (e) {}
+
+    // Never walk into host objects or class instances: that can touch huge
+    // getter graphs (window, document, app, ...) and freeze the page.
+    if (!isArray && !isPlain) {
+      const ctor = value.constructor && value.constructor.name;
+      return '[object ' + (ctor || 'Object') + ']';
+    }
+
+    if (depth >= 2) return isArray ? '[Array]' : '{…}';
+
+    seen = seen || new WeakSet();
+    if (seen.has(value)) return '[Circular]';
+    seen.add(value);
+
+    const indent = '  '.repeat(depth + 1);
+    const closing = '  '.repeat(depth);
+
+    if (isArray) {
+      const items = value.slice(0, 50).map(item => formatValue(item, depth + 1, seen));
+      if (value.length > 50) items.push('… ' + (value.length - 50) + ' more');
+      return '[\n' + indent + items.join(',\n' + indent) + '\n' + closing + ']';
+    }
+
+    const keys = Object.keys(value);
+    if (keys.length === 0) return '{}';
+    const entries = keys.slice(0, 50).map(key => {
+      let formatted;
+      try {
+        formatted = formatValue(value[key], depth + 1, seen);
+      } catch (e) {
+        formatted = '[Thrown: ' + (e && e.message ? e.message : e) + ']';
+      }
+      return JSON.stringify(key) + ': ' + formatted;
+    });
+    if (keys.length > 50) entries.push('… ' + (keys.length - 50) + ' more');
+    return '{\n' + indent + entries.join(',\n' + indent) + '\n' + closing + '}';
+  }
+
+  function appendResult(value) {
+    if (value && typeof value.then === 'function') {
+      appendLog('Promise { <pending> }', '#888');
+      value.then(
+        resolved => appendLog('Promise resolved: ' + formatValue(resolved), '#1f6f3f'),
+        rejected => appendLog('Promise rejected: ' + formatValue(rejected), '#b00020')
+      );
+      return;
+    }
+    appendLog(formatValue(value));
+  }
+
+  function formatError(err) {
+    if (!err) return 'Error';
+    const header = (err.name || 'Error') + ': ' + (err.message || String(err));
+    if (typeof err.stack !== 'string') return header;
+    const frames = err.stack.split('\n').filter(line => {
+      if (!/^\s*at /.test(line)) return false;
+      // Hide the console harness frames; keep frames from the user's code.
+      return !/at eval \(eval at /.test(line) &&
+        !/at (?:execute|submit|runAsScript|setupTinyToolsConsole) \(.*\.html/.test(line) &&
+        !/at HTMLInputElement\./.test(line);
+    });
+    return [header, ...frames].join('\n');
+  }
+
+  function appendError(err) {
+    appendLog(formatError(err), '#b00020');
+  }
+
+  function runAsScript(code, deferErrors) {
+    let error = null;
+    const onError = event => {
+      error = event.error || new Error(event.message);
+    };
+    window.addEventListener('error', onError, true);
+    try {
+      const script = document.createElement('script');
+      script.textContent = code + '\n//# sourceURL=ttc' + (++scriptRun) + '.js';
+      (document.head || document.documentElement).appendChild(script);
+      script.remove();
+    } catch (err) {
+      error = err;
+    } finally {
+      window.removeEventListener('error', onError, true);
+    }
+    if (error && !deferErrors) appendError(error);
+    return error;
+  }
+
+  function execute(code) {
+    if (!code || !code.trim()) return;
+    appendLog(code, '#1f6f3f', '700');
+
+    // Don't evaluate function/class/variable declarations as expressions:
+    // that would create throwaway expressions instead of persistent globals.
+    const withoutLeadingComments = code.replace(/^(?:\s|\/\/[^\n]*\n|\/\*[\s\S]*?\*\/)*/, '');
+    const isDeclaration = /^(?:var|let|const|function|class|async\s+function|import|export)\b/.test(withoutLeadingComments);
+    const isStatement = /^(?:if|for|while|do|switch|try|throw|return|break|continue|debugger|with)\b|^\{/.test(withoutLeadingComments);
+
+    if (isDeclaration || isStatement) {
+      runAsScript(code);
+      return;
+    }
+
+    // Evaluate as a single expression via a real script (not eval) so error
+    // stacks point at the console source instead of the host HTML.
+    const expression = code.replace(/;\s*$/, '');
+    const resultKey = '__tinytoolsConsoleResult' + (++scriptRun);
+    const wrapped = 'window[' + JSON.stringify(resultKey) + '] = (\n' + expression + '\n);';
+    const error = runAsScript(wrapped, true);
+
+    if (!error) {
+      const value = window[resultKey];
+      try { delete window[resultKey]; } catch (e) {}
+      appendResult(value);
+    } else if (error.name === 'SyntaxError' || /SyntaxError/.test(error.message || '')) {
+      // Not a single expression — run the whole thing as statements.
+      runAsScript(code);
+    } else {
+      appendError(error);
+    }
+  }
+
+  function submit() {
+    const code = input.value;
+    if (!code.trim()) return;
+    history.push(code);
+    historyIndex = history.length;
+    input.value = '';
+    execute(code);
+  }
+
+  if (sendBtn) {
+    sendBtn.addEventListener('click', () => {
+      submit();
+      input.focus();
+    });
+  }
+
+  input.addEventListener('keydown', event => {
+    // Let the global Ctrl+` shortcut through so the window can be toggled.
+    if (event.ctrlKey && event.key === '`') return;
+    event.stopPropagation();
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      submit();
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (historyIndex > 0) {
+        historyIndex -= 1;
+        input.value = history[historyIndex];
+      }
+    } else if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      if (historyIndex < history.length - 1) {
+        historyIndex += 1;
+        input.value = history[historyIndex];
+      } else {
+        historyIndex = history.length;
+        input.value = '';
+      }
+    }
+  });
+  input.addEventListener('keyup', event => {
+    if (!(event.ctrlKey && event.key === '`')) event.stopPropagation();
+  });
+  input.addEventListener('keypress', event => {
+    if (!(event.ctrlKey && event.key === '`')) event.stopPropagation();
+  });
+
+  window.tinyToolsConsole = {
+    run: execute,
+    focus: () => input.focus()
+  };
+})();
+
+// Singlefile warning window
+const isSinglefile = window.location.protocol === 'file:' || (typeof process !== 'undefined' && process.env && process.env.SINGLEFILE_BUILD === 'true');
+if (isSinglefile) {
+  window.singlefileWarningWindow = WindowManager.create({
+    title: "file:// Notice",
+    x: 100,
+    y: 100,
+    width: 430,
+    height: 220,
+    resizable: false,
+    noOverflow: true,
+    content: `
+      <div style="display:flex;flex-direction:column;height:100%;">
+        <p style="margin:0;padding:0;flex:1;">
+          TinyTools has detected that you have opened Breakmine on a file:// protocol. 
+          Some features may not work properly, such as Multiplayer and the Account system. <br><br>
+          If you encounter any issues, feel free to report them to <a href="mailto:support@breakmine.com">support@breakmine.com</a>.
+        </p>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:auto;padding-top:10px;">
+          <button id="singlefile-dismiss-btn">Okay</button>
+        </div>
+      </div>`
+  });
+
+  document.getElementById('singlefile-dismiss-btn').addEventListener('click', () => {
+    window.singlefileWarningWindow.setHidden(true);
+  });
+}
+
 window.openTinyToolsAbout = () => {
+  // Prefer the inlined asset: the singlefile build has no separate image files.
+  const logoSrc = (window.base64Assets && window.base64Assets['tinytoollogo.png'])
+    || 'tinytoollogo.png';
+
   WindowManager.create({
     title: `About TinyTools`,
     x: 100,
     y: 100,
     width: 200,
     height: 215,
-    resizeable: false,
+    resizable: false,
     noOverflow: true,
     content: `
       <p style="margin:0;padding:0;"><center>
-        <img src="tinytoollogo.png" alt="TinyTools Logo" style="width: 100px; height: 100px;"><br>
+        <img src="${logoSrc}" alt="TinyTools Logo" style="width: 100px; height: 100px;"><br>
         <i>TinyTools</i><br>
         Version 1.0.0<br>
         © 2026 SpinningCubes
@@ -541,13 +831,22 @@ window.openTinyToolsAbout = () => {
   });
 };
 
-document.addEventListener('keydown', (event) => {
-  if (event.ctrlKey && event.key === '`') {
-    event.preventDefault();
-    window.devtoolsWindow.setHidden(!window.devtoolsWindow.isHidden);
-    window.devtoolsWindow.bringToFront();
-  }
-});
+// Delay keydown listener to ensure WindowManager is initialized
+setTimeout(() => {
+  document.addEventListener('keydown', (event) => {
+    if (event.ctrlKey && event.key === '`') {
+      event.preventDefault();
+      if (window.devtoolsWindow) {
+        const wasHidden = window.devtoolsWindow.isHidden;
+        window.devtoolsWindow.setHidden(!wasHidden);
+        window.devtoolsWindow.bringToFront();
+        if (wasHidden && window.tinyToolsConsole) {
+          window.tinyToolsConsole.focus();
+        }
+      }
+    }
+  });
+}, 100);
 
 document.addEventListener('errorOccured', (event) => {
   const logElement = document.createElement('div');

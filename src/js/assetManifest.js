@@ -10,6 +10,7 @@ export const uiTextures = [
     "terrain/moon.png",
     "char.png",
     "creeper.png",
+    "tinytoollogo.png",
     "gui/title/minecraft.png",
     "gui/title/logo_hd.png",
     "gui/title/background/panorama_0.png",

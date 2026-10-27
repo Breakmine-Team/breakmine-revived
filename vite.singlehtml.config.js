@@ -102,7 +102,7 @@ function inlineWorkerPlugin() {
         name: "inline-worker",
         closeBundle() {
             const distDir = path.resolve(__dirname, "dist-single");
-            const htmlPath = path.join(distDir, "index-single.html");
+            const htmlPath = path.join(distDir, "index.html");
             if (!fs.existsSync(htmlPath)) return;
 
             try {
@@ -208,7 +208,7 @@ export default defineConfig({
         target: "esnext",
         rollupOptions: {
             input: {
-                main: path.resolve(__dirname, 'index-single.html'),
+                main: path.resolve(__dirname, 'index.html'),
             },
             output: {
                 inlineDynamicImports: true,

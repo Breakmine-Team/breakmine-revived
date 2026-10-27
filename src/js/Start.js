@@ -4,6 +4,10 @@ import MixinEngine from './net/minecraft/client/mixin/MixinEngine.js';
 import { base64Assets } from '../resources.js';
 import { uiTextures } from './assetManifest.js';
 
+// Expose the inlined assets so non-module UI code (e.g. TinyTools) can use
+// them in the singlefile build, where separate files are not available.
+window.base64Assets = base64Assets;
+
 window.addEventListener('unhandledrejection', event => {
     // Suppress the default console noise, but never silently: a rejected
     // promise inside an async init() leaves a screen half-built, and with no

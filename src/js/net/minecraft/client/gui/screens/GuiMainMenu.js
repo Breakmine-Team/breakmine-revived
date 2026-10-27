@@ -58,7 +58,7 @@ export default class GuiMainMenu extends GuiScreen {
         let btntemp = new GuiButton(this.minecraft, "Multiplayer", this.width / 2 - 100, y + 24, 200, 20, () => {
             this.minecraft.displayScreen(new GuiMultiplayer(this));
         });
-        
+
         if (new URLSearchParams(window.location.search).get('dev')) {
             btntemp.setEnabled(true);
         } else {
@@ -174,6 +174,13 @@ export default class GuiMainMenu extends GuiScreen {
 
         // Draw logo
         this.drawLogo(stack, x, y, logoWidth, logoHeight);
+
+        // Draw "Play at breakmine.com!" label for singlefile builds
+        const isSinglefile = typeof process !== 'undefined' && process.env && process.env.SINGLEFILE_BUILD === 'true' ||
+                             window.location.protocol === 'file:';
+        if (isSinglefile) {
+            this.drawRightString(stack, "Play at breakmine.com!", this.width - 2, 2, 0xFFFFFFff);
+        }
 
         // Draw version
         this.drawRightString(stack, "Updated at " + Minecraft.TIMESTAMP, this.width - 2, this.height - 20, 0xFFFFFFff);
