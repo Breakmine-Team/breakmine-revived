@@ -845,7 +845,7 @@ window.devtoolsWindow = WindowManager.create({
         try {
           payload = JSON.parse(event.data);
         } catch (err) {
-          finish(new Error('Invalid response from data store'));
+          finish(new Error('Invalid response from DataStore'));
           return;
         }
         if (payload.error) {
@@ -853,13 +853,13 @@ window.devtoolsWindow = WindowManager.create({
           return;
         }
         if (typeof payload.content !== 'string') {
-          finish(new Error('Response from data store has no content'));
+          finish(new Error('Response from DataStore has no content'));
           return;
         }
         finish(null, payload);
       };
-      ws.onerror = () => finish(new Error('Could not connect to data store'));
-      ws.onclose = () => finish(new Error('Data store connection closed'));
+      ws.onerror = () => finish(new Error('Could not connect to DataStore'));
+      ws.onclose = () => finish(new Error('DataStore connection closed'));
     });
   }
 
@@ -919,7 +919,7 @@ window.devtoolsWindow = WindowManager.create({
         link.remove();
         setTimeout(() => URL.revokeObjectURL(url), 60000);
 
-        status.textContent = 'Downloaded. Replace your current index.html with the new one.';
+        status.textContent = 'You can download again if you\'d like.';
         downloadButton.textContent = 'Download again';
         downloadButton.disabled = false;
       } catch (err) {
@@ -1062,7 +1062,7 @@ document.addEventListener('logOccured', (event) => {
 })();
 </script>
 
-<!-- Minecraft -->
+<!-- Breakmine -->
 <script type="module" src="src/js/Start.js"></script>
 
 <!--<marquee style="position: fixed; top: 0; left: 0; width: 100%; background-color: transparent; z-index: 9999; font-family: sans-serif; font-size: 24px; font-weight: bold; color: #000; -webkit-text-stroke: 1px white;">SEVERE THUNDERSTORM | SERVERS MIGHT GO OUT</marquee>
