@@ -495,6 +495,7 @@ export class BlockRegistry {
 
         // --- PAINTINGS (wall hangings, one block per painting texture) ---
         BlockRegistry.PAINTING_SALAD_PLATE = new BlockPainting(284, 0, "salad_plate", "Salad Plate");
+        BlockRegistry.PAINTING_DEPTH = new BlockPainting(286, 0, "depth", "Depth");
 
         // --- FLOWERS ---
         BlockRegistry.FLOWER_ROSE = new BlockFlower(189, 0, "poppy", "Rose");

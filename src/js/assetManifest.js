@@ -171,7 +171,8 @@ export const atlasItemTextures = [
 ];
 
 export const atlasPaintingTextures = [
-    "salad_plate.png"
+    "salad_plate.png",
+    "depth.png"
 ];
 
 // ---------------------------------------------------------------------------
