@@ -1,6 +1,6 @@
 import GuiScreen from "../GuiScreen.js";
 import GuiButton from "../widgets/GuiButton.js";
-import { stripGitHash, isPackagedApp } from "../../VersionChecker.js";
+import { stripGitHash, isPackagedApp, isElectronApp } from "../../VersionChecker.js";
 
 /**
  * Shown when the main menu's update check finds a newer build.
@@ -21,6 +21,8 @@ export default class GuiVersion extends GuiScreen {
         this.current = stripGitHash(updateInfo.current || "");
 
         this.isPackaged = isPackagedApp();
+        this.isElectron = isElectronApp();
+        this.isFile = window.location.protocol === 'file:';
         this.updating = false;
         this.statusLines = [];
 
@@ -28,11 +30,13 @@ export default class GuiVersion extends GuiScreen {
             `A new version of Breakmine is available: ${this.latest}\n`
             + `You are running: ${this.current}\n`
             + `\n`
-            + (this.isPackaged
-                ? "Breakmine will download and build the new version for you.\n"
-                + "This takes a few minutes and needs Node and npm; the game\n"
-                + "will close by itself when the update is installed.\n"
-                : "Click 'Update now' to download the new version and reload.\n");
+            + (this.isFile
+                ? "Download the new version from the New Update prompt.\n"
+                : this.isPackaged
+                    ? "Breakmine will download and build the new version for you.\n"
+                    + "This takes a few minutes and needs Node and npm; the game\n"
+                    + "will close by itself when the update is installed.\n"
+                    : "Click 'Reload' to update the game.\n");
     }
 
     init() {
@@ -44,10 +48,19 @@ export default class GuiVersion extends GuiScreen {
             this.minecraft.displayScreen(this.parentScreen);
         }));
 
-        this.updateButton = new GuiButton(this.minecraft, "Update now", this.width / 2 + 5, this.height - 28, 150, 20, () => {
-            this.startUpdate();
-        });
-        this.buttonList.push(this.updateButton);
+        // A file:// page has no installer and cannot reload into a new build;
+        // the New Update prompt in index.html handles that case.
+        if (!this.isFile) {
+            this.updateButton = new GuiButton(
+                this.minecraft,
+                this.isElectron ? "Update now" : "Reload",
+                this.width / 2 + 5, this.height - 28, 150, 20,
+                () => {
+                    this.startUpdate();
+                }
+            );
+            this.buttonList.push(this.updateButton);
+        }
 
         this.unsubscribe = window.modsBridge?.onUpdateStatus?.((status) => {
             this.onUpdateStatus(status);

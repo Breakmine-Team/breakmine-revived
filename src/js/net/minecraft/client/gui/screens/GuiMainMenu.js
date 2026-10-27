@@ -15,7 +15,7 @@ import GuiCredits from "./GuiCredits.js";
 import { SplashTexts } from "../../../../../../resources/splashes.js";
 import { Version } from "../../../../../../resources/version.js";
 import GuiTooltip from "../widgets/GuiTooltip.js";
-import { checkForUpdate } from "../../VersionChecker.js";
+import { checkForUpdate, isElectronApp } from "../../VersionChecker.js";
 import GuiNewVersion from "./GuiNewVersion.js";
 
 export default class GuiMainMenu extends GuiScreen {
@@ -81,9 +81,7 @@ export default class GuiMainMenu extends GuiScreen {
             this.minecraft.displayScreen(new GuiTexturePacks(this));
         }));
 
-        const isElectron = typeof navigator === 'object' && 
-            typeof navigator.userAgent === 'string' && 
-            navigator.userAgent.indexOf('Electron') !== -1;
+        const isElectron = isElectronApp();
 
         this.buttonList.push(new GuiButton(this.minecraft, "Quit Game", this.width / 2 + 2, y + 96 + 12, 98, 20, () => {
             window.close();
@@ -109,6 +107,11 @@ export default class GuiMainMenu extends GuiScreen {
      * up on the next frame.
      */
     async checkForUpdateInBackground() {
+        // Single-file builds update through the "New Update" prompt in
+        // index.html. The installer cannot run from a file:// page, so never
+        // offer it from the main menu there.
+        if (window.location.protocol === 'file:') return;
+
         if (this.updateCheckStarted) return;
         this.updateCheckStarted = true;
 

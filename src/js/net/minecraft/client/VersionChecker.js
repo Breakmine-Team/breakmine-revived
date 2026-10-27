@@ -97,3 +97,16 @@ export async function checkForUpdate() {
 export function isPackagedApp() {
     return !!(window.modsBridge && window.modsBridge.isPackaged);
 }
+
+/** True when running inside Electron, whether packaged or a dev checkout. */
+export function isElectronApp() {
+    if (typeof window !== "undefined" && window.process && window.process.type === "renderer") {
+        return true;
+    }
+    if (typeof process !== "undefined" && process.versions && process.versions.electron) {
+        return true;
+    }
+    return typeof navigator === "object"
+        && typeof navigator.userAgent === "string"
+        && navigator.userAgent.indexOf("Electron") >= 0;
+}
