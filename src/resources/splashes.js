@@ -50,6 +50,22 @@ Check out the wiki!
 Check out the mods!
 Now with controller support!
 Shaders?!
+TinyTools!
+Played by 3,000+!
+Ballright buddy...
+*-*
+:O
+:)
+:D
+:p
+No way! That's cool!
+I'm a splash text... oh no, I'm self-aware!
+THE'RE COMING!
+Five nights at Freddy's!
+Can you survive?
+>_<
+>.<
+\_(o.o)_/
 The horizons will soon be distant...
 Nahh Brotato that's crazy`.split('\n');
 
