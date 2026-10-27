@@ -12,6 +12,7 @@ vcs2.py
 node_modules/*
 dist/
 dist-single/
+.data-store/
 release/
 serverconfig.conf
 current_world.txt

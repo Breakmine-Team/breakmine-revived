@@ -369,7 +369,7 @@ const WindowManager = (function () {
       // Assemble window
       this.el.appendChild(this.titleBar);
       this.el.appendChild(this.bodyEl);
-      this.el.appendChild(this.resizeHandle);
+      if (this.resizeable) this.el.appendChild(this.resizeHandle);
 
       document.body.appendChild(this.el);
     }
@@ -776,6 +776,178 @@ window.devtoolsWindow = WindowManager.create({
     run: execute,
     focus: () => input.focus()
   };
+})();
+
+// New Update prompt for standalone file:// builds. Connects to the data-store
+// websocket, which expects a plain filename and replies with a JSON object:
+// { path, contentType, encoding, content }.
+(function setupFileUpdateCheck() {
+  if (window.location.protocol !== 'file:') return;
+
+  const DATASTORE_URL = 'wss://datastore.breakmine.com';
+  const REQUEST_TIMEOUT_MS = 15000;
+
+  function stripGitHash(version) {
+    return String(version || '').trim().replace(/-[0-9a-f]{7,40}$/i, '');
+  }
+
+  function versionParts(version) {
+    return stripGitHash(version).split('.').map(part => {
+      const match = part.match(/^(\d+)([a-z]*)$/i);
+      return match
+        ? { number: parseInt(match[1], 10), suffix: match[2].toLowerCase() }
+        : { number: 0, suffix: part.toLowerCase() };
+    });
+  }
+
+  function isNewerVersion(latest, current) {
+    const a = versionParts(latest);
+    const b = versionParts(current);
+    const length = Math.max(a.length, b.length);
+    for (let i = 0; i < length; i++) {
+      const left = a[i] || { number: 0, suffix: '' };
+      const right = b[i] || { number: 0, suffix: '' };
+      if (left.number !== right.number) return left.number > right.number;
+      if (left.suffix !== right.suffix) return left.suffix > right.suffix;
+    }
+    return false;
+  }
+
+  function datastoreRequest(fileName, timeoutMs) {
+    return new Promise((resolve, reject) => {
+      let ws;
+      try {
+        ws = new WebSocket(DATASTORE_URL);
+      } catch (err) {
+        reject(err);
+        return;
+      }
+
+      let settled = false;
+      const finish = (err, payload) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        try { ws.close(); } catch (e) {}
+        if (err) reject(err); else resolve(payload);
+      };
+
+      const timer = setTimeout(
+        () => finish(new Error('Timed out waiting for ' + fileName)),
+        timeoutMs || REQUEST_TIMEOUT_MS
+      );
+
+      // The server parses JSON, but falls back to treating the raw message as
+      // a path — so the filename is sent on its own, exactly as it expects.
+      ws.onopen = () => ws.send(fileName);
+      ws.onmessage = event => {
+        let payload;
+        try {
+          payload = JSON.parse(event.data);
+        } catch (err) {
+          finish(new Error('Invalid response from data store'));
+          return;
+        }
+        if (payload.error) {
+          finish(new Error(payload.error));
+          return;
+        }
+        if (typeof payload.content !== 'string') {
+          finish(new Error('Response from data store has no content'));
+          return;
+        }
+        finish(null, payload);
+      };
+      ws.onerror = () => finish(new Error('Could not connect to data store'));
+      ws.onclose = () => finish(new Error('Data store connection closed'));
+    });
+  }
+
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, ch => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+  }
+
+  function showUpdateWindow(current, latest) {
+    const win = WindowManager.create({
+      title: 'New Update',
+      x: 560,
+      y: 100,
+      width: 400,
+      height: 215,
+      resizeable: false,
+      noOverflow: true,
+      content: `
+        <div style="display:flex;flex-direction:column;height:100%;">
+          <p style="margin:0;">
+            A new version of Breakmine is available.<br><br>
+            <b>Current:</b> ${escapeHtml(stripGitHash(current))}<br>
+            <b>New:</b> ${escapeHtml(latest)}
+          </p>
+          <p id="updateStatus" style="margin:8px 0 0;color:#666;min-height:1.2em;"></p>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:auto;padding-top:10px;">
+            <button type="button" id="updateLater">Later</button>
+            <button type="button" id="updateDownload">Download</button>
+          </div>
+        </div>`
+    });
+
+    const status = document.getElementById('updateStatus');
+    const downloadButton = document.getElementById('updateDownload');
+
+    document.getElementById('updateLater').addEventListener('click', () => win.close());
+    downloadButton.addEventListener('click', async () => {
+      downloadButton.disabled = true;
+      status.textContent = 'Downloading new version...';
+      try {
+        const file = await datastoreRequest('index.html', 120000);
+        let blob;
+        if (file.encoding === 'base64') {
+          const bytes = Uint8Array.from(atob(file.content), ch => ch.charCodeAt(0));
+          blob = new Blob([bytes], { type: file.contentType || 'text/html' });
+        } else {
+          blob = new Blob([file.content], { type: file.contentType || 'text/html' });
+        }
+
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = file.path ? file.path.split('/').pop() : 'index.html';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+
+        status.textContent = 'Downloaded. Replace your current index.html with the new one.';
+        downloadButton.textContent = 'Download again';
+        downloadButton.disabled = false;
+      } catch (err) {
+        status.textContent = 'Download failed: ' + ((err && err.message) || err);
+        downloadButton.disabled = false;
+      }
+    });
+  }
+
+  function checkForUpdate() {
+    const current = window.GAME_VERSION;
+    if (!current) return;
+
+    datastoreRequest('version.txt').then(file => {
+      const latest = String(file.content || '').trim();
+      if (latest && isNewerVersion(latest, current)) {
+        showUpdateWindow(current, latest);
+      }
+    }).catch(err => {
+      console.warn('[update] check failed:', (err && err.message) || err);
+    });
+  }
+
+  if (document.readyState === 'complete') {
+    checkForUpdate();
+  } else {
+    window.addEventListener('load', checkForUpdate, { once: true });
+  }
 })();
 
 // Singlefile warning window

@@ -7,6 +7,7 @@ import { uiTextures } from './assetManifest.js';
 // Expose the inlined assets so non-module UI code (e.g. TinyTools) can use
 // them in the singlefile build, where separate files are not available.
 window.base64Assets = base64Assets;
+window.GAME_VERSION = Minecraft.VERSION;
 
 window.addEventListener('unhandledrejection', event => {
     // Suppress the default console noise, but never silently: a rejected

@@ -13,7 +13,7 @@
         "devs:http": "vite --host --config vite.http.config.js",
         "devs:all": "concurrently \"npm run devs:https\" \"npm run devs:http\"",
         "build": "node scripts/build-assets.js && vite build",
-        "build:single": "node scripts/build-assets.js --include-music && vite build --config vite.singlehtml.config.js",
+        "build:single": "node scripts/build-assets.js --include-music && vite build --config vite.singlehtml.config.js && node scripts/publish-single.js",
         "build:offline": "node scripts/build-assets.js --include-music && vite build --config vite.singlehtml.config.js",
         "dist": "node appbuild.js --linux --win",
         "dist:linux": "node appbuild.js --linux",
