@@ -1,6 +1,7 @@
 import { addWorldChange, getBlockAt, getBlockMetadata } from './world.js';
 import { getPlayers } from './players.js';
 import { sendBlockChange } from './packets.js';
+import Block from '../client/world/block/Block.js';
 
 // Fuel values: typeId -> burn ticks
 const FUEL_VALUES = {
@@ -107,7 +108,8 @@ function tickAllFurnaces(blockInventories) {
         const y = parseInt(parts[2]);
         const z = parseInt(parts[3]);
 
-        if (getBlockAt(x, y, z) !== 34) {
+        const block = Block.getById(getBlockAt(x, y, z));
+        if (!block || typeof block.isFurnace !== 'function' || !block.isFurnace()) {
             blockInventories.delete(key);
             continue;
         }
@@ -118,10 +120,10 @@ function tickAllFurnaces(blockInventories) {
 
         const desiredMeta = result.isLit ? currentMeta | 8 : currentMeta & ~8;
         if (desiredMeta !== currentMeta) {
-            addWorldChange(x, y, z, 34, desiredMeta);
+            addWorldChange(x, y, z, block.id, desiredMeta);
         }
 
-        changes.push({ key, inv, x, y, z, metaChanged: desiredMeta !== currentMeta, newMeta: desiredMeta });
+        changes.push({ key, inv, x, y, z, blockId: block.id, metaChanged: desiredMeta !== currentMeta, newMeta: desiredMeta });
     }
     return changes;
 }
@@ -137,7 +139,7 @@ function broadcastFurnaceChanges(players, changes) {
             if (player.ws && player.ws.readyState === 1) {
                 player.ws.send(msg);
                 if (change.metaChanged) {
-                    const blockState = (34 << 4) | (change.newMeta & 0xF);
+                    const blockState = (change.blockId << 4) | (change.newMeta & 0xF);
                     sendBlockChange(player.ws, change.x, change.y, change.z, blockState);
                 }
             }

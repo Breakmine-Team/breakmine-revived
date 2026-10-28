@@ -48,11 +48,15 @@ export default class ContainerFurnace extends Container {
         if (inv.fuelBurnTime === undefined) inv.fuelBurnTime = 0;
         if (inv.cookTime === undefined) inv.cookTime = 0;
 
-        // Clean up if the furnace block was removed
-        if (world && blockPosition && world.getBlockAt(blockPosition.x, blockPosition.y, blockPosition.z) !== 34) {
-            const key = `furnace:${blockPosition.x}:${blockPosition.y}:${blockPosition.z}`;
-            world.blockInventories?.delete(key);
-            return;
+        // Clean up if the furnace block was removed (furnaces and oven counters
+        // share this tile-entity tick).
+        if (world && blockPosition) {
+            const block = Block.getById(world.getBlockAt(blockPosition.x, blockPosition.y, blockPosition.z));
+            if (!block || typeof block.isFurnace !== "function" || !block.isFurnace()) {
+                const key = `furnace:${blockPosition.x}:${blockPosition.y}:${blockPosition.z}`;
+                world.blockInventories?.delete(key);
+                return;
+            }
         }
 
         const input = inv.getItemInSlot(0);

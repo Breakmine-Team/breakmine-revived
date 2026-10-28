@@ -530,6 +530,18 @@ ${event.detail}
 </script>
 
 <script>
+// Chromebooks and some international layouts don't report the backtick key as
+// "`" (it can arrive as "~" or even "Dead"), so match the physical key too.
+function isDevtoolsShortcut(event) {
+  if (!event.ctrlKey || event.altKey || event.metaKey) return false;
+  return event.code === 'Backquote'
+    || event.key === '`'
+    || event.key === '~'
+    || (event.key === 'Dead' && event.code === 'Backquote')
+    || event.keyCode === 192;
+}
+window.isDevtoolsShortcut = isDevtoolsShortcut;
+
 // TinyTools (Integrated)
 window.devtoolsWindow = WindowManager.create({
   title: `TinyTools (Integrated) - <a href="#" onclick="window.openTinyToolsAbout(); return false;">About</a>`,
@@ -718,7 +730,7 @@ window.devtoolsWindow = WindowManager.create({
       try { delete window[resultKey]; } catch (e) {}
       appendResult(value);
     } else if (error.name === 'SyntaxError' || /SyntaxError/.test(error.message || '')) {
-      // Not a single expression — run the whole thing as statements.
+      // Not a single expression - run the whole thing as statements.
       runAsScript(code);
     } else {
       appendError(error);
@@ -743,7 +755,7 @@ window.devtoolsWindow = WindowManager.create({
 
   input.addEventListener('keydown', event => {
     // Let the global Ctrl+` shortcut through so the window can be toggled.
-    if (event.ctrlKey && event.key === '`') return;
+    if (isDevtoolsShortcut(event)) return;
     event.stopPropagation();
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -766,10 +778,10 @@ window.devtoolsWindow = WindowManager.create({
     }
   });
   input.addEventListener('keyup', event => {
-    if (!(event.ctrlKey && event.key === '`')) event.stopPropagation();
+    if (!isDevtoolsShortcut(event)) event.stopPropagation();
   });
   input.addEventListener('keypress', event => {
-    if (!(event.ctrlKey && event.key === '`')) event.stopPropagation();
+    if (!isDevtoolsShortcut(event)) event.stopPropagation();
   });
 
   window.tinyToolsConsole = {
@@ -838,7 +850,7 @@ window.devtoolsWindow = WindowManager.create({
       );
 
       // The server parses JSON, but falls back to treating the raw message as
-      // a path — so the filename is sent on its own, exactly as it expects.
+      // a path; so the filename is sent on its own, exactly as it expects.
       ws.onopen = () => ws.send(fileName);
       ws.onmessage = event => {
         let payload;
@@ -889,7 +901,7 @@ window.devtoolsWindow = WindowManager.create({
           <p id="updateStatus" style="margin:8px 0 0;color:#666;min-height:1.2em;"></p>
           <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:auto;padding-top:10px;">
             <button type="button" id="updateLater">Later</button>
-            <button type="button" id="updateDownload">Download</button>
+            <button type="button" id="updateDownload">Attempt to Download</button>
           </div>
         </div>`
     });
@@ -1007,7 +1019,7 @@ window.openTinyToolsAbout = () => {
 // Delay keydown listener to ensure WindowManager is initialized
 setTimeout(() => {
   document.addEventListener('keydown', (event) => {
-    if (event.ctrlKey && event.key === '`') {
+    if (isDevtoolsShortcut(event)) {
       event.preventDefault();
       if (window.devtoolsWindow) {
         const wasHidden = window.devtoolsWindow.isHidden;

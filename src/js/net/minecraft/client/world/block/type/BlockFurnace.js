@@ -16,6 +16,10 @@ export default class BlockFurnace extends Block {
         return 'pickaxe';
     }
 
+    isFurnace() {
+        return true;
+    }
+
     getTextureForFace(face, data) {
         let facing = data & 7;
         if (facing === 0) facing = 2;

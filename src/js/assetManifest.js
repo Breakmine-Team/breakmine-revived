@@ -146,7 +146,8 @@ export const atlasBlockTextures = [
     "pumpkin_side.png", "pumpkin_top.png", "melon_side.png", "melon_top.png",
     "pumpkin_stem.png", "attached_pumpkin_stem.png",
     "melon_stem.png", "attached_melon_stem.png", "moldy_cheese.png",
-    "flint_cardoor.png", "counter_side.png", "counter_top.png"
+    "flint_cardoor.png", "counter_side.png", "counter_top.png",
+    "counter_side_drawer.png", "counter_stove_side.png", "counter_stove_side_on.png"
 ];
 
 const toolMaterials = ['wooden', 'stone', 'iron', 'diamond', 'golden'];

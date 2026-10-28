@@ -53,6 +53,10 @@ export default class BlockChest extends Block {
         }
     }
 
+    getContainerTitle() {
+        return "Chest";
+    }
+
     shouldRenderFace(world, x, y, z, face) {
         return true;
     }
@@ -63,7 +67,7 @@ export default class BlockChest extends Block {
 
     onMouseButton(world, x, y, z, button) {
         if (button === 2) {
-            world.minecraft.displayScreen(new GuiContainerChest(world.minecraft.player, { x, y, z }));
+            world.minecraft.displayScreen(new GuiContainerChest(world.minecraft.player, { x, y, z }, this.getContainerTitle()));
             return true;
         }
         return false;

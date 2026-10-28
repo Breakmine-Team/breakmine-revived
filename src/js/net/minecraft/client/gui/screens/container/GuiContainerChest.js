@@ -3,9 +3,10 @@ import ContainerChest from "../../../inventory/container/ContainerChest.js";
 
 export default class GuiContainerChest extends GuiContainer {
 
-    constructor(player, blockPosition = null) {
+    constructor(player, blockPosition = null, title = "Chest") {
         super(new ContainerChest(player, blockPosition));
 
+        this.title = title;
         this.inventoryWidth = 176;
         this.inventoryHeight = 166;
     }
@@ -17,7 +18,7 @@ export default class GuiContainerChest extends GuiContainer {
     }
 
     drawTitle(stack) {
-        this.drawString(stack, "Chest", this.x + 8, this.y + 6, 0xff404040, false);
+        this.drawString(stack, this.title, this.x + 8, this.y + 6, 0xff404040, false);
     }
 
     drawInventoryBackground(stack) {
