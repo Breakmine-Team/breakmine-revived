@@ -1087,6 +1087,7 @@ export default class OffGridBlockField {
             const translucentPass = pass === 1;
             tessellator.startDrawing();
             tessellator.setRenderingPass(translucentPass);
+            blockRenderer.beginModelPass();
 
             // Collect blocks for this pass (mirrors ChunkSection.rebuild)
             const blocksToRender = [];
@@ -1130,6 +1131,12 @@ export default class OffGridBlockField {
                     mesh.visible = false;
                 }
                 region.meshes.push(mesh);
+            }
+
+            const modelMesh = blockRenderer.flushModelPass(region.group);
+            if (modelMesh !== null) {
+                modelMesh.position.set(rx, ry, rz);
+                region.meshes.push(modelMesh);
             }
         }
 

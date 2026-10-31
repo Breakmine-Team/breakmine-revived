@@ -145,24 +145,39 @@ export default class OffGridBlockRenderer {
         const tessellator = blockRenderer.tessellator;
         tessellator.startDrawing();
         tessellator.setRenderingPass(block.isTranslucent());
+        blockRenderer.beginModelPass();
         blockRenderer.renderBlock(renderWorld, block, false, renderX, renderY, renderZ);
 
-        if (tessellator.addedVertices === 0) {
-            return null;
+        let mesh = null;
+        if (tessellator.addedVertices > 0) {
+            mesh = tessellator.draw(this.group);
         }
 
-        const mesh = tessellator.draw(this.group);
+        const modelMesh = blockRenderer.flushModelPass(this.group);
+        if (modelMesh !== null && mesh === null) {
+            mesh = modelMesh;
+        }
+
+        if (mesh === null) {
+            return null;
+        }
 
         // The renderer emits vertices relative to the chunk containing the
         // render position (see BlockRenderer.addBlockCorner), so offset the
         // mesh back out to world space - same expression the renderer itself
         // uses, so float positions stay consistent.
-        mesh.position.set((renderX >> 4) << 4, (renderY >> 4) << 4, (renderZ >> 4) << 4);
+        const chunkX = (renderX >> 4) << 4;
+        const chunkY = (renderY >> 4) << 4;
+        const chunkZ = (renderZ >> 4) << 4;
+        for (const previewMesh of [mesh, modelMesh]) {
+            if (previewMesh === null) continue;
+            previewMesh.position.set(chunkX, chunkY, chunkZ);
 
-        if (block.isTranslucent()) {
-            mesh.material.transparent = true;
-            mesh.material.depthWrite = false;
-            mesh.renderOrder = 10000;
+            if (block.isTranslucent()) {
+                previewMesh.material.transparent = true;
+                previewMesh.material.depthWrite = false;
+                previewMesh.renderOrder = 10000;
+            }
         }
 
         return mesh;

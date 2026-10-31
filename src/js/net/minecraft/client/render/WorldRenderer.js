@@ -1929,10 +1929,19 @@ export default class WorldRenderer {
 
         tessellator.startDrawing();
         tessellator.setRenderingPass(true);
+        this.blockRenderer.beginModelPass();
         this.blockRenderer.renderBlock(fakeWorld, block, false, x, y, z);
 
+        const previewMeshes = [];
         if (tessellator.addedVertices > 0) {
-            let mesh = tessellator.draw(this.blockPreviewGroup);
+            previewMeshes.push(tessellator.draw(this.blockPreviewGroup));
+        }
+        const modelMesh = this.blockRenderer.flushModelPass(this.blockPreviewGroup);
+        if (modelMesh !== null) {
+            previewMeshes.push(modelMesh);
+        }
+
+        for (const mesh of previewMeshes) {
             if (field) {
                 // Vertices are chunk-local; move the mesh back to local world
                 // space so the posed group transform maps it correctly.

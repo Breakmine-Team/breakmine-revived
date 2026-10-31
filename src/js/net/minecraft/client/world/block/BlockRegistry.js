@@ -48,6 +48,7 @@ import BlockPainting from "./type/BlockPainting.js";
 import BlockCounter from "./type/BlockCounter.js";
 import BlockCounterDrawer from "./type/BlockCounterDrawer.js";
 import BlockCounterOven from "./type/BlockCounterOven.js";
+import BlockTrafficCone from "./type/BlockTrafficCone.js";
 import BlockFlower from "./type/BlockFlower.js";
 import BlockGrassPlant from "./type/BlockGrassPlant.js";
 import BlockLava from "./type/BlockLava.js";
@@ -393,6 +394,7 @@ export class BlockRegistry {
         BlockRegistry.COUNTER = new BlockCounter(285, 0);
         BlockRegistry.DRAWER_COUNTER = new BlockCounterDrawer(314, 0);
         BlockRegistry.OVEN_COUNTER = new BlockCounterOven(315, 0);
+        BlockRegistry.TRAFFIC_CONE = new BlockTrafficCone(316, 0);
 
         // --- COLORED BLOCKS (grouped by color) ---
         BlockRegistry.CLAY = new BlockClay(138, 0, "clay", "Clay");

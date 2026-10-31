@@ -6,6 +6,7 @@ import {
     atlasBlockTextures,
     atlasItemTextures,
     atlasPaintingTextures,
+    modelAssets,
     musicTracks,
     soundPools,
     clickSound,
@@ -26,7 +27,8 @@ const MIME_TYPES = {
     '.gif': 'image/gif',
     '.webp': 'image/webp',
     '.ogg': 'audio/ogg',
-    '.mp3': 'audio/mpeg'
+    '.mp3': 'audio/mpeg',
+    '.obj': 'text/plain'
 };
 
 // Every asset the game actually uses, keyed the same way as base64Assets
@@ -62,6 +64,10 @@ for (const name of atlasItemTextures) {
 for (const name of atlasPaintingTextures) {
     wantedKeys.add(`terrain/pack/minecraft/textures/painting/${name}`);
     criticalKeys.add(`terrain/pack/minecraft/textures/painting/${name}`);
+}
+for (const model of modelAssets) {
+    wantedKeys.add(model);
+    criticalKeys.add(model);
 }
 
 function walkDir(dir, fileList = []) {

@@ -12,6 +12,7 @@ import BoundingBox from "../../util/BoundingBox.js";
 import { BlockRegistry } from "../world/block/BlockRegistry.js";
 import * as THREE from "../../../../../../libraries/three.module.js";
 import EnumCreativeInventoryTab from "../gui/EnumCreativeInventoryTab.js";
+import getTrafficConeModel, { getTrafficConeTexture } from "./model/TrafficConeModel.js";
 
 // Hoisted once: EnumBlockFace.values() allocates a fresh array on every call,
 // and the mesh generator calls it per block.
@@ -31,11 +32,39 @@ export default class BlockRenderer {
         } else {
             this.tessellator.bindTexture(worldRenderer.textureTerrain);
         }
+
+        // Custom models carry their own texture, so they cannot share the block
+        // atlas tessellator (one mesh has one material). They get a separate
+        // tessellator and are flushed as an extra mesh alongside the chunk mesh.
+        this.modelTessellator = new Tessellator();
+        this.modelTessellator.bindTexture(getTrafficConeTexture());
+        this.modelPassActive = false;
+    }
+
+    beginModelPass() {
+        this.modelTessellator.startDrawing();
+        this.modelTessellator.setRenderingPass(false);
+        this.modelTessellator.material.alphaTest = 0.5;
+        this.modelPassActive = true;
+    }
+
+    flushModelPass(group) {
+        if (!this.modelPassActive) {
+            return null;
+        }
+
+        this.modelPassActive = false;
+        if (this.modelTessellator.addedVertices <= 0) {
+            return null;
+        }
+
+        return this.modelTessellator.draw(group);
     }
 
     // Toggle shadow casting for the block meshes this renderer tessellates.
     setShadows(enabled) {
         this.tessellator.setShadows(enabled);
+        this.modelTessellator.setShadows(enabled);
     }
 
     renderBlock(world, block, ambientOcclusion, x, y, z) {
@@ -856,6 +885,52 @@ export default class BlockRenderer {
         return totalBlocks === 0 ? 0 : totalLightLevel / totalBlocks;
     }
 
+    renderTrafficCone(world, x, y, z) {
+        const model = getTrafficConeModel();
+        if (model === null || !this.modelPassActive) {
+            return;
+        }
+
+        const chunkX = x >> 4;
+        const chunkY = y >> 4;
+        const chunkZ = z >> 4;
+        const originX = chunkX << 4;
+        const originY = chunkY << 4;
+        const originZ = chunkZ << 4;
+
+        const lightLevel = world === null ? 15 : this.getEffectiveLightLevel(world, x, y, z);
+        const brightness = 0.9 / 15.0 * lightLevel + 0.1;
+        const tessellator = this.modelTessellator;
+
+        tessellator.material.alphaTest = 0.5;
+
+        // Tessellator faces are quads. Emit each OBJ triangle as a quad with a
+        // duplicated last vertex, ordered so the two generated triangles keep
+        // the OBJ's outward winding (the index buffer swaps vertices 1 and 2).
+        const order = [0, 2, 1, 1];
+
+        for (const face of model.faces) {
+            const [nx, ny, nz] = face.normal;
+            const ax = Math.abs(nx);
+            const ay = Math.abs(ny);
+            const az = Math.abs(nz);
+            const shading = ay >= ax && ay >= az ? 1.0 : ax >= az ? 0.6 : 0.8;
+            tessellator.setColor(shading * brightness, shading * brightness, shading * brightness);
+
+            for (const index of order) {
+                const vertex = face.vertices[index];
+                // Direct texture coordinates: no atlas region, scale or offset.
+                tessellator.addVertexWithUV(
+                    x - originX + 0.5 + vertex.position[0],
+                    y - originY + vertex.position[1],
+                    z - originZ + 0.5 + vertex.position[2],
+                    vertex.uv[0],
+                    vertex.uv[1]
+                );
+            }
+        }
+    }
+
     renderTorch(world, block, x, y, z) {
         let chunkX = x >> 4;
         let chunkY = y >> 4;
@@ -1107,8 +1182,8 @@ export default class BlockRenderer {
      * tessellator has bound; the flags are set explicitly because
      * Tessellator.setRenderingPass() mutates the shared instance it hands out.
      */
-    getUnlitGUIMaterial(alphaTest = 0.1) {
-        let material = this.tessellator.unlitMaterial.clone();
+    getUnlitGUIMaterial(alphaTest = 0.1, tessellator = this.tessellator) {
+        let material = tessellator.unlitMaterial.clone();
         material.transparent = true;
         material.alphaTest = alphaTest;
         material.depthTest = true;
@@ -1118,39 +1193,69 @@ export default class BlockRenderer {
 
     renderBlockInHandThirdPerson(group, block, brightness) {
         this.tessellator.startDrawing();
+        this.beginModelPass();
         this.renderBlock(null, block, false, 0, 0, 0);
         this.tessellator.transformBrightness(brightness);
-        let mesh = this.tessellator.draw(group);
-        mesh.material = this.getUnlitGUIMaterial();
-        mesh.geometry.center();
-        mesh.position.x = 0;
-        mesh.position.y = 9;
-        mesh.position.z = -5;
-        mesh.rotation.y = Math.PI / 4;
-        mesh.scale.x = 6;
-        mesh.scale.y = -6;
-        mesh.scale.z = 6;
+        this.modelTessellator.transformBrightness(brightness);
+
+        const meshes = [];
+        if (this.tessellator.addedVertices > 0) {
+            const mesh = this.tessellator.draw(group);
+            mesh.material = this.getUnlitGUIMaterial();
+            meshes.push(mesh);
+        }
+        const modelMesh = this.flushModelPass(group);
+        if (modelMesh !== null) {
+            modelMesh.material = this.getUnlitGUIMaterial(0.5, this.modelTessellator);
+            meshes.push(modelMesh);
+        }
+
+        for (const mesh of meshes) {
+            mesh.geometry.center();
+            mesh.position.x = 0;
+            mesh.position.y = 9;
+            mesh.position.z = -5;
+            mesh.rotation.y = Math.PI / 4;
+            mesh.scale.x = 6;
+            mesh.scale.y = -6;
+            mesh.scale.z = 6;
+        }
     }
 
     renderBlockInFirstPerson(group, block, brightness) {
         this.tessellator.startDrawing();
+        this.beginModelPass();
         this.renderBlock(null, block, false, 0, 0, 0);
         this.tessellator.transformBrightness(brightness);
-        let mesh = this.tessellator.draw(group);
-        mesh.material = this.getUnlitGUIMaterial();
-        mesh.geometry.center();
-        mesh.scale.x = 16;
-        mesh.scale.y = 16;
-        mesh.scale.z = 16;
-        if (block.getRenderType() === BlockRenderType.ITEM) {
-            mesh.scale.x = 19;
-            mesh.scale.y = 19;
-            mesh.scale.z = 19;
-            mesh.position.y += 8;
-            if (block.isTool === true) {
-                mesh.rotation.x -= Math.PI / 2.5;
-                //mesh.rotation.y -= Math.PI / 6;
-                mesh.rotation.z -= Math.PI / 6;
+        this.modelTessellator.transformBrightness(brightness);
+
+        const meshes = [];
+        if (this.tessellator.addedVertices > 0) {
+            const mesh = this.tessellator.draw(group);
+            mesh.material = this.getUnlitGUIMaterial();
+            meshes.push(mesh);
+        }
+        const modelMesh = this.flushModelPass(group);
+        if (modelMesh !== null) {
+            modelMesh.material = this.getUnlitGUIMaterial(0.5, this.modelTessellator);
+            meshes.push(modelMesh);
+        }
+
+        for (const mesh of meshes) {
+            mesh.geometry.center();
+            mesh.scale.x = 16;
+            mesh.scale.y = 16;
+            mesh.scale.z = 16;
+            if (block.getRenderType() === BlockRenderType.ITEM) {
+                mesh.scale.x = 19;
+                mesh.scale.y = 19;
+                mesh.scale.z = 19;
+                mesh.position.y += 8;
+                if (block.isTool === true) {
+                    mesh.rotation.x -= Math.PI / 2.5;
+                    //mesh.rotation.y -= Math.PI / 6;
+                    mesh.rotation.z -= Math.PI / 6;
+                }
             }
         }
     }
@@ -1158,77 +1263,95 @@ export default class BlockRenderer {
     renderGuiBlock(group, block, x, y, size, brightness) {
         this.tessellator.startDrawing();
         this.tessellator.setColor(1, 1, 1);
+        this.beginModelPass();
 
-        // Render block by type
-        if (block) {
-            // Pass 'this' (the BlockRenderer / WorldRenderer instance) to onRender
-            const customRenderHandled = block.onRender(null, 0, 0, 0, this);
+        // Render block by type. A custom onRender draws its own geometry, but
+        // the mesh still has to go through the shared draw/rotation path below.
+        const customRenderHandled = block
+            ? block.onRender(null, 0, 0, 0, this)
+            : false;
 
-            // If onRender returns true, skip standard block rendering
-            if (customRenderHandled) {
-                return; 
+        if (!customRenderHandled) {
+            if (!block.path && block.multipart !== true) {
+                switch (block.getRenderType()) {
+                    case (block?.renderAsItemInInventory === true):
+                        this.renderGuiItem(block);
+                        break;
+                    case BlockRenderType.BLOCK:
+                        let boundingBox = block.getBoundingBox(null, 0, 0, 0);
+                        this.renderFace(null, block, boundingBox, EnumBlockFace.TOP, false, 0, 0, 0);
+                        this.renderFace(null, block, boundingBox, EnumBlockFace.NORTH, false, 0, 0, 0);
+                        this.renderFace(null, block, boundingBox, EnumBlockFace.EAST, false, 0, 0, 0);
+                        break;
+                    case BlockRenderType.SIGN:
+                        this.renderSign(null, block, 0, 0, 0);
+                        break;
+                    default:
+                        this.renderGuiItem(block);
+                        break;
+                }
+            } else if (block.multipart === true) {
+                this.renderMultipart(null, block, 0, 0, 0);
+            } else if (block.path) {
+                this.renderPath(null, block, false, 0, 0, 0);
             }
         }
-        if (!block.path && block.multipart !== true) {
-            switch (block.getRenderType()) {
-                case (block?.renderAsItemInInventory === true):
-                    this.renderGuiItem(block);
-                    break;
-                case BlockRenderType.BLOCK:
-                    let boundingBox = block.getBoundingBox(null, 0, 0, 0);
-                    this.renderFace(null, block, boundingBox, EnumBlockFace.TOP, false, 0, 0, 0);
-                    this.renderFace(null, block, boundingBox, EnumBlockFace.NORTH, false, 0, 0, 0);
-                    this.renderFace(null, block, boundingBox, EnumBlockFace.EAST, false, 0, 0, 0);
-                    break;
-                case BlockRenderType.SIGN:
-                    this.renderSign(null, block, 0, 0, 0);
-                    break;
-                default:
-                    this.renderGuiItem(block);
-                    break;
-            }
-        } else if (block.multipart === true) {
-            this.renderMultipart(null, block, 0, 0, 0);
-        } else if (block.path) {
-            this.renderPath(null, block, false, 0, 0, 0);
-        }
 
-        // Change brightness
+        // Change brightness on both the atlas mesh and the custom-model mesh.
         this.tessellator.transformBrightness(brightness);
+        this.modelTessellator.transformBrightness(brightness);
 
-        // Create mesh
-        let mesh = this.tessellator.draw(group);
-        mesh.geometry.center();
+        const meshes = [];
 
-        mesh.material = this.getUnlitGUIMaterial();
-
-        // Rotate block
-        if (block.multipart === true || block.path) {
-            mesh.rotation.x = MathHelper.toRadians(45 / 1.5);
-            mesh.rotation.y = -MathHelper.toRadians(45 + 90);
-        } else {
-            switch (block.getRenderType()) {
-                case BlockRenderType.BLOCK:
-                case BlockRenderType.SIGN:
-                    mesh.rotation.x = MathHelper.toRadians(45 / 1.5);
-                    mesh.rotation.y = -MathHelper.toRadians(45 + 90);
-                    break;
-                default:
-                    mesh.rotation.y = MathHelper.toRadians(180);
-                    size += 5;
-                    break;
-            }
+        // Create the atlas mesh only when this block actually used it.
+        if (this.tessellator.addedVertices > 0) {
+            const mesh = this.tessellator.draw(group);
+            mesh.material = this.getUnlitGUIMaterial();
+            meshes.push(mesh);
         }
 
-        // Relative position
-        mesh.position.x = x;
-        mesh.position.y = -y;
-        mesh.position.z = -10;
+        const modelMesh = this.flushModelPass(group);
+        if (modelMesh !== null) {
+            modelMesh.material = this.getUnlitGUIMaterial(0.5, this.modelTessellator);
+            meshes.push(modelMesh);
+        }
 
-        // Scale
-        mesh.scale.x = size;
-        mesh.scale.y = size;
-        mesh.scale.z = size;
+        for (const mesh of meshes) {
+            mesh.geometry.center();
+
+            // Rotate block
+            if (block.multipart === true || block.path) {
+                mesh.rotation.x = MathHelper.toRadians(45 / 1.5);
+                mesh.rotation.y = -MathHelper.toRadians(45 + 90);
+            } else {
+                switch (block.getRenderType()) {
+                    case BlockRenderType.BLOCK:
+                    case BlockRenderType.SIGN:
+                        mesh.rotation.x = MathHelper.toRadians(45 / 1.5);
+                        mesh.rotation.y = -MathHelper.toRadians(45 + 90);
+                        break;
+                    default:
+                        mesh.rotation.y = MathHelper.toRadians(180);
+                        break;
+                }
+            }
+
+            // Relative position
+            mesh.position.x = x;
+            mesh.position.y = -y;
+            mesh.position.z = -10;
+
+            // Scale
+            const meshSize = block.getRenderType() === BlockRenderType.BLOCK
+                || block.getRenderType() === BlockRenderType.SIGN
+                || block.multipart === true
+                || block.path
+                ? size
+                : size + 5;
+            mesh.scale.x = meshSize;
+            mesh.scale.y = meshSize;
+            mesh.scale.z = meshSize;
+        }
     }
 
     renderGuiItem(block) {
@@ -1274,11 +1397,27 @@ export default class BlockRenderer {
 
     renderBlockInNullWorld(group, block, brightness) {
         this.tessellator.startDrawing();
+        this.beginModelPass();
         this.renderBlock(null, block, false, 0, 0, 0);
         this.tessellator.transformBrightness(brightness);
-        let mesh = this.tessellator.draw(group);
-        mesh.geometry.center();
-        mesh.material = this.getUnlitGUIMaterial();
+        this.modelTessellator.transformBrightness(brightness);
+
+        let mesh = null;
+        if (this.tessellator.addedVertices > 0) {
+            mesh = this.tessellator.draw(group);
+            mesh.material = this.getUnlitGUIMaterial();
+            mesh.geometry.center();
+        }
+
+        const modelMesh = this.flushModelPass(group);
+        if (modelMesh !== null) {
+            modelMesh.material = this.getUnlitGUIMaterial(0.5, this.modelTessellator);
+            modelMesh.geometry.center();
+            if (mesh === null) {
+                mesh = modelMesh;
+            }
+        }
+
         return mesh;
     }
 }

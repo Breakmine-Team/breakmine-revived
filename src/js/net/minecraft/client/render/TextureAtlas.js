@@ -72,14 +72,18 @@ export default class TextureAtlas {
         const textureFiles = await this.getTextureFiles();
         
         let index = 0;
-        for (const textureFile of textureFiles) {
+        for (const textureEntry of textureFiles) {
             if (index >= this.texturesPerRow * this.texturesPerRow) {
                 console.warn("Texture atlas full, skipping remaining textures");
                 break;
             }
 
+            const textureFile = typeof textureEntry === 'string' ? textureEntry : textureEntry.path;
+
             try {
-                const textureName = this.getTextureName(textureFile);
+                const textureName = typeof textureEntry === 'string'
+                    ? this.getTextureName(textureEntry)
+                    : textureEntry.name;
                 const image = await this.loadImage(textureFile);
                 
                 const x = (index % this.texturesPerRow) * this.textureSize;

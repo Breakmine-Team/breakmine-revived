@@ -155,6 +155,7 @@ export default class ChunkSection {
 
             tessellator.startDrawing();
             tessellator.setRenderingPass(isTranslucentRenderPhase);
+            renderer.blockRenderer.beginModelPass();
 
             // Collect blocks for this pass
             let blocksToRender = [];
@@ -241,6 +242,10 @@ export default class ChunkSection {
                     mesh.visible = false; 
                 }
             }
+
+            // Custom-model blocks use a separate texture, so they form their
+            // own mesh next to the atlas mesh.
+            renderer.blockRenderer.flushModelPass(this.group);
         }
     }
     

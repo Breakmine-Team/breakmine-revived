@@ -176,6 +176,13 @@ export const atlasPaintingTextures = [
     "depth.png"
 ];
 
+// Model files and textures embedded by scripts/build-assets.js for the
+// client-side model renderers. They are not part of the block texture atlas.
+export const modelAssets = [
+    "model/cone/model.obj",
+    "model/cone/texture.png"
+];
+
 // ---------------------------------------------------------------------------
 // Music tracks grouped by category (MusicManager.loadTracks)
 // ---------------------------------------------------------------------------
