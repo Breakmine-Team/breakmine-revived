@@ -1133,8 +1133,7 @@ export default class OffGridBlockField {
                 region.meshes.push(mesh);
             }
 
-            const modelMesh = blockRenderer.flushModelPass(region.group);
-            if (modelMesh !== null) {
+            for (const modelMesh of blockRenderer.flushModelPasses(region.group)) {
                 modelMesh.position.set(rx, ry, rz);
                 region.meshes.push(modelMesh);
             }

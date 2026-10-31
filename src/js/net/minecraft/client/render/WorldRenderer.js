@@ -2061,7 +2061,8 @@ export default class WorldRenderer {
 
         // Chest/furnace facing based on player yaw
         if (block.constructor.name === 'BlockChest' || block.constructor.name === 'BlockFurnace' ||
-            block.constructor.name === 'BlockCounterDrawer' || block.constructor.name === 'BlockCounterOven') {
+            block.constructor.name === 'BlockCounterDrawer' || block.constructor.name === 'BlockCounterOven' ||
+            block.constructor.name === 'BlockTrafficBarrier') {
             let dirIndex = Math.floor((this.minecraft.player.rotationYaw * 4 / 360) + 0.5) & 3;
             blockData = [2, 5, 3, 4][dirIndex]; // 2=N, 3=S, 4=W, 5=E - front faces player
         }

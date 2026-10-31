@@ -99,6 +99,8 @@ export const atlasBlockTextures = [
     "red_concrete.png", "red_concrete_powder.png", "red_terracotta.png",
     "black_wool.png", "black_concrete.png", "black_concrete_powder.png",
     "black_terracotta.png",     "tan_wool.png", "clay.png", "terracotta.png",
+    "pavement_black.png", "pavement_black_cracked.png", "pavement_light.png",
+    "pavement_white_cracked.png",
     "lava.png", "logic.png",
     "poppy.png", "dandelion.png", "blue_orchid.png", "allium.png",
     "azure_bluet.png", "red_tulip.png", "orange_tulip.png", "white_tulip.png",
@@ -180,7 +182,9 @@ export const atlasPaintingTextures = [
 // client-side model renderers. They are not part of the block texture atlas.
 export const modelAssets = [
     "model/cone/model.obj",
-    "model/cone/texture.png"
+    "model/cone/texture.png",
+    "model/barrier/model.obj",
+    "model/barrier/texture.png"
 ];
 
 // ---------------------------------------------------------------------------

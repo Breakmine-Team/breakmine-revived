@@ -13,6 +13,7 @@ import { BlockRegistry } from "../world/block/BlockRegistry.js";
 import * as THREE from "../../../../../../libraries/three.module.js";
 import EnumCreativeInventoryTab from "../gui/EnumCreativeInventoryTab.js";
 import getTrafficConeModel, { getTrafficConeTexture } from "./model/TrafficConeModel.js";
+import getTrafficBarrierModel, { getTrafficBarrierTexture } from "./model/TrafficBarrierModel.js";
 
 // Hoisted once: EnumBlockFace.values() allocates a fresh array on every call,
 // and the mesh generator calls it per block.
@@ -34,37 +35,71 @@ export default class BlockRenderer {
         }
 
         // Custom models carry their own texture, so they cannot share the block
-        // atlas tessellator (one mesh has one material). They get a separate
-        // tessellator and are flushed as an extra mesh alongside the chunk mesh.
-        this.modelTessellator = new Tessellator();
-        this.modelTessellator.bindTexture(getTrafficConeTexture());
+        // atlas tessellator (one mesh has one material). Each model gets a
+        // separate tessellator and is flushed as an extra mesh alongside the
+        // chunk mesh.
+        this.modelTessellators = [];
+        this.modelTessellator = this.createModelTessellator(getTrafficConeTexture());
+        this.barrierModelTessellator = this.createModelTessellator(getTrafficBarrierTexture());
         this.modelPassActive = false;
+    }
+
+    createModelTessellator(texture) {
+        const tessellator = new Tessellator();
+        tessellator.bindTexture(texture);
+        this.modelTessellators.push(tessellator);
+        return tessellator;
     }
 
     beginModelPass() {
-        this.modelTessellator.startDrawing();
-        this.modelTessellator.setRenderingPass(false);
-        this.modelTessellator.material.alphaTest = 0.5;
+        for (const tessellator of this.modelTessellators) {
+            tessellator.startDrawing();
+            tessellator.setRenderingPass(false);
+            tessellator.material.alphaTest = 0.5;
+        }
         this.modelPassActive = true;
     }
 
-    flushModelPass(group) {
+    /**
+     * Flush every custom-model tessellator that produced geometry. A chunk can
+     * contain several custom model types, and each type needs its own mesh
+     * because the material carries the model's texture.
+     */
+    flushModelPasses(group) {
         if (!this.modelPassActive) {
-            return null;
+            return [];
         }
 
         this.modelPassActive = false;
-        if (this.modelTessellator.addedVertices <= 0) {
-            return null;
+        const meshes = [];
+        for (const tessellator of this.modelTessellators) {
+            if (tessellator.addedVertices <= 0) {
+                continue;
+            }
+            const mesh = tessellator.draw(group);
+            mesh.userData.modelTessellator = tessellator;
+            meshes.push(mesh);
         }
+        return meshes;
+    }
 
-        return this.modelTessellator.draw(group);
+    /** Convenience for single-block contexts (hand, GUI, previews). */
+    flushModelPass(group) {
+        return this.flushModelPasses(group)[0] ?? null;
+    }
+
+    transformModelBrightness(brightness) {
+        for (const tessellator of this.modelTessellators) {
+            tessellator.transformBrightness(brightness);
+        }
     }
 
     // Toggle shadow casting for the block meshes this renderer tessellates.
     setShadows(enabled) {
         this.tessellator.setShadows(enabled);
-        this.modelTessellator.setShadows(enabled);
+        for (const tessellator of this.modelTessellators) {
+            tessellator.setShadows(enabled);
+        }
     }
 
     renderBlock(world, block, ambientOcclusion, x, y, z) {
@@ -886,7 +921,34 @@ export default class BlockRenderer {
     }
 
     renderTrafficCone(world, x, y, z) {
-        const model = getTrafficConeModel();
+        this.renderCustomModel(
+            this.modelTessellator,
+            getTrafficConeModel(),
+            world, x, y, z, 0
+        );
+    }
+
+    renderTrafficBarrier(world, x, y, z) {
+        const data = world === null ? 2 : world.getBlockDataAt(x, y, z);
+        let facing = data & 7;
+        if (facing === 0) {
+            facing = 2;
+        }
+
+        // The barrier model's front faces -Z (north) at rest.
+        const rotation = facing === 3 ? Math.PI
+            : facing === 4 ? Math.PI / 2
+            : facing === 5 ? -Math.PI / 2
+            : 0;
+
+        this.renderCustomModel(
+            this.barrierModelTessellator,
+            getTrafficBarrierModel(),
+            world, x, y, z, rotation
+        );
+    }
+
+    renderCustomModel(tessellator, model, world, x, y, z, rotation = 0) {
         if (model === null || !this.modelPassActive) {
             return;
         }
@@ -900,7 +962,6 @@ export default class BlockRenderer {
 
         const lightLevel = world === null ? 15 : this.getEffectiveLightLevel(world, x, y, z);
         const brightness = 0.9 / 15.0 * lightLevel + 0.1;
-        const tessellator = this.modelTessellator;
 
         tessellator.material.alphaTest = 0.5;
 
@@ -908,9 +969,17 @@ export default class BlockRenderer {
         // duplicated last vertex, ordered so the two generated triangles keep
         // the OBJ's outward winding (the index buffer swaps vertices 1 and 2).
         const order = [0, 2, 1, 1];
+        const cos = Math.cos(rotation);
+        const sin = Math.sin(rotation);
 
         for (const face of model.faces) {
-            const [nx, ny, nz] = face.normal;
+            let [nx, ny, nz] = face.normal;
+            // Shade by the world-space normal after the model is rotated.
+            const rnx = nx * cos + nz * sin;
+            const rnz = -nx * sin + nz * cos;
+            nx = rnx;
+            nz = rnz;
+
             const ax = Math.abs(nx);
             const ay = Math.abs(ny);
             const az = Math.abs(nz);
@@ -919,11 +988,19 @@ export default class BlockRenderer {
 
             for (const index of order) {
                 const vertex = face.vertices[index];
+                const vx = vertex.position[0];
+                const vz = vertex.position[2];
+
+                // Rotate around the block center so the model's front can face
+                // all four cardinal directions without moving the block.
+                const rx = vx * cos + vz * sin;
+                const rz = -vx * sin + vz * cos;
+
                 // Direct texture coordinates: no atlas region, scale or offset.
                 tessellator.addVertexWithUV(
-                    x - originX + 0.5 + vertex.position[0],
+                    x - originX + 0.5 + rx,
                     y - originY + vertex.position[1],
-                    z - originZ + 0.5 + vertex.position[2],
+                    z - originZ + 0.5 + rz,
                     vertex.uv[0],
                     vertex.uv[1]
                 );
@@ -1196,7 +1273,7 @@ export default class BlockRenderer {
         this.beginModelPass();
         this.renderBlock(null, block, false, 0, 0, 0);
         this.tessellator.transformBrightness(brightness);
-        this.modelTessellator.transformBrightness(brightness);
+        this.transformModelBrightness(brightness);
 
         const meshes = [];
         if (this.tessellator.addedVertices > 0) {
@@ -1206,7 +1283,7 @@ export default class BlockRenderer {
         }
         const modelMesh = this.flushModelPass(group);
         if (modelMesh !== null) {
-            modelMesh.material = this.getUnlitGUIMaterial(0.5, this.modelTessellator);
+            modelMesh.material = this.getUnlitGUIMaterial(0.5, modelMesh.userData.modelTessellator);
             meshes.push(modelMesh);
         }
 
@@ -1227,7 +1304,7 @@ export default class BlockRenderer {
         this.beginModelPass();
         this.renderBlock(null, block, false, 0, 0, 0);
         this.tessellator.transformBrightness(brightness);
-        this.modelTessellator.transformBrightness(brightness);
+        this.transformModelBrightness(brightness);
 
         const meshes = [];
         if (this.tessellator.addedVertices > 0) {
@@ -1237,7 +1314,7 @@ export default class BlockRenderer {
         }
         const modelMesh = this.flushModelPass(group);
         if (modelMesh !== null) {
-            modelMesh.material = this.getUnlitGUIMaterial(0.5, this.modelTessellator);
+            modelMesh.material = this.getUnlitGUIMaterial(0.5, modelMesh.userData.modelTessellator);
             meshes.push(modelMesh);
         }
 
@@ -1299,7 +1376,7 @@ export default class BlockRenderer {
 
         // Change brightness on both the atlas mesh and the custom-model mesh.
         this.tessellator.transformBrightness(brightness);
-        this.modelTessellator.transformBrightness(brightness);
+        this.transformModelBrightness(brightness);
 
         const meshes = [];
 
@@ -1312,7 +1389,7 @@ export default class BlockRenderer {
 
         const modelMesh = this.flushModelPass(group);
         if (modelMesh !== null) {
-            modelMesh.material = this.getUnlitGUIMaterial(0.5, this.modelTessellator);
+            modelMesh.material = this.getUnlitGUIMaterial(0.5, modelMesh.userData.modelTessellator);
             meshes.push(modelMesh);
         }
 
@@ -1400,7 +1477,7 @@ export default class BlockRenderer {
         this.beginModelPass();
         this.renderBlock(null, block, false, 0, 0, 0);
         this.tessellator.transformBrightness(brightness);
-        this.modelTessellator.transformBrightness(brightness);
+        this.transformModelBrightness(brightness);
 
         let mesh = null;
         if (this.tessellator.addedVertices > 0) {
@@ -1411,7 +1488,7 @@ export default class BlockRenderer {
 
         const modelMesh = this.flushModelPass(group);
         if (modelMesh !== null) {
-            modelMesh.material = this.getUnlitGUIMaterial(0.5, this.modelTessellator);
+            modelMesh.material = this.getUnlitGUIMaterial(0.5, modelMesh.userData.modelTessellator);
             modelMesh.geometry.center();
             if (mesh === null) {
                 mesh = modelMesh;

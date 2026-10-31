@@ -49,6 +49,8 @@ import BlockCounter from "./type/BlockCounter.js";
 import BlockCounterDrawer from "./type/BlockCounterDrawer.js";
 import BlockCounterOven from "./type/BlockCounterOven.js";
 import BlockTrafficCone from "./type/BlockTrafficCone.js";
+import BlockTrafficBarrier from "./type/BlockTrafficBarrier.js";
+import BlockPavement from "./type/BlockPavement.js";
 import BlockFlower from "./type/BlockFlower.js";
 import BlockGrassPlant from "./type/BlockGrassPlant.js";
 import BlockLava from "./type/BlockLava.js";
@@ -395,6 +397,13 @@ export class BlockRegistry {
         BlockRegistry.DRAWER_COUNTER = new BlockCounterDrawer(314, 0);
         BlockRegistry.OVEN_COUNTER = new BlockCounterOven(315, 0);
         BlockRegistry.TRAFFIC_CONE = new BlockTrafficCone(316, 0);
+        BlockRegistry.TRAFFIC_BARRIER = new BlockTrafficBarrier(317, 0);
+
+        // Pavement (pavement_light.png is the uncracked white texture)
+        BlockRegistry.PAVEMENT_BLACK = new BlockPavement(318, 0, "pavement_black", "Black Pavement");
+        BlockRegistry.PAVEMENT_BLACK_CRACKED = new BlockPavement(319, 0, "pavement_black_cracked", "Cracked Black Pavement");
+        BlockRegistry.PAVEMENT_WHITE = new BlockPavement(320, 0, "pavement_light", "White Pavement");
+        BlockRegistry.PAVEMENT_WHITE_CRACKED = new BlockPavement(321, 0, "pavement_white_cracked", "Cracked White Pavement");
 
         // --- COLORED BLOCKS (grouped by color) ---
         BlockRegistry.CLAY = new BlockClay(138, 0, "clay", "Clay");

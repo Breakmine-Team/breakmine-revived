@@ -243,9 +243,9 @@ export default class ChunkSection {
                 }
             }
 
-            // Custom-model blocks use a separate texture, so they form their
-            // own mesh next to the atlas mesh.
-            renderer.blockRenderer.flushModelPass(this.group);
+            // Custom-model blocks use their own textures, so each model type
+            // forms its own mesh next to the atlas mesh.
+            renderer.blockRenderer.flushModelPasses(this.group);
         }
     }
     
