@@ -10,6 +10,7 @@ import { getPlayers } from './players.js';
 import { addItemEntity } from './entities.js';
 import { createSpawnObjectPacket, sendBlockChange } from './packets.js';
 import Block from '../client/world/block/Block.js';
+import config from './config.js';
 
 const TICK_MS = 50; // 20 game ticks per second
 
@@ -35,6 +36,17 @@ class ServerWorld {
         // loop) are queued and drained iteratively instead of recursing.
         this.neighborUpdateQueue = [];
         this.processingNeighborUpdates = false;
+
+        // Read the live config instead of copying it, so a /server switch and
+        // its config.reload() apply the new rules without a restart.
+    }
+
+    get allowTNT() {
+        return config.allowTNT !== false;
+    }
+
+    get allowLiquidFlow() {
+        return config.allowLiquidFlow !== false;
     }
 
     getBlockAt(x, y, z) {

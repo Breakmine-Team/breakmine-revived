@@ -1,3 +1,4 @@
+import Block from "../Block.js";
 import BlockLiquid from "./BlockLiquid.js";
 import EnumCreativeInventoryTab from "../../../gui/EnumCreativeInventoryTab.js";
 import { BlockRegistry } from "../BlockRegistry.js";

@@ -20,8 +20,31 @@ const defaults = {
     motd: 'Brand new server',
     allowMods: false,
     worldType: 'flat',
-    seed: 0
+    seed: 0,
+    // Destructive gameplay rules. Environment switches can turn these off
+    // for a server; clients receive the same values on login so their local
+    // prediction does not fight the authoritative server.
+    allowTNT: true,
+    allowLiquidFlow: true
 };
+
+function isEnvEnabled(name) {
+    const value = ENV[name];
+    return typeof value === 'string'
+        && ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
+}
+
+// These are intentionally one-way: setting the variable turns the behavior
+// off, while leaving it unset keeps the normal serverconfig value.
+function applyEnvOverrides(config) {
+    if (isEnvEnabled('SERVER_DISABLE_TNT')) {
+        config.allowTNT = false;
+    }
+    if (isEnvEnabled('SERVER_DISABLE_LIQUID_FLOW')) {
+        config.allowLiquidFlow = false;
+    }
+    return config;
+}
 
 // World types supported by the server generator.
 const WORLD_TYPES = ['flat', 'normal', 'amplified'];
@@ -73,27 +96,25 @@ function loadConfig(serverName = 'main') {
     config.server = sanitizeServerName(serverName);
 
     const configPath = getConfigPath(serverName);
-    if (!fs.existsSync(configPath)) {
-        return config;
-    }
+    if (fs.existsSync(configPath)) {
+        const content = fs.readFileSync(configPath, 'utf8');
+        for (const line of content.split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#')) continue;
 
-    const content = fs.readFileSync(configPath, 'utf8');
-    for (const line of content.split('\n')) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) continue;
+            const eqIdx = trimmed.indexOf('=');
+            if (eqIdx === -1) continue;
 
-        const eqIdx = trimmed.indexOf('=');
-        if (eqIdx === -1) continue;
-
-        const key = trimmed.slice(0, eqIdx).trim();
-        const value = trimmed.slice(eqIdx + 1).trim();
-        if (key in defaults) {
-            config[key] = parseValue(value);
+            const key = trimmed.slice(0, eqIdx).trim();
+            const value = trimmed.slice(eqIdx + 1).trim();
+            if (key in defaults) {
+                config[key] = parseValue(value);
+            }
         }
     }
 
     config.worldType = normalizeWorldType(config.worldType);
-    return config;
+    return applyEnvOverrides(config);
 }
 
 // Pick the startup server from the command line (--server <name>). The

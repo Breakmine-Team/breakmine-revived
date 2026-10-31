@@ -53,6 +53,9 @@ services:
     environment:
       DATA_DIR: /data
       SERVER_PORT: "6008"
+      # Optional griefing switches: set to "true" to disable.
+      # SERVER_DISABLE_TNT: "true"
+      # SERVER_DISABLE_LIQUID_FLOW: "true"
     volumes:
       # World data, player data, and server configuration. Losing this
       # volume deletes all worlds and player progress.

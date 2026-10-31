@@ -25,7 +25,18 @@ export default class BlockTNT extends Block {
         }
     }
 
+    isExplosionEnabled(world) {
+        if (world && world.allowTNT === false) {
+            return false;
+        }
+        return world?.minecraft?.serverRules?.allowTNT !== false;
+    }
+
     explode(world, x, y, z, visited = new Set()) {
+        if (!this.isExplosionEnabled(world)) {
+            return;
+        }
+
         const key = `${x},${y},${z}`;
         if (visited.has(key)) {
             return;
@@ -80,6 +91,12 @@ export default class BlockTNT extends Block {
     onMouseButton(world, x, y, z, button) {
         if (button !== 2) {
             return false;
+        }
+
+        // Still consume the click when TNT is disabled so the held item is
+        // not placed against the block by the fallback placement path.
+        if (!this.isExplosionEnabled(world)) {
+            return true;
         }
 
         this.explode(world, x, y, z);

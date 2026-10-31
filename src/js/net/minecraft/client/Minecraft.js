@@ -94,6 +94,9 @@ export default class Minecraft {
         // uses PlayerControllerMultiplayer, so local sessions need their own flag.
         this.isConnectedToIntegratedServer = false;
         this.playerController = null;
+        // Gameplay rules pushed by a multiplayer server. Singleplayer and
+        // servers that do not send rules keep the normal behavior.
+        this.serverRules = { allowTNT: true, allowLiquidFlow: true };
         this.fps = 0;
         this.maxFps = 0;
 
@@ -380,6 +383,7 @@ export default class Minecraft {
 
             this.isConnectedToIntegratedServer = false;
             this.currentWorldSeed = null;
+            this.serverRules = { allowTNT: true, allowLiquidFlow: true };
 
             this.worldRenderer.reset();
             this.itemRenderer.reset();

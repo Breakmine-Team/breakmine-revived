@@ -212,7 +212,14 @@ export default class NetworkManager {
             // retaining the built-in JSON handlers below.
             this.minecraft?.modLoader?.handleNetworkMessage(payload, this);
 
-            if (payload.type === 'playerState') {
+            if (payload.type === 'serverRules') {
+                if (this.minecraft) {
+                    this.minecraft.serverRules = {
+                        allowTNT: payload.allowTNT !== false,
+                        allowLiquidFlow: payload.allowLiquidFlow !== false
+                    };
+                }
+            } else if (payload.type === 'playerState') {
                 const player = this.minecraft?.player;
                 if (player) {
                     this._applyPlayerState(player, payload);

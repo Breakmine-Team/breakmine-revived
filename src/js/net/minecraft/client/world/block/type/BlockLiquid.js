@@ -17,16 +17,29 @@ export default class BlockLiquid extends Block {
         return BlockRenderType.FLUID;
     }
 
+    isFlowEnabled(world) {
+        if (world && world.allowLiquidFlow === false) {
+            return false;
+        }
+        return world?.minecraft?.serverRules?.allowLiquidFlow !== false;
+    }
+
     // Kick off the flow simulation whenever a liquid is placed at runtime
     // (bucket use, spreading, and server-authoritative placement). Generated
     // and loaded blocks never hit these hooks (chunk data is written straight
     // into sections), so oceans/lakes stay static sources and don't tick.
     onBlockPlaced(world, x, y, z, face) {
+        if (!this.isFlowEnabled(world)) {
+            return;
+        }
         world.scheduleBlockTick(x, y, z, this.tickRate);
         this.checkContact(world, x, y, z);
     }
 
     onBlockAdded(world, x, y, z) {
+        if (!this.isFlowEnabled(world)) {
+            return;
+        }
         world.scheduleBlockTick(x, y, z, this.tickRate);
         this.checkContact(world, x, y, z);
     }
@@ -46,6 +59,10 @@ export default class BlockLiquid extends Block {
     // (BlockLava / BlockWater) override to also produce obsidian when source
     // blocks touch.
     checkContact(world, x, y, z) {
+        if (!this.isFlowEnabled(world)) {
+            return false;
+        }
+
         const oppositeId = this.getOppositeLiquidId();
         const cobbleId = this.getSolidificationId();
         if (oppositeId < 0 || cobbleId < 0) {
@@ -119,6 +136,9 @@ export default class BlockLiquid extends Block {
      * Called when a block tick executes for this liquid position.
      */
     onBlockTick(world, x, y, z) {
+        if (!this.isFlowEnabled(world)) {
+            return;
+        }
         this.updateFlow(world, x, y, z);
     }
 

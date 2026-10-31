@@ -3,6 +3,7 @@ import { writeLongBE } from './binary.js';
 import { makePacket, writeVarInt, writeString, broadcast, varIntSize } from './protocol.js';
 import { getPlayers, getPlayerCount } from './players.js';
 import { generateFlatChunkColumn, getWorldType, getSpawnPosition } from './world.js';
+import config from './config.js';
 import {
     OFF_GRID_PROTOCOL_VERSION,
     OFF_GRID_STATE_PACKET_ID,
@@ -48,6 +49,20 @@ function sendJoinGame(player) {
     data.writeUInt8(0, offset); offset += 1;           // Reduced Debug Info
 
     player.ws.send(makePacket(0x01, data.subarray(0, offset)));
+}
+
+// Gameplay policy for the connecting client. Clients use this for local
+// prediction (TNT ignition, liquid placement); the server still enforces the
+// same rules in ServerWorld and in the block handlers.
+function sendServerRules(player) {
+    if (!player?.ws || player.ws.readyState !== 1) {
+        return;
+    }
+    player.ws.send(JSON.stringify({
+        type: 'serverRules',
+        allowTNT: config.allowTNT !== false,
+        allowLiquidFlow: config.allowLiquidFlow !== false
+    }));
 }
 
 function sendRespawn(player, dimension) {
@@ -537,6 +552,7 @@ export {
     createDisconnectPacket,
     sendLoginSuccess,
     sendJoinGame,
+    sendServerRules,
     sendRespawn,
     sendSpawnPosition,
     sendChunks,

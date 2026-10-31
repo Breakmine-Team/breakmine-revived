@@ -60,6 +60,7 @@ export function initServer() {
 
     const currentWorld = config.requestedServer || loadCurrentWorld();
     config.reload(currentWorld);
+    log.info('Server', `TNT ${config.allowTNT !== false ? 'enabled' : 'disabled'}, liquid flow ${config.allowLiquidFlow !== false ? 'enabled' : 'disabled'}`);
     initWorld(currentWorld);
     BlockRegistry.create(); // Initialize block registry from game code
     const serverWorld = getServerWorld(); // Initialize server world for block ticking

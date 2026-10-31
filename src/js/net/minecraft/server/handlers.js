@@ -8,6 +8,7 @@ import { handleCommand } from './commands.js';
 import {
     sendLoginSuccess,
     sendJoinGame,
+    sendServerRules,
     sendSpawnPosition,
     sendChunks,
     sendPlayerPositionLook,
@@ -323,6 +324,7 @@ function handleLoginPacket(player, packetId, buffer, offset) {
         log.info('Chat', `${player.username} joined the game.`);
 
         sendLoginSuccess(player);
+        sendServerRules(player);
         sendJoinGame(player);
         sendSpawnPosition(player);
 

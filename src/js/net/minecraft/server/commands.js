@@ -3,7 +3,7 @@ import CommandRegistry from '../client/command/CommandRegistry.js';
 import Logger from './logger.js';
 import { sendChatMessageToPlayer, createCommandContext, syncCommandState } from './CommandContext.js';
 import { getPlayers, isOp, savePlayerData, loadPlayerData, normalizeInventoryState } from './players.js';
-import { sendResetWorldPacket, sendRespawn, sendChunks, sendSpawnPosition, sendPlayerPositionLook } from './packets.js';
+import { sendResetWorldPacket, sendRespawn, sendServerRules, sendChunks, sendSpawnPosition, sendPlayerPositionLook } from './packets.js';
 import { initWorld, saveWorld, getCurrentWorldName, getSpawnPosition } from './world.js';
 import { cleanupPlayerChunks } from './handlers.js';
 import { handleOffGridCommand } from './offgridCommands.js';
@@ -179,6 +179,9 @@ function handleServer(player, args) {
 
         // Send respawn packet (dimension 0 = overworld)
         sendRespawn(p, 0);
+
+        // The target server may have different gameplay rules.
+        sendServerRules(p);
 
         // Authoritative restore so the client targets the saved position while
         // it streams in the new server's terrain.
