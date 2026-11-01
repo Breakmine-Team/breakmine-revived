@@ -1,6 +1,7 @@
 const WebSocket = require('ws');
 const https = require('https');
-const { initServer, onConnection, stopServer } = require('./ServerRuntime.js');
+const { initServer, onConnection, stopServer, verifyConnection } = require('./ServerRuntime.js');
+const security = require('./security.js');
 const Logger = require('./logger.js').default;
 const config = require('./config.js').default;
 const { installServerModsFromEnv } = require('./serverModDownloads.js');
@@ -61,17 +62,31 @@ async function main() {
     const { attachAdminPanel } = require('./admin.js');
     attachAdminPanel(server);
 
-    wss = new WebSocket.Server({ server: server });
+    // Anti-DDoS admission check: floods and blocked addresses are refused
+    // during the HTTP upgrade, before a WebSocket or any game state exists.
+    wss = new WebSocket.Server({
+        server: server,
+        verifyClient: (info, callback) => {
+            const verdict = verifyConnection(info);
+            if (verdict.accepted) {
+                callback(true);
+                return;
+            }
+            log.warn('Security', `Refused ${verdict.ip || 'unknown address'}: ${verdict.reason || 'connection refused'}`);
+            callback(false, verdict.code || 403, verdict.message || 'Connection refused');
+        }
+    });
     server.listen(PORT, config.host);
     log.info('Server', `Minecraft server running!!! (v47)`);
     log.info('Server', `Listening on ${server ? 'wss' : 'ws'}://${config.host}:${PORT}`);
+    log.info('Security', security.describeSettings());
     if (process.env.ADMIN_PASSCODE) {
         log.info('Server', `Admin panel enabled at http://${config.host}:${PORT}/admin`);
     } else {
         log.warn('Server', 'Admin panel disabled (set ADMIN_PASSCODE env variable to enable it)');
     }
 
-    wss.on('connection', onConnection);
+    wss.on('connection', (ws, req) => onConnection(ws, req));
 }
 
 main().catch((e) => {

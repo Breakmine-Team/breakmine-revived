@@ -2,6 +2,10 @@ import { initWorld, saveWorld, getSubChunkStore, loadCurrentWorld, getWorldTime,
 import { tickAllFurnaces, broadcastFurnaceChanges } from './Furnace.js';
 import { sendTimeUpdate, sendChatMessage, sendPlayerListEntry } from './packets.js';
 import { handlePacket, cleanupPlayerChunks, respawnPlayer, flushSaveWorld } from './handlers.js';
+import { createConnectionGate } from './security.js';
+import { verifyConnection } from './security.js';
+
+export { verifyConnection };
 import { addPlayer, removePlayer, getPlayerCount, getPlayers, savePlayerData, normalizeInventoryState } from './players.js';
 import Logger from './logger.js';
 import { BlockRegistry } from '../client/world/block/BlockRegistry.js';
@@ -114,7 +118,7 @@ export function initServer() {
 // Handle an incoming connection. `ws` is any object exposing the subset of the
 // ws API the server uses (on/send/close/readyState): a native ws socket in
 // Node.js, or a LoopbackSocket adapter in the browser.
-export function onConnection(ws) {
+export function onConnection(ws, req) {
     const player = {
         ws,
         eid: null,
@@ -129,7 +133,32 @@ export function onConnection(ws) {
         isSneaking: false
     };
 
-    ws.on('message', (message, isBinary) => {
+    // Flood protection and VPN screening apply to real multiplayer sockets
+    // only; the integrated singleplayer server has no request/socket and gets
+    // a null gate.
+    const gate = createConnectionGate(req, ws);
+    if (gate) {
+        player.ip = gate.ip;
+        player.gate = gate;
+    }
+
+    // A socket that opens and never logs in would otherwise hold its flood
+    // budget forever. Refuse anyone who is not in game after a minute.
+    let loginTimer = null;
+    if (gate) {
+        loginTimer = setTimeout(() => {
+            if (player.protocolState !== 'play' && ws.readyState === 1) {
+                try {
+                    ws.close();
+                } catch (e) {
+                    // Socket already gone.
+                }
+            }
+        }, 60 * 1000);
+        if (typeof loginTimer.unref === 'function') loginTimer.unref();
+    }
+
+    const handleMessage = (message, isBinary) => {
         try {
             if (isBinary) {
                 handlePacket(player, message);
@@ -234,7 +263,21 @@ export function onConnection(ws) {
             // a single bad connection can never crash the whole server.
             log.warn('Server', 'Rejected bad message from client: ' + (err && err.message));
         }
+    };
+
+    ws.on('message', (message, isBinary) => {
+        if (gate) {
+            // Messages that arrive while a VPN verdict is still pending are
+            // buffered by the gate and replayed through handleMessage below.
+            const action = gate.beforeMessage(message, isBinary);
+            if (action !== 'ok') return;
+        }
+        handleMessage(message, isBinary);
     });
+
+    if (gate) {
+        gate.onFlush = (message, isBinary) => handleMessage(message, isBinary);
+    }
 
     // Abrupt disconnects emit 'error' on the socket; without a listener that
     // unhandled 'error' event would crash the entire server process.
@@ -243,6 +286,11 @@ export function onConnection(ws) {
     });
 
     ws.on('close', () => {
+        if (loginTimer !== null) clearTimeout(loginTimer);
+        if (gate) {
+            gate.dispose();
+            gate.onFlush = null;
+        }
         if (player.eid !== null) {
             removePlayer(player);
             cleanupPlayerChunks(player.eid);

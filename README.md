@@ -17,6 +17,63 @@ Minecraft behavior.
 SERVER_DISABLE_TNT=true SERVER_DISABLE_LIQUID_FLOW=true node server.js
 ```
 
+### Connection protection (anti-DDoS and anti-VPN)
+
+The dedicated multiplayer server rate-limits new connections and the messages
+players send, and can refuse players whose address belongs to a VPN, proxy, or
+hosting provider. Singleplayer is unaffected.
+
+Anti-DDoS is on by default: 12 connection attempts per 10 seconds and 5
+simultaneous sockets per address, 256 sockets server-wide, roughly 900 messages
+in a burst and 300 per second per player, plus a 1-minute limit to log in. An
+address that keeps tripping the limits is blocked for 10 minutes. A small
+amount of burst is normal (chunk loading), so these values are far above real
+play.
+
+Anti-VPN is also on by default and looks each new address up once, caching the
+answer for six hours. The default provider, [ip-api.com](https://ip-api.com),
+needs no account (free, non-commercial, HTTP only). For more accurate results
+and datacenter detection use [proxycheck.io](https://proxycheck.io) with a key:
+
+```sh
+SERVER_ANTIVPN_KEY=your-key SERVER_ANTIVPN_PROVIDER=proxycheck node server.js
+```
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `SERVER_ANTIDDOS` | `true` | Set to `false` to disable connection/message flood limits. |
+| `SERVER_ANTIVPN` | `true` | Set to `false` to disable address reputation checks. |
+| `SERVER_ANTIVPN_PROVIDER` | `ipapi` | `ipapi` or `proxycheck`. |
+| `SERVER_ANTIVPN_KEY` | — | proxycheck.io key. Without it the server uses ip-api.com. |
+| `SERVER_ANTIVPN_BLOCK_HOSTING` | `true` | Also refuse datacenter/hosting addresses. |
+| `SERVER_ANTIVPN_FAIL_OPEN` | `true` | Allow players when the lookup service is unreachable. Set to `false` to refuse them instead. |
+| `SERVER_ANTIVPN_TIMEOUT_MS` | `3000` | Lookup timeout. |
+| `SERVER_TRUST_PROXY` | local proxy | Which peers may report the real client address: unset trusts loopback/LAN peers, `true` trusts any peer, `false` ignores forwarded headers, or a comma-separated list of proxy addresses. |
+
+Refused players see a disconnect screen explaining why. Loopback and LAN
+addresses are never looked up.
+
+#### Behind a reverse proxy (play.breakmine.com)
+
+When players reach the server through a proxy, every socket comes from the
+proxy, so the per-IP limits and the VPN verdict would be shared by the whole
+server. The server therefore reads the player's address from `CF-Connecting-IP`
+(set by Cloudflare, which always overwrites it) or from the last
+`X-Forwarded-For` entry, but only when the connecting peer is trusted.
+
+By default that means loopback and LAN, which covers a proxy running on the
+same machine or network (nginx, Caddy, cloudflared). If your proxy reaches the
+server from a public address, name it:
+
+```sh
+SERVER_TRUST_PROXY=203.0.113.10 node server.js
+```
+
+`SERVER_TRUST_PROXY=true` trusts any peer and is only safe when the game port
+itself is not reachable from the internet. Keep it firewalled or bound to the
+proxy — otherwise a client can claim any address and dodge the per-IP limits
+and the VPN check.
+
 ### Server-side mods
 
 A server can ship its own mods to clients. Put mod folders in `servermods/`

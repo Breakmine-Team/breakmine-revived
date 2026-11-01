@@ -56,6 +56,17 @@ services:
       # Optional griefing switches: set to "true" to disable.
       # SERVER_DISABLE_TNT: "true"
       # SERVER_DISABLE_LIQUID_FLOW: "true"
+      # Connection protection. Both are on by default; set the matching
+      # variable to "false" to turn one off.
+      # SERVER_ANTIDDOS: "true"
+      # SERVER_ANTIVPN: "true"
+      # SERVER_ANTIVPN_PROVIDER: "proxycheck"
+      # SERVER_ANTIVPN_KEY: "your-key"
+      # SERVER_ANTIVPN_FAIL_OPEN: "true"
+      # Client address behind play.breakmine.com's proxy. Left unset, loopback
+      # and LAN proxies are trusted automatically; list the proxy here if it
+      # reaches this container from a public address.
+      # SERVER_TRUST_PROXY: "203.0.113.10"
     volumes:
       # World data, player data, and server configuration. Losing this
       # volume deletes all worlds and player progress.
