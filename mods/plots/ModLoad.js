@@ -2,7 +2,6 @@ const DEFAULT_STORE = () => ({ version: 1, nextId: 1, plots: [] });
 const CHUNK_SIZE = 16;
 const MAX_PLOT_SIZE = 16; // chunks along one axis (256 blocks)
 const MAX_AREA = MAX_PLOT_SIZE * MAX_PLOT_SIZE;
-const DEFAULT_RADIUS = 1; // chunks
 
 function blockToChunk(value) {
     return Math.floor(Number(value) / CHUNK_SIZE);
@@ -213,7 +212,7 @@ export default class ModLoad {
         }
 
         function usage(context) {
-            say(context, 'Subcommands: pos1, pos2, create <name> [radius in chunks], delete [name], rename <name>, owner <player>, trust <player>, untrust <player>, info, list, cancel');
+            say(context, 'create|delete|rename|owner|trust|untrust|pos1|pos2|select|info|list');
         }
 
         function selectionFor(username) {
@@ -236,7 +235,7 @@ export default class ModLoad {
         function denyBuild(username, plot) {
             ModAPI.sendToPlayer(username, {
                 action: 'notice',
-                text: `§cThis plot belongs to ${plot.owner}.`
+                text: `§c${plot.owner}'s plot.`
             });
         }
 
@@ -253,23 +252,23 @@ export default class ModLoad {
             const plot = getPlotAt(store.plots, event.x, event.z);
             if (!plot || canBuild(plot, event.username)) return;
             event.cancel();
-            client.addMessageToChat(`§cThis plot belongs to ${plot.owner}.`);
+            client.addMessageToChat(`§c${plot.owner}'s plot.`);
         }
 
-        function createPlot(context, nameArg, radiusArg) {
+        function createPlot(context, nameArg) {
             const username = usernameOf(context);
             if (!username) {
-                say(context, '§cCould not determine your username.');
+                say(context, '§cUnknown player.');
                 return true;
             }
 
             const name = normalizePlotName(nameArg);
             if (!name) {
-                say(context, '§cPlot name invalid.');
+                say(context, '§cInvalid name.');
                 return true;
             }
             if (findPlotByName(store.plots, name)) {
-                say(context, `§cA plot named "${name}" already exists.`);
+                say(context, '§cName already taken.');
                 return true;
             }
 
@@ -277,38 +276,30 @@ export default class ModLoad {
             if (!pos) return true;
 
             const selection = selectionFor(username);
-            const playerChunk = selectionChunk(pos);
-            let minChunkX;
-            let maxChunkX;
-            let minChunkZ;
-            let maxChunkZ;
-
-            if (selection.pos1 || selection.pos2) {
-                const first = selection.pos1 || playerChunk;
-                const second = selection.pos2 || playerChunk;
-                minChunkX = Math.min(first.chunkX, second.chunkX);
-                maxChunkX = Math.max(first.chunkX, second.chunkX);
-                minChunkZ = Math.min(first.chunkZ, second.chunkZ);
-                maxChunkZ = Math.max(first.chunkZ, second.chunkZ);
-            } else {
-                const radius = Math.max(1, Math.min(MAX_PLOT_SIZE, Math.floor(Number(radiusArg) || DEFAULT_RADIUS)));
-                minChunkX = playerChunk.chunkX - radius;
-                maxChunkX = playerChunk.chunkX + radius;
-                minChunkZ = playerChunk.chunkZ - radius;
-                maxChunkZ = playerChunk.chunkZ + radius;
+            if (!selection.pos1 && !selection.pos2) {
+                say(context, '§cSelect an area first.');
+                return true;
             }
+
+            const playerChunk = selectionChunk(pos);
+            const first = selection.pos1 || playerChunk;
+            const second = selection.pos2 || playerChunk;
+            const minChunkX = Math.min(first.chunkX, second.chunkX);
+            const maxChunkX = Math.max(first.chunkX, second.chunkX);
+            const minChunkZ = Math.min(first.chunkZ, second.chunkZ);
+            const maxChunkZ = Math.max(first.chunkZ, second.chunkZ);
 
             const widthChunks = maxChunkX - minChunkX + 1;
             const depthChunks = maxChunkZ - minChunkZ + 1;
             if (widthChunks > MAX_PLOT_SIZE || depthChunks > MAX_PLOT_SIZE || widthChunks * depthChunks > MAX_AREA) {
-                say(context, `§cThat plot is too large. Maximum is ${MAX_PLOT_SIZE}x${MAX_PLOT_SIZE} chunks!`);
+                say(context, `§cToo large (max ${MAX_PLOT_SIZE}x${MAX_PLOT_SIZE} chunks).`);
                 return true;
             }
 
             const candidate = { minChunkX, maxChunkX, minChunkZ, maxChunkZ };
             const collision = store.plots.find((plot) => overlaps(candidate, plot));
             if (collision) {
-                say(context, `§cThat area overlaps the plot "${collision.name}" owned by ${collision.owner}!`);
+                say(context, `§cOverlaps "${collision.name}" (${collision.owner}).`);
                 return true;
             }
 
@@ -331,7 +322,7 @@ export default class ModLoad {
             selections.delete(username.toLowerCase());
             refresh();
 
-            say(context, `Created "${plot.name}" for ${plot.owner}.`);
+            say(context, `Created "${plot.name}".`);
             return true;
         }
 
@@ -339,73 +330,72 @@ export default class ModLoad {
             const username = usernameOf(context);
             const named = nameArg ? findPlotByName(store.plots, nameArg) : null;
             if (nameArg && !named) {
-                say(context, `§cNo plot named "${nameArg}" exists.`);
+                say(context, `§cUnknown plot "${nameArg}".`);
                 return true;
             }
             const plot = named || plotAtPlayer(context).plot;
 
             if (!plot) {
-                say(context, '§cStand inside a plot or name one to delete it.');
+                say(context, '§cStand in a plot first.');
                 return true;
             }
             if (!isOwner(plot, username)) {
-                say(context, `§cOnly ${plot.owner} can delete this plot.`);
+                say(context, `§cOwned by ${plot.owner}.`);
                 return true;
             }
 
             store.plots = store.plots.filter((entry) => entry !== plot);
             refresh();
-            say(context, `Deleted plot "${plot.name}".`);
+            say(context, `Deleted "${plot.name}".`);
             return true;
         }
 
         function renamePlot(context, nameArg) {
             const { username, plot } = plotAtPlayer(context);
             if (!plot) {
-                say(context, '§cStand inside the plot you want to rename.');
+                say(context, '§cStand in a plot.');
                 return true;
             }
             if (!isOwner(plot, username)) {
-                say(context, `§cOnly ${plot.owner} can rename this plot.`);
+                say(context, `§cOwned by ${plot.owner}.`);
                 return true;
             }
 
             const name = normalizePlotName(nameArg);
             if (!name) {
-                say(context, '§cPlot name invalid.');
+                say(context, '§cInvalid name.');
                 return true;
             }
             const existing = findPlotByName(store.plots, name);
             if (existing && existing !== plot) {
-                say(context, `§cA plot named "${name}" already exists.`);
+                say(context, '§cName already taken.');
                 return true;
             }
 
-            const oldName = plot.name;
             plot.name = name;
             refresh();
-            say(context, `Renamed "${oldName}" to "${plot.name}".`);
+            say(context, `Renamed to "${plot.name}".`);
             return true;
         }
 
         function transferPlot(context, targetArg) {
             const { username, plot } = plotAtPlayer(context);
             if (!plot) {
-                say(context, '§cStand inside the plot you want to transfer.');
+                say(context, '§cStand in a plot.');
                 return true;
             }
             if (!isOwner(plot, username)) {
-                say(context, `§cOnly ${plot.owner} can transfer this plot.`);
+                say(context, `§cOwned by ${plot.owner}.`);
                 return true;
             }
 
             const target = normalizeUsername(targetArg);
             if (!target) {
-                say(context, '§cEnter a valid player name.');
+                say(context, '§cUnknown player.');
                 return true;
             }
             if (usernamesEqual(target, plot.owner)) {
-                say(context, '§cThat player already owns this plot.');
+                say(context, '§cAlready the owner.');
                 return true;
             }
 
@@ -416,43 +406,43 @@ export default class ModLoad {
             }
             plot.owner = target;
             refresh();
-            say(context, `Transferred "${plot.name}" from ${oldOwner} to ${target}.`);
+            say(context, `Gave "${plot.name}" to ${target}.`);
             return true;
         }
 
         function trustPlayer(context, targetArg, trusted) {
             const { username, plot } = plotAtPlayer(context);
             if (!plot) {
-                say(context, '§cStand inside the plot you want to manage.');
+                say(context, '§cStand in a plot.');
                 return true;
             }
             if (!isOwner(plot, username)) {
-                say(context, `§cOnly ${plot.owner} can manage members.`);
+                say(context, `§cOwned by ${plot.owner}.`);
                 return true;
             }
 
             const target = normalizeUsername(targetArg);
             if (!target) {
-                say(context, '§cEnter a valid player name.');
+                say(context, '§cUnknown player.');
                 return true;
             }
             if (usernamesEqual(target, plot.owner)) {
-                say(context, '§cThe owner already has access.');
+                say(context, '§cAlready the owner.');
                 return true;
             }
 
             if (trusted) {
                 if (plot.members.some((member) => usernamesEqual(member, target))) {
-                    say(context, `§e${target} is already trusted on "${plot.name}".`);
+                    say(context, `§eAlready trusted ${target}.`);
                     return true;
                 }
                 plot.members.push(target);
                 refresh();
-                say(context, `Trusted ${target} on "${plot.name}".`);
+                say(context, `Trusted ${target}.`);
             } else {
                 plot.members = plot.members.filter((member) => !usernamesEqual(member, target));
                 refresh();
-                say(context, `Removed ${target} from "${plot.name}".`);
+                say(context, `Removed ${target}.`);
             }
             return true;
         }
@@ -464,23 +454,22 @@ export default class ModLoad {
                 return true;
             }
 
-            say(context, `§e${plot.name} §7- owner §f${plot.owner}`);
+            say(context, `§e${plot.name} §7- §f${plot.owner}`);
             say(context, `§7Members: §f${plot.members.length ? plot.members.join(', ') : 'none'}`);
-            say(context, `§7Chunks: §f${plot.minChunkX},${plot.minChunkZ} §7to §f${plot.maxChunkX},${plot.maxChunkZ}`);
-            say(context, `§7Blocks: §f${plot.minX},${plot.minZ} §7to §f${plot.maxX},${plot.maxZ}`);
+            say(context, `§7Chunks §f${plot.minChunkX},${plot.minChunkZ} §7-> §f${plot.maxChunkX},${plot.maxChunkZ} §7(blocks §f${plot.minX},${plot.minZ} §7-> §f${plot.maxX},${plot.maxZ}§7)`);
             return true;
         }
 
         function listPlots(context) {
             if (store.plots.length === 0) {
-                say(context, '§7No plots have been created.');
+                say(context, '§7No plots yet.');
                 return true;
             }
 
             say(context, `§e${store.plots.length} plot(s):`);
             const shown = store.plots.slice(0, 20);
             for (const plot of shown) {
-                say(context, `§e${plot.name} §7- ${plot.owner} §8[chunks ${plot.minChunkX},${plot.minChunkZ} -> ${plot.maxChunkX},${plot.maxChunkZ}]`);
+                say(context, `§e${plot.name} §7- ${plot.owner} §8[${plot.minChunkX},${plot.minChunkZ} -> ${plot.maxChunkX},${plot.maxChunkZ}]`);
             }
             if (store.plots.length > shown.length) {
                 say(context, `§7...and ${store.plots.length - shown.length} more.`);
@@ -500,13 +489,26 @@ export default class ModLoad {
 
             if (sub === 'pos1' || sub === 'pos2') {
                 if (!username || !pos) {
-                    say(context, '§cCould not determine your position.');
+                    say(context, '§cUnknown position.');
                     return true;
                 }
                 const selection = selectionFor(username);
                 const chunk = selectionChunk(pos);
                 selection[sub] = chunk;
-                say(context, `Set ${sub} to chunk ${chunk.chunkX},${chunk.chunkZ} (blocks ${chunk.x},${chunk.z}).`);
+                say(context, `${sub} = ${chunk.chunkX},${chunk.chunkZ}`);
+                return true;
+            }
+
+            if (sub === 'select' || sub === 's') {
+                if (!username || !pos) {
+                    say(context, '§cUnknown position.');
+                    return true;
+                }
+                const chunk = selectionChunk(pos);
+                const selection = selectionFor(username);
+                selection.pos1 = chunk;
+                selection.pos2 = chunk;
+                say(context, `Selected chunk ${chunk.chunkX},${chunk.chunkZ}.`);
                 return true;
             }
 
@@ -517,17 +519,12 @@ export default class ModLoad {
             }
 
             if (sub === 'create') {
-                const rest = args.slice(1);
-                let radiusArg = null;
-                if (rest.length > 1 && /^\d+$/.test(rest[rest.length - 1])) {
-                    radiusArg = rest.pop();
-                }
-                const nameArg = rest.join(' ').trim();
+                const nameArg = args.slice(1).join(' ').trim();
                 if (!nameArg) {
-                    say(context, '§cUsage: /plot create <name> [radius in chunks]');
+                    say(context, '§cUsage: /p create <name>');
                     return true;
                 }
-                return createPlot(context, nameArg, radiusArg);
+                return createPlot(context, nameArg);
             }
 
             if (sub === 'delete' || sub === 'destroy') {
@@ -578,7 +575,7 @@ export default class ModLoad {
                 return listPlots(context);
             }
 
-            say(context, `§cUnknown subcommand "${sub}".`);
+            say(context, `§cUnknown: ${sub}`);
             usage(context);
             return true;
         }
@@ -650,7 +647,7 @@ export default class ModLoad {
                     hudOffset,
                     {
                         background: '#00000000',
-                        padding: 0,
+                        padding: -1,
                         noColor: false,
                         shadow: true
                     }
@@ -658,18 +655,18 @@ export default class ModLoad {
             }, { priority: 100 });
         }
 
-        ModAPI.registerCommand(
-            'plot',
-            '<create|delete|rename|owner|trust|untrust|pos1|pos2|info|list>',
-            'Create and manage plots',
-            (context, args) => {
-                if (!loaded) {
-                    ready.then(() => runCommand(context, args));
-                    return true;
-                }
-                return runCommand(context, args);
+        const plotUsage = '<create|delete|rename|owner|trust|untrust|pos1|pos2|select|info|list>';
+
+        function handlePlotCommand(context, args) {
+            if (!loaded) {
+                ready.then(() => runCommand(context, args));
+                return true;
             }
-        );
+            return runCommand(context, args);
+        }
+
+        ModAPI.registerCommand('plot', plotUsage, 'Create and manage plots', handlePlotCommand);
+        ModAPI.registerCommand('p', plotUsage, 'Plot commands (shorthand for /plot)', handlePlotCommand);
 
         if (isServer) {
             ModAPI.log('Plot manager ready.');
