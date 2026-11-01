@@ -13,6 +13,7 @@ const translations = {
     "Open Folder": "Mappa megnyitása",
     "Select Pack": "Csomag kiválasztása",
     "Upload .zip": ".zip feltöltése",
+    "Upload folder": "Mappa feltöltése",
     "Delete World": "Világ törlése",
     "Language": "Nyelv",
     "English": "Angol",
@@ -235,6 +236,10 @@ const translations = {
     // ------------------------------------------------------------------ loading
     "Loading terrain...": "Terep betöltése...",
     "Building terrain...": "Terep építése...",
+    "Importing mods...": "Modok importálása...",
+    "Loading world data...": "Világadatok betöltése...",
+    "Loading textures...": "Textúrák betöltése...",
+    "Connecting to world...": "Kapcsolódás a világhoz...",
     "Starting integrated server...": "Integrált szerver indítása...",
     "Starting the update...": "Frissítés indítása...",
     "The installer output will appear here.": "A telepítő kimenete itt jelenik meg.",

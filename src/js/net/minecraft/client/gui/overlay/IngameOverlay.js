@@ -27,6 +27,12 @@ export default class IngameOverlay extends Gui {
         this.textureHeartEmpty = minecraft.resources['gui/heartEmpty.png'];
 
         this.ticksRendered = 0;
+
+        // Selected-item name shown above the hotbar after switching slots.
+        this.lastSelectedSlot = -1;
+        this.lastSelectedTypeId = 0;
+        this.selectedItemName = "";
+        this.selectedItemNameUntil = 0;
     }
 
     render(stack, mouseX, mouseY, partialTicks) {
@@ -63,6 +69,8 @@ export default class IngameOverlay extends Gui {
         // Render hotbar (hidden in spectator)
         if (!this.minecraft.player.spectator) {
             this.renderHotbar(stack, this.window.width / 2 - 91, this.window.height - 22);
+            this.updateSelectedItemName();
+            this.renderSelectedItemName(stack);
         }
 
         // Render health bar (hidden in creative and spectator)
@@ -85,6 +93,10 @@ export default class IngameOverlay extends Gui {
         if (Keyboard.isKeyDown(this.minecraft.settings.keyPlayerList) && !this.minecraft.isSingleplayer()) {
             this.playerListOverlay.renderPlayerList(stack, this.window.width);
         }
+
+        // Mod-provided HUD text draws above the built-in overlay so a mod can
+        // place information anywhere without fighting the hotbar or chat.
+        this.minecraft.modLoader?.emitOverlayText(this, stack);
     }
 
     /** Small banner above the hotbar listing everyone currently talking. */
@@ -181,6 +193,54 @@ export default class IngameOverlay extends Gui {
                 size
             );
         }
+    }
+
+    updateSelectedItemName() {
+        const inventory = this.minecraft.player.inventory;
+        const slot = inventory.selectedSlotIndex;
+        const itemStack = inventory.getItemInSlot(slot);
+        const typeId = itemStack.isEmpty() ? 0 : itemStack.getType();
+
+        if (slot === this.lastSelectedSlot && typeId === this.lastSelectedTypeId) {
+            return;
+        }
+
+        // Don't pop the label for whatever happens to be held on join.
+        const firstUpdate = this.lastSelectedSlot === -1;
+        this.lastSelectedSlot = slot;
+        this.lastSelectedTypeId = typeId;
+
+        if (firstUpdate || typeId === 0) {
+            this.selectedItemName = "";
+            this.selectedItemNameUntil = 0;
+            return;
+        }
+
+        const block = Block.getById(typeId);
+        const description = block ? block.getDescription() : null;
+        const name = description ? description.split(/\r?\n/)[0].trim() : "";
+        if (!name) {
+            this.selectedItemName = "";
+            this.selectedItemNameUntil = 0;
+            return;
+        }
+
+        this.selectedItemName = name;
+        this.selectedItemNameUntil = performance.now() + 2000;
+    }
+
+    renderSelectedItemName(stack) {
+        if (!this.selectedItemName || performance.now() > this.selectedItemNameUntil) {
+            return;
+        }
+
+        const nameWidth = this.getStringWidth(stack, this.selectedItemName, true);
+        const x = Math.floor(this.window.width / 2 - nameWidth / 2);
+        // Sit just above the hotbar, or above the health bar when it is shown.
+        const healthVisible = !this.minecraft.player.creative && !this.minecraft.player.spectator;
+        const y = this.window.height - (healthVisible ? 44 : 44);
+
+        this.drawString(stack, this.selectedItemName, x, y, 0xFFFFFFFF, true, false);
     }
 
     renderHotbar(stack, x, y) {

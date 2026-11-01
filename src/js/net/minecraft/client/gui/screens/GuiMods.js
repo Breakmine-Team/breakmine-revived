@@ -78,6 +78,10 @@ export default class GuiMods extends GuiScreen {
             this.uploadMod();
         });
 
+        this.buttonUploadFolder = new GuiButton(this.minecraft, "Upload folder", this.width - 105, 0, 100, 20, () => {
+            this.uploadModFolder();
+        });
+
         this.buttonDelete = new GuiButton(this.minecraft, "Delete", this.width / 2 - 155, this.height - 28, 150, 20, async () => {
             if (this.selectedIndex < 0 || this.selectedIndex >= this.mods.length) return;
             const mod = this.mods[this.selectedIndex];
@@ -101,6 +105,7 @@ export default class GuiMods extends GuiScreen {
         });
 
         this.buttonList.push(this.buttonUpload);
+        this.buttonList.push(this.buttonUploadFolder);
         this.buttonList.push(this.buttonToggle);
         this.buttonList.push(this.buttonDelete);
         this.buttonList.push(this.buttonBack);
@@ -163,6 +168,29 @@ export default class GuiMods extends GuiScreen {
             console.error('[Patchwork] Could not list installed mods:', err);
             this.mods = [];
         }
+    }
+
+    uploadModFolder() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.multiple = true;
+        input.webkitdirectory = true;
+        input.setAttribute('webkitdirectory', '');
+        input.onchange = async (e) => {
+            const files = e.target.files;
+            if (!files || files.length === 0) return;
+            try {
+                await this.minecraft.modLoader.installModFromFolder(files);
+                this.dirty = true;
+                await this.refreshModList();
+                this.rebuildSlotList();
+                this.selectedIndex = this.mods.length - 1;
+                this.updateButtonStates();
+            } catch (err) {
+                alert('Failed to install mod: ' + err.message);
+            }
+        };
+        input.click();
     }
 
     uploadMod() {

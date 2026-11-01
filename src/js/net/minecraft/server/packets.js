@@ -4,6 +4,7 @@ import { makePacket, writeVarInt, writeString, broadcast, varIntSize } from './p
 import { getPlayers, getPlayerCount } from './players.js';
 import { generateFlatChunkColumn, getWorldType, getSpawnPosition } from './world.js';
 import config from './config.js';
+import { readServerMods } from './serverMods.js';
 import {
     OFF_GRID_PROTOCOL_VERSION,
     OFF_GRID_STATE_PACKET_ID,
@@ -63,6 +64,24 @@ function sendServerRules(player) {
         allowTNT: config.allowTNT !== false,
         allowLiquidFlow: config.allowLiquidFlow !== false
     }));
+}
+
+// Server-side mods travel as a JSON side-channel message right after the
+// join packet. The client loads them before it processes any chunk packets,
+// so hash block ids in the streamed chunks are already registered.
+function sendServerMods(player) {
+    if (!player?.ws || player.ws.readyState !== 1) {
+        return;
+    }
+
+    let mods = [];
+    try {
+        mods = readServerMods();
+    } catch (err) {
+        console.warn('[Server] Could not read server mods:', err.message);
+    }
+
+    player.ws.send(JSON.stringify({ type: 'serverMods', mods }));
 }
 
 function sendRespawn(player, dimension) {
@@ -553,6 +572,7 @@ export {
     sendLoginSuccess,
     sendJoinGame,
     sendServerRules,
+    sendServerMods,
     sendRespawn,
     sendSpawnPosition,
     sendChunks,

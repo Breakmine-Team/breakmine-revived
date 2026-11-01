@@ -19,6 +19,11 @@ const defaults = {
     op_player_list: [],
     motd: 'Brand new server',
     allowMods: false,
+    // Server-side mods are sent to every client on join. The folder is
+    // relative to the active server's directory (PROJECT_ROOT for "main",
+    // worlds/<name>/ otherwise).
+    serverMods: true,
+    serverModsDir: 'servermods',
     worldType: 'flat',
     seed: 0,
     // Destructive gameplay rules. Environment switches can turn these off
@@ -188,5 +193,6 @@ function listServers() {
 config.reload = reloadConfig;
 config.requestedServer = requestedServer;
 config.listServers = listServers;
+config.getServerDir = getServerDir;
 
 export default config;

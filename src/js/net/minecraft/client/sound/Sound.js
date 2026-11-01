@@ -38,8 +38,8 @@ export default class Sound {
 
     static async _playModSound(modId, soundName, volume, pitch) {
         const modLoader = Sound.minecraft?.modLoader;
-        const filesystem = (modLoader && modLoader.getDevModFilesystem)
-            ? (modLoader.getDevModFilesystem(modId) || modLoader.filesystem)
+        const filesystem = (modLoader && modLoader.getModFilesystem)
+            ? (modLoader.getModFilesystem(modId) || modLoader.filesystem)
             : modLoader?.filesystem;
         if (!filesystem) {
             return;

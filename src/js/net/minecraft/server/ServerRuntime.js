@@ -5,6 +5,7 @@ import { handlePacket, cleanupPlayerChunks, respawnPlayer, flushSaveWorld } from
 import { addPlayer, removePlayer, getPlayerCount, getPlayers, savePlayerData, normalizeInventoryState } from './players.js';
 import Logger from './logger.js';
 import { BlockRegistry } from '../client/world/block/BlockRegistry.js';
+import { handleModMessage, loadServerSideMods } from './ServerModLoader.js';
 import getServerWorld from './World.js';
 import config from './config.js';
 import * as protocol from './protocol.js';
@@ -63,6 +64,7 @@ export function initServer() {
     log.info('Server', `TNT ${config.allowTNT !== false ? 'enabled' : 'disabled'}, liquid flow ${config.allowLiquidFlow !== false ? 'enabled' : 'disabled'}`);
     initWorld(currentWorld);
     BlockRegistry.create(); // Initialize block registry from game code
+    loadServerSideMods(); // Register content shipped by this server's mods
     const serverWorld = getServerWorld(); // Initialize server world for block ticking
 
     // Seed block ticks for any saved bluestone components so loaded networks
@@ -150,6 +152,10 @@ export function onConnection(ws) {
             if (payload && payload.type === 'inventory') {
                 player.inventory = normalizeInventoryState(payload.inventory);
                 savePlayerData(player);
+            } else if (payload && payload.type === 'modMessage') {
+                if (player.username && typeof payload.modId === 'string' && payload.modId.length <= 64) {
+                    handleModMessage(player, payload.modId, payload.payload);
+                }
             } else if (payload && payload.type === 'cape:request') {
                 sendCapeStates(player);
             } else if (payload && payload.type === 'cape:update') {

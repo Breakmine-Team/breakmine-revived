@@ -510,6 +510,11 @@ export default class WorldRenderer {
         // Render placement preview ghost block
         this.updateBlockPlacePreview(partialTicks);
 
+        // Render the road builder's selection preview
+        if (this.minecraft.roadBuilder) {
+            this.minecraft.roadBuilder.updatePreview(this, player);
+        }
+
         // Render entity bounding boxes
         this.updateEntityBoundingBoxes(partialTicks);
 
@@ -644,6 +649,14 @@ export default class WorldRenderer {
         if (this.blockPreviewGroup.visible) {
             this.scene.remove(this.blockPreviewGroup);
             this.scene.add(this.blockPreviewGroup);
+        }
+
+        // Road preview uses translucent pavement meshes, so keep it after the
+        // chunk and batcher meshes as well.
+        const roadPreviewGroup = this.minecraft.roadBuilder?.previewGroup;
+        if (roadPreviewGroup && roadPreviewGroup.visible) {
+            this.scene.remove(roadPreviewGroup);
+            this.scene.add(roadPreviewGroup);
         }
 
         // Render actual scene (batcher mesh draws last, on top of entities/chunks)

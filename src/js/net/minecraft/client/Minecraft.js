@@ -3,6 +3,7 @@ import GameSettings from "./GameSettings.js";
 import GameWindow from "./GameWindow.js";
 import Keyboard from "../util/Keyboard.js";
 import WorldRenderer from "./render/WorldRenderer.js";
+import RoadBuilder from "./roadbuilder/RoadBuilder.js";
 import ScreenRenderer from "./render/gui/ScreenRenderer.js";
 import ItemRenderer from "./render/gui/ItemRenderer.js";
 import IngameOverlay from "./gui/overlay/IngameOverlay.js";
@@ -155,6 +156,7 @@ export default class Minecraft {
         SmeltingRegistry.reset();
 
         this.blockList = BlockRegistry.getAllBlocks();
+        this.roadBuilder = new RoadBuilder(this);
 
         // Expose Block class globally for mod sandboxing
         window.__ModBlockClass__ = Block;
@@ -376,6 +378,12 @@ export default class Minecraft {
         this.musicManager.stopMusic();
 
         if (world === null) {
+            // Mods supplied by the server belong to that connection only.
+            // Remove their blocks, textures, recipes and commands before the
+            // world is torn down so they cannot leak into another server or
+            // singleplayer.
+            this.modLoader?.unloadServerMods?.();
+            this.worldLoadPromise = Promise.resolve();
             // Save world before quitting
             if (this.world !== null && this.isSingleplayer()) {
                 await this.saveWorld();
@@ -435,9 +443,11 @@ export default class Minecraft {
                 await new Promise(resolve => setTimeout(resolve, 500));
             }
 
-            // Display loading screen
+            // Display loading screen. The terrain title stays until the chunk
+            // stream starts, then onTick/_loadWorldAsync switches to the
+            // building phase.
             this.loadingScreen = new GuiLoadingScreen();
-            this.loadingScreen.setTitle("Building terrain...");
+            this.loadingScreen.setTitle("Loading terrain...");
             this.displayScreen(this.loadingScreen);
 
             // Reset chunk timeout tracking for the new world
@@ -458,8 +468,10 @@ export default class Minecraft {
 
             // Reload texture atlas with selected pack if set
             if (this.settings.selectedTexturePack && this.worldRenderer.textureAtlas) {
+                this.setLoadingStatus("Loading textures...");
                 this.worldRenderer.textureAtlas.texturePath = `texture_packs/${this.settings.selectedTexturePack}/`;
                 await this.worldRenderer.textureAtlas.loadTextures();
+                this.setLoadingStatus("Loading terrain...");
             }
 
             // Create player
@@ -481,10 +493,14 @@ export default class Minecraft {
     }
 
     async _loadWorldAsync(world) {
+        this.setLoadingStatus("Loading world data...");
+
         // Load saved chunk data from IndexedDB before generating new chunks
         if (this.isSingleplayer()) {
             await this.loadWorldSave(world, this.currentWorldKey);
         }
+
+        this.setLoadingStatus("Building terrain...");
 
         const provider = world.getChunkProvider();
         const viewDistance = this.settings.viewDistance;
@@ -733,6 +749,7 @@ export default class Minecraft {
         // server owns the world (terrain + save files); the client renders
         // whatever the server sends, exactly like multiplayer.
         this.displayScreen(new GuiLoadingIntegratedServer(this.currentScreen));
+        this.setLoadingStatus("Loading world data...");
         await startIntegratedServer({
             worldKey: worldKey,
             name: name,
@@ -742,7 +759,9 @@ export default class Minecraft {
             gameMode: gameMode || 'survival',
             username: this.getSession().getProfile().getUsername(),
             migrateData: null,
+            clientMods: this.modLoader ? await this.modLoader.getServerModPayload() : [],
         });
+        this.setLoadingStatus("Connecting to world...");
         this.connectToIntegratedServer();
 
         return null;
@@ -968,6 +987,7 @@ export default class Minecraft {
         const saveData = await this._loadWorldFromDB(worldKey);
 
         this.displayScreen(new GuiLoadingIntegratedServer(this.currentScreen));
+        this.setLoadingStatus("Loading world data...");
         await startIntegratedServer({
             worldKey: worldKey,
             name: (serverEntry && serverEntry.name) || (entry && entry.name) || undefined,
@@ -977,6 +997,7 @@ export default class Minecraft {
             gameMode: (serverEntry && serverEntry.gameMode) || (entry && entry.gameMode) || 'creative',
             username: this.getSession().getProfile().getUsername(),
             migrateData: saveData || null,
+            clientMods: this.modLoader ? await this.modLoader.getServerModPayload() : [],
         });
 
         // Once migrated, drop the IndexedDB copy so it never overwrites the
@@ -985,6 +1006,7 @@ export default class Minecraft {
             await this._deleteWorldFromDB(worldKey);
         }
 
+        this.setLoadingStatus("Connecting to world...");
         this.connectToIntegratedServer();
         return true;
     }
@@ -1393,6 +1415,12 @@ export default class Minecraft {
             let requiredChunks = Math.pow(renderDistance * 2 - 1, 2);
             let loadedChunks = this.world.getChunkProvider().getChunks().size;
 
+            // Terrain chunks are arriving now: the stream/load phase is over
+            // and the client is building the visible world.
+            if (loadedChunks > 0) {
+                this.loadingScreen.setTitle("Building terrain...");
+            }
+
             // Track chunk arrival for timeout detection
             if (loadedChunks !== this.lastChunkCount) {
                 this.lastChunkCount = loadedChunks;
@@ -1456,6 +1484,24 @@ export default class Minecraft {
                 this.lastSaveTime = Date.now();
                 this.saveWorld();
             }
+        }
+    }
+
+    /**
+     * Update the status line of whichever loading screen is visible. Used by
+     * the world loader, the chunk stream and the server-mod importer so the
+     * screen describes the phase that is actually running.
+     */
+    setLoadingStatus(status) {
+        if (!status) return;
+
+        if (this.loadingScreen) {
+            this.loadingScreen.setTitle(status);
+            return;
+        }
+
+        if (this.currentScreen && typeof this.currentScreen.setStatus === 'function') {
+            this.currentScreen.setStatus(status);
         }
     }
 
@@ -1568,12 +1614,73 @@ export default class Minecraft {
         }
     }
 
+    /**
+     * Fire cancelable mod hooks for a player block action.
+     * `pos` is the block being changed (the destination for placement); the
+     * clicked block is exposed separately as `clickedPos`/`clickedBlock`.
+     */
+    isInteractiveBlock(block) {
+        return !!block &&
+            typeof block.onMouseButton === 'function' &&
+            block.onMouseButton !== Block.prototype.onMouseButton;
+    }
+
+    emitBlockAction(action, x, y, z, options = {}) {
+        const world = options.world || this.world;
+        let targetBlockId = 0;
+        let targetMetadata = 0;
+        if (world) {
+            targetBlockId = world.getBlockAt(x, y, z) ?? 0;
+            targetMetadata = world.getBlockDataAt(x, y, z) ?? 0;
+        }
+
+        const heldItem = this.player?.inventory?.getItemInSelectedSlot?.();
+        const currentBlockId = options.currentBlockId ?? (heldItem ? (heldItem.getType() || 0) : 0);
+        const clicked = options.clickedPos || { x, y, z };
+        const clickedBlockId = world
+            ? (world.getBlockAt(clicked.x, clicked.y, clicked.z) ?? 0)
+            : targetBlockId;
+
+        return this.modLoader?.emitBlockAction?.(action, {
+            action,
+            username: this.player?.username || '',
+            x, y, z,
+            pos: { x, y, z },
+            currentBlock: Block.getById(currentBlockId),
+            currentBlockId,
+            targetBlock: Block.getById(targetBlockId),
+            targetBlockId,
+            clickedBlock: Block.getById(clickedBlockId),
+            clickedBlockId,
+            clickedPos: { x: clicked.x, y: clicked.y, z: clicked.z },
+            placePos: { x, y, z },
+            face: options.face ?? null,
+            metadata: options.metadata ?? targetMetadata,
+            offGrid: !!options.offGrid,
+            world,
+            minecraft: this
+        }) || { action, canceled: false };
+    }
+
     breakTargetBlock(hitResult, typeId) {
         // Summoned cells live in the field's local grid, not in server chunk
         // storage: a dig/drop packet at those coordinates would make the
         // server break real terrain (or spawn server items) there. The cell
         // removal itself is synced by OffGridClientSync.
         let isFieldHit = !!(hitResult.fieldCell && this.world.offGridField);
+        const actionWorld = isFieldHit ? this.world.offGridField.createLocalWorld() : this.world;
+        const breakAction = this.emitBlockAction('break', hitResult.x, hitResult.y, hitResult.z, {
+            world: actionWorld,
+            metadata: actionWorld.getBlockDataAt(hitResult.x, hitResult.y, hitResult.z),
+            offGrid: isFieldHit
+        });
+        if (breakAction.canceled) {
+            this.miningProgress = 0;
+            this.miningTimer = 0;
+            this.lastBlockPos = null;
+            return;
+        }
+
         let block = Block.getById(typeId);
         let drops = [];
 
@@ -1649,6 +1756,22 @@ export default class Minecraft {
         for (let i = 1; i <= 9; i++) {
             if (button === 'Digit' + i) {
                 this.player.inventory.selectedSlotIndex = i - 1;
+            }
+        }
+
+        // Road builder controls while its tool is held
+        if (this.roadBuilder && this.roadBuilder.isToolSelected()) {
+            if (button === "Equal" || button === "NumpadAdd") {
+                this.roadBuilder.adjustWidth(1);
+                return;
+            }
+            if (button === "Minus" || button === "NumpadSubtract") {
+                this.roadBuilder.adjustWidth(-1);
+                return;
+            }
+            if (button === "KeyR") {
+                this.roadBuilder.cycleVariant();
+                return;
             }
         }
 
@@ -1799,10 +1922,23 @@ export default class Minecraft {
                         if (field) {
                             let cellId = field.getBlockAt(hitResult.x, hitResult.y, hitResult.z);
                             let cellBlock = Block.getById(cellId);
-                            if (cellId !== 0 && cellBlock !== null &&
-                                typeof cellBlock.onMouseButton === 'function' &&
-                                cellBlock.onMouseButton(field.createLocalWorld(), hitResult.x, hitResult.y, hitResult.z, button)) {
-                                return;
+                            if (cellId !== 0 && cellBlock !== null) {
+                                let fieldWorld = field.createLocalWorld();
+                                let face = this.getFaceValue(hitResult.face);
+                                let metadata = fieldWorld.getBlockDataAt(hitResult.x, hitResult.y, hitResult.z);
+
+                                if (typeof cellBlock.onMouseButton === 'function' &&
+                                    cellBlock.onMouseButton(fieldWorld, hitResult.x, hitResult.y, hitResult.z, button)) {
+                                    return;
+                                }
+
+                                let breakAction = this.emitBlockAction('break', hitResult.x, hitResult.y, hitResult.z, {
+                                    world: fieldWorld,
+                                    face,
+                                    metadata,
+                                    offGrid: true
+                                });
+                                if (breakAction.canceled) return;
                             }
 
                             let sound = cellBlock ? cellBlock.getSound().getBreakSound() : null;
@@ -1825,6 +1961,12 @@ export default class Minecraft {
                         if (block != null && block.onMouseButton(this.world, hitResult.x, hitResult.y, hitResult.z, button)) return;
 
                         if (typeId !== 0 && block != null) {
+                            let breakAction = this.emitBlockAction('break', hitResult.x, hitResult.y, hitResult.z, {
+                                face: this.getFaceValue(hitResult.face),
+                                metadata: this.world.getBlockDataAt(hitResult.x, hitResult.y, hitResult.z)
+                            });
+                            if (breakAction.canceled) return;
+
                             let soundName = block.getSound().getBreakSound();
 
                             // Play sound
@@ -1918,7 +2060,20 @@ export default class Minecraft {
                     if (hitResult != null && hitResult.fieldCell && this.world.offGridField) {
                         itemWorld = this.world.offGridField.createLocalWorld();
                     }
-                    Block.getById(heldItem.getType()).onUse(itemWorld, x, y, z, heldItem,
+
+                    let heldBlock = Block.getById(heldItem.getType());
+                    if (hitResult != null && typeof heldBlock?.onUseOnBlockServer === 'function') {
+                        let interactAction = this.emitBlockAction('interact', hitResult.x, hitResult.y, hitResult.z, {
+                            world: itemWorld,
+                            currentBlockId: heldItem.getType(),
+                            face: this.getFaceValue(hitResult.face),
+                            metadata: itemWorld.getBlockDataAt(hitResult.x, hitResult.y, hitResult.z),
+                            offGrid: !!hitResult.fieldCell
+                        });
+                        if (interactAction.canceled) return;
+                    }
+
+                    heldBlock.onUse(itemWorld, x, y, z, heldItem,
                         hitResult != null ? hitResult.face : undefined);
                     return;
                 }
@@ -1935,17 +2090,27 @@ export default class Minecraft {
                     let queryWorld = field ? field.createLocalWorld() : this.world;
 
                     let blockCheck = Block.getById(queryWorld.getBlockAt(hitResult.x, hitResult.y, hitResult.z));
-                    if (blockCheck && blockCheck.onMouseButton && blockCheck.onMouseButton(queryWorld, hitResult.x, hitResult.y, hitResult.z, button)) {
-                        // In multiplayer, tell the server so the interaction
-                        // (e.g. door toggle) is applied authoritatively and
-                        // broadcast to all players. A summoned cell's data
-                        // write is synced through OffGridClientSync instead,
-                        // so the vanilla packet must not use local coordinates.
-                        if (!field && !this.isSingleplayer()) {
-                            let blockPos = new BlockPosition(hitResult.x, hitResult.y, hitResult.z);
-                            this.playerController.sendBlockPlacementPacket(blockPos, 255, { id: -1 });
+                    if (this.isInteractiveBlock(blockCheck)) {
+                        let interactAction = this.emitBlockAction('interact', hitResult.x, hitResult.y, hitResult.z, {
+                            world: queryWorld,
+                            face: this.getFaceValue(hitResult.face),
+                            metadata: queryWorld.getBlockDataAt(hitResult.x, hitResult.y, hitResult.z),
+                            offGrid: !!field
+                        });
+                        if (interactAction.canceled) return;
+
+                        if (blockCheck.onMouseButton(queryWorld, hitResult.x, hitResult.y, hitResult.z, button)) {
+                            // In multiplayer, tell the server so the interaction
+                            // (e.g. door toggle) is applied authoritatively and
+                            // broadcast to all players. A summoned cell's data
+                            // write is synced through OffGridClientSync instead,
+                            // so the vanilla packet must not use local coordinates.
+                            if (!field && !this.isSingleplayer()) {
+                                let blockPos = new BlockPosition(hitResult.x, hitResult.y, hitResult.z);
+                                this.playerController.sendBlockPlacementPacket(blockPos, 255, { id: -1 });
+                            }
+                            return;
                         }
-                        return;
                     }
 
                     let blockedByPlayer;
@@ -1974,6 +2139,46 @@ export default class Minecraft {
                         // in the world, and guessing one here would push an id the
                         // server cannot resolve into the save file.
                         let block = Block.getById(typeId);
+
+                        // Clicking the top of an existing pavement slope adds
+                        // a layer to it instead of placing a layer one cell
+                        // above, matching snow-layer behavior.
+                        if (!field && block?.isPavementSlope === true && hitResult.face.y === 1) {
+                            const clickedX = hitResult.x;
+                            const clickedY = hitResult.y;
+                            const clickedZ = hitResult.z;
+                            const clickedId = queryWorld.getBlockAt(clickedX, clickedY, clickedZ);
+                            if (clickedId === typeId) {
+                                const layerData = queryWorld.getBlockDataAt(clickedX, clickedY, clickedZ) & 7;
+                                if (layerData < 7) {
+                                    let placeAction = this.emitBlockAction('place', clickedX, clickedY, clickedZ, {
+                                        world: queryWorld,
+                                        clickedPos: { x: hitResult.x, y: hitResult.y, z: hitResult.z },
+                                        face: this.getFaceValue(hitResult.face),
+                                        metadata: queryWorld.getBlockDataAt(clickedX, clickedY, clickedZ)
+                                    });
+                                    if (placeAction.canceled) return;
+
+                                    queryWorld.setBlockDataAt(clickedX, clickedY, clickedZ, layerData + 1);
+
+                                    if (!this.player.creative) {
+                                        this.player.inventory.removeItem(typeId, 1, this.player.inventory.selectedSlotIndex);
+                                    }
+                                    this.player.swingArm();
+
+                                    if (!this.isSingleplayer() &&
+                                        typeof this.playerController.sendBlockPlacementPacket === "function") {
+                                        this.playerController.sendBlockPlacementPacket(
+                                            new BlockPosition(clickedX, clickedY, clickedZ),
+                                            255,
+                                            { id: typeId }
+                                        );
+                                    }
+                                    return;
+                                }
+                            }
+                        }
+
                         let placeable = typeId !== 0 && isReplaceable && block !== null && !block.isItem() &&
                             (typeof block.canPlaceAt !== "function" ||
                                 block.canPlaceAt(queryWorld, x, y, z, hitResult.face));
@@ -2005,6 +2210,15 @@ export default class Minecraft {
                                 let dirIndex = Math.floor((this.player.rotationYaw * 4 / 360) + 0.5) & 3;
                                 blockData = [2, 5, 3, 4][dirIndex]; // 2=N, 3=S, 4=W, 5=E - front faces player
                             }
+
+                            let placeAction = this.emitBlockAction('place', x, y, z, {
+                                world: queryWorld,
+                                clickedPos: { x: hitResult.x, y: hitResult.y, z: hitResult.z },
+                                face: this.getFaceValue(hitResult.face),
+                                metadata: queryWorld.getBlockDataAt(x, y, z),
+                                offGrid: !!field
+                            });
+                            if (placeAction.canceled) return;
 
                             // Place block into the summoned field when the hit
                             // was on it: its cells use their own coordinate

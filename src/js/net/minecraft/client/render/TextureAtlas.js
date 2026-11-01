@@ -25,6 +25,7 @@ export default class TextureAtlas {
         this.texture = null;
         this.loaded = false;
         this._nextModIndex = 0;
+        this._freeModIndices = [];
         
         this.initializeTextureNameToSlotId();
     }
@@ -68,6 +69,9 @@ export default class TextureAtlas {
         ctx.imageSmoothingEnabled = false;
 
         this.animatedTextures.clear();
+        this.textureMap.clear();
+        this.reverseTextureMap.clear();
+        this._freeModIndices = [];
 
         const textureFiles = await this.getTextureFiles();
         
@@ -188,12 +192,16 @@ export default class TextureAtlas {
         }
 
         const maxSlots = this.texturesPerRow * this.texturesPerRow;
-        if (this._nextModIndex >= maxSlots) {
+        let index;
+        if (this._freeModIndices.length > 0) {
+            index = this._freeModIndices.pop();
+        } else if (this._nextModIndex < maxSlots) {
+            index = this._nextModIndex++;
+        } else {
             console.error(`[TextureAtlas] Atlas full (${maxSlots} slots). Cannot register mod texture '${namespacedKey}'.`);
             return { x: 0, y: 0, index: 0 };
         }
 
-        const index = this._nextModIndex++;
         const x = (index % this.texturesPerRow) * this.textureSize;
         const y = Math.floor(index / this.texturesPerRow) * this.textureSize;
 
@@ -211,6 +219,32 @@ export default class TextureAtlas {
 
         console.log(`[TextureAtlas] Registered mod texture '${namespacedKey}' at slot ${index} (${x}, ${y})`);
         return coords;
+    }
+
+    /**
+     * Remove a mod texture and return its slot to the free list. Called when a
+     * server-supplied mod is unloaded after leaving the server.
+     */
+    unregisterModTexture(namespacedKey) {
+        const coords = this.textureMap.get(namespacedKey);
+        if (!coords) return false;
+
+        this.textureMap.delete(namespacedKey);
+        if (this.reverseTextureMap.get(coords.index) === namespacedKey) {
+            this.reverseTextureMap.delete(coords.index);
+        }
+        this.animatedTextures.delete(namespacedKey);
+
+        if (this.canvas) {
+            const ctx = this.canvas.getContext('2d');
+            ctx.clearRect(coords.x, coords.y, this.textureSize, this.textureSize);
+            if (this.texture) this.texture.needsUpdate = true;
+        }
+
+        if (!this._freeModIndices.includes(coords.index)) {
+            this._freeModIndices.push(coords.index);
+        }
+        return true;
     }
 
     async getTextureFiles() {

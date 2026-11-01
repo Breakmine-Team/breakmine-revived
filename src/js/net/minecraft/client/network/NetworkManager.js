@@ -32,6 +32,11 @@ export default class NetworkManager {
         this.pendingHealth = null;
         this.pendingGamemode = null;
 
+        // Set while server-supplied mods are being registered. Binary packets
+        // (join/chunks) wait for it so hash block ids are known when chunks
+        // are decoded.
+        this._serverModsPromise = null;
+
         // Throttle tracking for movement packets
         this.lastMovementPacketTime = 0;
         this.movementThrottleCooldown = 50; // Minimum ms between movement updates
@@ -219,6 +224,27 @@ export default class NetworkManager {
                         allowLiquidFlow: payload.allowLiquidFlow !== false
                     };
                 }
+            } else if (payload.type === 'serverMods') {
+                const modLoader = this.minecraft?.modLoader;
+                const mods = Array.isArray(payload.mods) ? payload.mods : [];
+                if (modLoader && typeof modLoader.loadServerMods === 'function') {
+                    const pending = modLoader.loadServerMods(mods);
+                    this._serverModsPromise = pending;
+
+                    const finish = () => {
+                        // A newer serverMods payload owns the loading status now.
+                        if (this._serverModsPromise !== pending) return;
+                        this._serverModsPromise = null;
+                        if (mods.length > 0) {
+                            this.minecraft?.setLoadingStatus?.("Building terrain...");
+                        }
+                    };
+
+                    pending.then(finish, (err) => {
+                        console.error('[Network] Failed to load server mods:', err);
+                        finish();
+                    });
+                }
             } else if (payload.type === 'playerState') {
                 const player = this.minecraft?.player;
                 if (player) {
@@ -368,6 +394,23 @@ export default class NetworkManager {
     _onMessage(event) {
         if (typeof event.data === 'string') {
             this._onJsonMessage(event.data);
+            return;
+        }
+
+        if (this._serverModsPromise) {
+            const pending = this._serverModsPromise;
+            const resume = () => {
+                if (!this.connected) return;
+                if (this._serverModsPromise && this._serverModsPromise !== pending) {
+                    this._onMessage(event);
+                    return;
+                }
+                if (this._serverModsPromise === pending) {
+                    this._serverModsPromise = null;
+                }
+                this._onMessage(event);
+            };
+            pending.then(resume, resume);
             return;
         }
 

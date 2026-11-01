@@ -3,6 +3,7 @@ const https = require('https');
 const { initServer, onConnection, stopServer } = require('./ServerRuntime.js');
 const Logger = require('./logger.js').default;
 const config = require('./config.js').default;
+const { installServerModsFromEnv } = require('./serverModDownloads.js');
 const { IsomorphicFilesystem } = require('../client/fs/IsomorphicFilesystem.js');
 
 let log = Logger;
@@ -19,52 +20,69 @@ if (process.env.DATA_DIR) {
     log.info('Server', `Working directory set to ${process.env.DATA_DIR}`);
 }
 
-// Initialize the world (loads config, world data, block registry, tick loop).
-initServer();
+let wss = null;
 
-// Load SSL certificate and key if available
-let server = null;
-let options = {};
-
-try {
-    if (fs.existsSync('cert.pem') && fs.existsSync('key.pem')) {
-        options = {
-            cert: fs.readFileSync('cert.pem'),
-            key: fs.readFileSync('key.pem')
-        };
-        server = https.createServer(options);
-        log.info('Server', 'WSS enabled using cert.pem and key.pem');
+async function main() {
+    // Install SERVER_MOD_URLS before initServer() so downloaded mods are part
+    // of the first load and get sent to players on join.
+    try {
+        await installServerModsFromEnv();
+    } catch (e) {
+        log.warn('Server', `Could not install startup mods: ${e.message}`);
     }
-} catch (e) {
-    log.error('Server', 'Failed to load SSL certificates: ' + e.message);
+
+    // Initialize the world (loads config, world data, block registry, tick loop).
+    initServer();
+
+    // Load SSL certificate and key if available
+    let server = null;
+    let options = {};
+
+    try {
+        if (fs.existsSync('cert.pem') && fs.existsSync('key.pem')) {
+            options = {
+                cert: fs.readFileSync('cert.pem'),
+                key: fs.readFileSync('key.pem')
+            };
+            server = https.createServer(options);
+            log.info('Server', 'WSS enabled using cert.pem and key.pem');
+        }
+    } catch (e) {
+        log.error('Server', 'Failed to load SSL certificates: ' + e.message);
+    }
+
+    // Without certs: create a plain HTTP server so the admin panel and the
+    // WebSocket can share the same port.
+    if (!server) {
+        server = require('http').createServer();
+    }
+
+    // Admin panel (passcode-protected world upload/download) on the same port.
+    const { attachAdminPanel } = require('./admin.js');
+    attachAdminPanel(server);
+
+    wss = new WebSocket.Server({ server: server });
+    server.listen(PORT, config.host);
+    log.info('Server', `Minecraft server running!!! (v47)`);
+    log.info('Server', `Listening on ${server ? 'wss' : 'ws'}://${config.host}:${PORT}`);
+    if (process.env.ADMIN_PASSCODE) {
+        log.info('Server', `Admin panel enabled at http://${config.host}:${PORT}/admin`);
+    } else {
+        log.warn('Server', 'Admin panel disabled (set ADMIN_PASSCODE env variable to enable it)');
+    }
+
+    wss.on('connection', onConnection);
 }
 
-// Without certs: create a plain HTTP server so the admin panel and the
-// WebSocket can share the same port.
-if (!server) {
-    server = require('http').createServer();
-}
-
-// Admin panel (passcode-protected world upload/download) on the same port.
-const { attachAdminPanel } = require('./admin.js');
-attachAdminPanel(server);
-
-const wss = new WebSocket.Server({ server: server });
-server.listen(PORT, config.host);
-log.info('Server', `Minecraft server running!!! (v47)`);
-log.info('Server', `Listening on ${server ? 'wss' : 'ws'}://${config.host}:${PORT}`);
-if (process.env.ADMIN_PASSCODE) {
-    log.info('Server', `Admin panel enabled at http://${config.host}:${PORT}/admin`);
-} else {
-    log.warn('Server', 'Admin panel disabled (set ADMIN_PASSCODE env variable to enable it)');
-}
-
-wss.on('connection', onConnection);
+main().catch((e) => {
+    log.error('Server', `Failed to start: ${e.message}`);
+    process.exit(1);
+});
 
 function shutdown() {
     stopServer();
     try {
-        wss.close();
+        if (wss) wss.close();
     } catch (e) {
         // Ignore close errors on shutdown.
     }

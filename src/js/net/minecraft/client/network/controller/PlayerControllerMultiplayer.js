@@ -99,7 +99,7 @@ export default class PlayerControllerMultiplayer extends PlayerController {
         this.networkHandler.sendPacket(new ClientPlayerDiggingPacket(status, blockPosition, face));
     }
 
-    sendBlockPlacementPacket(blockPosition, direction, heldItem) {
-        this.networkHandler.sendPacket(new ClientPlayerBlockPlacementPacket(blockPosition, direction, heldItem));
+    sendBlockPlacementPacket(blockPosition, direction, heldItem, metadata = -1) {
+        this.networkHandler.sendPacket(new ClientPlayerBlockPlacementPacket(blockPosition, direction, heldItem, metadata));
     }
 }

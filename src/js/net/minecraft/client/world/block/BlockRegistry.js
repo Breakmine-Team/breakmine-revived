@@ -51,6 +51,8 @@ import BlockCounterOven from "./type/BlockCounterOven.js";
 import BlockTrafficCone from "./type/BlockTrafficCone.js";
 import BlockTrafficBarrier from "./type/BlockTrafficBarrier.js";
 import BlockPavement from "./type/BlockPavement.js";
+import BlockPavementSlope from "./type/BlockPavementSlope.js";
+import ItemRoadBuilder from "./type/ItemRoadBuilder.js";
 import BlockFlower from "./type/BlockFlower.js";
 import BlockGrassPlant from "./type/BlockGrassPlant.js";
 import BlockLava from "./type/BlockLava.js";
@@ -166,8 +168,15 @@ export class BlockRegistry {
         const block = this.registry.get(fullKey);
         if (block) {
             this.registry.delete(fullKey);
-            this.registry.delete(block.name);
-            if (block.id !== undefined) this.idMap.delete(block.id);
+            // Only drop the short alias if it still points at this block; a
+            // different namespace may legitimately own the same local name.
+            if (this.registry.get(block.name) === block) {
+                this.registry.delete(block.name);
+            }
+            if (block.id !== undefined) {
+                this.idMap.delete(block.id);
+                Block.blocks.delete(block.id);
+            }
             this.idMap.delete(block.hashId);
         }
     }
@@ -401,9 +410,12 @@ export class BlockRegistry {
 
         // Pavement (pavement_light.png is the uncracked white texture)
         BlockRegistry.PAVEMENT_BLACK = new BlockPavement(318, 0, "pavement_black", "Black Pavement");
-        BlockRegistry.PAVEMENT_BLACK_CRACKED = new BlockPavement(319, 0, "pavement_black_cracked", "Cracked Black Pavement");
         BlockRegistry.PAVEMENT_WHITE = new BlockPavement(320, 0, "pavement_light", "White Pavement");
-        BlockRegistry.PAVEMENT_WHITE_CRACKED = new BlockPavement(321, 0, "pavement_white_cracked", "Cracked White Pavement");
+
+        // Layered pavement slopes (snow-layer style). Metadata 0-7 is 1-8
+        // layers; run the road builder over a height change to fill them in.
+        BlockRegistry.PAVEMENT_BLACK_SLOPE = new BlockPavementSlope(323, 0, "pavement_black", "Black Pavement Slope");
+        BlockRegistry.PAVEMENT_WHITE_SLOPE = new BlockPavementSlope(325, 0, "pavement_light", "White Pavement Slope");
 
         // --- COLORED BLOCKS (grouped by color) ---
         BlockRegistry.CLAY = new BlockClay(138, 0, "clay", "Clay");
@@ -579,6 +591,7 @@ export class BlockRegistry {
             BlockRegistry[`${mat.toUpperCase()}_HOE`] = new ItemHoe(toolId++, `${texName}_hoe`, `${matName} Hoe`, mat);
         }
 
+        BlockRegistry.ITEM_ROAD_BUILDER = new ItemRoadBuilder(322, 'golden_shovel', 'Road Builder');
         BlockRegistry.ITEM_BUCKET_EMPTY = new ItemBucketEmpty(118, 'bucket', 'Empty Bucket');
         BlockRegistry.ITEM_BUCKET_WATER = new ItemBucketWater(119, 'water_bucket', 'Water Bucket');
         BlockRegistry.ITEM_BUCKET_LAVA = new ItemBucketLava(120, 'lava_bucket', 'Lava Bucket');

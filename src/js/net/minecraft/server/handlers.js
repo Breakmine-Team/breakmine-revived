@@ -9,6 +9,7 @@ import {
     sendLoginSuccess,
     sendJoinGame,
     sendServerRules,
+    sendServerMods,
     sendSpawnPosition,
     sendChunks,
     sendPlayerPositionLook,
@@ -30,6 +31,7 @@ import {
 import config from './config.js';
 import Logger from './logger.js';
 import getServerWorld from './World.js';
+import { emitBlockAction } from './ServerModLoader.js';
 import Block from '../client/world/block/Block.js';
 import { NO_MODULES } from '../util/environment.js';
 import {
@@ -326,6 +328,9 @@ function handleLoginPacket(player, packetId, buffer, offset) {
         sendLoginSuccess(player);
         sendServerRules(player);
         sendJoinGame(player);
+        // Sent after Join Game so the client has a world to load into; its
+        // chunk packets are held until the mods are registered.
+        sendServerMods(player);
         sendSpawnPosition(player);
 
         // Transmit the saved position right away so the client is placed at
@@ -605,6 +610,56 @@ function handleOffGridCellEdit(player, buffer, offset) {
 }
 
 
+function getHeldItemId(player) {
+    const inventory = player.inventory;
+    if (!inventory) return 0;
+    const slot = Number(inventory.selectedSlotIndex) || 0;
+    return inventory.items?.[slot]?.typeId || 0;
+}
+
+/** Re-send the authoritative block so a client prediction is reverted. */
+function revertBlockForPlayer(player, x, y, z) {
+    const blockId = getBlockAt(x, y, z) || 0;
+    const metadata = getBlockMetadata(x, y, z) || 0;
+    sendBlockChange(player.ws, x, y, z, (blockId << 4) | metadata);
+}
+
+function isInteractiveBlock(block) {
+    return !!block &&
+        typeof block.onMouseButton === 'function' &&
+        block.onMouseButton !== Block.prototype.onMouseButton;
+}
+
+/** Build the shared event shape for authoritative server-side mod hooks. */
+function emitServerBlockAction(action, player, x, y, z, options = {}) {
+    const world = getServerWorld();
+    const targetBlockId = getBlockAt(x, y, z) || 0;
+    const targetBlock = Block.getById(targetBlockId);
+    const currentBlockId = options.currentBlockId ?? getHeldItemId(player);
+    const currentBlock = Block.getById(currentBlockId);
+    const clicked = options.clickedPos || { x, y, z };
+    const clickedBlockId = getBlockAt(clicked.x, clicked.y, clicked.z) || 0;
+
+    return emitBlockAction(action, {
+        action,
+        username: player.username,
+        x, y, z,
+        pos: { x, y, z },
+        currentBlock,
+        currentBlockId,
+        targetBlock,
+        targetBlockId,
+        clickedBlock: Block.getById(clickedBlockId),
+        clickedBlockId,
+        clickedPos: { x: clicked.x, y: clicked.y, z: clicked.z },
+        placePos: { x, y, z },
+        face: options.face ?? null,
+        metadata: options.metadata ?? (getBlockMetadata(x, y, z) || 0),
+        world,
+        minecraft: null
+    });
+}
+
 function handlePlayerDigging(player, buffer, offset) {
     ensureReadable(buffer, offset, 10);
     const status = buffer.readUInt8(offset); // 0: Started, 1: Cancelled, 2: Finished
@@ -619,6 +674,17 @@ function handlePlayerDigging(player, buffer, offset) {
         const blockId = 0; // Air (broken block)
         const prevBlockId = getBlockAt(x, y, z);
         const serverWorld = getServerWorld();
+
+        if (prevBlockId !== 0) {
+            const breakAction = emitServerBlockAction('break', player, x, y, z, {
+                face,
+                metadata: getBlockMetadata(x, y, z) || 0
+            });
+            if (breakAction.canceled) {
+                revertBlockForPlayer(player, x, y, z);
+                return;
+            }
+        }
 
         addWorldChange(x, y, z, blockId);
 
@@ -685,17 +751,63 @@ function handleBlockPlacement(player, buffer, offset) {
     // Read held item from packet (offset + 9)
     const heldItemId = buffer.readInt16BE(offset + 9);
 
+    // Our client appends one optional metadata byte after the vanilla payload
+    // (18 bytes after the packet id). Vanilla clients stop at 18 bytes and let
+    // the block compute its own placement metadata.
+    let metadataOverride = -1;
+    if (buffer.length > offset + 18) {
+        const override = buffer.readUInt8(offset + 18);
+        if (override !== 255) {
+            metadataOverride = override & 0xF;
+        }
+    }
+
     // Protocol 47: direction 255 means "use item / interact with block"
     // (right-click). Blocks that change state when activated (doors) are
     // handled here so the change is authoritative and broadcast to everyone.
     if (direction === 255) {
         const serverWorld = getServerWorld();
+        const heldBlock = heldItemId > 0 ? Block.getById(heldItemId) : null;
+
+        // Clicking the top of an existing pavement slope adds a layer to it
+        // instead of placing a floating layer above, matching snow layers.
+        const targetId = getBlockAt(x, y, z);
+        if (heldBlock?.isPavementSlope === true && targetId === heldItemId) {
+            const layerData = (getBlockMetadata(x, y, z) || 0) & 7;
+            if (layerData < 7) {
+                const placeAction = emitServerBlockAction('place', player, x, y, z, {
+                    currentBlockId: heldItemId,
+                    face: direction,
+                    metadata: layerData
+                });
+                if (placeAction.canceled) {
+                    revertBlockForPlayer(player, x, y, z);
+                    return;
+                }
+
+                addWorldChange(x, y, z, targetId, layerData + 1);
+                safeSaveWorld();
+                const blockState = (targetId << 4) | (layerData + 1);
+                for (const p of getPlayers().values()) {
+                    sendBlockChange(p.ws, x, y, z, blockState);
+                }
+            }
+            return;
+        }
 
         // Held items that act on a block (hoes tilling soil, seeds planting on
         // farmland) run their authoritative hook on the clicked block instead
         // of the client's local prediction.
-        const heldBlock = heldItemId > 0 ? Block.getById(heldItemId) : null;
         if (heldBlock && typeof heldBlock.onUseOnBlockServer === 'function') {
+            const interactAction = emitServerBlockAction('interact', player, x, y, z, {
+                currentBlockId: heldItemId,
+                face: direction
+            });
+            if (interactAction.canceled) {
+                revertBlockForPlayer(player, x, y, z);
+                return;
+            }
+
             try {
                 heldBlock.onUseOnBlockServer(serverWorld, x, y, z, player);
             } catch (e) {
@@ -704,9 +816,17 @@ function handleBlockPlacement(player, buffer, offset) {
             return;
         }
 
-        const targetId = getBlockAt(x, y, z);
         const targetBlock = Block.getById(targetId);
-        if (targetBlock && typeof targetBlock.onMouseButton === 'function') {
+        if (isInteractiveBlock(targetBlock)) {
+            const interactAction = emitServerBlockAction('interact', player, x, y, z, {
+                currentBlockId: heldItemId,
+                face: direction
+            });
+            if (interactAction.canceled) {
+                revertBlockForPlayer(player, x, y, z);
+                return;
+            }
+
             try {
                 targetBlock.onMouseButton(serverWorld, x, y, z, 2);
             } catch (e) {
@@ -775,12 +895,25 @@ function handleBlockPlacement(player, buffer, offset) {
             return;
         }
 
+        const placeAction = emitServerBlockAction('place', player, placeX, placeY, placeZ, {
+            currentBlockId: blockId,
+            face: direction,
+            clickedPos: { x, y, z },
+            metadata: getBlockMetadata(placeX, placeY, placeZ) || 0
+        });
+        if (placeAction.canceled) {
+            revertBlockForPlayer(player, placeX, placeY, placeZ);
+            return;
+        }
+
         // Ask the block itself for its placement metadata. Every directional
         // block implements getPlacementMetadata() in its own class, so the
         // server needs no per-block special cases here - mod blocks included.
         const heldBlockForMeta = Block.getById(blockId);
         let metadata = 0;
-        if (heldBlockForMeta && typeof heldBlockForMeta.getPlacementMetadata === 'function') {
+        if (metadataOverride >= 0) {
+            metadata = metadataOverride;
+        } else if (heldBlockForMeta && typeof heldBlockForMeta.getPlacementMetadata === 'function') {
             metadata = heldBlockForMeta.getPlacementMetadata(
                 serverWorld,
                 placeX, placeY, placeZ,

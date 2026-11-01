@@ -3,7 +3,8 @@ import CommandRegistry from '../client/command/CommandRegistry.js';
 import Logger from './logger.js';
 import { sendChatMessageToPlayer, createCommandContext, syncCommandState } from './CommandContext.js';
 import { getPlayers, isOp, savePlayerData, loadPlayerData, normalizeInventoryState } from './players.js';
-import { sendResetWorldPacket, sendRespawn, sendServerRules, sendChunks, sendSpawnPosition, sendPlayerPositionLook } from './packets.js';
+import { sendResetWorldPacket, sendRespawn, sendServerRules, sendServerMods, sendChunks, sendSpawnPosition, sendPlayerPositionLook } from './packets.js';
+import { reloadServerSideMods } from './ServerModLoader.js';
 import { initWorld, saveWorld, getCurrentWorldName, getSpawnPosition } from './world.js';
 import { cleanupPlayerChunks } from './handlers.js';
 import { handleOffGridCommand } from './offgridCommands.js';
@@ -140,6 +141,10 @@ function handleServer(player, args) {
     // If it has no serverconfig.conf the current settings are kept.
     config.reload(serverName);
 
+    // Swap the server-side mod set before the new world is read, so block ids
+    // from the target server's mods resolve while its chunks are loaded.
+    reloadServerSideMods();
+
     // Load new server
     initWorld(serverName);
 
@@ -180,8 +185,9 @@ function handleServer(player, args) {
         // Send respawn packet (dimension 0 = overworld)
         sendRespawn(p, 0);
 
-        // The target server may have different gameplay rules.
+        // The target server may have different gameplay rules and mods.
         sendServerRules(p);
+        sendServerMods(p);
 
         // Authoritative restore so the client targets the saved position while
         // it streams in the new server's terrain.

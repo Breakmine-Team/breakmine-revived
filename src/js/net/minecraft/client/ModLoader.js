@@ -1,4 +1,5 @@
 import CraftingRegistry from "./crafting/CraftingRegistry.js";
+import SmeltingRegistry from "./smelting/SmeltingRegistry.js";
 import FileSystem from "./fs/Filesystem.js";
 import BridgeFilesystem from "./fs/BridgeFilesystem.js";
 import EnumCreativeInventoryTab from "./gui/EnumCreativeInventoryTab.js";
@@ -10,9 +11,51 @@ import ModelRenderer from "./render/model/renderer/ModelRenderer.js";
 import Tessellator from "./render/Tessellator.js";
 import * as AuthLib from "./network/AuthLib.js";
 import CommandRegistry from "./command/CommandRegistry.js";
+import BlockActionRegistry, { normalizeBlockAction } from "../mod/BlockActionRegistry.js";
+import { modDataPath } from "../mod/ModDataKey.js";
+import FontRenderer from "./render/gui/FontRenderer.js";
 
 const ENABLED_MODS_KEY = 'breakmine_enabled_mods';
 const DISABLED_MODS_KEY = 'breakmine_disabled_mods';
+const BINARY_MOD_EXTENSIONS = new Set([
+    'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp',
+    'ogg', 'wav', 'mp3'
+]);
+
+function isBinaryModFile(path) {
+    const dot = path.lastIndexOf('.');
+    return dot !== -1 && BINARY_MOD_EXTENSIONS.has(path.slice(dot + 1).toLowerCase());
+}
+
+function normalizeOverlayTextColor(value) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return value & 0xFFFFFF;
+    }
+    if (typeof value === 'string') {
+        let hex = value.trim().replace(/^#/, '');
+        if (/^[0-9a-f]{3}$/i.test(hex)) {
+            hex = hex.split('').map((char) => char + char).join('');
+        }
+        if (/^[0-9a-f]{6}$/i.test(hex)) return parseInt(hex, 16);
+        if (/^[0-9a-f]{8}$/i.test(hex)) return parseInt(hex.slice(0, 6), 16);
+    }
+    return 0xFFFFFF;
+}
+
+function normalizeOverlayCanvasColor(value) {
+    if (typeof value === 'string' && value.trim()) return value;
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        const red = (value >> 16) & 0xFF;
+        const green = (value >> 8) & 0xFF;
+        const blue = value & 0xFF;
+        // Plain 0xRRGGBB is opaque; only values with bits above 24 carry alpha.
+        const alpha = value > 0xFFFFFF ? ((value >>> 24) & 0xFF) / 255 : 1;
+        return alpha < 1
+            ? `rgba(${red}, ${green}, ${blue}, ${alpha})`
+            : `rgb(${red}, ${green}, ${blue})`;
+    }
+    return '#000000';
+}
 
 /**
  * ModLoader - discovers, installs, and registers mods.
@@ -42,10 +85,26 @@ const DISABLED_MODS_KEY = 'breakmine_disabled_mods';
  *   ModAPI.registerCommand(name, usage, description, execute, { opOnly })
  *   ModAPI.registerRenderHook(hook, fn, { priority })   // 'beforeRender',
  *       'renderChunks', 'renderSky', 'renderBlockHitBox', 'afterRender', 'onTick'
+ *   ModAPI.registerBlockAction(action, fn, { priority })
+ *       action: 'place' | 'break' | 'interact' ('destroy' and 'use' are aliases)
+ *       The handler gets { action, username, player, x, y, z, pos, currentBlock,
+ *       currentBlockId, targetBlock, targetBlockId, clickedBlock,
+ *       clickedBlockId, clickedPos, placePos, face, metadata, world, minecraft }.
+ *       Call event.cancel() or return false to veto the action. The same hooks
+ *       are registered by server-side mods, so a server-sent mod can veto the
+ *       authoritative action too.
+ *   ModAPI.registerOverlayText(fn, { priority })  // fn(textContext)
+ *       text(value, x, y, { color, shadow, align, background, padding,
+ *       scale, noColor }) draws HUD text anywhere on screen. Newlines work.
+ *   ModAPI.saveJson(key, value), ModAPI.loadJson(key, fallback),
+ *       ModAPI.deleteJson(key), ModAPI.listJson()
+ *       Persistent per-mod JSON under mod_data/<modId>/, never inside the
+ *       (possibly read-only) mod folder.
+ *   ModAPI.sendModMessage(payload)  // JSON to the server mod's onMessage()
  *   ModAPI.registerService(id, service), ModAPI.getService(id),
  *   ModAPI.resolveTexture('modid:name'), ModAPI.log(...), ModAPI.warn(...)
- * Commands and render hooks are dropped again when the mod is disabled or
- * uninstalled.
+ * Commands, render hooks, block-action hooks and overlay text are dropped when
+ * the mod is disabled or uninstalled; its JSON data is kept.
  * AuthLib is the account module: getAuthToken(), getUserInfo(username),
  * userExists(username), getSkinUrl(username) and getCapeUrl(username). Mods read
  * it rather than calling fetch, so they inherit the API base URL and the auth
@@ -80,12 +139,17 @@ export default class ModLoader {
         this.services = new Map();      // serviceId → mod-provided runtime service
         this.filesystem = new FileSystem('ModDB', 'mods');
         this._devModFilesystems = new Map(); // modId → MemoryFilesystem (temporary dev mods, never persisted)
+        this._serverModIds = new Set();      // modIds supplied by the current multiplayer server
+        this._serverModFilesystems = new Map(); // modId → MemoryFilesystem (server-supplied mods)
+        this._serverModGeneration = 0;       // invalidates an in-flight server mod load
         this._diskFilesystem = null;         // BridgeFilesystem over the physical mods/ folder (Electron only)
         this._blockBaseClass = null;    // cached Block class for eval sandbox
         this._commandBaseClass = null;  // cached Command class for mod command sandboxes
         this._modModuleCache = new Map(); // 'modId/filePath' → evaluated exports
         this.renderHooks = new Map();    // hook name → [{ fn, modId, priority, hook }] - world-render hook targets
-        this._modRegistrations = new Map(); // modId → { commands: Set, hooks: Set } for cleanup
+        this.blockActions = new BlockActionRegistry('Patchwork'); // cancelable place/break/interact hooks
+        this.overlayTextHooks = [];      // [{ fn, modId, priority }] - screen-space HUD text providers
+        this._modRegistrations = new Map(); // modId → { commands, hooks, blockActions, overlayText } for cleanup
         this._activeModId = null;       // mod currently being loaded (attributes registrations)
         this._modApis = new Map();      // modId → ModAPI facade handed to mod sandboxes
         this.customTabs = [];           // Array of custom tabs from mods: { modId, name, iconBlockId }
@@ -313,6 +377,255 @@ export default class ModLoader {
         return false;
     }
 
+    /* -------------------------- block actions ------------------------- */
+
+    /**
+     * Hook a player block action. `action` is 'place', 'break' (alias
+     * 'destroy') or 'interact' (alias 'use'). A handler cancels by calling
+     * event.cancel() or returning false; canceled handlers stop the chain.
+     */
+    registerBlockAction(action, fn, options = {}) {
+        const modId = options.modId || this._activeModId || null;
+        const entry = this.blockActions.register(action, fn, { ...options, modId });
+        if (modId) {
+            this._trackRegistration(modId).blockActions.add(entry);
+        }
+        return entry;
+    }
+
+    /** Remove a returned handle, a handler function, or every handler for an action. */
+    unregisterBlockAction(action, handle) {
+        const removed = this.blockActions.unregister(action, handle);
+        if (!removed) return false;
+
+        for (const record of this._modRegistrations.values()) {
+            if (typeof handle === 'object' && handle) {
+                record.blockActions.delete(handle);
+            } else if (typeof handle === 'function') {
+                const normalized = normalizeBlockAction(action);
+                for (const entry of [...record.blockActions]) {
+                    if (entry.action === normalized && entry.fn === handle) {
+                        record.blockActions.delete(entry);
+                    }
+                }
+            } else {
+                for (const entry of [...record.blockActions]) {
+                    if (entry.action === normalizeBlockAction(action)) {
+                        record.blockActions.delete(entry);
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    hasBlockAction(action) {
+        return this.blockActions.has(action);
+    }
+
+    /** Internal: fire block-action hooks and return the event. */
+    emitBlockAction(action, data) {
+        return this.blockActions.emit(action, data);
+    }
+
+    /* --------------------------- overlay text ------------------------- */
+
+    /**
+     * Register a screen-space HUD text provider. The callback runs every frame
+     * while the in-game overlay is visible and receives a drawing context:
+     *
+     *   { text(value, x, y, options), measure(value, options), rect(...),
+     *     width, height, stack, overlay, minecraft }
+     *
+     * `options` for text(): color (number or #rrggbb), shadow, align
+     * ('left'|'center'|'right'), background (canvas color), padding, scale and
+     * noColor. Newlines are supported. Coordinates are screen pixels, so a mod
+     * can draw anywhere on the HUD.
+     */
+    registerOverlayText(fn, options = {}) {
+        if (typeof fn !== 'function') {
+            throw new Error('Overlay text provider must be a function.');
+        }
+
+        const modId = options.modId || this._activeModId || null;
+        const entry = {
+            fn,
+            modId,
+            priority: Number(options.priority) || 0
+        };
+
+        this.overlayTextHooks.push(entry);
+        this.overlayTextHooks.sort((a, b) => a.priority - b.priority);
+        if (modId) {
+            this._trackRegistration(modId).overlayText.add(entry);
+        }
+        return entry;
+    }
+
+    unregisterOverlayText(handle) {
+        const index = this.overlayTextHooks.indexOf(handle);
+        if (index === -1) return false;
+        this.overlayTextHooks.splice(index, 1);
+        for (const record of this._modRegistrations.values()) {
+            record.overlayText.delete(handle);
+        }
+        return true;
+    }
+
+    /** Called by IngameOverlay after the built-in HUD widgets. */
+    emitOverlayText(overlay, stack) {
+        if (this.overlayTextHooks.length === 0) return;
+        if (!stack || !this.minecraft?.fontRenderer) return;
+
+        const context = this._createOverlayTextContext(overlay, stack);
+        for (const entry of [...this.overlayTextHooks]) {
+            try {
+                entry.fn(context);
+            } catch (error) {
+                console.warn('[Patchwork] Overlay text provider failed:', error);
+            }
+        }
+    }
+
+    _createOverlayTextContext(overlay, stack) {
+        const loader = this;
+        const font = this.minecraft.fontRenderer;
+        const width = overlay?.window?.width || this.minecraft?.window?.width || 0;
+        const height = overlay?.window?.height || this.minecraft?.window?.height || 0;
+        const lineStep = FontRenderer.FONT_HEIGHT + 1;
+
+        const measure = (value, options = {}) => {
+            const lines = String(value ?? '').split('\n');
+            const scale = Math.max(0.1, Number(options.scale) || 1);
+            let textWidth = 0;
+            for (const line of lines) {
+                textWidth = Math.max(textWidth, font.getStringWidth(line));
+            }
+            return {
+                width: textWidth * scale,
+                height: (lines.length * lineStep - 1) * scale
+            };
+        };
+
+        const text = (value, x, y, options = {}) => {
+            const lines = String(value ?? '').split('\n');
+            const scale = Math.max(0.1, Number(options.scale) || 1);
+            const color = normalizeOverlayTextColor(options.color);
+            const shadow = options.shadow !== false;
+            const noColor = options.noColor !== false;
+            const align = options.align === 'center' || options.align === 'right'
+                ? options.align : 'left';
+            const bounds = measure(value, { scale });
+            const baseX = Number(x) || 0;
+            const baseY = Number(y) || 0;
+            const textHeight = bounds.height;
+
+            if (options.background !== undefined && options.background !== null) {
+                const padding = Number(options.padding) || 0;
+                let left = baseX;
+                if (align === 'center') left -= bounds.width / 2;
+                if (align === 'right') left -= bounds.width;
+
+                stack.save();
+                stack.globalAlpha = options.backgroundAlpha === undefined
+                    ? 1 : Number(options.backgroundAlpha);
+                stack.fillStyle = normalizeOverlayCanvasColor(options.background);
+                stack.fillRect(
+                    Math.floor(left - padding),
+                    Math.floor(baseY - padding),
+                    Math.ceil(bounds.width + padding * 2),
+                    Math.ceil(textHeight + padding * 2)
+                );
+                stack.restore();
+            }
+
+            stack.save();
+            stack.translate(Math.round(baseX), Math.round(baseY));
+            stack.scale(scale, scale);
+            for (let i = 0; i < lines.length; i++) {
+                const lineWidth = font.getStringWidth(lines[i]);
+                let lineX = 0;
+                if (align === 'center') lineX = -lineWidth / 2;
+                if (align === 'right') lineX = -lineWidth;
+                font.drawString(stack, lines[i], lineX, i * lineStep, color, shadow, noColor);
+            }
+            stack.restore();
+
+            return {
+                x: baseX,
+                y: baseY,
+                width: bounds.width,
+                height: textHeight
+            };
+        };
+
+        return {
+            text,
+            drawText: text,
+            measure,
+            rect: (left, top, right, bottom, color = '#000000', alpha = 1) => {
+                stack.save();
+                stack.globalAlpha = Number(alpha);
+                stack.fillStyle = normalizeOverlayCanvasColor(color);
+                stack.fillRect(
+                    Math.floor(left), Math.floor(top),
+                    Math.ceil(right - left), Math.ceil(bottom - top)
+                );
+                stack.restore();
+            },
+            width,
+            height,
+            stack,
+            overlay,
+            minecraft: loader.minecraft
+        };
+    }
+
+    /* ---------------------------- mod data ---------------------------- */
+
+    /**
+     * Store JSON data for this mod. Data lives under its own namespace in the
+     * persistent game store, never inside a read-only disk mod folder.
+     */
+    async saveJson(key, value, modId = this._activeModId) {
+        if (!modId) throw new Error('No mod is active for saveJson().');
+        const path = modDataPath(modId, key);
+        await this.filesystem.saveFile(JSON.stringify(value, null, 2), path);
+        return value;
+    }
+
+    async loadJson(key, fallback = null, modId = this._activeModId) {
+        if (!modId) throw new Error('No mod is active for loadJson().');
+        const path = modDataPath(modId, key);
+        const raw = await this.filesystem.loadFile(path);
+        if (raw === null || raw === undefined || raw === '') return fallback;
+
+        try {
+            return JSON.parse(raw);
+        } catch (error) {
+            console.warn(`[Patchwork] Invalid JSON in '${path}':`, error);
+            return fallback;
+        }
+    }
+
+    async deleteJson(key, modId = this._activeModId) {
+        if (!modId) throw new Error('No mod is active for deleteJson().');
+        const path = modDataPath(modId, key);
+        const existed = await this.filesystem.fileExists(path);
+        await this.filesystem.deleteFile(path);
+        return existed;
+    }
+
+    async listJson(modId = this._activeModId) {
+        if (!modId) throw new Error('No mod is active for listJson().');
+        const prefix = `mod_data/${modId}/`;
+        const files = await this.filesystem.listDir(prefix);
+        return files
+            .filter((file) => file.endsWith('.json'))
+            .map((file) => file.slice(prefix.length, -'.json'.length))
+            .filter((key) => /^[A-Za-z0-9._-]{1,64}$/.test(key));
+    }
+
     /**
      * Fire a render hook. Called from WorldRenderer; mods never need this.
      * A throwing hook is reported and skipped so one bad mod cannot break the
@@ -343,13 +656,18 @@ export default class ModLoader {
     _trackRegistration(modId) {
         let record = this._modRegistrations.get(modId);
         if (!record) {
-            record = { commands: new Set(), hooks: new Set() };
+            record = {
+                commands: new Set(),
+                hooks: new Set(),
+                blockActions: new Set(),
+                overlayText: new Set()
+            };
             this._modRegistrations.set(modId, record);
         }
         return record;
     }
 
-    /** Remove every command and render hook a mod registered. */
+    /** Remove every command, render hook and block-action hook a mod registered. */
     releaseModRegistrations(modId) {
         const record = this._modRegistrations.get(modId);
         this._modRegistrations.delete(modId);
@@ -361,8 +679,16 @@ export default class ModLoader {
         for (const entry of record.hooks) {
             this._removeRenderHook(entry);
         }
+        for (const entry of record.blockActions) {
+            this.blockActions.unregister(entry.action, entry);
+        }
+        for (const entry of record.overlayText) {
+            const index = this.overlayTextHooks.indexOf(entry);
+            if (index !== -1) this.overlayTextHooks.splice(index, 1);
+        }
         this.clearCustomTabs(modId);
-        return record.commands.size + record.hooks.size;
+        return record.commands.size + record.hooks.size +
+            record.blockActions.size + record.overlayText.size;
     }
 
     /**
@@ -375,6 +701,7 @@ export default class ModLoader {
         const loader = this;
         const api = {
             modId,
+            isServer: false,
             get minecraft() { return loader.minecraft; },
             get world() { return loader.minecraft?.world; },
             registerCommand: (name, usage, description, execute, options = {}) =>
@@ -383,6 +710,23 @@ export default class ModLoader {
             getCommand: (name) => CommandRegistry.get(name),
             registerRenderHook: (hook, fn, options = {}) => loader.registerRenderHook(hook, fn, { modId, ...options }),
             unregisterRenderHook: (hook, handle) => loader.unregisterRenderHook(hook, handle),
+            registerBlockAction: (action, fn, options = {}) => loader.registerBlockAction(action, fn, { modId, ...options }),
+            onBlockAction: (action, fn, options = {}) => loader.registerBlockAction(action, fn, { modId, ...options }),
+            unregisterBlockAction: (action, handle) => loader.unregisterBlockAction(action, handle),
+            registerOverlayText: (fn, options = {}) => loader.registerOverlayText(fn, { modId, ...options }),
+            onOverlayText: (fn, options = {}) => loader.registerOverlayText(fn, { modId, ...options }),
+            unregisterOverlayText: (handle) => loader.unregisterOverlayText(handle),
+            saveJson: (key, value) => loader.saveJson(key, value, modId),
+            loadJson: (key, fallback = null) => loader.loadJson(key, fallback, modId),
+            deleteJson: (key) => loader.deleteJson(key, modId),
+            listJson: () => loader.listJson(modId),
+            sendModMessage: (payload) => {
+                const networkManager = loader.minecraft?.playerController
+                    ?.getNetworkHandler?.()?.getNetworkManager?.();
+                if (!networkManager) return false;
+                networkManager.sendJson({ type: 'modMessage', modId, payload });
+                return true;
+            },
             registerService: (serviceId, service) => loader.registerService(serviceId, service),
             getService: (serviceId) => loader.getService(serviceId),
             resolveTexture: (key) => loader.resolveTexture(key),
@@ -478,6 +822,101 @@ export default class ModLoader {
     }
 
     /**
+     * Install a mod from a selected folder. Accepts the FileList produced by
+     * an `<input type="file" webkitdirectory>` picker (or any array of File
+     * objects with `webkitRelativePath` paths). The folder is copied into the
+     * same persistent layout as a ZIP install, so it loads and unloads like any
+     * other installed mod.
+     *
+     * @param {FileList|File[]} fileList
+     * @returns {Promise<string>} the installed modId
+     */
+    async installModFromFolder(fileList) {
+        const files = Array.from(fileList || []);
+        if (files.length === 0) {
+            throw new Error('No files were selected.');
+        }
+
+        const entries = [];
+        for (const file of files) {
+            const rawPath = file.webkitRelativePath || file.name || '';
+            const path = String(rawPath).replace(/\\/g, '/').replace(/^\/+/, '');
+            const parts = path.split('/');
+            if (!path || parts.some((part) => !part || part === '.' || part === '..')) {
+                continue;
+            }
+            entries.push({ file, path });
+        }
+
+        const metadataEntries = entries.filter(({ path }) =>
+            path === 'ModData.js' || path.endsWith('/ModData.js') ||
+            path === 'ModData.json' || path.endsWith('/ModData.json')
+        );
+        if (metadataEntries.length === 0) {
+            throw new Error('ModData.js or ModData.json was not found in the selected folder.');
+        }
+
+        // Prefer explicit JSON metadata when a folder carries both forms.
+        const metadataEntry = metadataEntries.find(({ path }) =>
+            path === 'ModData.json' || path.endsWith('/ModData.json')
+        ) || metadataEntries[0];
+        const metadataName = metadataEntry.path.split('/').pop();
+        const rootPath = metadataEntry.path.slice(0, metadataEntry.path.length - metadataName.length);
+        const roots = new Set(metadataEntries.map(({ path }) =>
+            path.slice(0, path.length - path.split('/').pop().length)
+        ));
+        if (roots.size > 1) {
+            throw new Error('Select the folder for a single mod, not a folder containing several mods.');
+        }
+
+        let modData;
+        if (metadataName === 'ModData.json') {
+            modData = JSON.parse(await metadataEntry.file.text());
+        } else {
+            modData = this._parseModDataSource(await metadataEntry.file.text());
+        }
+
+        const modId = String(modData?.ID || '').trim();
+        if (!/^[A-Za-z0-9_-]{1,64}$/.test(modId)) {
+            throw new Error('ModData must define a valid static ID (letters, numbers, _ or -).');
+        }
+        if (this.mods.has(modId)) {
+            throw new Error(`A mod with ID '${modId}' is already loaded.`);
+        }
+
+        const normalizedMeta = {
+            NAME: String(modData.NAME || modId),
+            ID: modId,
+            AUTHOR: String(modData.AUTHOR || 'Unknown'),
+            VERSION: String(modData.VERSION || '0.0.0')
+        };
+
+        await this.filesystem.saveFile(
+            JSON.stringify(normalizedMeta, null, 2),
+            `mods/${modId}/ModData.json`
+        );
+
+        for (const { file, path } of entries) {
+            if (!path.startsWith(rootPath)) continue;
+            const relative = path.slice(rootPath.length);
+            if (!relative || relative === 'ModData.json') continue;
+
+            const storagePath = `mods/${modId}/${relative}`;
+            if (isBinaryModFile(relative)) {
+                const b64 = await this._arrayBufferToBase64(await file.arrayBuffer());
+                await this.filesystem.saveBinaryFile(b64, `${storagePath}.b64`);
+            } else {
+                await this.filesystem.saveFile(await file.text(), storagePath);
+            }
+        }
+
+        this.enabledMods.add(modId);
+        this._saveEnabledSet();
+        await this._loadMod(modId);
+        return modId;
+    }
+
+    /**
      * Temporarily load a mod from a ZIP file served over HTTP (dev mode).
      * Triggered by a `?dev-mod=<url>` query parameter. The mod is held in
      * memory only - nothing is written to the filesystem, so it is gone on
@@ -543,6 +982,142 @@ export default class ModLoader {
     }
 
     /**
+     * The in-memory filesystem for a server- or dev-supplied mod, or null for
+     * mods that live in IndexedDB / the physical mods folder.
+     */
+    getModFilesystem(modId) {
+        return this._serverModFilesystems.get(modId)
+            || this._devModFilesystems.get(modId)
+            || null;
+    }
+
+    /**
+     * Register the mods a multiplayer server sent on join.
+     *
+     * The payload mirrors the on-disk layout the loader already understands:
+     * text files are text, images/sounds carry base64 and are stored under
+     * `<name>.b64`. Server mods live only in memory and are tracked separately
+     * so leaving the server can remove everything they registered.
+     *
+     * @param {Array<{id:string,name?:string,author?:string,version?:string,files?:Array}>} serverMods
+     * @returns {Promise<string[]>} ids that were loaded
+     */
+    async loadServerMods(serverMods) {
+        this.unloadServerMods();
+        const generation = this._serverModGeneration;
+
+        if (!Array.isArray(serverMods) || serverMods.length === 0) {
+            return [];
+        }
+
+        // `handleJoinGame` starts the client world asynchronously and that may
+        // rebuild the texture atlas. Waiting here keeps server textures from
+        // being painted into an atlas that is about to be replaced.
+        const worldLoad = this.minecraft?.worldLoadPromise;
+        if (worldLoad && typeof worldLoad.then === 'function') {
+            try {
+                await worldLoad;
+            } catch {
+                // A failed world load will surface through its own path; mods
+                // can still be registered for the next join.
+            }
+        }
+
+        // The player may have disconnected while the world/mod payload was
+        // loading. Everything registered by that attempt must be discarded.
+        if (generation !== this._serverModGeneration) return [];
+
+        // The world and its texture atlas are ready now, so the remaining work
+        // really is importing the server's mods.
+        this.minecraft?.setLoadingStatus?.("Importing mods...");
+
+        const loaded = [];
+
+        for (const mod of serverMods) {
+            if (generation !== this._serverModGeneration) break;
+            if (!mod || typeof mod !== 'object') continue;
+
+            const modId = typeof mod.id === 'string' ? mod.id.trim() : '';
+            if (!/^[A-Za-z0-9_-]{1,64}$/.test(modId)) {
+                console.warn('[Patchwork] Ignoring server mod with an invalid id:', mod.id);
+                continue;
+            }
+            if (this.mods.has(modId)) {
+                console.warn(`[Patchwork] Server mod '${modId}' is already installed locally; using the local copy.`);
+                continue;
+            }
+
+            const fileMap = new Map();
+            fileMap.set(`mods/${modId}/ModData.json`, JSON.stringify({
+                ID: modId,
+                NAME: mod.name || modId,
+                AUTHOR: mod.author || 'Server',
+                VERSION: mod.version || '0.0.0'
+            }));
+
+            for (const file of Array.isArray(mod.files) ? mod.files : []) {
+                if (!file || typeof file.path !== 'string') continue;
+
+                const relative = file.path.replace(/\\/g, '/').replace(/^\/+/, '');
+                if (!relative || relative.includes('\0')) continue;
+
+                const segments = relative.split('/');
+                if (segments.some((segment) => segment === '..' || segment === '')) continue;
+                if (relative === 'ModData.js') continue;
+
+                const storagePath = file.binary && !relative.endsWith('.b64')
+                    ? `${relative}.b64`
+                    : relative;
+                fileMap.set(`mods/${modId}/${storagePath}`, String(file.data ?? ''));
+            }
+
+            const fs = new MemoryFilesystem(fileMap);
+            this._serverModFilesystems.set(modId, fs);
+            this._serverModIds.add(modId);
+
+            try {
+                const entry = await this._loadMod(modId, fs);
+                if (generation !== this._serverModGeneration) {
+                    this._unregisterModContent(modId, entry);
+                    this._serverModIds.delete(modId);
+                    this._serverModFilesystems.delete(modId);
+                    break;
+                }
+                loaded.push(modId);
+                console.log(`[Patchwork] Loaded server mod '${modId}'`);
+            } catch (err) {
+                console.error(`[Patchwork] Failed to load server mod '${modId}':`, err);
+                this._unregisterModContent(modId);
+                this._serverModIds.delete(modId);
+                this._serverModFilesystems.delete(modId);
+            }
+        }
+
+        return loaded;
+    }
+
+    /**
+     * Remove every mod supplied by the server that was joined last. Called
+     * when the connection closes or the player returns to the main menu, so
+     * server content never leaks into another server or singleplayer.
+     */
+    unloadServerMods() {
+        // Even when nothing has finished loading yet, this invalidates an
+        // in-flight loadServerMods() so it cannot register content after the
+        // player has already left.
+        this._serverModGeneration++;
+        if (this._serverModIds.size === 0) return;
+
+        const ids = [...this._serverModIds];
+        for (const modId of ids) {
+            this._unregisterModContent(modId);
+            this._serverModFilesystems.delete(modId);
+            this._serverModIds.delete(modId);
+        }
+        console.log(`[Patchwork] Unloaded ${ids.length} server mod(s)`);
+    }
+
+    /**
      * Load a mod from a folder of pre-extracted files (dev mode).
      * @param {string} modId
      * @param {object} fileMap - { relativePath: stringContent | ArrayBuffer }
@@ -585,23 +1160,7 @@ export default class ModLoader {
         this._saveEnabledSet();
         this._saveDisabledSet();
 
-        const entry = this.mods.get(modId);
-        if (entry) {
-            for (const blockId of entry.blockIds) {
-                BlockRegistry.unregister(blockId);
-            }
-            for (const itemId of entry.itemIds) {
-                BlockRegistry.unregister(itemId);
-            }
-            this.mods.delete(modId);
-        }
-
-        this.releaseModRegistrations(modId);
-        this._modApis.delete(modId);
-
-        for (const key of this._modModuleCache.keys()) {
-            if (key.startsWith(`${modId}/`)) this._modModuleCache.delete(key);
-        }
+        this._unregisterModContent(modId);
 
         const files = await this.filesystem.listDir(`mods/${modId}/`);
         for (const f of files) {
@@ -609,6 +1168,50 @@ export default class ModLoader {
         }
 
         console.log(`[Patchwork] Uninstalled mod '${modId}'`);
+    }
+
+    /**
+     * Remove every registration a mod made, without touching its files.
+     * Used by uninstall and by the server-mod lifecycle when a connection
+     * ends.
+     */
+    _unregisterModContent(modId, entryOverride = null) {
+        const entry = entryOverride || this.mods.get(modId) || null;
+        const atlas = this.minecraft?.worldRenderer?.textureAtlas;
+
+        if (entry) {
+            for (const blockId of entry.blockIds) {
+                BlockRegistry.unregister(blockId);
+            }
+            for (const itemId of entry.itemIds) {
+                BlockRegistry.unregister(itemId);
+            }
+
+            for (const textureName of entry.textureNames || []) {
+                atlas?.unregisterModTexture?.(`${modId}:${textureName}`);
+            }
+            for (const textureName of entry.guiTextureNames || []) {
+                if (this.minecraft?.resources) {
+                    delete this.minecraft.resources[`gui/${modId}/${textureName}`];
+                }
+            }
+            for (const recipe of entry.craftingRecipes || []) {
+                CraftingRegistry.unregisterRecipe(recipe);
+            }
+            for (const recipe of entry.smeltingRecipes || []) {
+                SmeltingRegistry.unregisterRecipe(recipe);
+            }
+        }
+
+        this.releaseModRegistrations(modId);
+        this._modApis.delete(modId);
+        this.mods.delete(modId);
+
+        for (const key of this._modModuleCache.keys()) {
+            if (key.startsWith(`${modId}/`)) this._modModuleCache.delete(key);
+        }
+
+        return entry;
     }
 
     /**
@@ -723,7 +1326,8 @@ export default class ModLoader {
      * @param {object} fs  - filesystem to read from (defaults to persisted store)
      * @returns {Promise<HTMLImageElement>}
      */
-    async loadModTexture(modId, textureName, fs = this.filesystem) {
+    async loadModTexture(modId, textureName, fs = null) {
+        fs = fs || this.getModFilesystem(modId) || this.filesystem;
         const b64Path = `mods/${modId}/textures/${textureName}.png.b64`;
         const b64data = await fs.loadBinaryFile(b64Path);
         if (!b64data) {
@@ -740,6 +1344,86 @@ export default class ModLoader {
     }
 
     /* ------------------------------------------------------------------
+     *  Integrated server support
+     * ------------------------------------------------------------------ */
+
+    /**
+     * Snapshot every locally installed mod in the same shape the server's
+     * servermods/ directory uses.
+     *
+     * Singleplayer runs the world in a worker, so the integrated server cannot
+     * read this ModDB store or the Electron mods/ folder. Passing the files
+     * over lets the server register the mods' commands and authoritative
+     * hooks (block protection, etc.) for the same mods the player sees.
+     * Mods supplied by a remote server are excluded; they belong to that
+     * server, not to the local world.
+     *
+     * @returns {Promise<Array<{id:string,name:string,author:string,version:string,files:Array}>>}
+     */
+    async getServerModPayload() {
+        const mods = [];
+
+        for (const [modId, entry] of this.mods) {
+            if (this._serverModIds.has(modId)) continue;
+
+            let fs;
+            try {
+                fs = await this._fsForMod(modId);
+            } catch (err) {
+                console.warn(`[Patchwork] Could not read mod '${modId}' for the integrated server:`, err);
+                continue;
+            }
+
+            const prefix = `mods/${modId}/`;
+            let paths = [];
+            try {
+                paths = await fs.listDir(prefix);
+            } catch (err) {
+                console.warn(`[Patchwork] Could not list mod '${modId}' for the integrated server:`, err);
+                continue;
+            }
+
+            const files = [];
+            for (const fullPath of paths) {
+                if (!fullPath.startsWith(prefix)) continue;
+
+                const relative = fullPath.slice(prefix.length);
+                if (!relative) continue;
+                if (relative === 'ModData.json' || relative === 'ModData.js') continue;
+                if (relative.split('/').some((segment) => segment === '' || segment === '..')) continue;
+
+                try {
+                    if (relative.endsWith('.b64')) {
+                        const bytes = await fs.loadBinaryFile(fullPath);
+                        if (!bytes || bytes.length === 0) continue;
+                        files.push({
+                            path: relative.slice(0, -4),
+                            binary: true,
+                            data: await this._arrayBufferToBase64(bytes)
+                        });
+                    } else {
+                        const text = await fs.loadFile(fullPath);
+                        if (typeof text !== 'string') continue;
+                        files.push({ path: relative, binary: false, data: text });
+                    }
+                } catch (err) {
+                    console.warn(`[Patchwork] Could not read '${fullPath}' for the integrated server:`, err);
+                }
+            }
+
+            mods.push({
+                id: entry.id || modId,
+                name: entry.name || modId,
+                author: entry.author || 'Unknown',
+                version: entry.version || '0.0.0',
+                files
+            });
+        }
+
+        return mods;
+    }
+
+    /* ------------------------------------------------------------------
      *  Internal - load a single mod from IndexedDB
      * ------------------------------------------------------------------ */
 
@@ -751,7 +1435,14 @@ export default class ModLoader {
         try {
             // A reload would otherwise leave the previous run's hooks behind.
             this.releaseModRegistrations(modId);
-            await this._loadModInner(modId, fs);
+            const entry = await this._loadModInner(modId, fs);
+            return entry;
+        } catch (err) {
+            // Content registered before the failure must not survive as a
+            // half-loaded mod (this matters for server mods, which are swapped
+            // on every join).
+            this._unregisterModContent(modId);
+            throw err;
         } finally {
             this._activeModId = previousActiveMod;
         }
@@ -776,8 +1467,14 @@ export default class ModLoader {
             commandNames: [],
             guiTextureNames: [],
             textureNames: [],
-            soundNames: []
+            soundNames: [],
+            craftingRecipes: [],
+            smeltingRecipes: []
         };
+
+        // Store the entry before registering anything so a partial failure can
+        // still be cleaned up through _unregisterModContent().
+        this.mods.set(modId, entry);
 
         // 2. Discover files
         const allFiles = await fs.listDir(`mods/${modId}/`);
@@ -854,10 +1551,8 @@ export default class ModLoader {
         // 10. Call ModLoad.onLoad if present
         await this._callModLoad(modId, entry, fs);
 
-        // 11. Store
-        this.mods.set(modId, entry);
-
         console.log(`[Patchwork] Loaded mod '${entry.name}' - ${entry.blockIds.length} block(s), ${entry.itemIds.length} item(s), ${entry.textureNames.length} texture(s), ${entry.soundNames.length} sound(s)`);
+        return entry;
     }
 
     /* ------------------------------------------------------------------
@@ -1081,8 +1776,9 @@ export default class ModLoader {
                     continue;
                 }
 
+                let recipe = null;
                 if (shapeless) {
-                    CraftingRegistry.registerShapelessRecipe(resultTypeId, resultCount, ingredients);
+                    recipe = CraftingRegistry.registerShapelessRecipe(resultTypeId, resultCount, ingredients);
                 } else {
                     let width = recipeClass.width || 0;
                     let height = recipeClass.height || 0;
@@ -1094,8 +1790,9 @@ export default class ModLoader {
                         else if (ingredients.length % 2 === 0) { width = 2; height = ingredients.length / 2; }
                         else { width = ingredients.length; height = 1; }
                     }
-                    CraftingRegistry.registerShapedRecipe(resultTypeId, resultCount, width, height, ingredients);
+                    recipe = CraftingRegistry.registerShapedRecipe(resultTypeId, resultCount, width, height, ingredients);
                 }
+                if (recipe) entry.craftingRecipes.push(recipe);
 
                 console.log(`[Patchwork] Registered crafting recipe for '${namespacedId}' from ${filename}`);
             } catch (err) {
@@ -1111,7 +1808,6 @@ export default class ModLoader {
     async _registerModSmelting(modId, entry, smeltingFiles, fs = this.filesystem) {
         try {
             const { default: SmeltingRecipe } = await import('./smelting/SmeltingRecipe.js');
-            const { SmeltingRegistry } = await import('./smelting/SmeltingRegistry.js');
 
             for (const filename of smeltingFiles) {
                 try {
@@ -1165,7 +1861,10 @@ export default class ModLoader {
                     const inputId = recipeClass.input || 0;
                     const resultCount = recipeClass.amount_output || 1;
                     if (inputId) {
-                        SmeltingRegistry.registerRecipe(new SmeltingRecipe(inputId, resultTypeId, resultCount));
+                        const recipe = SmeltingRegistry.registerRecipe(
+                            new SmeltingRecipe(inputId, resultTypeId, resultCount)
+                        );
+                        if (recipe) entry.smeltingRecipes.push(recipe);
                         console.log(`[Patchwork]   Registered smelting recipe for '${namespacedId}' from ${filename}`);
                     }
                 } catch (err) {

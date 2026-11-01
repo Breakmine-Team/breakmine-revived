@@ -12,6 +12,7 @@ import * as serverWorld from '../../server/world.js';
 import * as serverPlayers from '../../server/players.js';
 import * as serverEntities from '../../server/entities.js';
 import config from '../../server/config.js';
+import { setInjectedServerMods, clearInjectedServerMods } from '../../server/serverMods.js';
 import path from '../../util/path.js';
 import Long from '../../../../../../libraries/long.js';
 import { serverNameForKey, parseServerConfig, gamemodeName } from './shared.js';
@@ -119,6 +120,10 @@ async function startServer(options) {
     fs.writeFileSync(confPath, confLines.join('\n'));
 
     config.reload(serverName);
+    // The client's installed mods are authoritative in singleplayer. Hand them
+    // to the server loader before it initialises so their commands and block
+    // hooks exist for this world, without copying them into the save.
+    setInjectedServerMods(options.clientMods);
     serverWorld.initWorld(serverName);
 
     // initServer() itself calls initWorld(), which clears the world-change map
@@ -159,6 +164,7 @@ function stopServerInternal() {
     }
 
     stopServer();
+    clearInjectedServerMods();
 }
 
 function listServerWorlds() {

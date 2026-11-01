@@ -15,7 +15,16 @@ export default class SmeltingRegistry {
     static registerRecipe(recipe) {
         if (recipe && typeof recipe.matches === 'function') {
             this.recipes.push(recipe);
+            return recipe;
         }
+        return null;
+    }
+
+    static unregisterRecipe(recipe) {
+        const index = this.recipes.indexOf(recipe);
+        if (index === -1) return false;
+        this.recipes.splice(index, 1);
+        return true;
     }
 
     static registerFuel(typeId, burnTicks) {

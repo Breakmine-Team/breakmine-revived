@@ -6,6 +6,13 @@ export default class GuiLoadingIntegratedServer extends GuiScreen {
     constructor(previousScreen) {
         super();
         this.previousScreen = previousScreen;
+        this.status = "Starting integrated server...";
+    }
+
+    setStatus(status) {
+        if (typeof status === 'string' && status.length > 0) {
+            this.status = status;
+        }
     }
 
     init() {
@@ -22,7 +29,7 @@ export default class GuiLoadingIntegratedServer extends GuiScreen {
         this.drawBackground(stack, this.textureBackground, this.width, this.height);
 
         // Render title/status message
-        this.drawCenteredString(stack, "Starting integrated server...", this.width / 2, this.height / 2 - 20);
+        this.drawCenteredString(stack, this.status, this.width / 2, this.height / 2 - 20);
 
         super.drawScreen(stack, mouseX, mouseY, partialTicks);
     }

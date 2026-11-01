@@ -13,6 +13,7 @@ const translations = {
     "Open Folder": "Abrir carpeta",
     "Select Pack": "Seleccionar paquete",
     "Upload .zip": "Subir .zip",
+    "Upload folder": "Subir carpeta",
     "Delete World": "Eliminar mundo",
     "Language": "Idioma",
     "English": "Inglés",
@@ -235,6 +236,10 @@ const translations = {
     // ------------------------------------------------------------------ loading
     "Loading terrain...": "Cargando terreno...",
     "Building terrain...": "Construyendo terreno...",
+    "Importing mods...": "Importando mods...",
+    "Loading world data...": "Cargando datos del mundo...",
+    "Loading textures...": "Cargando texturas...",
+    "Connecting to world...": "Conectando al mundo...",
     "Starting integrated server...": "Iniciando servidor integrado...",
     "Starting the update...": "Iniciando la actualización...",
     "The installer output will appear here.": "La salida del instalador aparecerá aquí.",

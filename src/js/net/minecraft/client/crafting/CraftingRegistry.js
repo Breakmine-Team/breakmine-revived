@@ -15,7 +15,16 @@ export default class CraftingRegistry {
     static registerRecipe(recipeInstance) {
         if (recipeInstance && typeof recipeInstance.matches === 'function') {
             this.recipes.push(recipeInstance);
+            return recipeInstance;
         }
+        return null;
+    }
+
+    static unregisterRecipe(recipeInstance) {
+        const index = this.recipes.indexOf(recipeInstance);
+        if (index === -1) return false;
+        this.recipes.splice(index, 1);
+        return true;
     }
 
     static registerOreRecipes() {
@@ -292,13 +301,13 @@ export default class CraftingRegistry {
         }
 
         const recipe = new ShapedCraftingRecipe(resultTypeId, resultCount, width, height, normalizedIngredients);
-        this.registerRecipe(recipe);
+        return this.registerRecipe(recipe);
     }
 
     static registerShapelessRecipe(resultTypeId, resultCount = 1, ingredients) {
         const normalizedIngredients = Array.isArray(ingredients) ? ingredients : [];
         const recipe = new ShapelessCraftingRecipe(resultTypeId, resultCount, normalizedIngredients);
-        this.registerRecipe(recipe);
+        return this.registerRecipe(recipe);
     }
 
     static getCraftResult(gridItems, width, height) {
