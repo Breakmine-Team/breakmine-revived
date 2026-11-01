@@ -9,10 +9,13 @@ SERVER_PORT = "6008"
 nixPkgs = ["nodejs_22", "python3", "gcc", "gnumake"]
 
 [phases.build]
-cmds = ["node scripts/build-assets.js"]
+# Generated client assets, then the static site directory that gets served.
+# There is no Vite step: vite is a devDependency, and the client is native ES
+# modules that run straight from src/ (same tree the Docker image serves).
+cmds = ["node scripts/build-assets.js", "node scripts/build-site.js"]
 
 [start]
-cmd = "npx concurrently \"node cors.js\" \"node tunnel.js\" \"npx serve -s dist -l 3000\" \"node server.js\" \"node backup-server.js\""
+cmd = "npx concurrently \"node cors.js\" \"node tunnel.js\" \"npx serve -s public -l 3000\" \"node server.js\" \"node backup-server.js\""
 
 [mounts]
 data = "/data"

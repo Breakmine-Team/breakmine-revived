@@ -13,6 +13,7 @@ vcs2.py
 node_modules/*
 dist/
 dist-single/
+public/
 .data-store/
 release/
 serverconfig.conf
