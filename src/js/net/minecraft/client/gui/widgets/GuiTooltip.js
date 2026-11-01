@@ -29,39 +29,70 @@ export default class GuiTooltip extends Gui {
             }
         }
 
+        let l1 = Math.floor(mouseX) + 12;
+        let i2 = Math.floor(mouseY) - 12;
+        
+        const lineSpacing = 10;
         const padding = 2;
-        const lineHeight = 10;
-        const textHeight = 8;
-        const tooltipWidth = maxWidth + padding * 2;
-        // One rectangle for the whole tooltip. Drawing one per line made the
-        // overlapping 2px gutters blend into near-black bands.
-        const tooltipHeight = (lines.length - 1) * lineHeight + textHeight + padding * 2;
 
-        // Mouse coordinates are fractional after scaling from physical pixels.
-        // Snap them to the low-resolution GUI grid so the tooltip's rectangle
-        // does not round to a different width as the mouse moves.
-        let x = Math.floor(mouseX) + 4;
-        let y = Math.floor(mouseY) - 10;
+        let k = 8;
+        if (lines.length > 1) {
+            k += (lines.length - 1) * lineSpacing;
+        }
+
         const screenWidth = this.minecraft?.window?.width || 1920;
         const screenHeight = this.minecraft?.window?.height || 1080;
 
-        if (x + tooltipWidth > screenWidth) x = screenWidth - tooltipWidth;
-        if (x < 0) x = 0;
-        if (y < 0) y = 0;
-        if (y + tooltipHeight > screenHeight) y = screenHeight - tooltipHeight;
+        const totalWidth = maxWidth + padding * 2;
+        const totalHeight = k + padding * 2;
 
-        this.drawRect(stack, x, y, x + tooltipWidth, y + tooltipHeight, 'rgba(0,0,0,0.8)');
+        if (l1 + totalWidth + 6 > screenWidth) {
+            l1 -= (totalWidth + 28);
+        }
 
-        for (let index = 0; index < lines.length; index++) {
+        if (i2 + totalHeight + 6 > screenHeight) {
+            i2 = screenHeight - totalHeight - 6;
+        }
+        if (l1 < 0) l1 = 0;
+        if (i2 < 0) i2 = 0;
+
+        const bgColor = 'rgba(16, 0, 16, 0.941)';
+        const borderStart = 'rgba(80, 0, 255, 0.50)';
+        const borderEnd = 'rgba(40, 0, 127, 0.50)';
+
+        // Inner bounds directly enclosing text with 1px padding
+        const x1 = l1 - padding;
+        const y1 = i2 - padding;
+        const x2 = l1 + maxWidth + padding;
+        const y2 = i2 + k + padding;
+
+        // 1. Draw outer 1px black outline / background rects with proper 1px corner notches
+        this.drawRect(stack, x1 - 1, y1 - 2, x2 + 1, y1 - 1, bgColor);
+        this.drawRect(stack, x1 - 1, y2 + 1, x2 + 1, y2 + 2, bgColor);
+        this.drawRect(stack, x1 - 1, y1 - 1, x2 + 1, y2 + 1, bgColor);
+        this.drawRect(stack, x1 - 2, y1 - 1, x1 - 1, y2 + 1, bgColor);
+        this.drawRect(stack, x2 + 1, y1 - 1, x2 + 2, y2 + 1, bgColor);
+
+        // 2. Draw inner gradient border lines with 1px corner notches
+        this.drawGradientRect(stack, x1 - 1, y1, x1, y2, borderStart, borderEnd);
+        this.drawGradientRect(stack, x2, y1, x2 + 1, y2, borderStart, borderEnd);
+        this.drawGradientRect(stack, x1, y1 - 1, x2, y1, borderStart, borderStart);
+        this.drawGradientRect(stack, x1, y2, x2, y2 + 1, borderEnd, borderEnd);
+
+        // 3. Render text lines with reduced line spacing
+        let currentY = i2;
+        for (let k1 = 0; k1 < lines.length; ++k1) {
+            const s1 = lines[k1];
             this.drawString(
                 stack,
-                lines[index],
-                x + padding,
-                y + padding + index * lineHeight,
+                s1,
+                l1,
+                currentY,
                 0xFFFFFFFF,
                 true,
                 false
             );
+            currentY += lineSpacing;
         }
     }
 

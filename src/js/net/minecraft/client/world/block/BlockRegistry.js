@@ -164,6 +164,11 @@ export class BlockRegistry {
         return this.get(key);
     }
 
+    static getNamespacedKeyFromId(id) {
+        const block = this.idMap.get(id) || Block.blocks.get(id);
+        return block ? block.identifier : null;
+    }
+
     static unregister(identifier) {
         const fullKey = this.normalizeKey(identifier);
         const block = this.registry.get(fullKey);
