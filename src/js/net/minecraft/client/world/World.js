@@ -243,7 +243,7 @@ export default class World {
         return boundingBoxList;
     }
 
-    getBlockCollisionBoxesAt(x, y, z) {
+    getBlockCollisionBoxesAt(x, y, z, query = null) {
         // Summoned cells contribute through the field's pose-aware seam
         // (getCollisionBoxes -> offGridField.addCollisionBoxes), which knows
         // where the structure actually sits after a move/rotate.
@@ -261,7 +261,10 @@ export default class World {
             return [];
         }
 
-        if (block.multipart) {
+        // Only blocks whose parts are their real shape collide with them;
+        // a multipart block that is walked through (scaffolding) falls through
+        // to its own collision box below.
+        if (block.multipart && block.usesMultipartShape()) {
             let multipart = block.getMultipart(this, x, y, z);
             if (Array.isArray(multipart) && multipart.length > 0) {
                 return multipart.map((part) => {
@@ -290,7 +293,7 @@ export default class World {
         }
 
         // Check for blocks with custom collision bounding box
-        let collisionBb = block.getCollisionBoundingBox(this, x, y, z);
+        let collisionBb = block.getCollisionBoundingBoxFor(this, x, y, z, query);
         if (collisionBb) {
             let bb = new BoundingBox(
                 x + collisionBb.minX,
@@ -369,7 +372,7 @@ export default class World {
         return chunk.getSection(sectionY);
     }
 
-    getCollisionBoxes(region, includeOffGrid = true) {
+    getCollisionBoxes(region, includeOffGrid = true, context = null) {
         let boundingBoxList = [];
 
         let minX = MathHelper.floor(region.minX);
@@ -379,10 +382,19 @@ export default class World {
         let minZ = MathHelper.floor(region.minZ);
         let maxZ = MathHelper.floor(region.maxZ + 1.0);
 
+        // Blocks whose collision depends on how the entity is moving get the
+        // swept region plus the direction of the move and whether the entity is
+        // sneaking (used by scaffolding to let a player climb down through it).
+        let query = {
+            region: region,
+            downward: context !== null && context !== undefined && context.downward === true,
+            sneaking: context !== null && context !== undefined && context.sneaking === true
+        };
+
         for (let x = minX; x < maxX; x++) {
             for (let y = minY; y < maxY; y++) {
                 for (let z = minZ; z < maxZ; z++) {
-                    let collisionBoxes = this.getBlockCollisionBoxesAt(x, y, z);
+                    let collisionBoxes = this.getBlockCollisionBoxesAt(x, y, z, query);
                     if (collisionBoxes.length > 0) {
                         boundingBoxList.push(...collisionBoxes);
                     }

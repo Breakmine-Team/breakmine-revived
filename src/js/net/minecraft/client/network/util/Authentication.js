@@ -1,5 +1,5 @@
 import ByteBuf from "./ByteBuf.js";
-import {require} from "../../../../../Start.js";
+import {require} from "./Require.js";
 
 export default class Authentication {
 

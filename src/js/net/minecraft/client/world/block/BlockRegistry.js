@@ -52,6 +52,7 @@ import BlockTrafficCone from "./type/BlockTrafficCone.js";
 import BlockTrafficBarrier from "./type/BlockTrafficBarrier.js";
 import BlockPavement from "./type/BlockPavement.js";
 import BlockPavementSlope from "./type/BlockPavementSlope.js";
+import BlockScaffolding from "./type/BlockScaffolding.js";
 import ItemRoadBuilder from "./type/ItemRoadBuilder.js";
 import BlockFlower from "./type/BlockFlower.js";
 import BlockGrassPlant from "./type/BlockGrassPlant.js";
@@ -407,6 +408,7 @@ export class BlockRegistry {
         BlockRegistry.OVEN_COUNTER = new BlockCounterOven(315, 0);
         BlockRegistry.TRAFFIC_CONE = new BlockTrafficCone(316, 0);
         BlockRegistry.TRAFFIC_BARRIER = new BlockTrafficBarrier(317, 0);
+        BlockRegistry.SCAFFOLDING = new BlockScaffolding(326, 0);
 
         // Pavement (pavement_light.png is the uncracked white texture)
         BlockRegistry.PAVEMENT_BLACK = new BlockPavement(318, 0, "pavement_black", "Black Pavement");

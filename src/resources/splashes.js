@@ -65,7 +65,7 @@ Five nights at Freddy's!
 Can you survive?
 >_<
 >.<
-\_(o.o)_/
+\\_(o.o)_/
 The horizons will soon be distant...
 Nahh Brotato that's crazy`.split('\n');
 

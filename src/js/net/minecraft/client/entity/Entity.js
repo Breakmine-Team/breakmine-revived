@@ -202,8 +202,14 @@ export default class Entity {
         let movingBox = this.boundingBox.clone();
         let isClimbable = false;
 
-        // Calculate target Y
-        let boundingBoxList = this.world.getCollisionBoxes(movingBox.expand(0.0, targetY, 0.0), includeOffGrid);
+        // Calculate target Y. The downward flag lets blocks that are only solid
+        // from above (scaffolding) catch a landing without blocking a climb;
+        // sneaking lets the same blocks be passed through on the way down.
+        let boundingBoxList = this.world.getCollisionBoxes(
+            movingBox.expand(0.0, targetY, 0.0),
+            includeOffGrid,
+            { downward: targetY < 0.0, sneaking: this.isSneaking() }
+        );
         collisionBoxes.push(...boundingBoxList);
         for (let aABB of boundingBoxList) {
             targetY = aABB.clipYCollide(movingBox, targetY);

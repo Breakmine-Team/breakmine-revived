@@ -3,11 +3,16 @@ import * as aesjs from '../../libraries/aes.js';
 import MixinEngine from './net/minecraft/client/mixin/MixinEngine.js';
 import { base64Assets } from '../resources.js';
 import { uiTextures } from './assetManifest.js';
+import { Version } from '../resources/version.js';
 
 // Expose the inlined assets so non-module UI code (e.g. TinyTools) can use
 // them in the singlefile build, where separate files are not available.
 window.base64Assets = base64Assets;
-window.GAME_VERSION = Minecraft.VERSION;
+// Read the version from its own module rather than from Minecraft.VERSION: the
+// class binding is only initialized once Minecraft.js has finished evaluating,
+// and touching it here throws "Cannot access 'Minecraft' before initialization"
+// whenever the module graph happens to reach this file first.
+window.GAME_VERSION = Version.VERSION;
 
 window.addEventListener('unhandledrejection', event => {
     // Suppress the default console noise, but never silently: a rejected
@@ -72,6 +77,7 @@ window.addEventListener('pageshow', function (event) {
     }
 });
 
-export function require(module) {
-    return window[module];
-}
+// The network modules import this helper from its own leaf module so that
+// Start.js is not part of their import graph (see Require.js); keep the export
+// here for anything that still expects it on the entry point.
+export { require } from './net/minecraft/client/network/util/Require.js';

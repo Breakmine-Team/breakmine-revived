@@ -144,6 +144,17 @@ export default class Block {
         return null;
     }
 
+    /**
+     * True when the parts returned by getMultipart() are also the block's
+     * physical shape: they are used for collision and for the hit selection.
+     * Blocks that only *render* as parts but are otherwise walked through
+     * (scaffolding) return false and keep using getBoundingBox() and
+     * getCollisionBoundingBoxFor() instead.
+     */
+    usesMultipartShape() {
+        return true;
+    }
+
     getModel() {
         return null;
     }
@@ -279,6 +290,17 @@ export default class Block {
         return null;
     }
 
+    /**
+     * Collision box for one specific sweep of a moving entity. `query` carries
+     * the swept `region` and whether the entity is moving `downward` this step,
+     * so a block can collide differently depending on which way the entity is
+     * going (scaffolding only catches entities landing on its top plate).
+     * Blocks with a direction-independent box do not need to override this.
+     */
+    getCollisionBoundingBoxFor(world, x, y, z, query) {
+        return this.getCollisionBoundingBox(world, x, y, z);
+    }
+
     onBlockAdded(world, x, y, z) {
 
     }
@@ -301,7 +323,8 @@ export default class Block {
 
     collisionRayTrace(world, x, y, z, start, end) {
         // Raytrace against multipart bounding boxes if this is a multipart block
-        if (this.multipart) {
+        // whose parts are its real shape.
+        if (this.multipart && this.usesMultipartShape()) {
             let multipart = this.getMultipart(world, x, y, z);
             if (Array.isArray(multipart) && multipart.length > 0) {
                 let closestHit = null;
