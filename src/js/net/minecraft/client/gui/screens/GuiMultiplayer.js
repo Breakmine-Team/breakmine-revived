@@ -75,23 +75,23 @@ export default class GuiMultiplayer extends GuiScreen {
             )
         );
 
-        const defaultServerFileName = "Publix_Creative.json";
-        const defaultServerFileName2 = "Publix_SMP.json";
+        const defaultServerFileName = "LittleQ_Creative.json";
+        const defaultServerFileName2 = "LittleQ_SMP.json";
 
         this.saveList = [];
-        if (this.minecraft.settings.showPublix) {
+        if (this.minecraft.settings.showLittleQ) {
             this.saveList.push(
                 {
-                    name: ICON_SERVER + " Publix Creative",
+                    name: ICON_SERVER + " LittleQ Creative",
                     date: "",
                     details: "play.breakmine.com",
-                    motd: "Create epic things at Publix Creative!"
+                    motd: "Create epic things at LittleQ Creative!"
                 },
                 {
-                    name: ICON_SERVER + " Publix SMP",
+                    name: ICON_SERVER + " LittleQ SMP",
                     date: "",
                     details: "playsmp.breakmine.com",
-                    motd: "Survive and fight in the new Publix SMP!"
+                    motd: "Survive and fight in the new LittleQ SMP!"
                 }
             );
         }

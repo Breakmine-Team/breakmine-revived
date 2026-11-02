@@ -28,7 +28,7 @@ export default class GameSettings {
         this.serverAddress = '';
         this.apiUrl = 'api.breakmine.com';
         this.tunnelServer = 'tunnel.breakmine.com';
-        this.showPublix = true;
+        this.showLittleQ = true;
         this.proxyAddress = '';
         this.safePlacing = false;
         this.proxy = '';

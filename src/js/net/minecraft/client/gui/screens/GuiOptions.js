@@ -64,8 +64,8 @@ export default class GuiOptions extends GuiScreen {
                         action: () => this.minecraft.displayScreen(new GuiControls(this))
                     },
                     {
-                        name: "Show Publix servers",
-                        settingKey: "showPublix",
+                        name: "Show LittleQ servers",
+                        settingKey: "showLittleQ",
                         type: "toggle"
                     },
                     {

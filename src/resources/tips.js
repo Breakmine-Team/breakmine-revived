@@ -8,7 +8,7 @@ Patchwork was originally called ModForge.
 The first mod was BombCraft.
 Bluestone used to be a mod by stryck.
 Breakmine used to only have one block: dirt.
-Try the Publix server!
+Try the LittleQ server!
 Breakmine is NOT Minecraft.
 Breakmine was made after a joke in an art classroom.`.split('\n');
 
