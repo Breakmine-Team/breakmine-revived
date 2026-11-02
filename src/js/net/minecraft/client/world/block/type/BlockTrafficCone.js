@@ -11,15 +11,13 @@ export default class BlockTrafficCone extends Block {
         this.sound = Block.sounds.cloth;
         this.inventoryTab = EnumCreativeInventoryTab.DECORATION;
 
-        // The model is 12/16 wide at the base and 15/16 tall.
-        this.boundingBox = new BoundingBox(0.125, 0, 0.125, 0.875, 0.9375, 0.875);
         this.noFaceCull = true;
     }
 
     // The cone model uses its own texture, so this is only used for breaking
     // particles (the atlas has no traffic_cone tile).
     getTextureForFace(face) {
-        return 'orange_concrete';
+        return 'red_concrete';
     }
 
     onRender(world, x, y, z, blockRenderer) {

@@ -183,6 +183,8 @@ export const atlasPaintingTextures = [
 export const modelAssets = [
     "model/cone/model.obj",
     "model/cone/texture.png",
+    "model/snail/model.obj",
+    "model/snail/texture.png",
     "model/barrier/model.obj",
     "model/barrier/texture.png"
 ];

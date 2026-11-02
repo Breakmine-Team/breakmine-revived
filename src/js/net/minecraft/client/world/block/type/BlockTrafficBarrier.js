@@ -15,8 +15,6 @@ export default class BlockTrafficBarrier extends Block {
         this.sound = Block.sounds.cloth;
         this.inventoryTab = EnumCreativeInventoryTab.DECORATION;
 
-        // The model is a thin panel, but the engine cannot rotate collision
-        // boxes; keep the standard block box so collision matches every facing.
         this.noFaceCull = true;
     }
 

@@ -105,6 +105,7 @@ import BlockStem from "./type/BlockStem.js";
 import BlockFruit from "./type/BlockFruit.js";
 import ItemSeeds from "./type/ItemSeeds.js";
 import ItemFood from "./type/ItemFood.js";
+import BlockSnailStatue from "./type/BlockSnailStatue.js";
 
 export class BlockRegistry {
 
@@ -414,6 +415,7 @@ export class BlockRegistry {
         BlockRegistry.TRAFFIC_CONE = new BlockTrafficCone(316, 0);
         BlockRegistry.TRAFFIC_BARRIER = new BlockTrafficBarrier(317, 0);
         BlockRegistry.SCAFFOLDING = new BlockScaffolding(326, 0);
+        BlockRegistry.SNAIL_STATUE = new BlockSnailStatue(327, 0);
 
         // Pavement (pavement_light.png is the uncracked white texture)
         BlockRegistry.PAVEMENT_BLACK = new BlockPavement(318, 0, "pavement_black", "Black Pavement");

@@ -13,6 +13,7 @@ import { BlockRegistry } from "../world/block/BlockRegistry.js";
 import * as THREE from "../../../../../../libraries/three.module.js";
 import EnumCreativeInventoryTab from "../gui/EnumCreativeInventoryTab.js";
 import getTrafficConeModel, { getTrafficConeTexture } from "./model/TrafficConeModel.js";
+import getSnailModel, { getSnailTexture } from "./model/SnailModel.js";
 import getTrafficBarrierModel, { getTrafficBarrierTexture } from "./model/TrafficBarrierModel.js";
 
 // Hoisted once: EnumBlockFace.values() allocates a fresh array on every call,
@@ -41,6 +42,7 @@ export default class BlockRenderer {
         this.modelTessellators = [];
         this.modelTessellator = this.createModelTessellator(getTrafficConeTexture());
         this.barrierModelTessellator = this.createModelTessellator(getTrafficBarrierTexture());
+        this.snailModelTessellator = this.createModelTessellator(getSnailTexture());
         this.modelPassActive = false;
     }
 
@@ -924,6 +926,14 @@ export default class BlockRenderer {
         this.renderCustomModel(
             this.modelTessellator,
             getTrafficConeModel(),
+            world, x, y, z, 0
+        );
+    }
+
+    renderSnailStatue(world, x, y, z) {
+        this.renderCustomModel(
+            this.snailModelTessellator,
+            getSnailModel(),
             world, x, y, z, 0
         );
     }
