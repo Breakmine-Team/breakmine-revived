@@ -75,23 +75,23 @@ export default class GuiMultiplayer extends GuiScreen {
             )
         );
 
-        const defaultServerFileName = "LittleQ_Creative.json";
-        const defaultServerFileName2 = "LittleQ_SMP.json";
+        const defaultServerFileName = "Nino_Creative.json";
+        const defaultServerFileName2 = "Nino_SMP.json";
 
         this.saveList = [];
-        if (this.minecraft.settings.showLittleQ) {
+        if (this.minecraft.settings.showNino) {
             this.saveList.push(
                 {
-                    name: ICON_SERVER + " LittleQ Creative",
+                    name: ICON_SERVER + " Nino Creative",
                     date: "",
                     details: "play.breakmine.com",
-                    motd: "Create epic things at LittleQ Creative!"
+                    motd: "Create epic things at Nino Creative!"
                 },
                 {
-                    name: ICON_SERVER + " LittleQ SMP",
+                    name: ICON_SERVER + " Nino SMP",
                     date: "",
                     details: "playsmp.breakmine.com",
-                    motd: "Survive and fight in the new LittleQ SMP!"
+                    motd: "Survive and fight in the new Nino SMP!"
                 }
             );
         }
