@@ -1,4 +1,6 @@
 const express = require('express');
+const http = require('http');
+const { WebSocketServer } = require('ws');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
@@ -70,6 +72,17 @@ const SITE_HOSTNAMES = new Set(
 function hostnameOf(req) {
     const raw = req.headers['x-forwarded-host'] || req.headers.host || '';
     return raw.split(',')[0].trim().toLowerCase();
+}
+
+// Requests relayed by the WebSocket API arrive from loopback (see
+// replayLoopbackRequest). They carry a marker header so the HTTP rate limiters
+// step aside: the socket transport does its own per-client limiting, and one
+// shared loopback bucket would throttle every WebSocket client at once. The
+// header alone is not enough, because anyone could send it over plain HTTP.
+function isWsReplay(req) {
+    if (req.headers['x-breakmine-ws'] !== '1') return false;
+    const address = String(req.socket?.remoteAddress || '').replace(/^::ffff:/, '');
+    return address === '127.0.0.1' || address === '::1';
 }
 
 function getCapeAllowlist() {
@@ -225,7 +238,7 @@ app.get('/sitemap.xml', (req, res) => {
     }
 });
 
-app.use(rateLimit({ windowMs: 900000, max: 100 }));
+app.use(rateLimit({ windowMs: 900000, max: 100, skip: isWsReplay }));
 app.use(express.json({ limit: '1mb' }));
 
 app.use('/api', (req, res, next) => {
@@ -233,7 +246,7 @@ app.use('/api', (req, res, next) => {
     next();
 });
 
-const authLimiter = rateLimit({ windowMs: 900000, max: 10 });
+const authLimiter = rateLimit({ windowMs: 900000, max: 10, skip: isWsReplay });
 
 function makeUploader(destination, maxSize) {
     return multer({
@@ -480,8 +493,223 @@ app.use((err, req, res, next) => {
 
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 
-app.listen(PORT, '0.0.0.0', () => {
-    Logger.info('Server', `Listening on 0.0.0.0:${PORT}`);
+// --- WebSocket API -----------------------------------------------------------
+//
+// School and office filters regularly block plain HTTP requests to
+// breakmine.com while letting WebSocket traffic through, which made login and
+// skin uploads unusable on those networks. Every API route is therefore also
+// reachable over a WebSocket at /api-ws.
+//
+// Protocol: one JSON object per frame, both ways.
+//   client -> {"id": "3", "method": "POST", "path": "/api/login",
+//              "headers": {"Authorization": "Bearer ..."},
+//              "body": "{\"username\":...}"}   (binary bodies: "bodyBase64")
+//   server -> {"id": "3", "status": 200, "contentType": "application/json",
+//              "json": {...}}
+//
+// Each request is replayed against the loopback HTTP API instead of getting a
+// second implementation, so validation, auth, uploads and error shapes can
+// never drift between the two transports. Only API, skin and cape paths are
+// relayed, so this cannot be used as a general proxy for the site.
+
+const WS_API_PATH = '/api-ws';
+const WS_MAX_PAYLOAD = 4 * 1024 * 1024;
+const WS_MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
+const WS_REQUEST_TIMEOUT_MS = 30000;
+const WS_MAX_IN_FLIGHT = 8;
+const WS_WINDOW_MS = 15 * 60 * 1000;
+const WS_REQUESTS_PER_WINDOW = 120;
+const WS_AUTH_REQUESTS_PER_WINDOW = 10;
+const WS_ALLOWED_METHODS = new Set(['GET', 'HEAD', 'POST', 'DELETE']);
+const WS_ALLOWED_PREFIXES = ['/api/', '/skin/', '/cape/'];
+const WS_FORWARDED_HEADERS = new Set(['authorization', 'content-type', 'accept']);
+const WS_AUTH_PATHS = new Set(['/api/login', '/api/register']);
+
+const loopbackAgent = new http.Agent({ keepAlive: true, maxSockets: 16 });
+
+function replayLoopbackRequest(method, requestPath, headers, body) {
+    return new Promise((resolve, reject) => {
+        const req = http.request({
+            host: '127.0.0.1',
+            port: PORT,
+            method,
+            path: requestPath,
+            agent: loopbackAgent,
+            headers: {
+                ...headers,
+                host: '127.0.0.1',
+                'x-breakmine-ws': '1',
+                ...(body ? { 'content-length': body.length } : {}),
+            },
+        }, (res) => {
+            const chunks = [];
+            let size = 0;
+
+            res.on('data', (chunk) => {
+                size += chunk.length;
+                if (size > WS_MAX_RESPONSE_BYTES) {
+                    req.destroy(new Error('Response too large'));
+                    return;
+                }
+                chunks.push(chunk);
+            });
+            res.on('end', () => resolve({
+                status: res.statusCode || 500,
+                contentType: String(res.headers['content-type'] || ''),
+                body: Buffer.concat(chunks),
+            }));
+            res.on('error', reject);
+        });
+
+        req.on('error', reject);
+        req.setTimeout(WS_REQUEST_TIMEOUT_MS, () => req.destroy(new Error('Upstream request timed out')));
+        if (body) req.write(body);
+        req.end();
+    });
+}
+
+function attachApiWebSocket(server) {
+    const wss = new WebSocketServer({
+        server,
+        path: WS_API_PATH,
+        maxPayload: WS_MAX_PAYLOAD,
+    });
+
+    wss.on('connection', (ws) => {
+        const state = {
+            count: 0,
+            authCount: 0,
+            resetAt: Date.now() + WS_WINDOW_MS,
+            inFlight: 0,
+        };
+
+        const send = (payload) => {
+            if (ws.readyState === 1) ws.send(JSON.stringify(payload));
+        };
+
+        ws.on('message', async (data, isBinary) => {
+            if (isBinary) {
+                ws.close(1003, 'Binary frames are not supported');
+                return;
+            }
+
+            let message;
+            try {
+                message = JSON.parse(data.toString());
+            } catch (err) {
+                send({ id: null, status: 400, error: 'Invalid JSON' });
+                return;
+            }
+
+            const id = message && message.id !== undefined ? message.id : null;
+            const method = String((message && message.method) || 'GET').toUpperCase();
+            const requestPath = String((message && message.path) || '');
+
+            if (!WS_ALLOWED_METHODS.has(method)) {
+                send({ id, status: 405, error: 'Method not allowed' });
+                return;
+            }
+
+            if (!requestPath.startsWith('/') || requestPath.includes('..') ||
+                !WS_ALLOWED_PREFIXES.some((prefix) => requestPath.startsWith(prefix))) {
+                send({ id, status: 404, error: 'Unsupported API path' });
+                return;
+            }
+
+            const now = Date.now();
+            if (now >= state.resetAt) {
+                state.count = 0;
+                state.authCount = 0;
+                state.resetAt = now + WS_WINDOW_MS;
+            }
+
+            if (state.count >= WS_REQUESTS_PER_WINDOW) {
+                send({ id, status: 429, error: 'Too many requests' });
+                return;
+            }
+            if (WS_AUTH_PATHS.has(requestPath) && state.authCount >= WS_AUTH_REQUESTS_PER_WINDOW) {
+                send({ id, status: 429, error: 'Too many authentication attempts' });
+                return;
+            }
+            if (state.inFlight >= WS_MAX_IN_FLIGHT) {
+                send({ id, status: 429, error: 'Too many concurrent requests' });
+                return;
+            }
+
+            state.count += 1;
+            if (WS_AUTH_PATHS.has(requestPath)) state.authCount += 1;
+
+            const headers = {};
+            if (message && message.headers && typeof message.headers === 'object') {
+                for (const [name, value] of Object.entries(message.headers)) {
+                    const key = String(name).toLowerCase();
+                    if (!WS_FORWARDED_HEADERS.has(key)) continue;
+                    if (typeof value !== 'string' || /[\r\n]/.test(value)) continue;
+                    headers[key] = value.slice(0, 4096);
+                }
+            }
+
+            let body = null;
+            if (message && typeof message.bodyBase64 === 'string') {
+                body = Buffer.from(message.bodyBase64, 'base64');
+            } else if (message && typeof message.body === 'string' && message.body.length > 0) {
+                body = Buffer.from(message.body, 'utf8');
+            }
+            if (body && body.length > WS_MAX_PAYLOAD) {
+                send({ id, status: 413, error: 'Request body too large' });
+                return;
+            }
+
+            state.inFlight += 1;
+            try {
+                const response = await replayLoopbackRequest(method, requestPath, headers, body);
+
+                if (response.contentType.includes('application/json')) {
+                    const text = response.body.toString('utf8');
+                    let json = null;
+                    try {
+                        json = JSON.parse(text);
+                    } catch (err) {
+                        json = null;
+                    }
+                    if (json !== null) send({ id, status: response.status, contentType: response.contentType, json });
+                    else send({ id, status: response.status, contentType: response.contentType, body: text });
+                } else if (response.contentType.startsWith('text/') || response.contentType.includes('xml')) {
+                    send({
+                        id,
+                        status: response.status,
+                        contentType: response.contentType,
+                        body: response.body.toString('utf8'),
+                    });
+                } else {
+                    send({
+                        id,
+                        status: response.status,
+                        contentType: response.contentType,
+                        bodyBase64: response.body.toString('base64'),
+                    });
+                }
+            } catch (err) {
+                Logger.error('WebSocket', `Relay failed for ${method} ${requestPath}: ${err.message}`);
+                send({ id, status: 502, error: 'API relay failed' });
+            } finally {
+                state.inFlight -= 1;
+            }
+        });
+
+        ws.on('error', () => {
+            // ws emits 'close' right after; nothing else to do per connection.
+        });
+    });
+
+    return wss;
+}
+
+const server = http.createServer(app);
+attachApiWebSocket(server);
+
+server.listen(PORT, '0.0.0.0', () => {
+    Logger.info('Server', `Listening on 0.0.0.0:${PORT} (API over HTTP and ws://…${WS_API_PATH})`);
 });
 
 process.on('SIGTERM', () => { db.close(); process.exit(0); });

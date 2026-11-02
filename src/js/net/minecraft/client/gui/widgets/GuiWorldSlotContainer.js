@@ -14,6 +14,7 @@ export default class GuiWorldSlotContainer extends GuiScreen {
                     name: data.name || 'Unknown World',
                     date: data.lastPlayed ? new Date(data.lastPlayed).toLocaleDateString() : '',
                     details: (data.worldType || 'normal') + ' - ' + (data.gameMode || 'survival'),
+                    icon: data.icon,
                 },
                 parentGui.width / 2 - 110,
                 0,

@@ -208,6 +208,44 @@ function loadServerIcon() {
 
     console.log(`[Icon] Loading icon for server: ${config.server}`);
 
+    // Check environment variable first (highest priority)
+    const envIcon = ENV.SERVER_ICON;
+    if (envIcon && typeof envIcon === 'string') {
+        console.log('[Icon] Checking SERVER_ICON environment variable');
+        // If it's a data URL, use it directly
+        if (envIcon.startsWith('data:image')) {
+            console.log('[Icon] Using data URL from environment variable');
+            cachedIcon = envIcon;
+            return cachedIcon;
+        }
+        // Otherwise treat it as a file path
+        const pathsToTry = [
+            path.join(PROJECT_ROOT, envIcon),  // Project root
+            path.join(getServerDir(config.server), envIcon)  // Server directory
+        ];
+
+        for (const iconPath of pathsToTry) {
+            try {
+                console.log(`[Icon] Trying to load icon from env path: ${iconPath}`);
+                if (fs.existsSync(iconPath)) {
+                    const data = fs.readFileSync(iconPath);
+                    console.log(`[Icon] Icon file size: ${data.length} bytes`);
+                    if (data.length <= MAX_ICON_SIZE) {
+                        const base64 = Buffer.from(data).toString('base64');
+                        cachedIcon = `data:image/png;base64,${base64}`;
+                        console.log('[Icon] Successfully loaded icon from env file');
+                        return cachedIcon;
+                    } else {
+                        console.log('[Icon] Icon file too large');
+                    }
+                }
+            } catch (e) {
+                console.log(`[Icon] Failed to load icon from env path: ${e.message}`);
+            }
+        }
+        console.log('[Icon] Icon from env does not exist in any location');
+    }
+
     // If icon is already a data URL in config, use it
     if (config.icon && config.icon.startsWith('data:image')) {
         console.log('[Icon] Using data URL from config');

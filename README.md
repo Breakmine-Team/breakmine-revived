@@ -3,6 +3,40 @@
 ### IMPORTANT
 Before running the game, *make sure* you type: `node scripts/build-assets.js`!!!
 
+### Account API transports (HTTP and WebSocket)
+
+The account API (`cors.js`, port 6006) serves every route over HTTP and over a
+WebSocket at `/api-ws`. The socket exists for networks that block plain HTTP
+requests to the API host but let WebSocket traffic through: `AuthLib` in the
+client tries it first and falls back to HTTP when the socket is unavailable.
+Skin and cape *images* are still fetched over HTTP.
+
+Protocol: one JSON request per frame, one JSON reply per frame.
+
+```json
+{"id": "3", "method": "POST", "path": "/api/login",
+ "headers": {"Content-Type": "application/json"},
+ "body": "{\"username\":\"steve\",\"password\":\"secret\"}"}
+```
+
+```json
+{"id": "3", "status": 200, "contentType": "application/json; charset=utf-8",
+ "json": {"token": "...", "expiresIn": "7d"}}
+```
+
+Binary requests (skin uploads) send `bodyBase64` instead of `body`; replies that
+are not JSON come back as `bodyBase64`. Each frame is relayed to the loopback
+HTTP API, so both transports share one implementation and one set of
+validation rules. Only `/api/`, `/skin/` and `/cape/` paths are accepted, so the
+socket cannot be used to proxy the rest of the site. A connection is limited to
+120 requests per 15 minutes (10 of them to `/api/login` and `/api/register`) and
+8 requests in flight; the HTTP rate limiters skip these relayed requests,
+because they all arrive from loopback under a single address.
+
+```
+wss://api.breakmine.com/api-ws
+```
+
 ### Multiplayer server switches
 
 These environment variables are read by the dedicated server at startup. Use

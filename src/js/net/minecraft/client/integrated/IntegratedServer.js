@@ -124,6 +124,16 @@ export async function listServerWorlds() {
     return await post({ type: 'listWorlds' });
 }
 
+// Store a 256x256 PNG preview in the world's own directory, so it travels
+// with the save (export/import) and is listed alongside the rest of the world
+// metadata. The worker owns the world files, so the icon goes through it
+// instead of touching the filesystem from the render thread.
+export async function saveWorldIcon(worldKey, pngBytes) {
+    const data = pngBytes instanceof Uint8Array ? pngBytes : new Uint8Array(pngBytes);
+    const payload = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+    await post({ type: 'saveWorldIcon', worldKey, data: payload }, [payload]);
+}
+
 export async function deleteServerWorld(worldKey) {
     // Wait for an in-flight stop (which saves the world) before removing its
     // files, otherwise the server's final save can recreate them.

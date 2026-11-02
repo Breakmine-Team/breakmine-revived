@@ -195,6 +195,18 @@ function listServerWorlds() {
             }
         }
 
+        // 256x256 preview written when the world was last left. Stored as a
+        // data URL so the world-select screen can hand it straight to an Image.
+        let icon = null;
+        const iconPath = path.join(dir, 'icon.png');
+        if (fs.existsSync(iconPath)) {
+            try {
+                icon = 'data:image/png;base64,' + Buffer.from(fs.readFileSync(iconPath)).toString('base64');
+            } catch (e) {
+                icon = null;
+            }
+        }
+
         let time = 0;
         if (fs.existsSync(dataPath)) {
             const data = fs.readFileSync(dataPath);
@@ -211,6 +223,7 @@ function listServerWorlds() {
             worldType: conf.worldType || 'normal',
             gameMode: gamemodeName(conf.default_gamemode),
             time,
+            icon,
         });
     }
     return worlds;
@@ -346,6 +359,17 @@ async function handleMessage(msg) {
                 deleteServerWorld(msg.worldKey);
                 post({ type: 'result', reqId: msg.reqId, result: null });
                 break;
+
+            case 'saveWorldIcon': {
+                const serverName = serverNameForKey(msg.worldKey);
+                const dir = serverWorld.getWorldDir(serverName);
+                if (!fs.existsSync(dir)) {
+                    fs.mkdirSync(dir, { recursive: true });
+                }
+                fs.writeFileSync(path.join(dir, 'icon.png'), new Uint8Array(msg.data));
+                post({ type: 'ack', reqId: msg.reqId });
+                break;
+            }
 
             case 'socket-connect': {
                 if (!accepting) {

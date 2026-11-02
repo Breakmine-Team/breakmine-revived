@@ -38,7 +38,7 @@ import NetworkLoginHandler from "./network/handler/NetworkLoginHandler.js";
 import HandshakePacket from "./network/packet/handshake/client/HandshakePacket.js";
 import ProtocolState from "./network/ProtocolState.js";
 import LoginStartPacket from "./network/packet/login/client/LoginStartPacket.js";
-import { startIntegratedServer, stopIntegratedServer, isIntegratedRunning, getIntegratedServerName, deleteServerWorld, serverNameForKey, listServerWorlds } from "./integrated/IntegratedServer.js";
+import { startIntegratedServer, stopIntegratedServer, isIntegratedRunning, getIntegratedServerName, deleteServerWorld, serverNameForKey, listServerWorlds, saveWorldIcon } from "./integrated/IntegratedServer.js";
 import ChunkProviderGenerateWorker from "./world/provider/ChunkProviderGenerateWorker.js";
 import FileSystem from "./fs/Filesystem.js";
 import Chunk from "./world/Chunk.js";
@@ -86,6 +86,8 @@ export default class Minecraft {
         this.world = null;
         this.player = null;
         this.currentWorldKey = null;
+        // 256x256 world-select screenshots are captured on exit and stored on
+        // the world's index entry (see _captureWorldIcon).
         // Seed of the world handed to the in-page integrated server. Singleplayer
         // runs through that server, so the client world is a WorldClient with a
         // ChunkProviderClient that has no generator to read a seed from.
@@ -378,6 +380,21 @@ export default class Minecraft {
         this.musicManager.stopMusic();
 
         if (world === null) {
+            // Store a preview for the world-select list. This has to happen
+            // before the teardown below, while the world and its renderer are
+            // still alive, because the image is read from the rendered frame.
+            if (this.world !== null && this.currentWorldKey && this.isLocalSession()) {
+                const icon = this._captureWorldIcon();
+                if (icon) {
+                    // Shown by the world-select list straight from the index.
+                    await this._storeWorldIcon(this.currentWorldKey, icon);
+                    // Best effort: also keep a copy inside the world directory
+                    // so it travels with the save (export/import).
+                    saveWorldIcon(this.currentWorldKey, Minecraft.pngBytesFromDataUrl(icon))
+                        .catch((err) => console.error('Failed to save world icon:', err));
+                }
+            }
+
             // Mods supplied by the server belong to that connection only.
             // Remove their blocks, textures, recipes and commands before the
             // world is torn down so they cannot leak into another server or
@@ -696,6 +713,10 @@ export default class Minecraft {
                 spawnX: (idx && idx.spawnX) || 0,
                 spawnY: (idx && idx.spawnY) || 0,
                 spawnZ: (idx && idx.spawnZ) || 0,
+                // The index copy is written on every exit and is therefore
+                // the freshest; the file in the world directory is the fallback
+                // (e.g. for an imported world that has not been entered yet).
+                icon: (idx && idx.icon) || sw.icon || null,
             });
         }
 
@@ -716,6 +737,7 @@ export default class Minecraft {
                 spawnX: idx.spawnX || 0,
                 spawnY: idx.spawnY || 0,
                 spawnZ: idx.spawnZ || 0,
+                icon: idx.icon || null,
             });
         }
 
@@ -786,6 +808,82 @@ export default class Minecraft {
         networkManager.sendPacket(new LoginStartPacket(this.getSession().getProfile().getUsername()));
     }
 
+
+    /**
+     * Render the world once and return a 256x256 PNG data URL of it, for the
+     * singleplayer world-select list. The WebGL drawing buffer is not
+     * preserved between tasks, so the frame is rendered and copied into a 2D
+     * canvas in this same synchronous call: no render-loop round trip, which
+     * keeps it working while paused (the frame is otherwise only drawn when
+     * unpaused) and in a throttled tab. Returns null when there is nothing to
+     * capture.
+     */
+    _captureWorldIcon() {
+        if (!this.isInGame() || !this.worldRenderer) return null;
+
+        try {
+            // Draw a fresh frame: the previous one is no longer in the drawing
+            // buffer. The pause menu is a separate 2D canvas, so the result is
+            // the world without any HUD or menu overlay.
+            this.worldRenderer.render(this.timer ? this.timer.partialTicks : 0);
+
+            const source = this.window.canvasWorld;
+            const width = source.width;
+            const height = source.height;
+            if (!width || !height) return null;
+
+            // Centre-crop the frame to a square so the icon is not distorted
+            // on wide or tall viewports.
+            const side = Math.min(width, height);
+            const sx = Math.floor((width - side) / 2);
+            const sy = Math.floor((height - side) / 2);
+
+            const icon = document.createElement('canvas');
+            icon.width = 256;
+            icon.height = 256;
+            const context = icon.getContext('2d');
+            context.imageSmoothingEnabled = true;
+            context.imageSmoothingQuality = 'high';
+            context.drawImage(source, sx, sy, side, side, 0, 0, 256, 256);
+
+            return icon.toDataURL('image/png');
+        } catch (err) {
+            console.error('Failed to capture world icon:', err);
+            return null;
+        }
+    }
+
+    // Store the screenshot on the world's index entry, which is what the
+    // world-select list reads. This does not depend on the integrated server
+    // (or its filesystem) still being around when the world is left.
+    async _storeWorldIcon(worldKey, dataUrl) {
+        try {
+            const index = await this._loadWorldIndex();
+            let entry = index.find(e => e.key === worldKey);
+            if (!entry) {
+                entry = { key: worldKey, name: '' };
+                index.push(entry);
+            }
+            entry.icon = dataUrl;
+            await this._saveWorldIndex(index);
+        } catch (err) {
+            console.error('Failed to store world icon:', err);
+        }
+    }
+
+    // PNG bytes for a data URL, used to also store the icon inside the world
+    // directory (binary file) for export/import.
+    static pngBytesFromDataUrl(dataUrl) {
+        const text = String(dataUrl);
+        const comma = text.indexOf(',');
+        const base64 = comma === -1 ? text : text.slice(comma + 1);
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+        return bytes;
+    }
 
     async saveWorld() {
         if (!this.world || !this.isSingleplayer() || !this.currentWorldKey) return;
@@ -1027,11 +1125,17 @@ export default class Minecraft {
     async _updateWorldIndexOnQuit() {
         if (!this.currentWorldKey || !this.world || !this.player) return;
 
-        const index = await this._loadWorldIndex();
-        const entry = index.find(e => e.key === this.currentWorldKey);
-        if (!entry) return;
+        const index = await this._loadWorldIndex();            let entry = index.find(e => e.key === this.currentWorldKey);
+            if (!entry) {
+                // Newly created worlds may not have an index entry yet; create
+                // one so the screenshot taken on exit is not dropped.
+                entry = { key: this.currentWorldKey, name: '' };
+                index.push(entry);
+            }
 
-        entry.lastPlayed = Date.now();
+            // Keep the icon stored on exit; _storeWorldIcon writes it while
+            // the world is still alive so it does not depend on this path.
+            entry.lastPlayed = Date.now();
         entry.time = this.world.time || 0;
         entry.spawnX = this.world.spawn ? this.world.spawn.x : 0;
         entry.spawnY = this.world.spawn ? this.world.spawn.y : 0;
@@ -1286,7 +1390,7 @@ export default class Minecraft {
             }
 
             // Render the game
-            if (this.isInGame() && !this.isPaused()) {
+            if (!this.isPaused()) {
                 this.worldRenderer.render(partialTicks);
             }
         }

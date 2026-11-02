@@ -32,20 +32,69 @@ export function isLocalNetwork() {
 }
 
 let API_BASE_URL = 'https://api.breakmine.com';
+let API_WS_URL = null;
+
+// Transport that last worked, so a blocked transport is not retried on every
+// single call. null means "not decided yet": try the WebSocket first.
+let transportPreference = null;
 
 export function setApiBaseUrl(url) {
     if (typeof url !== 'string' || url.length === 0) return;
     API_BASE_URL = url.startsWith('http://') || url.startsWith('https://') ? url : 'https://' + url;
+    // The WebSocket endpoint follows the API host unless it was set explicitly.
+    transportPreference = null;
 }
 
 export function getApiBaseUrl() {
     return API_BASE_URL;
 }
 
+// The API is served over HTTP and over a WebSocket at /api-ws. School and
+// office filters often block plain HTTP to this host while letting WebSocket
+// traffic through, so the WebSocket is tried first and HTTP remains the
+// fallback for networks where the socket is blocked instead.
+function defaultApiWebSocketUrl() {
+    try {
+        const url = new URL(API_BASE_URL);
+        url.protocol = url.protocol === 'http:' ? 'ws:' : 'wss:';
+        url.pathname = '/api-ws';
+        url.search = '';
+        url.hash = '';
+        return url.toString();
+    } catch (err) {
+        return null;
+    }
+}
+
+export function getApiWebSocketUrl() {
+    return API_WS_URL || defaultApiWebSocketUrl();
+}
+
+export function setApiWebSocketUrl(url) {
+    if (typeof url !== 'string' || url.length === 0) {
+        API_WS_URL = null;
+        transportPreference = null;
+        return;
+    }
+
+    if (url.startsWith('ws://') || url.startsWith('wss://')) {
+        API_WS_URL = url;
+    } else {
+        const parsed = new URL(url.startsWith('http://') || url.startsWith('https://') ? url : 'https://' + url);
+        parsed.protocol = parsed.protocol === 'http:' ? 'ws:' : 'wss:';
+        parsed.pathname = '/api-ws';
+        parsed.search = '';
+        parsed.hash = '';
+        API_WS_URL = parsed.toString();
+    }
+
+    transportPreference = null;
+}
+
 export class AuthLibInfo {
-    static VERSION = "1.2.0";
+    static VERSION = "1.3.0";
     static NAME = "AuthLib";
-    
+
     constructor() {
         //
     }
@@ -63,10 +112,183 @@ export function clearAuthToken() {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
 }
 
+// Raised when a transport could not be used at all (connection refused,
+// filtered, malformed reply). API errors come back as a status instead, so a
+// 401 never makes the client retry over the other transport.
+class ApiTransportError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'ApiTransportError';
+    }
+}
+
+// Transport helper state.
+let webSocketRequestId = 0;
+
+function bytesToBase64(bytes) {
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+    }
+    return btoa(binary);
+}
+
+async function requestOverHttp(method, endpoint, { headers = {}, body = null } = {}) {
+    let response;
+
+    try {
+        response = await fetch(API_BASE_URL + endpoint, { method, headers, body });
+    } catch (err) {
+        throw new ApiTransportError(err && err.message ? err.message : 'HTTP request failed');
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+
+    // An interception/proxy block page lands here too, so a non-JSON reply is
+    // treated as a transport failure and lets the caller try the other one.
+    if (!contentType.includes('application/json')) {
+        throw new ApiTransportError(`Unexpected response from server (${response.status})`);
+    }
+
+    let data;
+    try {
+        data = await response.json();
+    } catch (err) {
+        throw new ApiTransportError('Malformed response from server');
+    }
+
+    return { status: response.status, data };
+}
+
+function requestOverWebSocket(method, endpoint, { headers = {}, body = null, timeoutMs = 20000 } = {}) {
+    return new Promise((resolve, reject) => {
+        const url = getApiWebSocketUrl();
+        if (!url) {
+            reject(new ApiTransportError('WebSocket API is not available'));
+            return;
+        }
+
+        let socket;
+        try {
+            socket = new WebSocket(url);
+        } catch (err) {
+            reject(new ApiTransportError('WebSocket API connection failed'));
+            return;
+        }
+
+        const id = `req-${++webSocketRequestId}`;
+        let settled = false;
+
+        const finish = (error, value) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(connectTimer);
+            clearTimeout(requestTimer);
+            try { socket.close(); } catch (e) { /* already closing */ }
+            if (error) reject(error); else resolve(value);
+        };
+
+        const connectTimer = setTimeout(
+            () => finish(new ApiTransportError('WebSocket API connection timed out')),
+            Math.min(timeoutMs, 8000)
+        );
+        const requestTimer = setTimeout(
+            () => finish(new ApiTransportError('WebSocket API request timed out')),
+            timeoutMs
+        );
+
+        socket.onopen = () => {
+            clearTimeout(connectTimer);
+
+            const payload = { id, method, path: endpoint, headers };
+            if (body === null || body === undefined) {
+                // nothing to send
+            } else if (typeof body === 'string') {
+                payload.body = body;
+            } else {
+                payload.bodyBase64 = bytesToBase64(body);
+            }
+
+            try {
+                socket.send(JSON.stringify(payload));
+            } catch (err) {
+                finish(new ApiTransportError('WebSocket API send failed'));
+            }
+        };
+
+        socket.onmessage = (event) => {
+            let reply;
+            try {
+                reply = JSON.parse(event.data);
+            } catch (err) {
+                finish(new ApiTransportError('Malformed WebSocket API response'));
+                return;
+            }
+
+            if (reply && reply.id !== undefined && reply.id !== null && String(reply.id) !== id) return;
+
+            let data = null;
+            if (reply && reply.json !== undefined) {
+                data = reply.json;
+            } else if (reply && typeof reply.body === 'string') {
+                try {
+                    data = JSON.parse(reply.body);
+                } catch (err) {
+                    data = reply.body;
+                }
+            }
+
+            if (!data || typeof data !== 'object') {
+                data = { error: typeof data === 'string' ? data : 'Unknown server response' };
+            }
+
+            const status = Number(reply && reply.status) || (reply && reply.error ? 500 : 200);
+            if (reply && reply.error && !data.error) {
+                data.error = String(reply.error);
+            }
+
+            finish(null, { status, data });
+        };
+
+        socket.onerror = () => finish(new ApiTransportError('WebSocket API connection failed'));
+        socket.onclose = () => finish(new ApiTransportError('WebSocket API connection closed'));
+    });
+}
+
+async function apiRequest(method, endpoint, options = {}) {
+    const webSocketUrl = getApiWebSocketUrl();
+    let transports;
+
+    if (transportPreference === 'http') {
+        transports = webSocketUrl ? ['http', 'websocket'] : ['http'];
+    } else {
+        transports = webSocketUrl ? ['websocket', 'http'] : ['http'];
+    }
+
+    let lastError = null;
+
+    for (const transport of transports) {
+        try {
+            const result = transport === 'websocket'
+                ? await requestOverWebSocket(method, endpoint, options)
+                : await requestOverHttp(method, endpoint, options);
+
+            transportPreference = transport;
+            return result;
+        } catch (error) {
+            if (!(error instanceof ApiTransportError)) throw error;
+            lastError = error;
+            if (transport === 'websocket') transportPreference = 'http';
+        }
+    }
+
+    throw new ApiTransportError(lastError ? lastError.message : 'No API transport available');
+}
+
 async function postRequest(endpoint, payload, isProtected = false) {
-    const url = API_BASE_URL + endpoint;
     const headers = { 'Content-Type': 'application/json' };
-    
+
     if (isProtected) {
         const token = getAuthToken();
         if (!token) {
@@ -76,19 +298,16 @@ async function postRequest(endpoint, payload, isProtected = false) {
     }
 
     try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify(payload)
+        const { status, data } = await apiRequest('POST', endpoint, {
+            headers,
+            body: JSON.stringify(payload),
         });
 
-        const data = await response.json();
-
-        if (!response.ok) {
-            if (response.status === 401 && isProtected) {
+        if (status < 200 || status >= 300) {
+            if (status === 401 && isProtected) {
                 clearAuthToken();
             }
-            throw new Error(data.error || `Server error: ${response.status}`);
+            throw new Error((data && data.error) || `Server error: ${status}`);
         }
 
         return data;
@@ -99,14 +318,11 @@ async function postRequest(endpoint, payload, isProtected = false) {
 }
 
 async function getRequest(endpoint) {
-    const url = API_BASE_URL + endpoint;
-
     try {
-        const response = await fetch(url);
-        const data = await response.json();
+        const { status, data } = await apiRequest('GET', endpoint);
 
-        if (!response.ok) {
-            throw new Error(data.error || `Server error: ${response.status}`);
+        if (status < 200 || status >= 300) {
+            throw new Error((data && data.error) || `Server error: ${status}`);
         }
 
         return data;
@@ -125,7 +341,7 @@ export async function login(username, password) {
     if (response.token) {
         saveAuthToken(response.token);
     }
-    
+
     return response;
 }
 
@@ -141,26 +357,22 @@ export async function logout() {
 }
 
 export async function getUserInfo(username) {
-    return getRequest(`/api/user/${username}`);
+    return getRequest(`/api/user/${encodeURIComponent(username)}`);
 }
 
 export async function userExists(username) {
-    const url = API_BASE_URL + `/api/user/${username}`;
-
     try {
-        const response = await fetch(url);
+        const { status, data } = await apiRequest('GET', `/api/user/${encodeURIComponent(username)}`);
 
-        if (response.status === 200) {
+        if (status === 200) {
             return true;
         }
 
-        if (response.status === 404) {
+        if (status === 404) {
             return false;
         }
 
-        const data = await response.json().catch(() => ({ error: 'Unknown server response' }));
-        throw new Error(data.error || `Server error: ${response.status}`);
-
+        throw new Error((data && data.error) || `Server error: ${status}`);
     } catch (error) {
         throw new Error(`Failed to check user's existence, ${error.message}`);
     }
@@ -186,6 +398,26 @@ export function getCapeUrlForId(username, capeId) {
     return `${API_BASE_URL}/cape/${username}?id=${encodeURIComponent(capeId)}`;
 }
 
+// The skin upload route expects a multipart body with a single "file" part.
+// Building it by hand (instead of using FormData) keeps one code path for both
+// transports: the WebSocket carries the bytes as base64, HTTP sends the same
+// bytes directly.
+function buildSkinMultipart(fileBytes, boundary) {
+    const encoder = new TextEncoder();
+    const head = encoder.encode(
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="file"; filename="skin.png"\r\n` +
+        `Content-Type: image/png\r\n\r\n`
+    );
+    const tail = encoder.encode(`\r\n--${boundary}--\r\n`);
+
+    const body = new Uint8Array(head.length + fileBytes.length + tail.length);
+    body.set(head, 0);
+    body.set(fileBytes, head.length);
+    body.set(tail, head.length + fileBytes.length);
+    return body;
+}
+
 export function uploadSkinForUser(username) {
     return new Promise((resolve, reject) => {
         const fileInput = document.createElement('input');
@@ -206,29 +438,28 @@ export function uploadSkinForUser(username) {
                 return reject(new Error("No file selected"));
             }
 
-            const formData = new FormData();
-            formData.append('file', file);
-
             try {
-                const response = await fetch(API_BASE_URL + '/api/upload_skin', {
-                    method: 'POST',
+                const fileBytes = new Uint8Array(await file.arrayBuffer());
+                const boundary = `----breakmine${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
+
+                const { status, data } = await apiRequest('POST', '/api/upload_skin', {
                     headers: {
-                        'Authorization': `Bearer ${token}`
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': `multipart/form-data; boundary=${boundary}`,
                     },
-                    body: formData
+                    body: buildSkinMultipart(fileBytes, boundary),
+                    timeoutMs: 45000,
                 });
 
-                const data = await response.json();
+                if (status === 401) {
+                    clearAuthToken();
+                }
 
-                if (!response.ok) {
-                    if (response.status === 401) {
-                        clearAuthToken();
-                    }
-                    return reject(new Error(data.error || `Server-side error: ${response.status}`));
+                if (status < 200 || status >= 300) {
+                    return reject(new Error((data && data.error) || `Server-side error: ${status}`));
                 }
 
                 resolve(data);
-
             } catch (error) {
                 reject(new Error(`Failed to upload skin, ${error.message}`));
             } finally {

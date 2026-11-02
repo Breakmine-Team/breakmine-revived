@@ -13,6 +13,18 @@ export default class GuiWorldSlot extends GuiButton {
         this.worldDate = worldData.date;
         this.worldDetails = worldData.details;
 
+        // 256x256 screenshot of the world, taken when it was last left (stored
+        // as icon.png in the world directory). Falls back to the default icon.
+        this.iconImage = null;
+        if (worldData.icon) {
+            const image = new Image();
+            image.onerror = () => {
+                if (this.iconImage === image) this.iconImage = null;
+            };
+            image.src = worldData.icon;
+            this.iconImage = image;
+        }
+
         this.drawButton = () => {}; 
         
         // Ensure renderE is set to true
@@ -30,12 +42,18 @@ export default class GuiWorldSlot extends GuiButton {
 
         // Draw icon on the left side (centered in 36px area)
         try {
-            const iconTexture = this.getTexture("gui/new_world.png");
-            if (iconTexture) {
-                const iconSize = 34;
-                const iconX = slotX + 1;
-                const iconY = slotY - 1;
-                this.drawSprite(stack, iconTexture, 0, 0, 256, 256, iconX, iconY, iconSize, iconSize);
+            const iconSize = 34;
+            const iconX = slotX + 1;
+            const iconY = slotY - 1;
+
+            if (this.iconImage !== null && this.iconImage.complete && this.iconImage.naturalWidth > 0) {
+                // World screenshot: already a 256x256 PNG, drawn as-is.
+                stack.drawImage(this.iconImage, iconX, iconY, iconSize, iconSize);
+            } else {
+                const iconTexture = this.getTexture("gui/new_world.png");
+                if (iconTexture) {
+                    this.drawSprite(stack, iconTexture, 0, 0, 256, 256, iconX, iconY, iconSize, iconSize);
+                }
             }
         } catch (e) {
             // continue silently if no texture
