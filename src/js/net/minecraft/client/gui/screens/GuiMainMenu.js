@@ -66,9 +66,49 @@ export default class GuiMainMenu extends GuiScreen {
         }
         this.buttonList.push(btntemp);
 
-        this.buttonList.push(new GuiButton(this.minecraft, "Mods", this.width / 2 - 100, y + 24 * 2, 200, 20, () => {
-            this.minecraft.displayScreen(new GuiMods(this.minecraft, this));
-        }));
+        if (this.minecraft.settings.showRealmsButton) {
+            this.buttonList.push(new GuiButton(this.minecraft, "Mods", this.width / 2 - 100, y + 24 * 2, 98, 20, () => {
+                this.minecraft.displayScreen(new GuiMods(this.minecraft, this));
+            }));
+
+            const realmsButton = new GuiButton(this.minecraft, "Realms", this.width / 2 + 2, y + 24 * 2, 98, 20, () => {})
+                .setEnabled(false)
+                .setTooltip("Coming soon!");
+            realmsButton.drawButton = function(stack, enabled, mouseOver, x, y, width, height) {
+                // Black border
+                this.drawRect(stack, x, y, x + width, y + height, "#000000");
+                // Purple gradient background (dark to light) - inset by 1px for border
+                const gradient = stack.createLinearGradient(x, y + 1, x, y + height - 1);
+                if (mouseOver && false) {
+                    gradient.addColorStop(1, "#6326a8");
+                    gradient.addColorStop(0, "#8c4dd4");
+                } else {
+                    gradient.addColorStop(1, "#4b1c81");
+                    gradient.addColorStop(0, "#7c41c0");
+                }
+                stack.save();
+                stack.fillStyle = gradient;
+                stack.fillRect(Math.floor(x + 1), Math.floor(y + 1), Math.floor(width - 2), Math.floor(height - 2));
+                stack.restore();
+            };
+            realmsButton.render = function(stack, mouseX, mouseY, partialTicks) {
+                let mouseOver = this.isMouseOver(mouseX, mouseY) || this.focused;
+                this.drawButton(stack, this.enabled, mouseOver, this.x, this.y, this.width, this.height);
+                this.drawCenteredString(stack, this.enabled ? "§5" + this.string : "§d" + this.string, this.x + this.width / 2, this.y + this.height / 2 - 4, 0xFFFFFFFF, false);
+
+                if (this.tooltipString && this.minecraft && mouseOver) {
+                    if (!this.tooltip) {
+                        this.tooltip = new GuiTooltip(this.minecraft, this.tooltipString, this.x, this.y, this.width, this.height);
+                    }
+                    this.tooltip.render(stack, mouseX, mouseY, partialTicks);
+                }
+            };
+            this.buttonList.push(realmsButton);
+        } else {
+            this.buttonList.push(new GuiButton(this.minecraft, "Mods", this.width / 2 - 100, y + 24 * 2, 200, 20, () => {
+                this.minecraft.displayScreen(new GuiMods(this.minecraft, this));
+            }));
+        }
 
         const modButtons = this.minecraft.modLoader?.getGuiButtons('main-menu', this) || [];
         this.buttonList.push(...modButtons);

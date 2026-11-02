@@ -10,21 +10,23 @@ export default class GuiServerSlot extends GuiButton {
     worldMotd = "";
     
     constructor(worldData, x, y, width, height, callback, minecraft) {
-        super(minecraft, worldData.name, x, y, width, height, callback); 
-        
+        super(minecraft, worldData.name, x, y, width, height, callback);
+
         this.worldName = worldData.name ?? "Unknown Server";
         this.worldDate = worldData.date ?? "";
         this.worldDetails = worldData.details ?? "";
         this.worldMotd = worldData.motd ?? "";
+        this.serverIcon = worldData.icon ?? null; // Custom server icon (base64 or URL)
 
-        this.drawButton = () => {}; 
-        
+        this.drawButton = () => {};
+
         // Ensure renderE is set to true
         this.renderE = true;
         this.pingMs = null; // measured ping in ms, null = not yet measured
         this.pingIcon = 5; // 0..5, 5 = unknown/unreachable by default (bottom/no ping)
         this.playerCount = null;
         this.maxPlayers = null;
+        this.iconImage = null; // Loaded Image object for custom icon
 
         if (typeof worldData.playerCount === 'number') {
             this.playerCount = worldData.playerCount;
@@ -44,6 +46,11 @@ export default class GuiServerSlot extends GuiButton {
             this.maxPlayers = parsedPlayers.max;
         }
 
+        // Load custom server icon if provided
+        if (this.serverIcon) {
+            this.loadServerIcon();
+        }
+
         // Start an initial ping attempt
         try {
             this.startPing();
@@ -52,19 +59,78 @@ export default class GuiServerSlot extends GuiButton {
         }
     }
 
+    loadServerIcon() {
+        if (!this.serverIcon) return;
+
+        const img = new Image();
+        this.iconImage = img;
+
+        if (this.serverIcon.startsWith('data:image')) {
+            // Base64 data URL
+            img.src = this.serverIcon;
+        } else if (this.serverIcon.startsWith('http')) {
+            // URL
+            img.src = this.serverIcon;
+        } else {
+            // Assume it's a path to load from resources
+            try {
+                const iconTexture = this.getTexture(this.serverIcon);
+                if (iconTexture) {
+                    this.iconImage = iconTexture;
+                }
+            } catch (e) {
+                // Fall back to default
+            }
+            return;
+        }
+
+        img.onload = () => {
+            // Icon loaded successfully
+        };
+
+        img.onerror = () => {
+            // Failed to load, will use default
+            this.iconImage = null;
+        };
+    }
+
     render(stack, mouseX, mouseY, partialTicks) {
         if (!this.renderE) return;
-        
+
         const slotX = this.x;
         const slotY = this.y;
-        
+
         const WHITE = 16777215;
         const GRAY = 8421504;
-        
+
+        // Draw icon on the left side (centered in 36px area)
+        try {
+            let iconTexture = this.iconImage;
+            if (!iconTexture) {
+                iconTexture = this.getTexture("gui/new_world.png");
+            }
+
+            if (iconTexture) {
+                const iconSize = 34;
+                const iconX = slotX + 1;
+                const iconY = slotY - 1;
+
+                if (this.iconImage && this.iconImage instanceof Image) {
+                    // Draw custom image directly
+                    stack.drawImage(iconTexture, iconX, iconY, iconSize, iconSize);
+                } else {
+                    // Draw as sprite from texture atlas
+                    this.drawSprite(stack, iconTexture, 0, 0, 256, 256, iconX, iconY, iconSize, iconSize);
+                }
+            }
+        } catch (e) {
+            // continue silently if no texture
+        }
+
         // Match GuiWorldSlot's drawString calls exactly
-        this.drawString(stack, this.worldName, slotX + 2, slotY + 1, WHITE, true, false);
-        this.drawString(stack, '§7' + this.worldMotd, slotX + 2, slotY + 12, GRAY, true, false);
-        this.drawString(stack, '§8' + this.worldDetails, slotX + 2, slotY + 22, GRAY, true, false);
+        this.drawString(stack, this.worldName, slotX + 38, slotY + 1, WHITE, true, false);
+        this.drawString(stack, '§7' + this.worldMotd, slotX + 38, slotY + 12, GRAY, true, false);
+        this.drawString(stack, '§8' + this.worldDetails, slotX + 38, slotY + 22, GRAY, true, false);
 
         // Draw ping icon on the right side of the slot if texture available
         let pingIconBounds = null;
@@ -151,6 +217,11 @@ export default class GuiServerSlot extends GuiButton {
                     if (payload && typeof payload === 'object') {
                         if (typeof payload.players === 'number') this.playerCount = payload.players;
                         if (typeof payload.maxPlayers === 'number') this.maxPlayers = payload.maxPlayers;
+                        if (payload.icon && !this.serverIcon) {
+                            // Server sent icon in ping response
+                            this.serverIcon = payload.icon;
+                            this.loadServerIcon();
+                        }
                     }
                     this.pingIcon = this.computeIconIndex(this.pingMs);
                 } else {

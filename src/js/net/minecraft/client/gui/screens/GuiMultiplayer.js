@@ -86,12 +86,6 @@ export default class GuiMultiplayer extends GuiScreen {
                     date: "",
                     details: "play.breakmine.com",
                     motd: "Create epic things at Nino Creative!"
-                },
-                {
-                    name: ICON_SERVER + " Nino SMP",
-                    date: "",
-                    details: "playsmp.breakmine.com",
-                    motd: "Survive and fight in the new Nino SMP!"
                 }
             );
         }

@@ -18,11 +18,28 @@ function copyResourcesPlugin() {
 
 export default defineConfig({
     plugins: [copyResourcesPlugin(), basicSsl()],
+    root: '.',
+    publicDir: false,
     server: {
         port: 8002,
         https: true,
-        allowedHosts: true
+        allowedHosts: true,
+        headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+        },
+        fs: {
+            strict: false,
+            cachedChecks: false,
+            allow: ['.']
+        },
+        watch: {
+            usePolling: true,
+            interval: 100
+        }
     },
+    cacheDir: false,
     // Relative asset URLs. The desktop app is packaged with electron-builder
     // and loaded with win.loadFile() (main.js), so the page origin is
     // file:///.../app.asar/dist/index.html. With the default base of "/" the

@@ -5,6 +5,7 @@ export const uiTextures = [
     "gui/gui.png",
     "gui/background.png",
     "gui/icons.png",
+    "gui/new_world.png",
     "terrain/terrain.png",
     "terrain/sun.png",
     "terrain/moon.png",

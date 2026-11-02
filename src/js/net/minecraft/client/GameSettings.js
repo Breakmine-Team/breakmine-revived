@@ -22,6 +22,7 @@ export default class GameSettings {
         this.sensitivity = 100;
         this.viewDistance = 4;
         this.fogType = 'modern';
+        this.showRealmsButton = false;
         this.debugOverlay = false;
         this.showChunkBoundaries = false;
         this.showEntityBoundingBoxes = false;

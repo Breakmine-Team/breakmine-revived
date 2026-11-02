@@ -128,6 +128,12 @@ export default class GuiOptions extends GuiScreen {
                         tooltip: "Modern: Gradual fog\nClassic: Exponential fog"
                     },
                     {
+                        name: "Realms",
+                        settingKey: "showRealmsButton",
+                        type: "toggle",
+                        tooltip: "Show the Realms button on the main menu"
+                    },
+                    {
                         name: "Language",
                         settingKey: "language",
                         type: "list",

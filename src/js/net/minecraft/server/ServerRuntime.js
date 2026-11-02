@@ -171,7 +171,8 @@ export function onConnection(ws, req) {
                     type: 'status',
                     players: getPlayerCount(),
                     maxPlayers: 35,
-                    motd: config.motd || ''
+                    motd: config.motd || '',
+                    icon: config.getServerIcon()
                 };
                 ws.send(JSON.stringify(payload));
                 return;

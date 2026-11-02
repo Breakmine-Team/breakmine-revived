@@ -17,6 +17,7 @@ public/
 .data-store/
 release/
 serverconfig.conf
+server_icon.png
 current_world.txt
 offgrid.json
 offgrid.json.tmp

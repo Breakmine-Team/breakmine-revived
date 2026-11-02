@@ -30,7 +30,8 @@ const defaults = {
     // for a server; clients receive the same values on login so their local
     // prediction does not fight the authoritative server.
     allowTNT: true,
-    allowLiquidFlow: true
+    allowLiquidFlow: true,
+    icon: null // Server icon (base64 data URL or path to icon file)
 };
 
 function isEnvEnabled(name) {
@@ -162,6 +163,9 @@ function reloadConfig(serverName) {
         config[key] = fresh[key];
     }
     config.server = target;
+
+    // Clear icon cache when switching servers
+    cachedIcon = null;
 }
 
 // List available servers: the explicit `servers` config wins when set,
@@ -194,5 +198,87 @@ config.reload = reloadConfig;
 config.requestedServer = requestedServer;
 config.listServers = listServers;
 config.getServerDir = getServerDir;
+
+// Load server icon from file or config
+let cachedIcon = null;
+const MAX_ICON_SIZE = 64 * 1024; // 64KB max for server icon
+
+function loadServerIcon() {
+    if (cachedIcon !== null) return cachedIcon;
+
+    console.log(`[Icon] Loading icon for server: ${config.server}`);
+
+    // If icon is already a data URL in config, use it
+    if (config.icon && config.icon.startsWith('data:image')) {
+        console.log('[Icon] Using data URL from config');
+        cachedIcon = config.icon;
+        return cachedIcon;
+    }
+
+    // If icon is a file path, try to load it (relative to project root first, then server dir)
+    if (config.icon && typeof config.icon === 'string') {
+        const pathsToTry = [
+            path.join(PROJECT_ROOT, config.icon),  // Project root
+            path.join(getServerDir(config.server), config.icon)  // Server directory
+        ];
+
+        for (const iconPath of pathsToTry) {
+            try {
+                console.log(`[Icon] Trying to load icon from path: ${iconPath}`);
+                if (fs.existsSync(iconPath)) {
+                    const data = fs.readFileSync(iconPath);
+                    console.log(`[Icon] Icon file size: ${data.length} bytes`);
+                    if (data.length <= MAX_ICON_SIZE) {
+                        const base64 = Buffer.from(data).toString('base64');
+                        cachedIcon = `data:image/png;base64,${base64}`;
+                        console.log('[Icon] Successfully loaded icon from file');
+                        return cachedIcon;
+                    } else {
+                        console.log('[Icon] Icon file too large');
+                    }
+                }
+            } catch (e) {
+                console.log(`[Icon] Failed to load icon from path: ${e.message}`);
+            }
+        }
+        console.log('[Icon] Icon file does not exist in any location');
+    }
+
+    // Try to load server_icon.png from project root first, then server directory
+    const defaultPaths = [
+        path.join(PROJECT_ROOT, 'server_icon.png'),
+        path.join(getServerDir(config.server), 'server_icon.png')
+    ];
+
+    for (const iconPath of defaultPaths) {
+        try {
+            console.log(`[Icon] Trying default server_icon.png: ${iconPath}`);
+            if (fs.existsSync(iconPath)) {
+                const data = fs.readFileSync(iconPath);
+                console.log(`[Icon] Default icon file size: ${data.length} bytes`);
+                if (data.length <= MAX_ICON_SIZE) {
+                    const base64 = Buffer.from(data).toString('base64');
+                    cachedIcon = `data:image/png;base64,${base64}`;
+                    console.log('[Icon] Successfully loaded default icon');
+                    return cachedIcon;
+                } else {
+                    console.log('[Icon] Default icon file too large');
+                }
+            }
+        } catch (e) {
+            console.log(`[Icon] Failed to load default icon: ${e.message}`);
+        }
+    }
+
+    console.log('[Icon] No icon found');
+    cachedIcon = null;
+    return null;
+}
+
+function getServerIcon() {
+    return loadServerIcon();
+}
+
+config.getServerIcon = getServerIcon;
 
 export default config;
