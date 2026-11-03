@@ -47,13 +47,23 @@ export default class NetworkPlayHandler extends PacketHandler {
     }
 
     handleServerSpawnPosition(packet) {
-        this.minecraft.world.spawnX = packet.getSpawnX();
-        this.minecraft.world.spawnY = packet.getSpawnY();
-        this.minecraft.world.spawnZ = packet.getSpawnZ();
+        const world = this.minecraft.world;
+        world.spawnX = packet.getSpawnX();
+        world.spawnY = packet.getSpawnY();
+        world.spawnZ = packet.getSpawnZ();
+
+        // Keep the spawn vector in sync as well: PlayerEntity.respawn() prefers
+        // world.spawn, which otherwise keeps its default (0, 0) — the middle of
+        // an ocean on many seeds — and drops respawning players into the water.
+        if (world.spawn) {
+            world.spawn.x = world.spawnX;
+            world.spawn.y = world.spawnY;
+            world.spawn.z = world.spawnZ;
+        }
 
         // Set player position to spawn position
         if (this.minecraft.player) {
-            this.minecraft.player.setPosition(packet.getSpawnX(), packet.getSpawnY(), packet.getSpawnZ());
+            this.minecraft.player.setPosition(world.spawnX, world.spawnY, world.spawnZ);
         }
     }
 

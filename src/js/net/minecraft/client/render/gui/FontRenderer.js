@@ -15,6 +15,9 @@ export default class FontRenderer {
     static CHAR_INDEX_LOOKUP = "\u00c0\u00c1\u00c2\u00c8\u00ca\u00cb\u00cd\u00d3\u00d4\u00d5\u00da\u00df\u00e3\u00f5\u011f\u0130\u0131\u0152\u0153\u015e\u015f\u0174\u0175\u017e\u0207\u0151\u0171\u0150\u0170\u0000\u0000\u0000 !\"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\u0000\u00c7\u00fc\u00e9\u00e2\u00e4\u00e0\u00e5\u00e7\u00ea\u00eb\u00e8\u00ef\u00ee\u00ec\u00c4\u00c5\u00c9\u00e6\u00c6\u00f4\u00f6\u00f2\u00fb\u00f9\u00ff\u00d6\u00dc\u00f8\u00a3\u00d8\u00d7\u0192\u00e1\u00ed\u00f3\u00fa\u00f1\u00d1\u00aa\u00ba\u00bf\u00ae\u00ac\u00bd\u00bc\u00a1\u00ab\u00bb\u2591\u2592\u2593\u2502\u2524\u2561\u2562\u2556\u2555\u2563\u2551\u2557\u255d\u255c\u255b\u2510\u2514\u2534\u252c\u251c\u2500\u253c\u255e\u255f\u255a\u2554\u2569\u2566\u2560\u2550\u256c\u2567\u2568\u2564\u2565\u2559\u2558\u2552\u2553\u256b\u256a\u2518\u250c\u2588\u2584\u258c\u2590\u2580\u03b1\u03b2\u0393\u03c0\u03a3\u03c3\u03bc\u03c4\u03a6\u0398\u03a9\u03b4\u221e\u2205\u2208\u2229\u2261\u00b1\u2265\u2264\u2320\u2321\u00f7\u2248\u00b0\u2219\u00b7\u221a\u207f\u00b2\u25a0\u0000";
     static COLOR_PREFIX = '\u00a7';
 
+    // How far the top of an italic glyph leans right of its bottom, per pixel of height.
+    static ITALIC_SHEAR = 0.375;
+
     static COLOR_HEX_MAP = {
         '0': '000000',
         '1': '0000aa',
@@ -47,6 +50,7 @@ export default class FontRenderer {
 
     constructor(minecraft) {
         this.charWidths = [];
+        this.italicLeftInk = [];
 
         this.filterCache = {};
         this.lastAppliedFilter = null;
@@ -89,6 +93,23 @@ export default class FontRenderer {
         for (const code in ACCENTED_GLYPHS) {
             this.charWidths[code] = ACCENTED_GLYPHS[code][2];
         }
+
+        // Where each glyph's leftmost lit pixel ends up once the italic shear
+        // is applied, so an italic run can start exactly on the x it is given.
+        for (let index = 0; index < FontRenderer.CHAR_INDEX_LOOKUP.length; index++) {
+            const character = FontRenderer.CHAR_INDEX_LOOKUP.charAt(index);
+            if (character === "\u0000" || character === "") continue;
+
+            this.italicLeftInk[character.charCodeAt(0)] = this.calculateCharacterLeftInkAt(
+                bitMap,
+                index % FontRenderer.BITMAP_SIZE,
+                Math.floor(index / FontRenderer.BITMAP_SIZE)
+            );
+        }
+
+        for (const code in FONT_ICONS) {
+            this.italicLeftInk[code] = this.italicLeftInk[FONT_ICONS[code]];
+        }
     }
 
     calculateCharacterWidthAt(bitMap, indexX, indexY) {
@@ -108,6 +129,34 @@ export default class FontRenderer {
         }
 
         return 2;
+    }
+
+    calculateCharacterLeftInkAt(bitMap, indexX, indexY) {
+        let leftmost = 0;
+        let found = false;
+
+        for (let x = indexX * FontRenderer.FIELD_SIZE; x < indexX * FontRenderer.FIELD_SIZE + FontRenderer.FIELD_SIZE; x++) {
+            for (let y = indexY * FontRenderer.FIELD_SIZE; y < indexY * FontRenderer.FIELD_SIZE + FontRenderer.FIELD_SIZE; y++) {
+                let i = (x + y * this.texture.width) * 4;
+
+                let red = bitMap[i];
+                let green = bitMap[i + 1];
+                let blue = bitMap[i + 2];
+                let alpha = bitMap[i + 3];
+
+                if (red > 1 || green > 1 || blue > 1 || alpha > 1) {
+                    // The shear moves a pixel at row r right by ITALIC_SHEAR * r,
+                    // so the leftmost drawn column can come from anywhere in the cell.
+                    const column = (x - indexX * FontRenderer.FIELD_SIZE) - FontRenderer.ITALIC_SHEAR * (y - indexY * FontRenderer.FIELD_SIZE);
+                    if (!found || column < leftmost) {
+                        leftmost = column;
+                        found = true;
+                    }
+                }
+            }
+        }
+
+        return leftmost;
     }
 
     drawString(stack, string, x, y, color = -1, shadow = true, noColor = true) {
@@ -142,6 +191,9 @@ export default class FontRenderer {
         let bold = false;
         let italic = false;
         let underline = false;
+        // Shear translation for the current italic run, fixed on its first glyph
+        // so the run's leftmost lit pixel lands exactly on localX.
+        let italicShiftX = null;
 
         let solidIndex = FontRenderer.CHAR_INDEX_LOOKUP.indexOf('\u2588');
         if (solidIndex === -1) solidIndex = 0;
@@ -162,11 +214,13 @@ export default class FontRenderer {
                         bold = true;
                     } else if (codeChar === 'o') {
                         italic = true;
+                        italicShiftX = null;
                     } else if (codeChar === 'n') {
                         underline = true;
                     } else if (codeChar === 'r') {
                         bold = false;
                         italic = false;
+                        italicShiftX = null;
                         underline = false;
                         this.setColor(stack, color, isShadow);
                     } else {
@@ -177,6 +231,7 @@ export default class FontRenderer {
                             }
                             bold = false;
                             italic = false;
+                            italicShiftX = null;
                             underline = false;
                         }
                     }
@@ -224,15 +279,22 @@ export default class FontRenderer {
                 let textureOffsetX = (index % FontRenderer.BITMAP_SIZE) * FontRenderer.FIELD_SIZE;
                 let textureOffsetY = Math.floor(index / FontRenderer.BITMAP_SIZE) * FontRenderer.FIELD_SIZE;
 
+                if (italic && italicShiftX === null) {
+                    // Pull the run left by however far its first glyph's ink sits
+                    // inside the cell, so that ink starts on localX.
+                    const glyphCode = iconSlot !== undefined ? iconSlot : code;
+                    italicShiftX = -(this.italicLeftInk[glyphCode] || 0);
+                }
+
                 const drawGlyphAt = (offsetX) => {
                     if (italic) {
                         // Render the full character at full resolution, then apply shear transform
                         stack.save();
                         // Shear transformation: transform(a, b, c, d, e, f)
                         // x' = a*x + c*y + e, y' = b*x + d*y + f
-                        // We want top (y=0) shifted right by 3px, bottom (y=8) unchanged
-                        // y=0: x' = x + 3, y=8: x' = x → c = -3/8 = -0.375
-                        stack.transform(1, 0, -0.375, 1, localX + offsetX + 3, y);
+                        // Top rows lean right of the bottom rows, and the translation
+                        // is chosen so the glyph's leftmost lit pixel sits on localX.
+                        stack.transform(1, 0, -FontRenderer.ITALIC_SHEAR, 1, localX + offsetX + italicShiftX, y);
                         Gui.drawSpriteRGB(
                             stack, this.texture,
                             textureOffsetX, textureOffsetY,

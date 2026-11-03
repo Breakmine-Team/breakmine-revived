@@ -307,6 +307,14 @@ function getFlatBlockId(worldY) {
 // count as "surface" or spawn would land on top of a tree canopy.
 const NON_SURFACE_IDS = new Set([17, 18]); // LOG, LEAVE
 
+// Liquids are never valid ground: the highest column near the origin is often
+// the sea floor, and spawning there puts the player straight into the water.
+const LIQUID_IDS = new Set([9, 55]); // WATER, LAVA
+
+// How far from the origin to look for dry land. Most worlds find a spot in the
+// first radius; the wider ones only matter when the origin sits in an ocean.
+const SPAWN_SEARCH_RADII = [16, 32, 64, 96];
+
 // Highest non-air, non-tree block in a generated column at world (x, z).
 function getSurfaceTop(x, z, blocks) {
     const lx = x & 15;
@@ -318,37 +326,159 @@ function getSurfaceTop(x, z, blocks) {
     return 0;
 }
 
+function getColumnBlock(blocks, x, y, z) {
+    return blocks[(y << 8) | ((z & 15) << 4) | (x & 15)];
+}
+
+// Top of a column the player can spawn on, or -1 when it cannot: a liquid
+// surface, no ground at all, or no room to stand (a trunk or bush overhead).
+function getSpawnTop(blocks, x, z, requireDry = true) {
+    const top = getSurfaceTop(x, z, blocks);
+    if (top <= 1 || top + 2 >= 256) return -1;
+
+    const surface = getColumnBlock(blocks, x, top, z);
+    if (requireDry && LIQUID_IDS.has(surface)) return -1;
+
+    if (getColumnBlock(blocks, x, top + 1, z) !== 0) return -1;
+    if (getColumnBlock(blocks, x, top + 2, z) !== 0) return -1;
+
+    return top;
+}
+
+// Highest usable column within `radius`, or null when there is none.
+//
+// Chunks are visited one at a time, each fully evaluated before moving on: the
+// block caches only hold a few dozen chunks, so walking the block grid row by
+// row would evict and regenerate the same chunks over and over.
+function findSpawnInRadius(radius, getBlocks, requireDry) {
+    let best = null;
+    const minChunk = Math.floor(-radius / 16);
+    const maxChunk = Math.floor(radius / 16);
+
+    for (let chunkZ = minChunk; chunkZ <= maxChunk; chunkZ++) {
+        for (let chunkX = minChunk; chunkX <= maxChunk; chunkX++) {
+            const blocks = getBlocks(chunkX, chunkZ);
+            if (!blocks) continue;
+
+            for (let lz = 0; lz < 16; lz++) {
+                const dz = chunkZ * 16 + lz;
+                if (dz < -radius || dz > radius) continue;
+
+                for (let lx = 0; lx < 16; lx++) {
+                    const dx = chunkX * 16 + lx;
+                    if (dx < -radius || dx > radius) continue;
+
+                    const top = getSpawnTop(blocks, dx, dz, requireDry);
+                    if (top < 0) continue;
+
+                    const dist = Math.abs(dx) + Math.abs(dz);
+                    if (best === null || top > best.top || (top === best.top && dist < best.dist)) {
+                        best = { x: dx, y: top + 1, z: dz, top, dist };
+                    }
+                }
+            }
+        }
+    }
+
+    return best;
+}
+
+// Base terrain only: no caves, ores, trees or plants. Wet or dry is decided by
+// the terrain alone (water is filled in below the sea level), and skipping the
+// rest keeps the search cheap — population alone runs nine neighbouring chunks
+// per chunk.
+const probeCache = new Map();
+const PROBE_CACHE_MAX = 256;
+
+function getProbeBlocks(chunkX, chunkZ) {
+    if (getWorldType() === 'flat') return null;
+
+    const generator = getGenerator();
+    if (!generator || !PrimerClass) return null;
+
+    const key = getGeneratorKey() + ':' + chunkX + ',' + chunkZ;
+    const cached = probeCache.get(key);
+    if (cached) return cached;
+
+    const chunk = new ServerChunk();
+    const primer = new PrimerClass(chunk);
+
+    // Same per-chunk seed the full generator uses.
+    generator.random.setSeed(chunkX * 0x4f9939f508 + chunkZ * 0x1ef1565bd5);
+    generator.generateTerrain(chunkX, chunkZ, primer);
+    generator.naturalize(chunkX, chunkZ, primer);
+
+    probeCache.set(key, chunk.blocks);
+    if (probeCache.size > PROBE_CACHE_MAX) {
+        probeCache.delete(probeCache.keys().next().value);
+    }
+
+    return chunk.blocks;
+}
+
+// Population adds trees and plants that base terrain does not have, so the
+// chosen chunk is checked again with the real blocks and the best free column
+// near the candidate is used.
+function confirmSpawn(candidate) {
+    const chunkX = Math.floor(candidate.x / 16);
+    const chunkZ = Math.floor(candidate.z / 16);
+    const blocks = getColumnBlocks(chunkX, chunkZ);
+    if (!blocks) return null;
+
+    let best = null;
+    for (let lz = 0; lz < 16; lz++) {
+        for (let lx = 0; lx < 16; lx++) {
+            const x = chunkX * 16 + lx;
+            const z = chunkZ * 16 + lz;
+            const top = getSpawnTop(blocks, x, z);
+            if (top < 0) continue;
+
+            const dist = Math.abs(x - candidate.x) + Math.abs(z - candidate.z);
+            if (best === null || dist < best.dist) {
+                best = { x, y: top + 1, z, dist };
+            }
+        }
+    }
+
+    return best === null ? null : { x: best.x, y: best.y, z: best.z };
+}
+
+let cachedSpawn = null;
+let cachedSpawnKey = null;
+
 function getSpawnPosition() {
     if (getWorldType() === 'flat') {
         return { x: 0, y: 10, z: 0 };
     }
 
-    const RADIUS = 16;
-    let bestX = 0;
-    let bestZ = 0;
-    let bestTop = 0;
-    let bestDist = Infinity;
-
-    for (let dz = -RADIUS; dz <= RADIUS; dz++) {
-        for (let dx = -RADIUS; dx <= RADIUS; dx++) {
-            const blocks = getColumnBlocks(Math.floor(dx / 16), Math.floor(dz / 16));
-            if (!blocks) continue;
-
-            const top = getSurfaceTop(dx, dz, blocks);
-            const dist = Math.abs(dx) + Math.abs(dz);
-            if (top > bestTop || (top === bestTop && dist < bestDist)) {
-                bestTop = top;
-                bestX = dx;
-                bestZ = dz;
-                bestDist = dist;
-            }
-        }
+    // The search covers a lot of terrain and only depends on the seed, so
+    // remember the answer instead of repeating it for every player that joins.
+    const key = getGeneratorKey();
+    if (cachedSpawn !== null && cachedSpawnKey === key) {
+        return { ...cachedSpawn };
     }
 
-    if (bestTop <= 1) {
-        return { x: 0, y: 10, z: 0 };
+    // Widen the search when the origin is all ocean: a single 16 block radius
+    // can only ever answer with the sea floor there.
+    let spawn = null;
+    for (const radius of SPAWN_SEARCH_RADII) {
+        const candidate = findSpawnInRadius(radius, getProbeBlocks, true);
+        if (!candidate) continue;
+
+        spawn = confirmSpawn(candidate) || { x: candidate.x, y: candidate.y, z: candidate.z };
+        break;
     }
-    return { x: bestX, y: bestTop + 1, z: bestZ };
+
+    // Nothing dry anywhere near: fall back to the highest real column, water or
+    // not, so the player at least starts at the surface.
+    if (!spawn) {
+        const fallback = findSpawnInRadius(SPAWN_SEARCH_RADII[0], getColumnBlocks, false);
+        spawn = fallback ? { x: fallback.x, y: fallback.y, z: fallback.z } : { x: 0, y: 10, z: 0 };
+    }
+
+    cachedSpawn = spawn;
+    cachedSpawnKey = key;
+    return { ...spawn };
 }
 
 export {

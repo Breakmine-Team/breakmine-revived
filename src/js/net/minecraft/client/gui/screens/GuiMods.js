@@ -388,14 +388,18 @@ export default class GuiMods extends GuiScreen {
         this.drawString(stack, this.trimToWidth(stack, `by ${mod.author}`, textWidth), textX, iconY + 15, 0xAAAAAA, true, false);
         this.drawString(stack, this.trimToWidth(stack, `Version: ${mod.version}`, textWidth), textX, iconY + 27 + 4, 0xAAAAAA, true, false);
         this.drawString(stack, this.trimToWidth(stack, `License: ${mod.license || 'Unspecified'}`, textWidth), textX, iconY + 39 + 4, 0x888888, true, false);
-        this.drawString(stack, this.trimToWidth(stack, `§oID: ${mod.id || 'Unknown'}`, textWidth), textX - 1, iconY + 51 + 4, 0x666666, true, true);
+        this.drawString(stack, this.trimToWidth(stack, `§oID: ${mod.id || 'Unknown'}`, textWidth), textX, iconY + 51 + 4, 0x666666, true, true);
 
         let y = iconY + INFO_ICON_SIZE + 5;
         this.drawRect(stack, left + 5, y, right - 5, y + 1, "rgba(255, 255, 255, 0.15)");
         y += 6;
 
         const bodyX = left + 5;
-        const bodyWidth = right - 10;
+        // Lines are drawn from bodyX, so the wrap width is the distance from
+        // there to the pane's right padding. Using the pane's right coordinate
+        // (as before) made the limit almost the full window, so descriptions
+        // never wrapped and just ran off the edge.
+        const bodyWidth = Math.max(40, right - 5 - bodyX);
         const textBottom = bottom - 34;
 
         const description = String(mod.description || '').trim();

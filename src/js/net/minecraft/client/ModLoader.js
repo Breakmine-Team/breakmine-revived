@@ -146,6 +146,7 @@ export default class ModLoader {
         this._serverModIds = new Set();      // modIds supplied by the current multiplayer server
         this._serverModFilesystems = new Map(); // modId -> MemoryFilesystem (server-supplied mods)
         this._serverModGeneration = 0;       // invalidates an in-flight server mod load
+        this._replacedLocalModIds = new Set(); // modIds that had local versions replaced by server versions
         this._diskFilesystem = null;         // BridgeFilesystem over the physical mods/ folder (Electron only)
         this._blockBaseClass = null;    // cached Block class for eval sandbox
         this._commandBaseClass = null;  // cached Command class for mod command sandboxes
@@ -1159,8 +1160,13 @@ export default class ModLoader {
                 continue;
             }
             if (this.mods.has(modId)) {
-                console.warn(`[Patchwork] Server mod '${modId}' is already installed locally; using the local copy.`);
-                continue;
+                console.log(`[Patchwork] Server mod '${modId}' is also installed locally; using server version.`);
+                // Unload the local version before loading the server version
+                this._unregisterModContent(modId);
+                // Mark it as a server mod so it gets cleaned up on disconnect
+                this._serverModIds.add(modId);
+                // Track that this mod had a local version that was replaced
+                this._replacedLocalModIds.add(modId);
             }
 
             const fileMap = new Map();
@@ -1217,7 +1223,7 @@ export default class ModLoader {
      * when the connection closes or the player returns to the main menu, so
      * server content never leaks into another server or singleplayer.
      */
-    unloadServerMods() {
+    async unloadServerMods() {
         // Even when nothing has finished loading yet, this invalidates an
         // in-flight loadServerMods() so it cannot register content after the
         // player has already left.
@@ -1226,9 +1232,22 @@ export default class ModLoader {
 
         const ids = [...this._serverModIds];
         for (const modId of ids) {
+            const hadLocalVersion = this._replacedLocalModIds.has(modId);
             this._unregisterModContent(modId);
             this._serverModFilesystems.delete(modId);
             this._serverModIds.delete(modId);
+            this._replacedLocalModIds.delete(modId);
+
+            // Reload the local version if it was replaced by the server version
+            if (hadLocalVersion) {
+                try {
+                    const fs = await this._fsForMod(modId);
+                    await this._loadMod(modId, fs);
+                    console.log(`[Patchwork] Reloaded local version of '${modId}'`);
+                } catch (err) {
+                    console.error(`[Patchwork] Failed to reload local version of '${modId}':`, err);
+                }
+            }
         }
         console.log(`[Patchwork] Unloaded ${ids.length} server mod(s)`);
     }

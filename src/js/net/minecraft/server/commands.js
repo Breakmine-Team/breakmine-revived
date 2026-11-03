@@ -39,7 +39,7 @@ function requireOp(player) {
     if (isOp(player)) {
         return true;
     }
-    sendChatMessageToPlayer(player, '§cYou do not have permission to use this command.');
+    sendChatMessageToPlayer(player, '§cYou do not have permission to use this command!');
     return false;
 }
 
@@ -79,7 +79,7 @@ function handleCommand(player, command) {
     if (!commandHandler.hasCommand(cmd)) {
         if (player.mods && player.mods.length > 0) {
             const names = player.mods.map(mod => mod.name).join(', ');
-            sendChatMessageToPlayer(player, `§cUnknown command '/${cmd}'. Your mods are only installed on your client (${names}).`);
+            sendChatMessageToPlayer(player, `§cUnknown command! Type "/help" for help.`);
             return;
         }
     }

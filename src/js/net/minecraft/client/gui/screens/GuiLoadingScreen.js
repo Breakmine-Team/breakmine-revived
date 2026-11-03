@@ -8,6 +8,8 @@ export default class GuiLoadingScreen extends GuiScreen {
         this.progress = 0;
         this.title = "Loading terrain...";
         this.tip = LoadingTips.generateTip();
+        this.tipTimer = 0;
+        this.tipInterval = 5000; // 5 seconds in milliseconds
     }
 
     init() {
@@ -67,6 +69,19 @@ export default class GuiLoadingScreen extends GuiScreen {
             return;
         }
         this.progress = progress;
+    }
+
+    updateScreen() {
+        super.updateScreen();
+
+        // Update tip timer
+        this.tipTimer += 16; // Assuming ~60fps, ~16ms per frame
+
+        // Change tip every 5 seconds
+        if (this.tipTimer >= this.tipInterval) {
+            this.tip = LoadingTips.generateTip();
+            this.tipTimer = 0;
+        }
     }
 
     keyTyped(key) {
