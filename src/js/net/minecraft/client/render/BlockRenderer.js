@@ -23,6 +23,9 @@ const FACES = EnumBlockFace.values();
 // Bounding boxes use 1/16-block steps, so this only absorbs float noise.
 const PART_FACE_EPSILON = 1e-6;
 
+// UV spans are compared against a tile's own span; same float-noise margin.
+const FACE_UV_EPSILON = 1e-6;
+
 export default class BlockRenderer {
 
     constructor(worldRenderer) {
@@ -44,6 +47,11 @@ export default class BlockRenderer {
         this.barrierModelTessellator = this.createModelTessellator(getTrafficBarrierTexture());
         this.snailModelTessellator = this.createModelTessellator(getSnailTexture());
         this.modelPassActive = false;
+
+        // Blocks that turn themselves are built one mesh at a time here, so the
+        // object can be rotated every frame instead of re-meshing the section.
+        this.rotatingTessellator = new Tessellator();
+        this.suppressRotation = false;
     }
 
     createModelTessellator(texture) {
@@ -99,12 +107,120 @@ export default class BlockRenderer {
     // Toggle shadow casting for the block meshes this renderer tessellates.
     setShadows(enabled) {
         this.tessellator.setShadows(enabled);
+        this.rotatingTessellator.setShadows(enabled);
         for (const tessellator of this.modelTessellators) {
             tessellator.setShadows(enabled);
         }
     }
 
+    /**
+     * Normalize a block's self-rotation into {x, y, z} degrees, or null when it
+     * does not rotate. A bare number turns the block around Y.
+     */
+    getBlockRotation(world, block, x, y, z, tick = null) {
+        if (block === null || typeof block.getRenderRotation !== 'function') {
+            return null;
+        }
+
+        const data = world && typeof world.getBlockDataAt === 'function'
+            ? world.getBlockDataAt(x, y, z)
+            : 0;
+        // The animation clock is passed in from the caller: the client only
+        // advances its own tick counter reliably in singleplayer, so rotating
+        // blocks must not read world.ticks to decide how far to turn.
+        let rotation = block.getRenderRotation(world, x, y, z, data, tick);
+
+        if (typeof rotation === 'number') {
+            rotation = {x: 0, y: rotation, z: 0};
+        } else if (Array.isArray(rotation)) {
+            rotation = {x: rotation[0], y: rotation[1], z: rotation[2]};
+        } else if (rotation === null || typeof rotation !== 'object') {
+            return null;
+        }
+
+        const angleX = Number(rotation.x) || 0;
+        const angleY = Number(rotation.y) || 0;
+        const angleZ = Number(rotation.z) || 0;
+
+        return angleX === 0 && angleY === 0 && angleZ === 0 ? null : {x: angleX, y: angleY, z: angleZ};
+    }
+
+    /** Every tessellator a single block's geometry can be emitted into. */
+    getBlockTessellators() {
+        return [this.tessellator, ...this.modelTessellators];
+    }
+
+    applyBlockRotation(x, y, z, rotation) {
+        // The pivot is chunk-local, matching the vertex coordinates.
+        const pivotX = x + 0.5 - ((x >> 4) << 4);
+        const pivotY = y + 0.5 - ((y >> 4) << 4);
+        const pivotZ = z + 0.5 - ((z >> 4) << 4);
+
+        for (const tessellator of this.getBlockTessellators()) {
+            tessellator.setBlockRotation(pivotX, pivotY, pivotZ, rotation.x, rotation.y, rotation.z);
+        }
+    }
+
+    clearBlockRotation() {
+        for (const tessellator of this.getBlockTessellators()) {
+            tessellator.clearRotation();
+        }
+    }
+
+    /**
+     * Build one block as its own mesh, unrotated, so the mesh object can be
+     * turned every frame. Vertices stay in section-local space; the caller
+     * recenters them on the block's middle.
+     */
+    buildRotatingMesh(world, block, ambientOcclusion, x, y, z, translucent = false, parts = null) {
+        const tessellator = this.rotatingTessellator;
+
+        // Follow whatever atlas the section mesh is using (it can be rebound
+        // when texture packs or mod textures load).
+        tessellator.bindTexture(this.tessellator.material.map);
+        tessellator.startDrawing();
+        tessellator.setRenderingPass(translucent);
+
+        // renderBlock (and every face helper under it) emits through
+        // this.tessellator, so swap it for the rotating one while this block is
+        // built. Without the swap the geometry lands in the section mesh and
+        // the rotating mesh comes out empty.
+        const sectionTessellator = this.tessellator;
+        this.tessellator = tessellator;
+        // The object applies the rotation, so it must not be baked in here.
+        this.suppressRotation = true;
+        // Only the parts that actually move belong in this mesh; the casing is
+        // already in the section mesh (see getStaticParts below).
+        this.buildingRotatingMesh = true;
+        try {
+            if (parts !== null) {
+                this.renderParts(world, parts, x, y, z, false, true, block);
+            } else {
+                this.renderBlock(world, block, ambientOcclusion, x, y, z);
+            }
+        } finally {
+            this.buildingRotatingMesh = false;
+            this.suppressRotation = false;
+            this.tessellator = sectionTessellator;
+        }
+
+        if (tessellator.addedVertices === 0) {
+            return null;
+        }
+
+        return tessellator.draw(new THREE.Group());
+    }
+
     renderBlock(world, block, ambientOcclusion, x, y, z) {
+        // Blocks can turn themselves around their own center; the angle is
+        // baked into the vertices below and cleared before the next block.
+        const blockRotation = this.suppressRotation
+            ? null
+            : this.getBlockRotation(world, block, x, y, z);
+        if (blockRotation !== null) {
+            this.applyBlockRotation(x, y, z, blockRotation);
+        }
+
         if (block.path) {
             this.renderPath(world, block, ambientOcclusion, x, y, z);
         } else if (block.multipart === true) {
@@ -145,6 +261,10 @@ export default class BlockRenderer {
         // The lever renders its inner parts itself so they rotate with it.
         if (block && Array.isArray(block.renderInside) && block.lever !== true) {
             this.renderParts(world, block.renderInside, x, y, z);
+        }
+
+        if (blockRotation !== null) {
+            this.clearBlockRotation();
         }
     }
 
@@ -213,7 +333,62 @@ export default class BlockRenderer {
     };
 
     renderMultipart(world, block, x, y, z) {
-        this.renderParts(world, block.getMultipart(world, x, y, z), x, y, z, false, true, block);
+        const moving = this.buildingRotatingMesh
+            ? this.getRotatingParts(block, world, x, y, z)
+            : null;
+
+        this.renderParts(world, moving || block.getMultipart(world, x, y, z), x, y, z, false, true, block);
+    }
+
+    /**
+     * The parts of `block` that turn with it, or null when the whole block turns
+     * (or does not turn at all).
+     */
+    getRotatingParts(block, world, x, y, z) {
+        if (typeof block.getRotatingMultipart !== "function") {
+            return null;
+        }
+
+        const parts = block.getRotatingMultipart(world, x, y, z);
+        return Array.isArray(parts) && parts.length > 0 ? parts : null;
+    }
+
+    /**
+     * Groups of parts that turn on different axles - a gearbox's crossed pairs
+     * - or null when the block turns as one piece.
+     */
+    getRotatingGroups(block, world, x, y, z) {
+        if (typeof block.getRotatingGroups !== "function") {
+            return null;
+        }
+
+        const groups = block.getRotatingGroups(world, x, y, z);
+        if (!Array.isArray(groups) || groups.length === 0) {
+            return null;
+        }
+
+        const usable = groups.every((group) => group && Array.isArray(group.parts) && group.parts.length > 0);
+        return usable ? groups : null;
+    }
+
+    /** How one rotating group of a block is turned right now. */
+    getGroupRotation(block, index, world, x, y, z, tick) {
+        if (typeof block.getGroupRotation === "function") {
+            return block.getGroupRotation(index, world, x, y, z, tick);
+        }
+
+        return this.getBlockRotation(world, block, x, y, z, tick);
+    }
+
+    /** The still casing of a block whose moving parts are listed separately. */
+    getStaticParts(block, world, x, y, z) {
+        if (this.getRotatingParts(block, world, x, y, z) === null
+            || typeof block.getStaticMultipart !== "function") {
+            return null;
+        }
+
+        const parts = block.getStaticMultipart(world, x, y, z);
+        return Array.isArray(parts) && parts.length > 0 ? parts : null;
     }
 
     resolveParts(parts) {
@@ -223,6 +398,7 @@ export default class BlockRenderer {
         for (let i = 0; i < parts.length; i++) {
             let partBlock = null;
             let bbox = null;
+            let partData = parts[i][2];
             
             if (parts[i][0] === 'block') {
                 partBlock = Block.getById(parts[i][1]);
@@ -236,10 +412,84 @@ export default class BlockRenderer {
             }
             
             if (partBlock && bbox) {
-                resolvedParts.push({ partBlock, bbox });
+                resolvedParts.push({ partBlock, bbox, rotation: this.getPartRotation(partData, bbox) });
             }
         }
         return resolvedParts;
+    }
+
+    /**
+     * Normalize the optional rotation of one multipart part.
+     *
+     * A part's data object (or, for the plain ["block", id, bbox] form, the
+     * box itself) may carry `rotation` - a single Y angle, an [x, y, z] array
+     * or an {x, y, z} object, in degrees - plus an optional block-local
+     * `pivot` in the same shapes. Without a pivot the part turns around the
+     * middle of its own box, so it spins in place.
+     *
+     * The rotation is visual: collision and the hit selection keep using the
+     * unrotated boxes.
+     *
+     * @returns {{pivot: number[], angles: number[]}|null}
+     */
+    getPartRotation(partData, bbox) {
+        let rotation = partData !== null && typeof partData === 'object' ? partData.rotation : undefined;
+        let pivot = partData !== null && typeof partData === 'object' ? partData.pivot : undefined;
+        if (rotation === undefined && bbox) {
+            rotation = bbox.rotation;
+        }
+        if (pivot === undefined && bbox) {
+            pivot = bbox.pivot;
+        }
+
+        let angles;
+        if (typeof rotation === 'number') {
+            angles = [0, rotation, 0];
+        } else if (Array.isArray(rotation)) {
+            angles = [Number(rotation[0]) || 0, Number(rotation[1]) || 0, Number(rotation[2]) || 0];
+        } else if (rotation !== null && typeof rotation === 'object') {
+            angles = [Number(rotation.x) || 0, Number(rotation.y) || 0, Number(rotation.z) || 0];
+        } else {
+            return null;
+        }
+
+        if (angles[0] === 0 && angles[1] === 0 && angles[2] === 0) {
+            return null;
+        }
+
+        let pivotPoint;
+        if (Array.isArray(pivot)) {
+            pivotPoint = [Number(pivot[0]) || 0, Number(pivot[1]) || 0, Number(pivot[2]) || 0];
+        } else if (pivot !== null && typeof pivot === 'object') {
+            pivotPoint = [Number(pivot.x) || 0, Number(pivot.y) || 0, Number(pivot.z) || 0];
+        } else {
+            pivotPoint = [
+                (bbox.minX + bbox.maxX) / 2,
+                (bbox.minY + bbox.maxY) / 2,
+                (bbox.minZ + bbox.maxZ) / 2
+            ];
+        }
+
+        return { pivot: pivotPoint, angles };
+    }
+
+    /** Turn the vertices of one multipart part around its own pivot. */
+    applyPartRotation(x, y, z, rotation) {
+        // Part pivots are block-local, the emitted vertices are section-local.
+        const pivotX = x + rotation.pivot[0] - ((x >> 4) << 4);
+        const pivotY = y + rotation.pivot[1] - ((y >> 4) << 4);
+        const pivotZ = z + rotation.pivot[2] - ((z >> 4) << 4);
+
+        for (const tessellator of this.getBlockTessellators()) {
+            tessellator.setPartRotation(pivotX, pivotY, pivotZ,
+                rotation.angles[0], rotation.angles[1], rotation.angles[2]);
+        }
+    }
+
+    clearPartRotation() {
+        for (const tessellator of this.getBlockTessellators()) {
+            tessellator.clearPartRotation();
+        }
     }
 
     renderParts(world, parts, x, y, z, respectFaces = false, cullHidden = false, multipartBlock = null) {
@@ -259,34 +509,50 @@ export default class BlockRenderer {
         for (let i = 0; i < resolvedParts.length; i++) {
             let partBlock = resolvedParts[i].partBlock;
             let bbox = resolvedParts[i].bbox;
-            for (let j = 0; j < FACES.length; j++) {
-                let face = FACES[j];
+            let partRotation = resolvedParts[i].rotation;
 
-                if (respectFaces && partBlock.shouldRenderFace(world, x, y, z, face) === false) {
-                    continue;
-                }
+            // A turned part no longer sits inside its box, so the box-based
+            // occluder tests would hide faces that are actually visible.
+            const cullHiddenPart = cullHidden && world !== null && partRotation === null;
 
-                if (cullHidden && world !== null) {
-                    // Interior faces must not use the boundary test: the part
-                    // may sit well inside the block while its neighbour is
-                    // solid.
-                    if (this.isPartFaceAtBoundary(bbox, face)) {
-                        if (!neighborOccludersResolved[j]) {
-                            neighborOccluders[j] = this.getNeighborFaceOccluders(world, multipartBlock, x, y, z, face);
-                            neighborOccludersResolved[j] = true;
+            if (partRotation !== null) {
+                this.applyPartRotation(x, y, z, partRotation);
+            }
+
+            try {
+                for (let j = 0; j < FACES.length; j++) {
+                    let face = FACES[j];
+
+                    if (respectFaces && partBlock.shouldRenderFace(world, x, y, z, face) === false) {
+                        continue;
+                    }
+
+                    if (cullHiddenPart) {
+                        // Interior faces must not use the boundary test: the part
+                        // may sit well inside the block while its neighbour is
+                        // solid.
+                        if (this.isPartFaceAtBoundary(bbox, face)) {
+                            if (!neighborOccludersResolved[j]) {
+                                neighborOccluders[j] = this.getNeighborFaceOccluders(world, multipartBlock, x, y, z, face);
+                                neighborOccludersResolved[j] = true;
+                            }
+
+                            let occluders = neighborOccluders[j];
+                            if (occluders !== null && this.isPartFaceCoveredByPart(occluders, -1, bbox, face)) {
+                                continue;
+                            }
                         }
-
-                        let occluders = neighborOccluders[j];
-                        if (occluders !== null && this.isPartFaceCoveredByPart(occluders, -1, bbox, face)) {
+                        if (this.isPartFaceCoveredByPart(resolvedParts, i, bbox, face)) {
                             continue;
                         }
                     }
-                    if (this.isPartFaceCoveredByPart(resolvedParts, i, bbox, face)) {
-                        continue;
-                    }
-                }
 
-                this.renderFace(world, partBlock, bbox, face, false, x, y, z);
+                    this.renderFace(world, partBlock, bbox, face, false, x, y, z);
+                }
+            } finally {
+                if (partRotation !== null) {
+                    this.clearPartRotation();
+                }
             }
         }
     }
@@ -591,6 +857,11 @@ export default class BlockRenderer {
         let uSpan = maxU - minU;
         let vSpan = maxV - minV;
 
+        // Remember where the tile itself starts: a face longer than one block
+        // repeats the tile from here instead of running into its neighbours.
+        const tileMinU = minU;
+        const tileMinV = minV;
+
         switch (face) {
             case EnumBlockFace.BOTTOM:
             case EnumBlockFace.TOP:
@@ -621,6 +892,13 @@ export default class BlockRenderer {
                 break;
         }
 
+        // A face longer than one block would sample past this tile into the
+        // neighbouring tiles stored in the atlas. Wrap the offending axis back
+        // inside the tile so the texture repeats instead of bleeding. Measure
+        // the spans before the V flip below, which reverses their sign.
+        const wrapsU = (maxU - minU) > uSpan + FACE_UV_EPSILON;
+        const wrapsV = (maxV - minV) > vSpan + FACE_UV_EPSILON;
+
         minV = 1 - minV;
         maxV = 1 - maxV;
 
@@ -629,7 +907,12 @@ export default class BlockRenderer {
         // moving the sample window across the atlas (which bleeds into the
         // neighbouring tiles and then wraps around the whole atlas).
         let uSlideOffset = 0;
-        let wrapRect = null;
+        // Shader wrap mask: 1 = U, 2 = V. Set for faces that repeat a tile
+        // (longer than a block) and for scrolling faces.
+        let wrapFlags = wrapsU ? 1 : 0;
+        if (wrapsV) {
+            wrapFlags |= 2;
+        }
         if (world && typeof block.doSlideFaceAnimate === 'function') {
             let slideOffset = 0;
             let tick = world.ticks || 0;
@@ -658,8 +941,20 @@ export default class BlockRenderer {
                 let uRange = maxU - minU;
                 uSlideOffset = uRange * slideFraction;
                 // Keep the tile as the wrap boundary; addFace offsets the UVs.
-                wrapRect = [minU, minV, maxU - minU, maxV - minV];
+                wrapFlags |= 1;
             }
+        }
+
+        // The rect is (minU, minV, uSpan, vSpan, mask). A repeating face wraps
+        // around the tile itself; a scrolling-only face keeps the old
+        // face-span boundary so existing animations look unchanged.
+        let wrapRect;
+        if (wrapFlags === 0) {
+            wrapRect = null;
+        } else if (wrapsU || wrapsV) {
+            wrapRect = [tileMinU, 1 - tileMinV - vSpan, uSpan, vSpan, wrapFlags];
+        } else {
+            wrapRect = [minU, minV, maxU - minU, maxV - minV, wrapFlags];
         }
 
         let rotation = block.getRotationForFace(face, blockData, x, y, z, world);

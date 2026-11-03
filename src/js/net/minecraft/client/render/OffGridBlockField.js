@@ -1292,7 +1292,8 @@ export default class OffGridBlockField {
             const parts = block.getMultipart(localWorld, lx, ly, lz);
             if (Array.isArray(parts) && parts.length > 0) {
                 return parts.map((part) => {
-                    const bbox = part[2];
+                    // Texture parts wrap their box as {texture, bbox}.
+                    const bbox = Block.getPartBoundingBox(part);
                     if (!bbox) return null;
                     return new BoundingBox(
                         lx + bbox.minX,

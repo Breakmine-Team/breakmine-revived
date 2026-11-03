@@ -216,6 +216,15 @@ export default class ModLoader {
      * @returns {object} The tab object with { id, name, iconBlockId, modId }
      */
     registerCustomTab(modId, name, iconBlockId) {
+        // Mods are re-loaded every time a world is (re)entered, so the same tab
+        // arrives again. Reuse the existing one instead of stacking duplicates
+        // in the creative screen.
+        const existing = this.customTabs.find(tab => tab.modId === modId && tab.name === name);
+        if (existing) {
+            if (iconBlockId) existing.iconBlockId = iconBlockId;
+            return existing;
+        }
+
         // Find the next available ID (starting from 100 to avoid conflicts with built-in tabs)
         const nextId = 100 + this.customTabs.length;
         const tab = { id: nextId, modId, name, iconBlockId };

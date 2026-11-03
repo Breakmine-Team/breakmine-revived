@@ -97,18 +97,16 @@ export default class GuiContainerCreative extends GuiContainer {
     loadAllTabs() {
         this.allTabs = [];
 
-        // Load built-in tabs from EnumCreativeInventoryTab
-        Object.keys(EnumCreativeInventoryTab).forEach(propertyName => {
-            const tab = EnumCreativeInventoryTab[propertyName];
-            if (tab && typeof tab === 'object' && !(tab.id >= 99998)) {
-                this.allTabs.push({
-                    id: tab.id,
-                    name: tab.name,
-                    icon: tab.icon,
-                    isCustom: false
-                });
-            }
-        });
+        // Load built-in tabs from EnumCreativeInventoryTab. Dev-only tabs
+        // (Debug) only come back when the page was opened with ?dev=1.
+        for (const tab of EnumCreativeInventoryTab.getBuiltinTabs()) {
+            this.allTabs.push({
+                id: tab.id,
+                name: tab.name,
+                icon: tab.icon,
+                isCustom: false
+            });
+        }
 
         // Load custom tabs from mods
         if (this.minecraft.modLoader) {

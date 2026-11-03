@@ -31,6 +31,10 @@ export default class ChunkSection {
         this.isModified = true;
         this.isDirty = false;
 
+        // One mesh per block that turns itself. They are rebuilt with the
+        // section and re-rotated every frame, so the turn is smooth.
+        this.rotatingMeshes = [];
+
         // Typed arrays: every get/set becomes a direct index read/write instead
         // of a holey-array `in` operator probe (the single hottest path in both
         // worldgen and meshing).
@@ -113,6 +117,7 @@ export default class ChunkSection {
 
         this.isModified = false;
         this.group.clear();
+        this.rotatingMeshes.length = 0;
         this.translucentMesh = null; // Reset on rebuild
 
         let ambientOcclusion = this.world.minecraft.settings.ambientOcclusion;
@@ -159,6 +164,7 @@ export default class ChunkSection {
 
             // Collect blocks for this pass
             let blocksToRender = [];
+            let rotatingBlocks = [];
             
             for (let x = 0; x < ChunkSection.SIZE; x++) {
                 for (let y = 0; y < ChunkSection.SIZE; y++) {
@@ -183,6 +189,36 @@ export default class ChunkSection {
                                 continue;
                             }
                             
+                            // Blocks that turn themselves get their own mesh,
+                            // so the section mesh stays put and the object can
+                            // be rotated every frame.
+                            if (renderer.blockRenderer.getBlockRotation(
+                                    this.world, block,
+                                    this.x * ChunkSection.SIZE + x,
+                                    this.y * ChunkSection.SIZE + y,
+                                    this.z * ChunkSection.SIZE + z,
+                                    ChunkSection.animationTick()                            ) !== null) {
+                                // A block may spin only some of its parts: the
+                                // still casing goes into the section mesh, and
+                                // the moving parts become the block's own mesh.
+                                const absoluteX = this.x * ChunkSection.SIZE + x;
+                                const absoluteY = this.y * ChunkSection.SIZE + y;
+                                const absoluteZ = this.z * ChunkSection.SIZE + z;
+                                const staticParts = renderer.blockRenderer.getStaticParts(
+                                    block, this.world, absoluteX, absoluteY, absoluteZ
+                                );
+
+                                if (staticParts !== null) {
+                                    renderer.blockRenderer.renderParts(
+                                        this.world, staticParts,
+                                        absoluteX, absoluteY, absoluteZ, false, true, block
+                                    );
+                                }
+
+                                rotatingBlocks.push({x: x, y: y, z: z, block: block});
+                                continue;
+                            }
+
                             blocksToRender.push({
                                 x: x,
                                 y: y,
@@ -232,6 +268,76 @@ export default class ChunkSection {
                 renderer.blockRenderer.renderBlock(this.world, blockData.block, ambientOcclusion, absoluteX, absoluteY, absoluteZ);
             }
 
+            // Each rotating block becomes a mesh of its own, centered on its
+            // cell so the object can spin around the block's middle.
+            for (let blockData of rotatingBlocks) {
+                let absoluteX = this.x * ChunkSection.SIZE + blockData.x;
+                let absoluteY = this.y * ChunkSection.SIZE + blockData.y;
+                let absoluteZ = this.z * ChunkSection.SIZE + blockData.z;
+
+                // Parts that turn on different axles (a gearbox's crossed
+                // pairs) each become their own mesh; anything else is one mesh.
+                const groups = renderer.blockRenderer.getRotatingGroups(
+                    blockData.block, this.world, absoluteX, absoluteY, absoluteZ
+                );
+                const partGroups = groups !== null ? groups.map((group) => group.parts) : [null];
+
+                let meshes = [];
+                for (const parts of partGroups) {
+                    const mesh = renderer.blockRenderer.buildRotatingMesh(
+                        this.world, blockData.block, ambientOcclusion,
+                        absoluteX, absoluteY, absoluteZ, isTranslucentRenderPhase, parts
+                    );
+                    if (mesh === null) {
+                        meshes = [];
+                        break;
+                    }
+                    meshes.push(mesh);
+                }
+
+                // Non-finite geometry would make three.js drop the mesh (and
+                // log a NaN bounding-sphere error).
+                if (meshes.length === 0 || meshes.some((mesh) => !ChunkSection.hasFinitePositions(mesh))) {
+                    // Safety net: a rotating block must never disappear. If it
+                    // produced no usable geometry, bake it into the section
+                    // mesh like any other block.
+                    if (meshes.length > 0) {
+                        console.warn(
+                            `[ChunkSection] Non-finite geometry for '${blockData.block?.identifier ?? blockData.block?.id}' at ${absoluteX},${absoluteY},${absoluteZ}; drawing it in the section mesh instead`
+                        );
+                    }
+                    renderer.blockRenderer.renderBlock(
+                        this.world, blockData.block, ambientOcclusion,
+                        absoluteX, absoluteY, absoluteZ
+                    );
+                    continue;
+                }
+
+                const centerX = blockData.x + 0.5;
+                const centerY = blockData.y + 0.5;
+                const centerZ = blockData.z + 0.5;
+
+                for (let i = 0; i < meshes.length; i++) {
+                    const mesh = meshes[i];
+                    mesh.geometry.translate(-centerX, -centerY, -centerZ);
+                    mesh.geometry.computeBoundingSphere();
+                    mesh.position.set(centerX, centerY, centerZ);
+                    mesh.userData.rotatingBlock = {
+                        block: blockData.block,
+                        worldX: absoluteX,
+                        worldY: absoluteY,
+                        worldZ: absoluteZ,
+                        group: groups !== null ? i : -1,
+                        previous: null,
+                        current: null,
+                        tick: -1
+                    };
+
+                    this.group.add(mesh);
+                    this.rotatingMeshes.push(mesh);
+                }
+            }
+
             if (tessellator.addedVertices > 0) {
                 let mesh = tessellator.draw(this.group);
                 
@@ -273,6 +379,77 @@ export default class ChunkSection {
         // Negative distance ensures farther chunks have LOWER renderOrder (render first)
         // This achieves back-to-front rendering across chunks
         this.translucentMesh.renderOrder = -distSq;
+    }
+
+    /** True when a built mesh has only usable vertex positions. */
+    static hasFinitePositions(mesh) {
+        const array = mesh?.geometry?.attributes?.position?.array;
+        if (!array) return false;
+
+        for (let i = 0; i < array.length; i++) {
+            if (!Number.isFinite(array[i])) return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * 20 Hz animation clock for blocks that turn themselves, in game ticks.
+     * Wall-clock based so it advances whether or not the client world is
+     * ticking its own counter (it does not in multiplayer).
+     */
+    static animationTick() {
+        const now = typeof performance !== 'undefined' && performance.now
+            ? performance.now()
+            : Date.now();
+        return Math.floor(now / 50);
+    }
+
+    /** Blend two angles in degrees the short way round, for frame blending. */
+    static interpolateAngle(from, to, t) {
+        const delta = ((to - from) % 360 + 540) % 360 - 180;
+        return from + delta * t;
+    }
+
+    /**
+     * Turn every rotating block mesh to the angle for this frame. Blocks move a
+     * tick at a time, so blend from the previous tick's angle to this tick's
+     * using the frame's partial ticks.
+     */
+    updateRotatingBlocks(renderer, tick, partialTicks) {
+        if (this.rotatingMeshes.length === 0) {
+            return;
+        }
+
+        const world = this.world;
+        const blend = Math.max(0, Math.min(1, partialTicks || 0));
+        const radians = Math.PI / 180;
+
+        for (const mesh of this.rotatingMeshes) {
+            const info = mesh.userData.rotatingBlock;
+            const rotation = info.group >= 0
+                ? renderer.blockRenderer.getGroupRotation(
+                    info.block, info.group, world, info.worldX, info.worldY, info.worldZ, tick)
+                : renderer.blockRenderer.getBlockRotation(
+                    world, info.block, info.worldX, info.worldY, info.worldZ, tick);
+
+            if (rotation === null) {
+                mesh.rotation.set(0, 0, 0);
+                continue;
+            }
+
+            if (info.current === null || info.tick !== tick) {
+                info.previous = info.current === null ? rotation : info.current;
+                info.current = rotation;
+                info.tick = tick;
+            }
+
+            mesh.rotation.set(
+                ChunkSection.interpolateAngle(info.previous.x, info.current.x, blend) * radians,
+                ChunkSection.interpolateAngle(info.previous.y, info.current.y, blend) * radians,
+                ChunkSection.interpolateAngle(info.previous.z, info.current.z, blend) * radians
+            );
+        }
     }
 
     getBlockAt(x, y, z) {

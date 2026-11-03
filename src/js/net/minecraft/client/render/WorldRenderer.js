@@ -70,6 +70,12 @@ function addOutlineSegment(segments, axis, fixedA, fixedB, start, end) {
 export function mergeBlockOutlineEdges(boxes, expansion = 0) {
     const uniqueBoxes = [];
     for (let box of boxes) {
+        // A malformed part would put NaN into the line geometry, which makes
+        // three.js reject the whole outline; skip it instead of poisoning it.
+        if (!box || !Number.isFinite(box.minX) || !Number.isFinite(box.minY) || !Number.isFinite(box.minZ)
+            || !Number.isFinite(box.maxX) || !Number.isFinite(box.maxY) || !Number.isFinite(box.maxZ)) {
+            continue;
+        }
         if (!uniqueBoxes.some((other) => isSameBox(box, other))) {
             uniqueBoxes.push(box);
         }
@@ -1324,6 +1330,15 @@ export default class WorldRenderer {
         let world = this.minecraft.world;
         let renderDistance = this.minecraft.settings.viewDistance;
 
+        // One animation clock per frame for self-rotating blocks. It is wall
+        // clock based on purpose: in multiplayer the client world does not
+        // advance its own tick counter, so block animation must not use it.
+        const animationNow = typeof performance !== 'undefined' && performance.now
+            ? performance.now()
+            : Date.now();
+        const animationTick = Math.floor(animationNow / 50);
+        const animationBlend = (animationNow % 50) / 50;
+
         // Calculate the camera's vertical section index (Y axis)
         let player = this.minecraft.player;
         let cameraChunkY = Math.floor(player.y) >> 4;
@@ -1355,6 +1370,10 @@ export default class WorldRenderer {
 
                         // Render chunk section
                         chunkSection.render();
+
+                        // Rotating blocks have their own meshes; turn them to
+                        // the angle for this frame (blended between ticks).
+                        chunkSection.updateRotatingBlocks(this, animationTick, animationBlend);
 
                         // Queue for rebuild
                         if (chunkSection.isModified && !this.chunkSectionUpdateQueue.includes(chunkSection)) {

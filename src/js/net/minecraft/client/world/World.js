@@ -268,7 +268,10 @@ export default class World {
             let multipart = block.getMultipart(this, x, y, z);
             if (Array.isArray(multipart) && multipart.length > 0) {
                 return multipart.map((part) => {
-                    let bbox = part[2];
+                    // Parts come in both shapes: ["block", id, bbox] and
+                    // ["texture", name, {texture, bbox}], so unwrap the box
+                    // through Block instead of assuming part[2] is one.
+                    let bbox = Block.getPartBoundingBox(part);
                     if (!bbox) {
                         return null;
                     }

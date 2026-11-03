@@ -140,7 +140,47 @@ export default class Block {
         return drops;
     }
 
+    /**
+     * The parts this block is drawn (and, for multipart blocks, collided) as.
+     * Each entry is one of:
+     *
+     *   ["block", blockId, bbox]
+     *   ["blockClass", blockClass, {block, bbox}]
+     *   ["texture", textureName, {texture, bbox}]
+     *
+     * `bbox` is block-local ({minX..maxZ} in 0-1). An optional `rotation`
+     * (degrees: a single Y angle, an [x, y, z] array or an {x, y, z} object)
+     * turns that part around `pivot` (block-local, same shapes), which defaults
+     * to the middle of the part so it spins in place. Parts turn visually: the
+     * collision and hit boxes stay axis-aligned on the unrotated boxes.
+     */
     getMultipart(world, x, y, z) {
+        return null;
+    }
+
+    /**
+     * The subset of getMultipart() that turns while the block itself is
+     * animated - a motor's drive rod, a gearbox's axle stubs.
+     *
+     * A block that returns parts here is rendered in pieces: getStaticMultipart()
+     * goes into the section mesh, and these parts become the block's own turning
+     * mesh. Return null to have the whole block turn as one piece.
+     */
+    getRotatingMultipart(world, x, y, z) {
+        return null;
+    }
+
+    /** The still part of a block that spins only some of its pieces. */
+    getStaticMultipart(world, x, y, z) {
+        return null;
+    }
+
+    /**
+     * Groups of parts that turn on different axles, each `{parts, axis}`, or
+     * null to turn the moving parts as one piece. A gearbox uses this for its
+     * crossed axle pairs.
+     */
+    getRotatingGroups(world, x, y, z) {
         return null;
     }
 
@@ -176,6 +216,32 @@ export default class Block {
     }
 
     getRotationForFace(face, data, x, y, z, world) {
+        return 0;
+    }
+
+    /**
+     * How far this block turns around its own center while rendered, in
+     * degrees. Return a number to spin it around the Y axis, or an
+     * [x, y, z] array ({x, y, z} also works) to turn it around several axes at
+     * once; the angles are applied in X, Y, Z order around the middle of the
+     * block's cell, so the block keeps its position and its original faces.
+     * Return 0 for a block that does not rotate.
+     *
+     * The rotation is baked into the chunk mesh, so a block that turns over
+     * time has to ask for a rebuild (world.onBlockChanged(x, y, z)) when the
+     * angle changes.
+     *
+     * @param {World|null} world
+     * @param {number} x
+     * @param {number} y
+     * @param {number} z
+     * @param {number} data block metadata nibble
+     * @param {number|null} tick animation clock the renderer is using, in
+     *   game ticks. Use it for time-based turns instead of world.ticks, which
+     *   does not advance on the client in multiplayer.
+     * @returns {number|number[]|{x:number,y:number,z:number}}
+     */
+    getRenderRotation(world, x, y, z, data, tick) {
         return 0;
     }
 

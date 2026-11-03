@@ -38,6 +38,7 @@ import ItemBucketEmpty from "./type/ItemBucketEmpty.js";
 import BlockBush from "./type/BlockBush.js";
 import BlockFence from "./type/BlockFence.js";
 import BlockWoodPanel from "./type/BlockWoodPanel.js";
+import BlockDebugSpinner from "./type/BlockDebugSpinner.js";
 import SoundGrass from "./sound/SoundGrass.js";
 import BlockWool from "./type/BlockWool.js";
 import BlockConcrete from "./type/BlockConcrete.js";
@@ -106,6 +107,10 @@ import BlockFruit from "./type/BlockFruit.js";
 import ItemSeeds from "./type/ItemSeeds.js";
 import ItemFood from "./type/ItemFood.js";
 import BlockSnailStatue from "./type/BlockSnailStatue.js";
+import BlockShaft from "./type/BlockShaft.js";
+import BlockGear from "./type/BlockGear.js";
+import BlockMotor from "./type/BlockMotor.js";
+import BlockGearbox from "./type/BlockGearbox.js";
 
 export class BlockRegistry {
 
@@ -191,8 +196,34 @@ export class BlockRegistry {
     static registerBlockClass(id, name, blockClass) {
         if (!blockClass) return null;
         const block = new blockClass(id, 0);
-        block.id = BlockRegistry.hashString(id);
+        block.id = BlockRegistry.allocateModId(id);
         return this.register(id, block);
+    }
+
+    /**
+     * Numeric id for a mod block or item.
+     *
+     * Chunk cells store a block as a u16 whose upper 12 bits are the id and
+     * whose lower 4 are metadata (see ChunkSection), so a 32-bit hash - what
+     * mod ids used to be - cannot be written: it was truncated on the way in and
+     * read back as an unknown block, which is why mod blocks had no mesh, no
+     * collision and no selection box. Hand out an id in the storable range
+     * instead. `register` still indexes the block by its hash and its namespaced
+     * id, so name lookups keep working.
+     */
+    static allocateModId(namespacedId) {
+        const FIRST = 1024;   // above every built-in id
+        const LAST = 4095;    // 12-bit limit of a packed block state
+        const hash = BlockRegistry.hashString(namespacedId);
+        let id = FIRST + (hash % (LAST - FIRST + 1));
+
+        // Deterministic probe: the start comes from the name, so the same mod
+        // set resolves the same way on client and server.
+        while (BlockRegistry.idMap.has(id) || Block.blocks.has(id)) {
+            id = id >= LAST ? FIRST : id + 1;
+        }
+
+        return id;
     }
 
     static create() {
@@ -206,6 +237,10 @@ export class BlockRegistry {
         Block.sounds.leaves = new Sound("leaves", 1.0);
 
         BlockRegistry.STONE = new BlockStone(1, 0);
+        // Example of a self-rotating block. It is always registered so the
+        // client and server agree on its id, but it only shows up in the
+        // Debug creative tab, which needs ?dev=1.
+        BlockRegistry.DEBUG_SPINNER = new BlockDebugSpinner(3001, 1);
         BlockRegistry.GRASS = new BlockGrass(2, 1);
         BlockRegistry.DIRT = new BlockDirt(3, 2);
         BlockRegistry.BEDROCK = new BlockBedrock(7, 11);
@@ -643,6 +678,15 @@ export class BlockRegistry {
             const texName = mat === 'gold' ? 'golden' : mat === 'wood' ? 'wooden' : mat;
             BlockRegistry[`${mat.toUpperCase()}_KNIFE`] = new ItemKnife(toolId++, `${texName}_knife`, `${matName} Knife`, mat);
         }
+
+        // --- SHAFT MACHINERY (moved out of the Factorio mod) ---
+        // Registered here so the generic loop below picks them up like every
+        // other base-game block.
+        BlockRegistry.SHAFT = new BlockShaft(342, 0);
+        BlockRegistry.GEAR = new BlockGear(343, 0);
+        BlockRegistry.MOTOR = new BlockMotor(344, 0);
+        BlockRegistry.GEARBOX = new BlockGearbox(345, 0, false);
+        BlockRegistry.VERTICAL_GEARBOX = new BlockGearbox(346, 0, true);
 
         for (const [key, val] of Object.entries(BlockRegistry)) {
             if (val && typeof val === "object" && val.id !== undefined) {
