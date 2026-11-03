@@ -533,7 +533,7 @@ export class IsomorphicWebSocket extends EventTarget {
         this.dispatchEvent(clonedEvent);
     }
 
-    /** Forward events from LoopbackSocket or TunnelSocket → this (addEventListener). */
+    /** Forward events from LoopbackSocket or TunnelSocket -> this (addEventListener). */
     #setupInternalForwarding() {
         ['open', 'message', 'error', 'close'].forEach((event) => {
             this.#socket.addEventListener(event, (e) => this.#forwardEvent(e));

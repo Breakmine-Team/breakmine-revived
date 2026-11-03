@@ -23,7 +23,20 @@ export default class Patchwork {
     }
 
     static game = class GameManager {
-        //
+        /**
+         * Info about the block the player is currently looking at:
+         * { name, namespace, id, text_id, description }.
+         *
+         * `name` is the first line of the block's description, `id` is the
+         * numeric block id and `text_id` the namespaced identifier
+         * (e.g. "breakmine:stone"). Returns null when nothing is targeted and
+         * undefined when there is no world/player yet.
+         *
+         * @param {number} reach how far to trace, in blocks (default 5)
+         */
+        static getLookedAtBlock(reach = 5) {
+            return globalThis.Mixin?.callFunction('game:getLookedAtBlock', reach);
+        }
     }
 
     static world = class WorldManager {

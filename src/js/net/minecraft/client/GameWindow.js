@@ -526,18 +526,18 @@ export default class GameWindow {
             }, { passive: false });
         };
 
-        // Left Joystick -> Movement (WASD)
+        // Left Joystick -> Movement (uses the player's movement bindings)
         setupJoystick('joystick-move-zone', 'joystick-move-knob', (normX, normY) => {
             const threshold = 0.3;
-            Keyboard.setState("KeyW", normY < -threshold);
-            Keyboard.setState("KeyS", normY > threshold);
-            Keyboard.setState("KeyA", normX < -threshold);
-            Keyboard.setState("KeyD", normX > threshold);
+            Keyboard.setState(this.mobileKey('keyForward', 'KeyW'), normY < -threshold);
+            Keyboard.setState(this.mobileKey('keyBack', 'KeyS'), normY > threshold);
+            Keyboard.setState(this.mobileKey('keyLeft', 'KeyA'), normX < -threshold);
+            Keyboard.setState(this.mobileKey('keyRight', 'KeyD'), normX > threshold);
         }, () => {
-            Keyboard.setState("KeyW", false);
-            Keyboard.setState("KeyS", false);
-            Keyboard.setState("KeyA", false);
-            Keyboard.setState("KeyD", false);
+            Keyboard.setState(this.mobileKey('keyForward', 'KeyW'), false);
+            Keyboard.setState(this.mobileKey('keyBack', 'KeyS'), false);
+            Keyboard.setState(this.mobileKey('keyLeft', 'KeyA'), false);
+            Keyboard.setState(this.mobileKey('keyRight', 'KeyD'), false);
         });
 
         // Mobile State Update Loop
@@ -691,8 +691,8 @@ export default class GameWindow {
             }, { passive: false });
         };
 
-        bindKeyButton('mbtn-shift', 'ShiftLeft');
-        bindKeyButton('mbtn-e', 'KeyE');
+        bindKeyButton('mbtn-shift', this.mobileKey('keyCrouching', 'ShiftLeft'));
+        bindKeyButton('mbtn-e', this.mobileKey('keyOpenInventory', 'KeyE'));
 
         // Jump button with double-tap detector for flight (KeyF)
         let lastSpaceTap = 0;
@@ -709,15 +709,15 @@ export default class GameWindow {
                 }
                 lastSpaceTap = now;
 
-                Keyboard.setState("Space", true);
+                Keyboard.setState(this.mobileKey('keyJump', 'Space'), true);
                 if (this.minecraft.currentScreen === null) {
-                    this.minecraft.onKeyPressed("Space");
+                    this.minecraft.onKeyPressed(this.mobileKey('keyJump', 'Space'));
                 }
             }, { passive: false });
 
             spaceBtn.addEventListener('touchend', e => {
                 e.preventDefault();
-                Keyboard.setState("Space", false);
+                Keyboard.setState(this.mobileKey('keyJump', 'Space'), false);
             }, { passive: false });
         }
 
@@ -732,6 +732,12 @@ export default class GameWindow {
         }, { passive: false });
 
         this.registerListener(document, 'contextmenu');
+    }
+
+    // Resolve a rebindable key for the on-screen mobile controls.
+    mobileKey(name, fallback) {
+        const settings = this.minecraft.settings;
+        return (settings && settings[name]) || fallback;
     }
 
     updateMobileUIState() {

@@ -70,6 +70,37 @@ export default class Gui {
         stack.fillRect(left, top, right - left, bottom - top);
     }
 
+    /**
+     * Fade the top and bottom edges of a panel into its background, so content
+     * that is clipped by the edge does not end on a hard line. Alpha follows
+     * (1 - t)^2, peak `edgeAlpha` at the edge and 0 inside the panel.
+     */
+    drawEdgeFades(stack, left, right, top, bottom, height = 8, edgeAlpha = 0.45) {
+        const fade = (fromY, toY, edgeAtStart) => {
+            const gradient = stack.createLinearGradient(0, fromY, 0, toY);
+
+            for (let i = 0; i <= 4; i++) {
+                const t = i / 4;
+                const distanceFromEdge = edgeAtStart ? 1 - t : t;
+                const alpha = (edgeAlpha * distanceFromEdge * distanceFromEdge).toFixed(3);
+                gradient.addColorStop(t, `rgba(0, 0, 0, ${alpha})`);
+            }
+
+            stack.save();
+            stack.fillStyle = gradient;
+            stack.fillRect(
+                Math.floor(left),
+                Math.floor(Math.min(fromY, toY)),
+                Math.ceil(right - left),
+                Math.ceil(Math.abs(toY - fromY))
+            );
+            stack.restore();
+        };
+
+        fade(top, top + height, true);
+        fade(bottom - height, bottom, false);
+    }
+
     drawTexture(stack, texture, x, y, width, height, alpha = 1.0) {
         Gui.drawSprite(stack, texture, 0, 0, 256, 256, x, y, width, height, alpha);
     }

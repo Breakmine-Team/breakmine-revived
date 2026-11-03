@@ -1,12 +1,31 @@
 export default class GameSettings {
 
     constructor() {
+        // Movement
+        this.keyForward = 'KeyW';
+        this.keyLeft = 'KeyA';
+        this.keyBack = 'KeyS';
+        this.keyRight = 'KeyD';
+        this.keyJump = 'Space';
         this.keyCrouching = 'ShiftLeft';
         this.keySprinting = 'ControlLeft';
+
+        // Gameplay
+        this.keyDrop = 'KeyQ';
         this.keyTogglePerspective = 'F5';
+        this.keyToggleGui = 'F1';
+        this.keyScreenshot = 'F2';
+        this.keyDebug = 'F3';
+
+        // Inventory
+        this.keyOpenInventory = 'KeyE';
+        for (let slot = 1; slot <= 9; slot++) {
+            this['keyHotbar' + slot] = 'Digit' + slot;
+        }
+
+        // Multiplayer
         this.keyOpenChat = 'KeyT';
         this.keyOpenCommands = 'Slash';
-        this.keyOpenInventory = 'KeyE';
         this.keyPlayerList = 'Tab';
         this.keyVoiceChat = 'KeyO';
 

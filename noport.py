@@ -142,7 +142,7 @@ class TunnelServer:
             # spin up public listener
             threading.Thread(target=self._public_listener,
                              args=(pub_port,), daemon=True).start()
-            # read client→user stream
+            # read client->user stream
             self._client_to_user_loop(pub_port, client_sock)
 
         except Exception as exc:
@@ -200,7 +200,7 @@ class TunnelServer:
             self._free_port(pub_port)
             print(f"[-] Tunnel :{pub_port} removed")
 
-    # ── user → client forwarder (one per user connection) ────────────────
+    # ── user -> client forwarder (one per user connection) ────────────────
     def _user_to_client(self, user_sock: socket.socket,
                         client_sock: socket.socket,
                         cid: int, pub_port: int):
@@ -224,7 +224,7 @@ class TunnelServer:
                     t['conns'].pop(cid, None)
             print(f"[-] User conn #{cid} closed")
 
-    # ── client → users loop (one per tunnel client) ──────────────────────
+    # ── client -> users loop (one per tunnel client) ──────────────────────
     def _client_to_user_loop(self, pub_port: int,
                              client_sock: socket.socket):
         try:
@@ -313,7 +313,7 @@ class TunnelClient:
             print(f"[-] Local connect failed for #{cid}: {exc}")
             return None
 
-    # ── local → server forwarder ─────────────────────────────────────────
+    # ── local -> server forwarder ─────────────────────────────────────────
     def _local_to_server(self, cid: int, local_sock: socket.socket,
                          server_sock: socket.socket):
         try:
@@ -330,7 +330,7 @@ class TunnelClient:
             except OSError:
                 pass
 
-    # ── server → local dispatcher ────────────────────────────────────────
+    # ── server -> local dispatcher ────────────────────────────────────────
     def _server_loop(self, server_sock: socket.socket):
         try:
             while self.running:

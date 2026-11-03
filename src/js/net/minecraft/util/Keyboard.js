@@ -3,7 +3,7 @@ export default class Keyboard {
     static state = {};
     static enabled = false;
 
-    // TV remote keycode → standard event.code mapping
+    // TV remote keycode -> standard event.code mapping
     static TV_KEY_MAP = {
         4: 'Escape',        // Android TV / Fire TV Back
         461: 'Escape',      // LG webOS Back

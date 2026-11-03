@@ -540,26 +540,26 @@ export default class PlayerEntity extends EntityLiving {
                 }
 
                 // TV remote colored buttons (if available)
-                if (Keyboard.isKeyDown("Space")) jumping = true;
+                if (Keyboard.isKeyDown(this.minecraft.settings.keyJump)) jumping = true;
                 if (Keyboard.isKeyDown(this.minecraft.settings.keyCrouching)) sneaking = true;
             } else {
-                // Desktop mode: WASD for movement
+                // Desktop mode: movement keys are rebindable in Options > Controls
                 if (Keyboard.isKeyDown("KeyR")) {
                     // this.respawn();
                 }
-                if (Keyboard.isKeyDown("KeyW")) {
+                if (Keyboard.isKeyDown(this.minecraft.settings.keyForward)) {
                     moveForward++;
                 }
-                if (Keyboard.isKeyDown("KeyS")) {
+                if (Keyboard.isKeyDown(this.minecraft.settings.keyBack)) {
                     moveForward--;
                 }
-                if (Keyboard.isKeyDown("KeyA")) {
+                if (Keyboard.isKeyDown(this.minecraft.settings.keyLeft)) {
                     moveStrafe++;
                 }
-                if (Keyboard.isKeyDown("KeyD")) {
+                if (Keyboard.isKeyDown(this.minecraft.settings.keyRight)) {
                     moveStrafe--;
                 }
-                if (Keyboard.isKeyDown("Space")) {
+                if (Keyboard.isKeyDown(this.minecraft.settings.keyJump)) {
                     jumping = true;
                 }
                 if (Keyboard.isKeyDown(this.minecraft.settings.keySprinting)) {

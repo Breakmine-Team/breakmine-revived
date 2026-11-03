@@ -86,8 +86,14 @@ export default class GuiButton extends Gui {
         let textureGui = this.getTexture("gui/gui.png");
         let spriteY = 66 + (enabled ? (mouseOver ? 20 : 0) : -20);
 
-        this.drawSprite(stack, textureGui, 0, spriteY, width / 2, 20, x, y, width / 2, height);
-        this.drawSprite(stack, textureGui, 200 - width / 2, spriteY, width / 2, 20, x + width / 2, y, width / 2, height);
+        // Split the sprite into integer halves. Using width / 2 directly leaves
+        // the last pixel column unpainted on odd widths, because both halves
+        // round down when drawn.
+        const leftWidth = Math.ceil(width / 2);
+        const rightWidth = width - leftWidth;
+
+        this.drawSprite(stack, textureGui, 0, spriteY, leftWidth, 20, x, y, leftWidth, height);
+        this.drawSprite(stack, textureGui, 200 - rightWidth, spriteY, rightWidth, 20, x + leftWidth, y, rightWidth, height);
     }
 
     setTooltip(string) {

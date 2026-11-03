@@ -7,9 +7,9 @@
  * to the small read-only contract the mod loading pipeline expects from a
  * filesystem - the same one MemoryFilesystem provides for dev mods:
  *
- *   loadFile(path)        → Promise<string|null>
- *   loadBinaryFile(path)  → Promise<Uint8Array|null>
- *   listDir(dir)          → Promise<string[]>
+ *   loadFile(path)        -> Promise<string|null>
+ *   loadBinaryFile(path)  -> Promise<Uint8Array|null>
+ *   listDir(dir)          -> Promise<string[]>
  *
  * Two layouts are involved. On disk a mod is an ordinary folder using the
  * names its author sees; the mod loader instead works in the virtual layout
@@ -74,7 +74,7 @@ export class BridgeFilesystem {
 
     #bridge;
     #parseModDataSource;
-    // virtual path → { rel, kind }
+    // virtual path -> { rel, kind }
     #index = null;
     #indexPromise = null;
 

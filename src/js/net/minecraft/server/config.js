@@ -203,6 +203,32 @@ config.getServerDir = getServerDir;
 let cachedIcon = null;
 const MAX_ICON_SIZE = 64 * 1024; // 64KB max for server icon
 
+async function fetchIconFromUrl(url) {
+    try {
+        console.log(`[Icon] Fetching icon from URL: ${url}`);
+        const response = await fetch(url);
+        if (!response.ok) {
+            console.log(`[Icon] Failed to fetch icon: HTTP ${response.status}`);
+            return null;
+        }
+        const buffer = await response.arrayBuffer();
+        const data = Buffer.from(buffer);
+        console.log(`[Icon] Icon file size: ${data.length} bytes`);
+        if (data.length <= MAX_ICON_SIZE) {
+            const base64 = data.toString('base64');
+            const dataUrl = `data:image/png;base64,${base64}`;
+            console.log('[Icon] Successfully loaded icon from URL');
+            return dataUrl;
+        } else {
+            console.log('[Icon] Icon from URL too large');
+            return null;
+        }
+    } catch (e) {
+        console.log(`[Icon] Failed to fetch icon from URL: ${e.message}`);
+        return null;
+    }
+}
+
 function loadServerIcon() {
     if (cachedIcon !== null) return cachedIcon;
 
@@ -217,6 +243,15 @@ function loadServerIcon() {
             console.log('[Icon] Using data URL from environment variable');
             cachedIcon = envIcon;
             return cachedIcon;
+        }
+        // If it's a URL, fetch it
+        if (envIcon.startsWith('http://') || envIcon.startsWith('https://')) {
+            fetchIconFromUrl(envIcon).then(icon => {
+                if (icon) {
+                    cachedIcon = icon;
+                }
+            });
+            return null; // Return null for now, will be cached when fetch completes
         }
         // Otherwise treat it as a file path
         const pathsToTry = [
@@ -251,6 +286,16 @@ function loadServerIcon() {
         console.log('[Icon] Using data URL from config');
         cachedIcon = config.icon;
         return cachedIcon;
+    }
+
+    // If icon is a URL, fetch it
+    if (config.icon && (config.icon.startsWith('http://') || config.icon.startsWith('https://'))) {
+        fetchIconFromUrl(config.icon).then(icon => {
+            if (icon) {
+                cachedIcon = icon;
+            }
+        });
+        return null; // Return null for now, will be cached when fetch completes
     }
 
     // If icon is a file path, try to load it (relative to project root first, then server dir)

@@ -207,7 +207,7 @@ export default class FontRenderer {
                         stack, this.accentedTexture,
                         accented[0], accented[1],
                         ACCENTED_CELL_WIDTH, ACCENTED_CELL_HEIGHT,
-                        Math.floor(localX + offsetX), Math.floor(y - ACCENTED_ASCENT),
+                        localX + offsetX, y - ACCENTED_ASCENT,
                         ACCENTED_CELL_WIDTH, ACCENTED_CELL_HEIGHT,
                         this.r, this.g, this.b, 1.0
                     );
@@ -226,24 +226,28 @@ export default class FontRenderer {
 
                 const drawGlyphAt = (offsetX) => {
                     if (italic) {
-                        // Slices character into 2px high strips, shifting 1px right every 2px up
-                        for (let row = 0; row < FontRenderer.FIELD_SIZE; row += 2) {
-                            let shift = Math.floor((FontRenderer.FIELD_SIZE - 2 - row) / 2);
-                            Gui.drawSpriteRGB(
-                                stack, this.texture,
-                                textureOffsetX, textureOffsetY + row,
-                                FontRenderer.FIELD_SIZE, 2,
-                                Math.floor(localX + offsetX + shift), Math.floor(y + row),
-                                FontRenderer.FIELD_SIZE, 2,
-                                this.r, this.g, this.b, 1.0
-                            );
-                        }
+                        // Render the full character at full resolution, then apply shear transform
+                        stack.save();
+                        // Shear transformation: transform(a, b, c, d, e, f)
+                        // x' = a*x + c*y + e, y' = b*x + d*y + f
+                        // We want top (y=0) shifted right by 3px, bottom (y=8) unchanged
+                        // y=0: x' = x + 3, y=8: x' = x → c = -3/8 = -0.375
+                        stack.transform(1, 0, -0.375, 1, localX + offsetX + 3, y);
+                        Gui.drawSpriteRGB(
+                            stack, this.texture,
+                            textureOffsetX, textureOffsetY,
+                            FontRenderer.FIELD_SIZE, FontRenderer.FIELD_SIZE,
+                            0, 0,
+                            FontRenderer.FIELD_SIZE, FontRenderer.FIELD_SIZE,
+                            this.r, this.g, this.b, 1.0
+                        );
+                        stack.restore();
                     } else {
                         Gui.drawSpriteRGB(
                             stack, this.texture,
                             textureOffsetX, textureOffsetY,
                             FontRenderer.FIELD_SIZE, FontRenderer.FIELD_SIZE,
-                            Math.floor(localX + offsetX), Math.floor(y),
+                            localX + offsetX, y,
                             FontRenderer.FIELD_SIZE, FontRenderer.FIELD_SIZE,
                             this.r, this.g, this.b, 1.0
                         );

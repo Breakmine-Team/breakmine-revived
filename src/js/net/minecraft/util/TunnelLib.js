@@ -145,7 +145,7 @@ class TunnelLib {
                     } catch { /* fall through to relay */ }
                 }
 
-                /* ---- Relay: joiner data → target ---- */
+                /* ---- Relay: joiner data -> target ---- */
                 this._forwardToTarget(raw);
             };
 
@@ -257,14 +257,14 @@ class TunnelLib {
         };
     }
 
-    /** Forward a frame from the tunnel server (joiner data) → target. */
+    /** Forward a frame from the tunnel server (joiner data) -> target. */
     _forwardToTarget(data) {
         if (this._targetWs && this._targetWs.readyState === 1) {
             this._targetWs.send(data);
         }
     }
 
-    /** Forward a frame from the target → tunnel server (→ joiners). */
+    /** Forward a frame from the target -> tunnel server (-> joiners). */
     _forwardToTunnel(data) {
         if (this._ws && this._ws.readyState === 1) {
             this._ws.send(data);

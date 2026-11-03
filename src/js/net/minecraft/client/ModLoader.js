@@ -99,10 +99,14 @@ function normalizeOverlayCanvasColor(value) {
  *   ModAPI.saveJson(key, value), ModAPI.loadJson(key, fallback),
  *       ModAPI.deleteJson(key), ModAPI.listJson()
  *       Persistent per-mod JSON under mod_data/<modId>/, never inside the
- *       (possibly read-only) mod folder.
- *   ModAPI.sendModMessage(payload)  // JSON to the server mod's onMessage()
+ *       (possibly read-only) mod folder. *   ModAPI.sendModMessage(payload)  // JSON to the server mod's onMessage()
+ *   ModAPI.getLookedAtBlock(reach = 5)
+ *       The block under the crosshair as { name, namespace, id, text_id,
+ *       description }: name is the first line of its description, id the
+ *       numeric block id, text_id the namespaced id ("breakmine:stone").
+ *       null when nothing is targeted, undefined when no world is loaded.
  *   ModAPI.registerService(id, service), ModAPI.getService(id),
- *   ModAPI.resolveTexture('modid:name'), ModAPI.log(...), ModAPI.warn(...)
+ *       ModAPI.resolveTexture('modid:name'), ModAPI.log(...), ModAPI.warn(...)
  * Commands, render hooks, block-action hooks and overlay text are dropped when
  * the mod is disabled or uninstalled; its JSON data is kept.
  * AuthLib is the account module: getAuthToken(), getUserInfo(username),
@@ -114,11 +118,11 @@ function normalizeOverlayCanvasColor(value) {
  * loads blocks/Helper.js). Imports of game classes (e.g. `../Block.js`) are
  * provided via the sandbox deps. Circular imports are allowed and cached.
  * Block naming convention:
- *   BlockUnbreakableBlock  →  strip "Block"  →  UnbreakableBlock  →  unbreakable_block
+ *   BlockUnbreakableBlock  ->  strip "Block"  ->  UnbreakableBlock  ->  unbreakable_block
  *   Final namespaced ID:  <modId>:unbreakable_block
  *
  * Item naming convention:
- *   ItemTestItem          →  strip "Item"   →  TestItem          →  test_item
+ *   ItemTestItem          ->  strip "Item"   ->  TestItem          ->  test_item
  *   Final namespaced ID:  <modId>:test_item
  *
  * GUI classes loaded from gui/ are automatically available in block/item eval
@@ -130,28 +134,28 @@ export default class ModLoader {
      */
     constructor(minecraft) {
         this.minecraft = minecraft;
-        this.mods = new Map();          // modId → ModEntry
+        this.mods = new Map();          // modId -> ModEntry
         this.enabledMods = new Set();   // modIds that are active
         this._disabledMods = new Set(); // modIds the user has explicitly switched off
         // Load the deny-list up front so toggleMod()/uninstallMod() are correct
         // regardless of whether loadAllMods() has run yet.
         this._loadDisabledSet();
-        this.services = new Map();      // serviceId → mod-provided runtime service
+        this.services = new Map();      // serviceId -> mod-provided runtime service
         this.filesystem = new FileSystem('ModDB', 'mods');
-        this._devModFilesystems = new Map(); // modId → MemoryFilesystem (temporary dev mods, never persisted)
+        this._devModFilesystems = new Map(); // modId -> MemoryFilesystem (temporary dev mods, never persisted)
         this._serverModIds = new Set();      // modIds supplied by the current multiplayer server
-        this._serverModFilesystems = new Map(); // modId → MemoryFilesystem (server-supplied mods)
+        this._serverModFilesystems = new Map(); // modId -> MemoryFilesystem (server-supplied mods)
         this._serverModGeneration = 0;       // invalidates an in-flight server mod load
         this._diskFilesystem = null;         // BridgeFilesystem over the physical mods/ folder (Electron only)
         this._blockBaseClass = null;    // cached Block class for eval sandbox
         this._commandBaseClass = null;  // cached Command class for mod command sandboxes
-        this._modModuleCache = new Map(); // 'modId/filePath' → evaluated exports
-        this.renderHooks = new Map();    // hook name → [{ fn, modId, priority, hook }] - world-render hook targets
+        this._modModuleCache = new Map(); // 'modId/filePath' -> evaluated exports
+        this.renderHooks = new Map();    // hook name -> [{ fn, modId, priority, hook }] - world-render hook targets
         this.blockActions = new BlockActionRegistry('Patchwork'); // cancelable place/break/interact hooks
         this.overlayTextHooks = [];      // [{ fn, modId, priority }] - screen-space HUD text providers
-        this._modRegistrations = new Map(); // modId → { commands, hooks, blockActions, overlayText } for cleanup
+        this._modRegistrations = new Map(); // modId -> { commands, hooks, blockActions, overlayText } for cleanup
         this._activeModId = null;       // mod currently being loaded (attributes registrations)
-        this._modApis = new Map();      // modId → ModAPI facade handed to mod sandboxes
+        this._modApis = new Map();      // modId -> ModAPI facade handed to mod sandboxes
         this.customTabs = [];           // Array of custom tabs from mods: { modId, name, iconBlockId }
     }
 
@@ -434,13 +438,23 @@ export default class ModLoader {
      * Register a screen-space HUD text provider. The callback runs every frame
      * while the in-game overlay is visible and receives a drawing context:
      *
-     *   { text(value, x, y, options), measure(value, options), rect(...),
-     *     width, height, stack, overlay, minecraft }
+     *   { text(value, x, y, options), tooltip(value, x, y, options),
+     *     measure(value, options), rect(...), width, height, stack, overlay,
+     *     minecraft }
      *
      * `options` for text(): color (number or #rrggbb), shadow, align
      * ('left'|'center'|'right'), background (canvas color), padding, scale and
      * noColor. Newlines are supported. Coordinates are screen pixels, so a mod
      * can draw anywhere on the HUD.
+     *
+     * tooltip() draws a real GuiTooltip - the same inner bounds, notched dark
+     * outline, purple gradient border and 10px line spacing as the in-game
+     * item/block tooltips. x/y is the top-left corner of the drawn box and
+     * `align` ('left'|'center'|'right') anchors the box on x, so a tooltip
+     * centred at the top of the screen is
+     * tooltip(lines, ctx.width / 2, 6, { align: 'center' }).
+     * § colour codes are interpreted, `color` overrides the text colour, and the
+     * box clamps itself to the screen edges.
      */
     registerOverlayText(fn, options = {}) {
         if (typeof fn !== 'function') {
@@ -559,9 +573,104 @@ export default class ModLoader {
             };
         };
 
+        /**
+         * Draws a GuiTooltip at any screen position, pixel for pixel the same
+         * box the in-game tooltips use. x/y is the top-left of the drawn box;
+         * `align` anchors the box on x instead. Returns the box bounds.
+         */
+        const tooltip = (value, x, y, options = {}) => {
+            const lines = String(value ?? '').split('\n');
+            const color = normalizeOverlayTextColor(options.color);
+            const align = options.align === 'center' || options.align === 'right'
+                ? options.align : 'left';
+
+            // GuiTooltip sizes its box on the visible text, ignoring § codes.
+            let maxWidth = 0;
+            for (const line of lines) {
+                maxWidth = Math.max(maxWidth, font.getStringWidth(line.replace(/§./g, '')));
+            }
+
+            // Same constants as GuiTooltip.
+            const lineSpacing = 10;
+            const padding = 2;
+            const k = FontRenderer.FONT_HEIGHT + (lines.length - 1) * lineSpacing;
+
+            // The outline reaches 2px outside the inner bounds on every side.
+            const boxWidth = maxWidth + padding * 2 + 4;
+            const boxHeight = k + padding * 2 + 4;
+
+            let boxLeft = Number(x) || 0;
+            if (align === 'center') boxLeft -= boxWidth / 2;
+            if (align === 'right') boxLeft -= boxWidth;
+            let boxTop = Number(y) || 0;
+
+            // Keep the whole box on screen, like the built-in tooltips.
+            boxLeft = Math.max(0, Math.min(Math.floor(boxLeft), Math.max(0, width - boxWidth)));
+            boxTop = Math.max(0, Math.min(Math.floor(boxTop), Math.max(0, height - boxHeight)));
+
+            // Text origin, then the inner bounds GuiTooltip draws around it.
+            const l1 = boxLeft + padding + 2;
+            const i2 = boxTop + padding + 2;
+            const x1 = l1 - padding;
+            const y1 = i2 - padding;
+            const x2 = l1 + maxWidth + padding;
+            const y2 = i2 + k + padding;
+
+            const bgColor = 'rgba(16, 0, 16, 0.941)';
+            const borderStart = 'rgba(80, 0, 255, 0.50)';
+            const borderEnd = 'rgba(40, 0, 127, 0.50)';
+
+            // Gui.drawRect, minus the helper instance.
+            const fill = (left, top, right, bottom, style) => {
+                stack.save();
+                stack.fillStyle = style;
+                stack.fillRect(
+                    Math.floor(left), Math.floor(top),
+                    Math.floor(right - left), Math.floor(bottom - top)
+                );
+                stack.restore();
+            };
+
+            // Gui.drawGradientRect, including its gradient axis.
+            const gradient = (left, top, right, bottom, from, to) => {
+                const startX = left + (right - left) / 2;
+                const grad = stack.createLinearGradient(startX, top, startX, bottom - top);
+                grad.addColorStop(0, from);
+                grad.addColorStop(1, to);
+                fill(left, top, right, bottom, grad);
+            };
+
+            // 1. Outer 1px dark frame, with 1px notched corners
+            fill(x1 - 1, y1 - 2, x2 + 1, y1 - 1, bgColor);
+            fill(x1 - 1, y2 + 1, x2 + 1, y2 + 2, bgColor);
+            fill(x1 - 1, y1 - 1, x2 + 1, y2 + 1, bgColor);
+            fill(x1 - 2, y1 - 1, x1 - 1, y2 + 1, bgColor);
+            fill(x2 + 1, y1 - 1, x2 + 2, y2 + 1, bgColor);
+
+            // 2. Inner gradient border, also with notched corners
+            gradient(x1 - 1, y1, x1, y2, borderStart, borderEnd);
+            gradient(x2, y1, x2 + 1, y2, borderStart, borderEnd);
+            gradient(x1, y1 - 1, x2, y1, borderStart, borderStart);
+            gradient(x1, y2, x2, y2 + 1, borderEnd, borderEnd);
+
+            // 3. Text lines, 10px apart, shadowed, § codes interpreted
+            for (let i = 0; i < lines.length; i++) {
+                font.drawString(stack, lines[i], l1, i2 + i * lineSpacing, color, true, false);
+            }
+
+            return {
+                x: boxLeft,
+                y: boxTop,
+                width: boxWidth,
+                height: boxHeight
+            };
+        };
+
         return {
             text,
             drawText: text,
+            tooltip,
+            drawTooltip: tooltip,
             measure,
             rect: (left, top, right, bottom, color = '#000000', alpha = 1) => {
                 stack.save();
@@ -727,6 +836,7 @@ export default class ModLoader {
                 networkManager.sendJson({ type: 'modMessage', modId, payload });
                 return true;
             },
+            getLookedAtBlock: (reach = 5) => globalThis.Mixin?.callFunction('game:getLookedAtBlock', reach),
             registerService: (serviceId, service) => loader.registerService(serviceId, service),
             getService: (serviceId) => loader.getService(serviceId),
             resolveTexture: (key) => loader.resolveTexture(key),
@@ -786,6 +896,10 @@ export default class ModLoader {
                 const src = await entry.async('string');
                 const filename = path.split('/').pop();
                 await this.filesystem.saveFile(src, `mods/${modId}/items/${filename}`);
+            } else if (path === 'icon.png' || path === './icon.png') {
+                // Mod icon shown on the Mods screen.
+                const b64 = await entry.async('base64');
+                await this.filesystem.saveBinaryFile(b64, `mods/${modId}/icon.png.b64`);
             } else if (path.startsWith('textures/') && path.endsWith('.png')) {
                 const b64 = await entry.async('base64');
                 const filename = path.split('/').pop();
@@ -888,7 +1002,9 @@ export default class ModLoader {
             NAME: String(modData.NAME || modId),
             ID: modId,
             AUTHOR: String(modData.AUTHOR || 'Unknown'),
-            VERSION: String(modData.VERSION || '0.0.0')
+            VERSION: String(modData.VERSION || '0.0.0'),
+            DESCRIPTION: String(modData.DESCRIPTION || ''),
+            LICENSE: String(modData.LICENSE || '')
         };
 
         await this.filesystem.saveFile(
@@ -1343,6 +1459,25 @@ export default class ModLoader {
         });
     }
 
+    /**
+     * Load a mod's root `icon.png` as a data URL for the Mods screen. Returns
+     * null when the mod has no icon or it cannot be read.
+     * @param {string} modId
+     * @param {object} fs - filesystem to read from (defaults to the mod's own)
+     * @returns {Promise<string|null>}
+     */
+    async loadModIcon(modId, fs = null) {
+        fs = fs || this.getModFilesystem(modId) || this.filesystem;
+        try {
+            const bytes = await fs.loadBinaryFile(`mods/${modId}/icon.png.b64`);
+            if (!bytes || bytes.length === 0) return null;
+            return `data:image/png;base64,${await this._arrayBufferToBase64(bytes)}`;
+        } catch (err) {
+            console.warn(`[Patchwork] Could not read the icon for '${modId}':`, err);
+            return null;
+        }
+    }
+
     /* ------------------------------------------------------------------
      *  Integrated server support
      * ------------------------------------------------------------------ */
@@ -1459,6 +1594,8 @@ export default class ModLoader {
             name: modData.NAME || 'Unknown',
             author: modData.AUTHOR || 'Unknown',
             version: modData.VERSION || '0.0.0',
+            description: modData.DESCRIPTION || '',
+            license: modData.LICENSE || '',
             blockIds: [],
             blockClasses: new Map(),
             itemIds: [],
@@ -1734,7 +1871,7 @@ export default class ModLoader {
                 if (!match) continue;
                 const className = match[1];
 
-                // Extract block name: BlockOakTableCrafting → OakTable
+                // Extract block name: BlockOakTableCrafting -> OakTable
                 let blockName = className;
                 if (blockName.startsWith('Block')) blockName = blockName.substring(5);
                 if (blockName.endsWith('Crafting')) blockName = blockName.slice(0, -8);
@@ -1825,7 +1962,7 @@ export default class ModLoader {
                     if (!match) continue;
                     const className = match[1];
 
-                    // Extract block name: BlockOakTableSmelting → OakTable
+                    // Extract block name: BlockOakTableSmelting -> OakTable
                     let blockName = className;
                     if (blockName.startsWith('Block')) blockName = blockName.substring(5);
                     if (blockName.endsWith('Smelting')) blockName = blockName.slice(0, -8);
@@ -2436,7 +2573,9 @@ export default class ModLoader {
     }
 
     /**
-     * Parse ModData.js source and extract static properties.
+     * Parse ModData.js source and extract static properties. NAME, ID, AUTHOR
+     * and VERSION are required by every mod; DESCRIPTION and LICENSE are
+     * optional and are returned as empty strings when undeclared.
      */
     _parseModDataSource(source) {
         let cleaned = source.replace(/export\s+default\s+class\s+\w+\s*\{/, '{');
@@ -2444,7 +2583,11 @@ export default class ModLoader {
         cleaned = cleaned.replace(/\}\s*;?\s*$/, '}');
         cleaned = cleaned.replace(/static\s+(\w+)\s*=/g, '$1 =');
 
-        const wrapped = `return (function() { ${cleaned} return { NAME, ID, AUTHOR, VERSION }; })()`;
+        // Optional fields are read defensively: referencing an undeclared
+        // identifier would throw and lose NAME/ID for the whole mod.
+        const wrapped = `return (function() { ${cleaned} return { NAME, ID, AUTHOR, VERSION,`
+            + ` DESCRIPTION: typeof DESCRIPTION === 'undefined' ? '' : DESCRIPTION,`
+            + ` LICENSE: typeof LICENSE === 'undefined' ? '' : LICENSE }; })()`;
         try {
             return new Function(wrapped)();
         } catch (err) {
@@ -2459,7 +2602,7 @@ export default class ModLoader {
 
     /**
      * Convert a Block class name to a snake_case block ID.
-     * BlockUnbreakableBlock → UnbreakableBlock → unbreakable_block
+     * BlockUnbreakableBlock -> UnbreakableBlock -> unbreakable_block
      */
     static classToBlockId(className) {
         let name = className;
@@ -2471,7 +2614,7 @@ export default class ModLoader {
 
     /**
      * Convert an Item class name to a snake_case item ID.
-     * ItemTestItem → TestItem → test_item
+     * ItemTestItem -> TestItem -> test_item
      */
     static classToItemId(className) {
         let name = className;
@@ -2652,8 +2795,10 @@ export default class ModLoader {
     }
 
     /**
-     * Get metadata for all installed mods.
-     * @returns {Promise<Array<{id:string, name:string, author:string, version:string, enabled:boolean}>>}
+     * Get metadata for all installed mods, including the optional description,
+     * license and the root icon.png (as a data URL) the Mods screen renders.
+     * @returns {Promise<Array<{id:string, name:string, author:string, version:string,
+     *   description:string, license:string, icon:string|null, enabled:boolean}>>}
      */
     async getInstalledMods() {
         await this._loadEnabledSet(); // Ensure set is populated before querying status
@@ -2672,6 +2817,9 @@ export default class ModLoader {
                     name: meta.NAME || 'Unknown',
                     author: meta.AUTHOR || 'Unknown',
                     version: meta.VERSION || '0.0.0',
+                    description: typeof meta.DESCRIPTION === 'string' ? meta.DESCRIPTION : '',
+                    license: typeof meta.LICENSE === 'string' ? meta.LICENSE : '',
+                    icon: await this.loadModIcon(actualId, fs),
                     enabled: this.enabledMods.has(actualId) || this.enabledMods.has(modId),
                     // Folder in the physical mods/ directory rather than an
                     // installed ZIP; the GUI uses this to hide Delete.

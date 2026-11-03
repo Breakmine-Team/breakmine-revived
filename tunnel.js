@@ -233,7 +233,7 @@ class TunnelServer {
             if (!tunnel) { this._closeWs(ws, 1003, 'Tunnel gone'); return; }
 
             if (role === 'provider') {
-                // Provider → joiner(s)
+                // Provider -> joiner(s)
                 if (tunnel.joiners.size === 0) {
                     // Buffer until a joiner arrives
                     if (tunnel.buffer) {
@@ -250,7 +250,7 @@ class TunnelServer {
                     if (j.readyState === 1) j.send(data, { binary: isBinary });
                 }
             } else {
-                // Joiner → provider
+                // Joiner -> provider
                 if (tunnel.provider.readyState === 1) {
                     tunnel.provider.send(data, { binary: isBinary });
                 }

@@ -335,6 +335,44 @@ export default class Minecraft {
             }
         });
 
+        // Patchwork: info about the block under the crosshair
+        Mixin.registerFunction('game:getLookedAtBlock', (reach = 5) => {
+            if (!this.world || !this.player) {
+                return undefined;
+            }
+
+            const hit = this.player.rayTrace(reach, this.timer.partialTicks);
+            if (!hit) {
+                return null;
+            }
+
+            // Summoned off-grid structures are addressed with local coordinates.
+            const field = hit.fieldCell && this.world.offGridField;
+            const typeId = field
+                ? field.getBlockAt(hit.x, hit.y, hit.z)
+                : this.world.getBlockAt(hit.x, hit.y, hit.z);
+            if (!typeId) {
+                return null;
+            }
+
+            const block = BlockRegistry.get(typeId) || Block.getById(typeId);
+            if (!block) {
+                return null;
+            }
+
+            const rawDescription = typeof block.getDescription === 'function' ? block.getDescription() : null;
+            const description = rawDescription ? String(rawDescription) : '';
+            const fallbackName = block.name || block.identifier || String(typeId);
+
+            return {
+                name: description.split(/\r?\n/)[0].trim() || fallbackName,
+                namespace: block.namespace || BlockRegistry.DEFAULT_NAMESPACE,
+                id: typeId,
+                text_id: block.identifier || `${block.namespace || BlockRegistry.DEFAULT_NAMESPACE}:${fallbackName}`,
+                description: description || fallbackName
+            };
+        });
+
         // Mod loader mixin functions
         Mixin.registerFunction('mod:list', () => {
             if (this.modLoader) {
@@ -1856,9 +1894,9 @@ export default class Minecraft {
             }
         }
 
-        // Select slot
+        // Select hotbar slot
         for (let i = 1; i <= 9; i++) {
-            if (button === 'Digit' + i) {
+            if (button === this.settings['keyHotbar' + i]) {
                 this.player.inventory.selectedSlotIndex = i - 1;
             }
         }
@@ -1900,25 +1938,25 @@ export default class Minecraft {
         }
 
         // Toggle debug overlay
-        if (button === "F3") {
+        if (button === this.settings.keyDebug) {
             this.settings.debugOverlay = !this.settings.debugOverlay;
             this.settings.save();
         }
 
-        // Toggle chunk boundaries with F3 + G
-        if (button === "KeyG" && Keyboard.isKeyDown("F3")) {
+        // Toggle chunk boundaries with Debug + G
+        if (button === "KeyG" && Keyboard.isKeyDown(this.settings.keyDebug)) {
             this.settings.showChunkBoundaries = !this.settings.showChunkBoundaries;
             this.settings.save();
         }
 
-        // Toggle entity bounding boxes with F3 + B
-        if (button === "KeyB" && Keyboard.isKeyDown("F3")) {
+        // Toggle entity bounding boxes with Debug + B
+        if (button === "KeyB" && Keyboard.isKeyDown(this.settings.keyDebug)) {
             this.settings.showEntityBoundingBoxes = !this.settings.showEntityBoundingBoxes;
             this.settings.save();
         }
 
-        // Toggle GUI visibility (F1) - only in-game, not in menus
-        if (button === "F1") {
+        // Toggle GUI visibility - only in-game, not in menus
+        if (button === this.settings.keyToggleGui) {
             if (this.currentScreen === null && this.isInGame()) {
                 GuiFunctions.toggleGui();
                 if (GuiFunctions.isGuiHidden() && this.itemRenderer) {
@@ -1927,13 +1965,13 @@ export default class Minecraft {
             }
         }
 
-        // Take screenshot (F2)
-        if (button === "F2") {
+        // Take screenshot
+        if (button === this.settings.keyScreenshot) {
             GuiFunctions.takeScreenshot(this.window.canvas);
         }
 
         // Drop held item
-        if (button === "KeyQ") {
+        if (button === this.settings.keyDrop) {
             if (this.player.spectator) return;
             if (this.player.inventory.getItemInSelectedSlot() !== 0 && this.player.inventory.getItemInSelectedSlot() !== null && this.player.inventory.getItemInSelectedSlot()?.isEmpty() === false) {
                 let itemStack = this.player.inventory.getItemInSelectedSlot();

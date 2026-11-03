@@ -33,7 +33,7 @@ const log = Logger;
  */
 let loadedMods = [];
 const blockActions = new BlockActionRegistry('ServerMods');
-const modMessageHandlers = new Map(); // modId → Set(handler)
+const modMessageHandlers = new Map(); // modId -> Set(handler)
 
 function stripImports(source) {
     return source

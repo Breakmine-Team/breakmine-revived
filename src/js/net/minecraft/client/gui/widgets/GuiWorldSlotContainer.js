@@ -35,6 +35,13 @@ export default class GuiWorldSlotContainer extends GuiScreen {
         this.bottom = parentGui.height - 64;
         this.amountScrolled = 0;
 
+        // Subclasses that use the list as a sidebar (the Mods screen) narrow
+        // these; the full-width screens keep the whole window as the viewport.
+        this.viewLeft = 0;
+        this.viewRight = parentGui.width;
+        this.drawBackgroundTexture = true;
+        this.alwaysShowScrollBar = false;
+
         // Scrollbar geometry
         this.scrollBarWidth = 6;
         this.scrollBarX = parentGui.width - this.scrollBarWidth - 2;
@@ -106,7 +113,7 @@ export default class GuiWorldSlotContainer extends GuiScreen {
             trackTop,
             trackBottom,
             trackHeight,
-            visible: max > 0
+            visible: max > 0 || this.alwaysShowScrollBar
         };
     }
 
@@ -129,12 +136,14 @@ export default class GuiWorldSlotContainer extends GuiScreen {
         const listTop = this.top;
         const listBottom = this.bottom;
         const slotWidth = this.slotWidth;
-        this.parentGui.drawBackground(stack, this.parentGui.getTexture("gui/background.png"), this.parentGui.width, this.parentGui.height);
+        if (this.drawBackgroundTexture) {
+            this.parentGui.drawBackground(stack, this.parentGui.getTexture("gui/background.png"), this.parentGui.width, this.parentGui.height);
+        }
 
         stack.save();
 
         stack.beginPath();
-        stack.rect(0, listTop, this.parentGui.width, listBottom - listTop);
+        stack.rect(this.viewLeft, listTop, this.viewRight - this.viewLeft, listBottom - listTop);
         stack.clip();
 
         let currentY = listTop + 7 - this.amountScrolled;
@@ -167,6 +176,8 @@ export default class GuiWorldSlotContainer extends GuiScreen {
             }
         }
 
+        this.drawOverlayFades(stack, listTop, listBottom);
+
         stack.restore();
 
         // Scrollbar is drawn OUTSIDE the list clip so it is never cut off
@@ -185,6 +196,17 @@ export default class GuiWorldSlotContainer extends GuiScreen {
             "rgba(0, 0, 0, 0.4)"
         );
 
+        // Nothing to scroll: dim, inert thumb rather than an interactive one.
+        if (this.getMaxScroll() <= 0) {
+            this.parentGui.drawRect(
+                stack,
+                sb.x, sb.y,
+                sb.x + sb.width, sb.y + sb.height,
+                "rgba(110, 110, 110, 0.55)"
+            );
+            return;
+        }
+
         // Thumb (highlight on hover or while dragging)
         const isHover =
             mouseX >= sb.x && mouseX <= sb.x + sb.width &&
@@ -200,14 +222,16 @@ export default class GuiWorldSlotContainer extends GuiScreen {
     }
 
     drawBackgroundPart(stack, top, bottom) {
-        this.parentGui.drawRect(stack, 0, top, this.parentGui.width, bottom, "rgba(0, 0, 0, 0.5)");
+        this.parentGui.drawRect(stack, this.viewLeft, top, this.viewRight, bottom, "rgba(0, 0, 0, 0.5)");
     }
 
+    /**
+     * Fade the list's top and bottom edges into the background, so rows that
+     * scroll past the viewport do not end on a hard line. Called from
+     * drawScreen while the list clip is still active.
+     */
     drawOverlayFades(stack, top, bottom) {
-        const FADE_HEIGHT = 4;
-
-        this.parentGui.drawGradientRect(stack, 0, top, this.parentGui.width, top + FADE_HEIGHT, "rgba(0, 0, 0, 0.0)", "rgba(0, 0, 0, 1.0)");
-        this.parentGui.drawGradientRect(stack, 0, bottom - FADE_HEIGHT, this.parentGui.width, bottom, "rgba(0, 0, 0, 1.0)", "rgba(0, 0, 0, 0.0)");
+        this.drawEdgeFades(stack, this.viewLeft, this.viewRight, top, bottom);
     }
 
     // --- Hit testing -------------------------------------------------------

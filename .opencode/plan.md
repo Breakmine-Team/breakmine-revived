@@ -47,12 +47,12 @@ All files that reference `"src/resources/..."` need to be updated to `"/resource
 
 | File | Change |
 |------|--------|
-| `src/js/Start.js` | `image.src = "src/resources/"` → `image.src = "/resources/"` |
-| `src/js/net/minecraft/client/sound/SoundManager.js` | `'src/resources/sound/...'` → `'/resources/sound/...'` |
-| `src/js/net/minecraft/client/sound/MusicManager.js` | `'src/resources/sound/music/...'` → `'/resources/sound/music/...'` |
-| `style.css` | `url(src/resources/gui/title/splash.png)` → `url(/resources/gui/title/splash.png)` |
-| `index.html` | `href="src/resources/favicon.ico"` → `href="/resources/favicon.ico"` |
-| `prelaunch.html` | `href="src/resources/favicon.ico"` → `href="/resources/favicon.ico"` |
+| `src/js/Start.js` | `image.src = "src/resources/"` -> `image.src = "/resources/"` |
+| `src/js/net/minecraft/client/sound/SoundManager.js` | `'src/resources/sound/...'` -> `'/resources/sound/...'` |
+| `src/js/net/minecraft/client/sound/MusicManager.js` | `'src/resources/sound/music/...'` -> `'/resources/sound/music/...'` |
+| `style.css` | `url(src/resources/gui/title/splash.png)` -> `url(/resources/gui/title/splash.png)` |
+| `index.html` | `href="src/resources/favicon.ico"` -> `href="/resources/favicon.ico"` |
+| `prelaunch.html` | `href="src/resources/favicon.ico"` -> `href="/resources/favicon.ico"` |
 
 ### Step 4: Update `index.html` - remove library script tags, single Vite entry
 
@@ -138,7 +138,7 @@ import * as aesjs from "../../../../../../libraries/aes.js";
 // Replace: require("ASN1").parse(...)
 // Replace: require("bigint-mod-arith")
 // ASN1.js IIFE assigns to window when no module.exports. 
-// In Vite it runs as side-effect → window.ASN1 is set.
+// In Vite it runs as side-effect -> window.ASN1 is set.
 // bigint-mod-arith assigns window["bigint-mod-arith"] directly.
 // So we need side-effect imports that set globals:
 import "../../../../../libraries/asn1.js";
