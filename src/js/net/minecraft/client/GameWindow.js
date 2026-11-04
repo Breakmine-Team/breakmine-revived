@@ -870,7 +870,7 @@ export default class GameWindow {
 
         worldRenderer.camera.aspect = this.width / this.height;
         worldRenderer.camera.updateProjectionMatrix();
-        worldRenderer.webRenderer.setSize(wrapperWidth, wrapperHeight);
+        this.applyWorldResolution();
 
         itemRenderer.camera.aspect = this.width / this.height;
         itemRenderer.camera.updateProjectionMatrix();
@@ -917,6 +917,29 @@ export default class GameWindow {
             this.minecraft.worldRenderer.render(0);
             this.minecraft.onRender(0)
         }
+    }
+
+    /**
+     * Size the 3D render target by the Resolution setting: the world is drawn
+     * at a fraction of the window's pixels and stretched back up by the screen
+     * canvas, so the GUI stays crisp whatever resolution is picked.
+     */
+    applyWorldResolution() {
+        const renderer = this.minecraft.worldRenderer?.webRenderer;
+        if (!renderer) return;
+
+        const resolution = this.minecraft.settings.getResolution();
+        const fullWidth = Math.max(1, Math.round(this.width * this.scaleFactor));
+        const fullHeight = Math.max(1, Math.round(this.height * this.scaleFactor));
+        const width = Math.max(1, Math.round(fullWidth * resolution));
+        const height = Math.max(1, Math.round(fullHeight * resolution));
+
+        // Only the drawing buffer shrinks; the element keeps filling the
+        // window. The main menu shows this canvas directly behind the screen
+        // canvas for its panorama, so it cannot be left at its intrinsic size.
+        renderer.setSize(width, height, false);
+        renderer.domElement.style.width = fullWidth + "px";
+        renderer.domElement.style.height = fullHeight + "px";
     }
 
     updateScaleFactor() {

@@ -67,7 +67,7 @@ export const atlasBlockTextures = [
     "stone.png", "dirt.png", "grass_top.png", "grass_side.png", "cobblestone.png",
     "oak_planks.png", "bedrock.png", "sand.png", "gravel.png", "log_oak.png",
     "log_oak_top.png", "leaves_oak_opaque.png", "glass.png", "water_still.png",
-    "torch_on.png", "grass_path_top.png", "grass_path_side.png", "coal_ore.png",
+    "torch_on.png", "bluestone_torch.png", "bluestone_torch_off.png", "grass_path_top.png", "grass_path_side.png", "coal_ore.png",
     "iron_ore.png", "diamond_ore.png", "emerald_ore.png", "gold_ore.png",
     "iron_block.png", "gold_block.png", "diamond_block.png", "emerald_block.png",
     "coal_block.png", "crafting_table_top.png", "crafting_table_side.png",

@@ -29,6 +29,7 @@ export default class GuiCredits extends GuiScreen {
                     { name: "Sara", role: "Early Tester & Designer" },
                     { name: "Chloe", role: "Early Tester" },
                     { name: "Finley", role: "Early Tester" },
+                    { name: "Carter F.", role: "Early Tester" },
                     { name: "Aliah L.", role: "Tester & Designer" },
                     { name: "Faith", role: "Tester & Designer" },
                     { name: "Mason S.", role: "Tester" },

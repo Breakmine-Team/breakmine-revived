@@ -111,6 +111,11 @@ import BlockShaft from "./type/BlockShaft.js";
 import BlockGear from "./type/BlockGear.js";
 import BlockMotor from "./type/BlockMotor.js";
 import BlockGearbox from "./type/BlockGearbox.js";
+import BlockWaterWheel from "./type/BlockWaterWheel.js";
+import BlockLargeCog from "./type/BlockLargeCog.js";
+import BlockMechanicalBearing from "./type/BlockMechanicalBearing.js";
+import BlockBluestoneTorch from "./type/BlockBluestoneTorch.js";
+import BlockTurntable from "./type/BlockTurntable.js";
 
 export class BlockRegistry {
 
@@ -687,6 +692,11 @@ export class BlockRegistry {
         BlockRegistry.MOTOR = new BlockMotor(344, 0);
         BlockRegistry.GEARBOX = new BlockGearbox(345, 0, false);
         BlockRegistry.VERTICAL_GEARBOX = new BlockGearbox(346, 0, true);
+        BlockRegistry.WATER_WHEEL = new BlockWaterWheel(347, 0);
+        BlockRegistry.TURNTABLE = new BlockTurntable(348, 0);
+        BlockRegistry.LARGE_COG = new BlockLargeCog(349, 0);
+        BlockRegistry.MECHANICAL_BEARING = new BlockMechanicalBearing(350, 0);
+        BlockRegistry.BLUESTONE_TORCH = new BlockBluestoneTorch(351, 0);
 
         for (const [key, val] of Object.entries(BlockRegistry)) {
             if (val && typeof val === "object" && val.id !== undefined) {

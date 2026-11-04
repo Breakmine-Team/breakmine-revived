@@ -3,6 +3,7 @@ import MathHelper from "../../util/MathHelper.js";
 import BoundingBox from "../../util/BoundingBox.js";
 import EnumSkyBlock from "../../util/EnumSkyBlock.js";
 import Block from "./block/Block.js";
+import BearingDrive from "./block/BearingDrive.js";
 import EnumBlockFace from "../../util/EnumBlockFace.js";
 import Vector3 from "../../util/Vector3.js";
 import Vector4 from "../../util/Vector4.js";
@@ -158,6 +159,12 @@ export default class World {
         if (this.offGridField !== null && this.offGridField.cells.size > 0) {
             this.offGridField.tickBlocks();
         }
+
+        // Machine bearings carry their structures from here. Block ticks only
+        // run in singleplayer (processBlockTicks bails out otherwise), so a
+        // contraption has to be advanced by the world tick to turn at all on a
+        // client that is connected to a server.
+        BearingDrive.tickWorld(this);
 
         // Tick NBT-backed block entities
         this.tickBlockEntities();

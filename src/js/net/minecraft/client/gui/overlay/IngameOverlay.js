@@ -52,6 +52,7 @@ export default class IngameOverlay extends Gui {
         // Render crosshair
         if (this.minecraft.hasInGameFocus()) {
             this.renderCrosshair(stack, this.window.width / 2, this.window.height / 2)
+            this.renderShaftRpm(stack, partialTicks);
         }
 
         let fps = Math.floor(this.minecraft.fps);
@@ -160,6 +161,78 @@ export default class IngameOverlay extends Gui {
     renderCrosshair(stack, x, y) {
         let size = 15;
         this.drawSprite(stack, this.textureCrosshair, 0, 0, 15, 15, x - size / 2, y - size / 2, size, size, 0.6);
+    }
+
+    /**
+     * Speed of the machine part under the crosshair, as a tooltip beside it.
+     * A motor reports the speed it turns its output at; a shaft, cog or gearbox
+     * reports whatever its assembly is driven at, which is 0 with no motor.
+     */
+    renderShaftRpm(stack, partialTicks) {
+        const world = this.minecraft.world;
+        const player = this.minecraft.player;
+        if (!world || !player) return;
+
+        const hit = player.rayTrace(5, partialTicks);
+        if (!hit) return;
+
+        // Summoned structures are addressed in their own local space.
+        const field = (hit.fieldCell && world.offGridField) ? world.offGridField : null;
+        const typeId = field ? field.getBlockAt(hit.x, hit.y, hit.z) : world.getBlockAt(hit.x, hit.y, hit.z);
+        if (!typeId) return;
+
+        const block = Block.getById(typeId);
+        if (!block) return;
+
+        let rpm = null;
+        if (typeof block.getOutputRpm === 'function') {
+            rpm = block.getOutputRpm(world.getBlockDataAt(hit.x, hit.y, hit.z));
+        } else if (typeof block.getShaftRpm === 'function') {
+            rpm = block.getShaftRpm(world, hit.x, hit.y, hit.z, world.ticks || 0);
+        }
+
+        if (rpm === null || !Number.isFinite(Number(rpm))) return;
+
+        this.renderRpmTooltip(stack, `${Math.round(Number(rpm))} RPM`);
+    }
+
+    /** One line of text in the game's usual tooltip box. */
+    renderRpmTooltip(stack, text) {
+        const padding = 2;
+        // Same single-line height GuiTooltip uses.
+        const k = 8;
+        const textWidth = this.getStringWidth(stack, text, true);
+
+        // To the right of the crosshair, and on screen like any other tooltip.
+        const maxLeft = Math.max(2, this.window.width - (textWidth + padding * 2 + 6));
+        const maxTop = Math.max(2, this.window.height - (k + padding * 2 + 6));
+        const l1 = Math.max(2, Math.min(Math.floor(this.window.width / 2) + 12, maxLeft));
+        const i2 = Math.max(2, Math.min(Math.floor(this.window.height / 2) - Math.floor(k / 2), maxTop));
+
+        const bgColor = 'rgba(16, 0, 16, 0.941)';
+        const borderStart = 'rgba(80, 0, 255, 0.50)';
+        const borderEnd = 'rgba(40, 0, 127, 0.50)';
+
+        const x1 = l1 - padding;
+        const y1 = i2 - padding;
+        const x2 = l1 + textWidth + padding;
+        const y2 = i2 + k + padding;
+
+        // 1. Outer 1px dark frame, with 1px notched corners
+        this.drawRect(stack, x1 - 1, y1 - 2, x2 + 1, y1 - 1, bgColor);
+        this.drawRect(stack, x1 - 1, y2 + 1, x2 + 1, y2 + 2, bgColor);
+        this.drawRect(stack, x1 - 1, y1 - 1, x2 + 1, y2 + 1, bgColor);
+        this.drawRect(stack, x1 - 2, y1 - 1, x1 - 1, y2 + 1, bgColor);
+        this.drawRect(stack, x2 + 1, y1 - 1, x2 + 2, y2 + 1, bgColor);
+
+        // 2. Inner gradient border, also with notched corners
+        this.drawGradientRect(stack, x1 - 1, y1, x1, y2, borderStart, borderEnd);
+        this.drawGradientRect(stack, x2, y1, x2 + 1, y2, borderStart, borderEnd);
+        this.drawGradientRect(stack, x1, y1 - 1, x2, y1, borderStart, borderStart);
+        this.drawGradientRect(stack, x1, y2, x2, y2 + 1, borderEnd, borderEnd);
+
+        // 3. The text
+        this.drawString(stack, text, l1, i2, 0xFFFFFFFF, true, false);
     }
 
     renderHealth(stack, x, y) {

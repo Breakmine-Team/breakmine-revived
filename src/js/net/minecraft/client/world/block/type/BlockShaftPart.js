@@ -155,6 +155,38 @@ export default class BlockShaftPart extends Block {
     // stale).
     onBlockAdded(world, x, y, z) {
         ShaftDrive.refreshAround(world, x, y, z);
+
+        // Watch this part for two drives fighting over the run it belongs to.
+        if (world && typeof world.scheduleBlockTick === 'function') {
+            world.scheduleBlockTick(x, y, z, 20);
+        }
+    }
+
+    /**
+     * A shaft with two drives pulling it different ways shears and breaks. The
+     * snap splits the run, so afterwards each source drives its own half and
+     * the conflict is gone.
+     */
+    onBlockTick(world, x, y, z) {
+        if (!world) {
+            return;
+        }
+
+        if (typeof world.scheduleBlockTick === 'function') {
+            world.scheduleBlockTick(x, y, z, 20);
+        }
+
+        if (typeof world.setBlockAt !== 'function') {
+            return;
+        }
+
+        const candidate = ShaftDrive.findSnapCandidate(world, x, y, z);
+        if (candidate === null || candidate !== ShaftDrive.keyOf(x, y, z)) {
+            return;
+        }
+
+        world.setBlockAt(x, y, z, 0);
+        ShaftDrive.refreshAround(world, x, y, z);
     }
 
     onBlockRemoved(world, x, y, z) {

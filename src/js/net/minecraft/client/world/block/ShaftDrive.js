@@ -137,15 +137,24 @@ export default class ShaftDrive {
 
         let source = null;
 
+        // Every source found in this assembly, in the start part's frame.
+        const drivers = [];
+
         for (let i = 0; i < queue.length; i++) {
             const member = queue[i];
 
             const driver = ShaftDrive.findDriver(world, member);
-            if (driver !== null && (source === null || driver.rpm > source.rpm)) {
-                source = {
+            if (driver !== null) {
+                const drive = {
                     rpm: driver.rpm,
-                    direction: driver.direction * member.parity
+                    direction: driver.direction * member.parity,
+                    key: member.key
                 };
+                drivers.push(drive);
+
+                if (source === null || drive.rpm > source.rpm) {
+                    source = {rpm: drive.rpm, direction: drive.direction};
+                }
             }
 
             if (parityByKey.size >= ShaftDrive.MAX_MEMBERS) {
@@ -186,16 +195,61 @@ export default class ShaftDrive {
         }
 
         const members = [];
-        for (const [key, parity] of parityByKey) {
-            members.push({key: key, parity: parity});
+        for (const entry of queue) {
+            members.push({
+                key: entry.key,
+                parity: entry.parity,
+                x: entry.x,
+                y: entry.y,
+                z: entry.z,
+                block: entry.block
+            });
         }
 
+        // Two sources turning one assembly different speeds or ways is not a
+        // drive at all: the run is fighting itself, so nothing turns.
+        const conflict = drivers.some((driver) => drivers.some((other) =>
+            other !== driver &&
+            (other.rpm !== driver.rpm ||
+                (other.direction >= 0) !== (driver.direction >= 0))));
+
         return {
-            drive: source === null
+            drive: conflict || source === null
                 ? ShaftDrive.IDLE
                 : {rpm: source.rpm, direction: source.direction >= 0 ? 1 : -1},
-            members: members
+            members: members,
+            conflict: conflict,
+            drivers: drivers
         };
+    }
+
+    /**
+     * The connector a fighting assembly snaps, or null when this run is fine.
+     *
+     * Sources are never the ones that break: a driving motor or water wheel
+     * survives and the shaft between the two of them shears. The lowest
+     * coordinate key is chosen so the client and the server always snap the
+     * same block instead of drifting apart.
+     */
+    static findSnapCandidate(world, x, y, z) {
+        const assembly = ShaftDrive.compute(world, x, y, z);
+        if (!assembly || assembly.conflict !== true) {
+            return null;
+        }
+
+        let candidate = null;
+        for (const member of assembly.members) {
+            const block = member.block;
+            if (!block || block.isShaftMotor === true || block.isWaterWheel === true) {
+                continue;
+            }
+
+            if (candidate === null || member.key < candidate) {
+                candidate = member.key;
+            }
+        }
+
+        return candidate;
     }
 
     /**
@@ -203,6 +257,16 @@ export default class ShaftDrive {
      * The motor's drive end must line up with the part's axle.
      */
     static findDriver(world, member) {
+        // A water wheel makes its own power while water reaches it, so it
+        // drives the assembly instead of waiting to be driven.
+        if (member.block && member.block.isWaterWheel === true &&
+            typeof member.block.getWaterDrive === "function") {
+            const waterDrive = member.block.getWaterDrive(world, member.x, member.y, member.z);
+            if (waterDrive !== null) {
+                return waterDrive;
+            }
+        }
+
         for (const step of ShaftDrive.NEIGHBOURS) {
             const nx = member.x + step.delta[0];
             const ny = member.y + step.delta[1];

@@ -1357,7 +1357,7 @@ export default class BlockRenderer {
         let minU, minV, maxU, maxV;
         
         if (this.worldRenderer.textureAtlas && this.worldRenderer.textureAtlas.isLoaded()) {
-            let textureName = block.getTextureForFace(EnumBlockFace.NORTH);
+            let textureName = block.getTextureForFace(EnumBlockFace.NORTH, world != null ? world.getBlockDataAt(x, y, z) : 0, x, y, z, world);
             let uvs = this.worldRenderer.textureAtlas.getUVs(textureName);
             let uOffset = 7 / 16;
             let vOffset = 6 / 16;
@@ -1369,7 +1369,7 @@ export default class BlockRenderer {
             maxU = minU + uSize * (uvs.maxU - uvs.minU);
             maxV = minV + vSize * (uvs.maxV - uvs.minV);
         } else {
-            let textureIndex = block.getTextureForFace(EnumBlockFace.NORTH);
+            let textureIndex = block.getTextureForFace(EnumBlockFace.NORTH, world != null ? world.getBlockDataAt(x, y, z) : 0, x, y, z, world);
             minU = (textureIndex % 16) / 16.0;
             minV = Math.floor(textureIndex / 16) / 16.0;
             

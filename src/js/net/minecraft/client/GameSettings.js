@@ -35,6 +35,8 @@ export default class GameSettings {
 
         this.thirdPersonView = 0;
         this.fov = 70;
+        // Pixel ratio the 3D world is rendered at, 1 = full resolution.
+        this.resolution = 1;
         this.viewBobbing = true;
         this.ambientOcclusion = true;
         this.shadows = false;
@@ -73,6 +75,16 @@ export default class GameSettings {
         this.loggedIn = false;
 
         this.selectedTexturePack = null;
+    }
+
+    /**
+     * Pixel ratio the world renders at (Options "Resolution"), from 1 down to
+     * 0.1. Anything missing or out of range in a saved blob falls back to 1.
+     */
+    getResolution() {
+        const value = Number(this.resolution);
+        if (!Number.isFinite(value)) return 1;
+        return Math.min(1, Math.max(0.1, value));
     }
 
     /**

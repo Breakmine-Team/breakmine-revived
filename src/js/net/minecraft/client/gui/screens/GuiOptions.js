@@ -144,7 +144,19 @@ export default class GuiOptions extends GuiScreen {
                             I18n.setLanguage(value);
                             mc.settings.save();
                         }
-                    }
+                    },
+                    {
+                        name: "Resolution",
+                        settingKey: "resolution",
+                        type: "slider",
+                        min: 10,
+                        max: 100,
+                        toSlider: (value) => Math.round(Math.min(1, Math.max(0.1, Number(value) || 1)) * 100),
+                        fromSlider: (value) => value / 100,
+                        display: (name, value) => `${name}: ${(value / 100).toFixed(1)}x`,
+                        tooltip: "How much the game should be scaled by.\n1.0x is full res and 0.5x is half.",
+                        onchange: (_value, mc) => mc.window.applyWorldResolution()
+                    },
                 ]
             }
         ];
@@ -275,11 +287,16 @@ export default class GuiOptions extends GuiScreen {
             case "slider": {
                 const min = item.min !== undefined ? item.min : 0;
                 const max = item.max !== undefined ? item.max : 100;
-                const slider = new GuiSliderButton(item.name, currentValue, min, max, x, y, width, height, newValue => {
-                    settings[item.settingKey] = newValue;
+                // Items whose stored value is not a slider integer map both ways.
+                const toSlider = typeof item.toSlider === "function" ? item.toSlider : (value => value);
+                const fromSlider = typeof item.fromSlider === "function" ? item.fromSlider : (value => value);
+                const slider = new GuiSliderButton(item.name, toSlider(currentValue), min, max, x, y, width, height, newValue => {
+                    settings[item.settingKey] = fromSlider(newValue);
                     if (item.onchange) item.onchange(newValue, this.minecraft);
                 });
-                if (item.step !== undefined && slider.setDisplayNameBuilder) {
+                if (typeof item.display === "function") {
+                    slider.setDisplayNameBuilder(item.display);
+                } else if (item.step !== undefined && slider.setDisplayNameBuilder) {
                     slider.setDisplayNameBuilder((name, value) => `${name}: ${value}`);
                 }
                 return slider;

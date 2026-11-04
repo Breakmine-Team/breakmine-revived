@@ -192,6 +192,18 @@ export default class PlayerEntity extends EntityLiving {
             this.updateFOVModifier();
         }
 
+        // A turntable under the local player carries them round at its speed.
+        if (this === this.minecraft.player) {
+            const turntableSpin = this.getTurntableSpin();
+            if (turntableSpin !== 0) {
+                // The spin is the table's own angle, and a positive rotation
+                // about Y runs counter-clockwise seen from above. Yaw grows
+                // the other way, so the rider follows the plate only when it
+                // is subtracted.
+                this.rotationYaw -= turntableSpin;
+            }
+        }
+
         super.onLivingUpdate();
 
         this.jumpMovementFactor = this.speedInAir;
@@ -726,6 +738,29 @@ export default class PlayerEntity extends EntityLiving {
         //    return { type: 'entity', entity: entityHit };
         //}
         return blockHit;
+    }
+
+    /**
+     * Degrees a turntable under this player's feet turns them this tick, or 0
+     * when there is no driven turntable there.
+     */
+    getTurntableSpin() {
+        const world = this.world;
+        if (!world || typeof world.getBlockAt !== 'function') {
+            return 0;
+        }
+
+        const x = Math.floor(this.x);
+        // Feet sit just above the block, so look at the cell they rest on.
+        const y = Math.floor(this.y - 0.1);
+        const z = Math.floor(this.z);
+
+        const block = Block.getById(world.getBlockAt(x, y, z));
+        if (!block || typeof block.getTurntableSpin !== 'function') {
+            return 0;
+        }
+
+        return block.getTurntableSpin(world, x, y, z);
     }
 
     isSprinting() {
