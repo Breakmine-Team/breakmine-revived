@@ -1,0 +1,812 @@
+{
+  "source": {
+    "version": "26.3",
+    "worldVersion": 5023,
+    "sha256": "4508d006323f24fa02876310c192d739af56516eb259000ac50f0909a68c9a2d"
+  },
+  "registryStateCount": 35723,
+  "mappings": [
+    {
+      "stateId": 0,
+      "name": "minecraft:air",
+      "properties": {},
+      "blockId": 0,
+      "metadata": 0,
+      "packedState": 0
+    },
+    {
+      "stateId": 1,
+      "name": "minecraft:stone",
+      "properties": {},
+      "blockId": 1,
+      "metadata": 0,
+      "packedState": 16
+    },
+    {
+      "stateId": 8,
+      "name": "minecraft:grass_block",
+      "properties": {
+        "snowy": "true"
+      },
+      "blockId": 2,
+      "metadata": 0,
+      "packedState": 32
+    },
+    {
+      "stateId": 9,
+      "name": "minecraft:grass_block",
+      "properties": {
+        "snowy": "false"
+      },
+      "blockId": 2,
+      "metadata": 0,
+      "packedState": 32
+    },
+    {
+      "stateId": 10,
+      "name": "minecraft:dirt",
+      "properties": {},
+      "blockId": 3,
+      "metadata": 0,
+      "packedState": 48
+    },
+    {
+      "stateId": 14,
+      "name": "minecraft:cobblestone",
+      "properties": {},
+      "blockId": 4,
+      "metadata": 0,
+      "packedState": 64
+    },
+    {
+      "stateId": 15,
+      "name": "minecraft:oak_planks",
+      "properties": {},
+      "blockId": 5,
+      "metadata": 0,
+      "packedState": 80
+    },
+    {
+      "stateId": 88,
+      "name": "minecraft:bedrock",
+      "properties": {},
+      "blockId": 7,
+      "metadata": 0,
+      "packedState": 112
+    },
+    {
+      "stateId": 89,
+      "name": "minecraft:water",
+      "properties": {
+        "level": "0"
+      },
+      "blockId": 9,
+      "metadata": 0,
+      "packedState": 144
+    },
+    {
+      "stateId": 90,
+      "name": "minecraft:water",
+      "properties": {
+        "level": "1"
+      },
+      "blockId": 9,
+      "metadata": 1,
+      "packedState": 145
+    },
+    {
+      "stateId": 91,
+      "name": "minecraft:water",
+      "properties": {
+        "level": "2"
+      },
+      "blockId": 9,
+      "metadata": 2,
+      "packedState": 146
+    },
+    {
+      "stateId": 92,
+      "name": "minecraft:water",
+      "properties": {
+        "level": "3"
+      },
+      "blockId": 9,
+      "metadata": 3,
+      "packedState": 147
+    },
+    {
+      "stateId": 93,
+      "name": "minecraft:water",
+      "properties": {
+        "level": "4"
+      },
+      "blockId": 9,
+      "metadata": 4,
+      "packedState": 148
+    },
+    {
+      "stateId": 94,
+      "name": "minecraft:water",
+      "properties": {
+        "level": "5"
+      },
+      "blockId": 9,
+      "metadata": 5,
+      "packedState": 149
+    },
+    {
+      "stateId": 95,
+      "name": "minecraft:water",
+      "properties": {
+        "level": "6"
+      },
+      "blockId": 9,
+      "metadata": 6,
+      "packedState": 150
+    },
+    {
+      "stateId": 96,
+      "name": "minecraft:water",
+      "properties": {
+        "level": "7"
+      },
+      "blockId": 9,
+      "metadata": 7,
+      "packedState": 151
+    },
+    {
+      "stateId": 97,
+      "name": "minecraft:water",
+      "properties": {
+        "level": "8"
+      },
+      "blockId": 9,
+      "metadata": 8,
+      "packedState": 152
+    },
+    {
+      "stateId": 98,
+      "name": "minecraft:water",
+      "properties": {
+        "level": "9"
+      },
+      "blockId": 9,
+      "metadata": 9,
+      "packedState": 153
+    },
+    {
+      "stateId": 99,
+      "name": "minecraft:water",
+      "properties": {
+        "level": "10"
+      },
+      "blockId": 9,
+      "metadata": 10,
+      "packedState": 154
+    },
+    {
+      "stateId": 100,
+      "name": "minecraft:water",
+      "properties": {
+        "level": "11"
+      },
+      "blockId": 9,
+      "metadata": 11,
+      "packedState": 155
+    },
+    {
+      "stateId": 101,
+      "name": "minecraft:water",
+      "properties": {
+        "level": "12"
+      },
+      "blockId": 9,
+      "metadata": 12,
+      "packedState": 156
+    },
+    {
+      "stateId": 102,
+      "name": "minecraft:water",
+      "properties": {
+        "level": "13"
+      },
+      "blockId": 9,
+      "metadata": 13,
+      "packedState": 157
+    },
+    {
+      "stateId": 103,
+      "name": "minecraft:water",
+      "properties": {
+        "level": "14"
+      },
+      "blockId": 9,
+      "metadata": 14,
+      "packedState": 158
+    },
+    {
+      "stateId": 104,
+      "name": "minecraft:water",
+      "properties": {
+        "level": "15"
+      },
+      "blockId": 9,
+      "metadata": 15,
+      "packedState": 159
+    },
+    {
+      "stateId": 105,
+      "name": "minecraft:lava",
+      "properties": {
+        "level": "0"
+      },
+      "blockId": 55,
+      "metadata": 0,
+      "packedState": 880
+    },
+    {
+      "stateId": 106,
+      "name": "minecraft:lava",
+      "properties": {
+        "level": "1"
+      },
+      "blockId": 55,
+      "metadata": 1,
+      "packedState": 881
+    },
+    {
+      "stateId": 107,
+      "name": "minecraft:lava",
+      "properties": {
+        "level": "2"
+      },
+      "blockId": 55,
+      "metadata": 2,
+      "packedState": 882
+    },
+    {
+      "stateId": 108,
+      "name": "minecraft:lava",
+      "properties": {
+        "level": "3"
+      },
+      "blockId": 55,
+      "metadata": 3,
+      "packedState": 883
+    },
+    {
+      "stateId": 109,
+      "name": "minecraft:lava",
+      "properties": {
+        "level": "4"
+      },
+      "blockId": 55,
+      "metadata": 4,
+      "packedState": 884
+    },
+    {
+      "stateId": 110,
+      "name": "minecraft:lava",
+      "properties": {
+        "level": "5"
+      },
+      "blockId": 55,
+      "metadata": 5,
+      "packedState": 885
+    },
+    {
+      "stateId": 111,
+      "name": "minecraft:lava",
+      "properties": {
+        "level": "6"
+      },
+      "blockId": 55,
+      "metadata": 6,
+      "packedState": 886
+    },
+    {
+      "stateId": 112,
+      "name": "minecraft:lava",
+      "properties": {
+        "level": "7"
+      },
+      "blockId": 55,
+      "metadata": 7,
+      "packedState": 887
+    },
+    {
+      "stateId": 113,
+      "name": "minecraft:lava",
+      "properties": {
+        "level": "8"
+      },
+      "blockId": 55,
+      "metadata": 8,
+      "packedState": 888
+    },
+    {
+      "stateId": 114,
+      "name": "minecraft:lava",
+      "properties": {
+        "level": "9"
+      },
+      "blockId": 55,
+      "metadata": 9,
+      "packedState": 889
+    },
+    {
+      "stateId": 115,
+      "name": "minecraft:lava",
+      "properties": {
+        "level": "10"
+      },
+      "blockId": 55,
+      "metadata": 10,
+      "packedState": 890
+    },
+    {
+      "stateId": 116,
+      "name": "minecraft:lava",
+      "properties": {
+        "level": "11"
+      },
+      "blockId": 55,
+      "metadata": 11,
+      "packedState": 891
+    },
+    {
+      "stateId": 117,
+      "name": "minecraft:lava",
+      "properties": {
+        "level": "12"
+      },
+      "blockId": 55,
+      "metadata": 12,
+      "packedState": 892
+    },
+    {
+      "stateId": 118,
+      "name": "minecraft:lava",
+      "properties": {
+        "level": "13"
+      },
+      "blockId": 55,
+      "metadata": 13,
+      "packedState": 893
+    },
+    {
+      "stateId": 119,
+      "name": "minecraft:lava",
+      "properties": {
+        "level": "14"
+      },
+      "blockId": 55,
+      "metadata": 14,
+      "packedState": 894
+    },
+    {
+      "stateId": 120,
+      "name": "minecraft:lava",
+      "properties": {
+        "level": "15"
+      },
+      "blockId": 55,
+      "metadata": 15,
+      "packedState": 895
+    },
+    {
+      "stateId": 121,
+      "name": "minecraft:sand",
+      "properties": {},
+      "blockId": 12,
+      "metadata": 0,
+      "packedState": 192
+    },
+    {
+      "stateId": 127,
+      "name": "minecraft:gravel",
+      "properties": {},
+      "blockId": 13,
+      "metadata": 0,
+      "packedState": 208
+    },
+    {
+      "stateId": 139,
+      "name": "minecraft:oak_log",
+      "properties": {
+        "axis": "x"
+      },
+      "blockId": 17,
+      "metadata": 1,
+      "packedState": 273
+    },
+    {
+      "stateId": 140,
+      "name": "minecraft:oak_log",
+      "properties": {
+        "axis": "y"
+      },
+      "blockId": 17,
+      "metadata": 0,
+      "packedState": 272
+    },
+    {
+      "stateId": 141,
+      "name": "minecraft:oak_log",
+      "properties": {
+        "axis": "z"
+      },
+      "blockId": 17,
+      "metadata": 2,
+      "packedState": 274
+    },
+    {
+      "stateId": 267,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "1",
+        "persistent": "true",
+        "waterlogged": "true"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 268,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "1",
+        "persistent": "true",
+        "waterlogged": "false"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 269,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "1",
+        "persistent": "false",
+        "waterlogged": "true"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 270,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "1",
+        "persistent": "false",
+        "waterlogged": "false"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 271,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "2",
+        "persistent": "true",
+        "waterlogged": "true"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 272,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "2",
+        "persistent": "true",
+        "waterlogged": "false"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 273,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "2",
+        "persistent": "false",
+        "waterlogged": "true"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 274,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "2",
+        "persistent": "false",
+        "waterlogged": "false"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 275,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "3",
+        "persistent": "true",
+        "waterlogged": "true"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 276,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "3",
+        "persistent": "true",
+        "waterlogged": "false"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 277,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "3",
+        "persistent": "false",
+        "waterlogged": "true"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 278,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "3",
+        "persistent": "false",
+        "waterlogged": "false"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 279,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "4",
+        "persistent": "true",
+        "waterlogged": "true"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 280,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "4",
+        "persistent": "true",
+        "waterlogged": "false"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 281,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "4",
+        "persistent": "false",
+        "waterlogged": "true"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 282,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "4",
+        "persistent": "false",
+        "waterlogged": "false"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 283,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "5",
+        "persistent": "true",
+        "waterlogged": "true"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 284,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "5",
+        "persistent": "true",
+        "waterlogged": "false"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 285,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "5",
+        "persistent": "false",
+        "waterlogged": "true"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 286,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "5",
+        "persistent": "false",
+        "waterlogged": "false"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 287,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "6",
+        "persistent": "true",
+        "waterlogged": "true"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 288,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "6",
+        "persistent": "true",
+        "waterlogged": "false"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 289,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "6",
+        "persistent": "false",
+        "waterlogged": "true"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 290,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "6",
+        "persistent": "false",
+        "waterlogged": "false"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 291,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "7",
+        "persistent": "true",
+        "waterlogged": "true"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 292,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "7",
+        "persistent": "true",
+        "waterlogged": "false"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 293,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "7",
+        "persistent": "false",
+        "waterlogged": "true"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 294,
+      "name": "minecraft:oak_leaves",
+      "properties": {
+        "distance": "7",
+        "persistent": "false",
+        "waterlogged": "false"
+      },
+      "blockId": 18,
+      "metadata": 0,
+      "packedState": 288
+    },
+    {
+      "stateId": 3832,
+      "name": "minecraft:bricks",
+      "properties": {},
+      "blockId": 33,
+      "metadata": 0,
+      "packedState": 528
+    },
+    {
+      "stateId": 4924,
+      "name": "minecraft:mossy_cobblestone",
+      "properties": {},
+      "blockId": 6,
+      "metadata": 0,
+      "packedState": 96
+    },
+    {
+      "stateId": 8616,
+      "name": "minecraft:clay",
+      "properties": {},
+      "blockId": 138,
+      "metadata": 0,
+      "packedState": 2208
+    },
+    {
+      "stateId": 14759,
+      "name": "minecraft:terracotta",
+      "properties": {},
+      "blockId": 139,
+      "metadata": 0,
+      "packedState": 2224
+    }
+  ]
+}

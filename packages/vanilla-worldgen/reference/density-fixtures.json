@@ -1,0 +1,28 @@
+{
+  "gradient_x": {"type":"minecraft:gradient","axis":"x","tiling":"clamp_to_edge","from_coordinate":-4,"to_coordinate":4,"from_value":-2,"to_value":2},
+  "gradient_reverse_z": {"type":"minecraft:gradient","axis":"z","from_coordinate":4,"to_coordinate":-4,"from_value":-2,"to_value":2},
+  "spline": {"type":"minecraft:spline","spline":{"coordinate":"minecraft:y","points":[
+    {"location":-2,"value":0.3,"derivative":0.2},
+    {"location":0,"value":{"coordinate":"minecraft:y","points":[{"location":-1,"value":-0.1,"derivative":0.3},{"location":1,"value":0.7,"derivative":-0.2}]},"derivative":0.6},
+    {"location":2,"value":0.9,"derivative":-0.4}
+  ]}},
+  "add": {"type":"minecraft:add","left":"minecraft:y","right":0.33333334},
+  "sub": {"type":"minecraft:sub","left":0.33333334,"right":"minecraft:y"},
+  "mul": {"type":"minecraft:mul","left":"minecraft:y","right":0.27},
+  "div": {"type":"minecraft:div","left":"minecraft:y","right":7},
+  "min": {"type":"minecraft:min","left":"minecraft:y","right":0.25},
+  "max": {"type":"minecraft:max","left":-0.25,"right":"minecraft:y"},
+  "abs": {"type":"minecraft:abs","input":"minecraft:y"},
+  "negate": {"type":"minecraft:negate","input":"minecraft:y"},
+  "clamp": {"type":"minecraft:clamp","input":"minecraft:y","min":-0.5,"max":0.5},
+  "lerp": {"type":"minecraft:lerp","alpha":{"type":"minecraft:gradient","axis":"y","from_coordinate":-4,"to_coordinate":4,"from_value":0,"to_value":1},"first":0.2,"second":0.8},
+  "xyz_shifted_noise": {"type":"minecraft:noise","noise":"minecraft:temperature","xz_scale":0.25,"y_scale":0.5,"shift_x":0.3,"shift_y":"minecraft:y","shift_z":-0.4},
+  "shift": {"type":"minecraft:shift","noise":"minecraft:offset"},
+  "shift_a": {"type":"minecraft:shift_a","noise":"minecraft:offset"},
+  "shift_b": {"type":"minecraft:shift_b","noise":"minecraft:offset"},
+  "half_negative": {"type":"minecraft:half_negative","input":"minecraft:y"},
+  "quarter_negative": {"type":"minecraft:quarter_negative","input":"minecraft:y"},
+  "square": {"type":"minecraft:square","input":"minecraft:y"},
+  "cube": {"type":"minecraft:cube","input":"minecraft:y"},
+  "squeeze": {"type":"minecraft:squeeze","input":"minecraft:y"}
+}
