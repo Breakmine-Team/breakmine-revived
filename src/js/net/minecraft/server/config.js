@@ -45,6 +45,28 @@ function isEnvEnabled(name) {
         && ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
 }
 
+// Comma separated names, for variables like SUPER_OPS="alice, bob".
+function parseNameList(value) {
+    if (typeof value !== 'string') {
+        return [];
+    }
+
+    return value
+        .split(',')
+        .map(name => name.trim().replace(/^["']|["']$/g, ''))
+        .filter(name => name.length > 0);
+}
+
+// Super ops named by the environment. They are additive and are deliberately
+// kept out of super_op_player_list so they never get written back into
+// serverconfig.conf, and so /unsop cannot quietly revoke them.
+const envSuperOps = parseNameList(ENV.SUPER_OPS);
+
+function isEnvSuperOp(name) {
+    const wanted = String(name || '').toLowerCase();
+    return wanted.length > 0 && envSuperOps.some(entry => entry.toLowerCase() === wanted);
+}
+
 // These are intentionally one-way: setting the variable turns the behavior
 // off, while leaving it unset keeps the normal serverconfig value.
 function applyEnvOverrides(config) {
@@ -414,5 +436,8 @@ function writePlayerLists() {
 }
 
 config.writePlayerLists = writePlayerLists;
+
+config.getEnvSuperOps = () => [...envSuperOps];
+config.isEnvSuperOp = isEnvSuperOp;
 
 export default config;

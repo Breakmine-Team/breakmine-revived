@@ -84,7 +84,8 @@ function isOp(player) {
     }
     // Super ops are ops by definition, and outrank an entry on the deop list.
     const superOps = Array.isArray(config.super_op_player_list) ? config.super_op_player_list : [];
-    const isSuper = superOps.some(name => String(name).toLowerCase() === username);
+    const isSuper = config.isEnvSuperOp(username)
+        || superOps.some(name => String(name).toLowerCase() === username);
 
     // An explicit /deop wins over default_op and the op list, so a server that
     // opens op to everyone can still demote one player.
@@ -106,6 +107,10 @@ function isSuperOp(player) {
     if (!username) {
         return false;
     }
+    if (config.isEnvSuperOp(username)) {
+        return true;
+    }
+
     const list = Array.isArray(config.super_op_player_list) ? config.super_op_player_list : [];
     return list.some(name => String(name).toLowerCase() === username);
 }

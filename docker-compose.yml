@@ -56,6 +56,9 @@ services:
       # Optional griefing switches: set to "true" to disable.
       # SERVER_DISABLE_TNT: "true"
       # SERVER_DISABLE_LIQUID_FLOW: "true"
+      # Extra super operators, comma separated. Always super ops; not saved
+      # to serverconfig.conf and not removable with /unsop.
+      # SUPER_OPS: "alice, bob"
       # Connection protection. Both are on by default; set the matching
       # variable to "false" to turn one off.
       # SERVER_ANTIDDOS: "true"

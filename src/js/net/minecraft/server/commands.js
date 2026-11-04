@@ -277,6 +277,13 @@ function withoutName(list, name) {
 }
 
 function handleSuperOp(player, cmd, name) {
+    if (config.isEnvSuperOp(name)) {
+        sendChatMessageToPlayer(player, cmd === 'sop'
+            ? `§e${name} is already a super operator (set by the SUPER_OPS environment variable).`
+            : `§c${name} is a super operator set by the SUPER_OPS environment variable and cannot be unsop'd here.`);
+        return;
+    }
+
     const list = Array.isArray(config.super_op_player_list) ? [...config.super_op_player_list] : [];
     const matches = (entry) => String(entry).toLowerCase() === name.toLowerCase();
     const existing = list.find(matches);
@@ -320,7 +327,7 @@ function handleOp(player, cmd, name) {
 
     // A super op outranks /deop; demote them with /unsop first.
     const superOps = Array.isArray(config.super_op_player_list) ? config.super_op_player_list : [];
-    if (cmd === 'deop' && superOps.some(matches)) {
+    if (cmd === 'deop' && (superOps.some(matches) || config.isEnvSuperOp(name))) {
         sendChatMessageToPlayer(player, `§c${name} is a super operator - use /unsop first.`);
         return;
     }
