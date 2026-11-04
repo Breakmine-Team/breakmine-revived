@@ -1,0 +1,102 @@
+body {
+    margin: 0;
+}
+
+canvas {
+    position: absolute;
+    image-rendering: -moz-crisp-edges; /* Firefox */
+    image-rendering: -webkit-crisp-edges; /* Webkit (Safari) */
+    image-rendering: pixelated; /* Chrome */
+}
+
+#background {
+    background-image: url(src/resources/gui/title/splash.png);
+    background-repeat: no-repeat;
+    background-size: contain;
+    background-position: center;
+    image-rendering: -moz-crisp-edges; /* Firefox */
+    image-rendering: -webkit-crisp-edges; /* Webkit (Safari) */
+    image-rendering: pixelated; /* Chrome */
+}
+
+.fullscreen {
+    position: absolute;
+    float: left;
+    display: block;
+    width: 100%;
+    height: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+#loading-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    z-index: 10000;
+    overflow: hidden;
+    background: #10131c url("src/resources/gui/loading/panorama.webp") center / cover no-repeat;
+    opacity: 1;
+}
+
+#loading-overlay::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: linear-gradient(rgba(0, 0, 0, 0.22), rgba(0, 0, 0, 0.48));
+}
+
+#loading-overlay .loading-image {
+    position: relative;
+    z-index: 1;
+    display: block;
+    width: min(75vw, 498px);
+    height: auto;
+    aspect-ratio: 498 / 280;
+    object-fit: cover;
+    border-radius: 18px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.38);
+}
+
+#loading-overlay .loading-progress {
+    z-index: 1;
+    position: absolute;
+    left: 50%;
+    top: calc(83.25% - 5px);
+    transform: translateX(-50%);
+    width: min(75vw, 100vh);
+    height: 10px;
+    box-sizing: border-box;
+    background:
+        linear-gradient(#fff, #fff) center top / calc(100% - 2px) 1px,
+        linear-gradient(#fff, #fff) center bottom / calc(100% - 2px) 1px,
+        linear-gradient(#fff, #fff) left center / 1px 100%,
+        linear-gradient(#fff, #fff) right center / 1px 100%;
+    background-repeat: no-repeat;
+}
+
+#loading-overlay .loading-progress-fill {
+    position: absolute;
+    left: 2px;
+    top: 2px;
+    width: calc(100% - 4px);
+    height: calc(100% - 4px);
+    background: #fff;
+    transform: scaleX(0);
+    transform-origin: left;
+}
+
+#loading-overlay .loading-error {
+    position: relative;
+    z-index: 1;
+    max-width: 75vw;
+    color: #ff7777;
+    font: 16px sans-serif;
+    overflow-wrap: anywhere;
+}

@@ -11,18 +11,25 @@ vcs.py
 vcs2.py
 node_modules/
 package-lock.json
-apps/game/dist/
-apps/game/dist-single/
 .kilo/
-apps/game/serverconfig.conf
-apps/game/current_world.txt
-apps/game/src/resources.js
+src/resources.js
+
+# Root-level game layout mirrors main; generated output stays untracked here too.
+/dist/
+/dist-single/
+/release/
+/serverconfig.conf
+/current_world.txt
+/src/resources.js
 
 # Wiki runtime and machine-local files
-apps/wiki/node_modules/
-apps/wiki/__pycache__/
-apps/wiki/.env
-apps/wiki/*.db-wal
-apps/wiki/*.db-shm
-apps/wiki/*.pem
-apps/wiki/*.key
+wiki/node_modules/
+wiki/__pycache__/
+wiki/.env
+wiki/*.db-wal
+wiki/*.db-shm
+wiki/*.pem
+wiki/*.key
+archive/legacy-apps/*/node_modules/
+archive/legacy-apps/*/dist/
+archive/legacy-apps/*/dist-single/
