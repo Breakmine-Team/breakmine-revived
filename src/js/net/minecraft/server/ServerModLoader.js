@@ -16,7 +16,7 @@ import { readServerMods } from './serverMods.js';
 import BlockActionRegistry from '../mod/BlockActionRegistry.js';
 import { modDataPath } from '../mod/ModDataKey.js';
 import fs from '../client/fs/ServerFs.js';
-import { findPlayerByUsername, getPlayers } from './players.js';
+import { findPlayerByUsername, getPlayers, isOp, isSuperOp } from './players.js';
 
 const log = Logger;
 
@@ -296,6 +296,10 @@ function createModApi(modId) {
         isServer: true,
         get minecraft() { return undefined; },
         get world() { return undefined; },
+        // Operator checks for mods that hand out extra rights, so a mod never
+        // has to keep its own copy of the server's op lists.
+        isOp: (username) => !!isOp({username: String(username ?? '')}),
+        isSuperOp: (username) => !!isSuperOp({username: String(username ?? '')}),
         registerCommand: (name, usage, description, execute, options = {}) => {
             const descriptor = typeof name === 'object' && name !== null
                 ? { ...name }

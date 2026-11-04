@@ -163,6 +163,20 @@ export default class ModLoad {
         let loaded = false;
         let hasServerState = false;
         let lastSyncRequest = 0;
+        // Super ops may build in and manage any plot. The server answers from
+        // its own op lists; the client has none, so the state sync tells it
+        // whether its own player is one.
+        let serverSaysSuperOp = false;
+
+        function isSuperOperator(username) {
+            if (!username) {
+                return false;
+            }
+            if (typeof ModAPI.isSuperOp === 'function') {
+                return !!ModAPI.isSuperOp(username);
+            }
+            return serverSaysSuperOp;
+        }
 
         const ready = ModAPI.loadJson('plots', DEFAULT_STORE())
             .then((value) => {
@@ -242,7 +256,7 @@ export default class ModLoad {
         function guardBuild(event) {
             if (!loaded) return;
             const plot = getPlotAt(store.plots, event.x, event.z);
-            if (!plot || canBuild(plot, event.username)) return;
+            if (!plot || canBuild(plot, event.username) || isSuperOperator(event.username)) return;
             event.cancel();
             denyBuild(event.username, plot);
         }
@@ -250,7 +264,7 @@ export default class ModLoad {
         function guardClientBuild(event) {
             if (!loaded) return;
             const plot = getPlotAt(store.plots, event.x, event.z);
-            if (!plot || canBuild(plot, event.username)) return;
+            if (!plot || canBuild(plot, event.username) || isSuperOperator(event.username)) return;
             event.cancel();
             client.addMessageToChat(`§c${plot.owner}'s plot.`);
         }
@@ -339,7 +353,7 @@ export default class ModLoad {
                 say(context, '§cStand in a plot first.');
                 return true;
             }
-            if (!isOwner(plot, username)) {
+            if (!isOwner(plot, username) && !isSuperOperator(username)) {
                 say(context, `§cOwned by ${plot.owner}.`);
                 return true;
             }
@@ -356,7 +370,7 @@ export default class ModLoad {
                 say(context, '§cStand in a plot.');
                 return true;
             }
-            if (!isOwner(plot, username)) {
+            if (!isOwner(plot, username) && !isSuperOperator(username)) {
                 say(context, `§cOwned by ${plot.owner}.`);
                 return true;
             }
@@ -384,7 +398,7 @@ export default class ModLoad {
                 say(context, '§cStand in a plot.');
                 return true;
             }
-            if (!isOwner(plot, username)) {
+            if (!isOwner(plot, username) && !isSuperOperator(username)) {
                 say(context, `§cOwned by ${plot.owner}.`);
                 return true;
             }
@@ -416,7 +430,7 @@ export default class ModLoad {
                 say(context, '§cStand in a plot.');
                 return true;
             }
-            if (!isOwner(plot, username)) {
+            if (!isOwner(plot, username) && !isSuperOperator(username)) {
                 say(context, `§cOwned by ${plot.owner}.`);
                 return true;
             }
@@ -588,7 +602,11 @@ export default class ModLoad {
 
             ModAPI.onMessage((event) => {
                 if (event.payload?.action === 'sync') {
-                    event.send({ action: 'state', plots: store.plots });
+                    event.send({
+                        action: 'state',
+                        plots: store.plots,
+                        superOp: isSuperOperator(event.username)
+                    });
                 }
             });
         }
@@ -610,6 +628,9 @@ export default class ModLoad {
 
                     if (message.action === 'state' && Array.isArray(message.plots)) {
                         store = normalizeStore({ version: 1, nextId: store.nextId, plots: message.plots });
+                        if (typeof message.superOp === 'boolean') {
+                            serverSaysSuperOp = message.superOp;
+                        }
                         loaded = true;
                         hasServerState = true;
                     } else if (message.action === 'notice' && typeof message.text === 'string') {
