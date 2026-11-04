@@ -80,7 +80,7 @@ export function convertOld(text) {
                     c.underlined = true;
                     break;
                 case "o":
-                    c.bold = true;
+                    c.italic = true;
                     break;
                 case "r":
                     c = {text: c.text};

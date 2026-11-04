@@ -82,10 +82,31 @@ function isOp(player) {
     if (!username) {
         return false;
     }
-    if (config.default_op === true) {
+    // Super ops are ops by definition, and outrank an entry on the deop list.
+    const superOps = Array.isArray(config.super_op_player_list) ? config.super_op_player_list : [];
+    const isSuper = superOps.some(name => String(name).toLowerCase() === username);
+
+    // An explicit /deop wins over default_op and the op list, so a server that
+    // opens op to everyone can still demote one player.
+    const deop = Array.isArray(config.deop_player_list) ? config.deop_player_list : [];
+    if (!isSuper && deop.some(name => String(name).toLowerCase() === username)) {
+        return false;
+    }
+    if (isSuper || config.default_op === true) {
         return true;
     }
     const list = Array.isArray(config.op_player_list) ? config.op_player_list : [];
+    return list.some(name => String(name).toLowerCase() === username);
+}
+
+// Super ops are the ones trusted with moderation (kick, ban, unban) and with
+// handing out super op themselves.
+function isSuperOp(player) {
+    const username = String((player && player.username) || '').toLowerCase();
+    if (!username) {
+        return false;
+    }
+    const list = Array.isArray(config.super_op_player_list) ? config.super_op_player_list : [];
     return list.some(name => String(name).toLowerCase() === username);
 }
 
@@ -199,6 +220,7 @@ export {
     getPlayerCount,
     isSpectator,
     isOp,
+    isSuperOp,
     updatePosition,
     savePlayerData,
     loadPlayerData,

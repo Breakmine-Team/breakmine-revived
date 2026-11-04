@@ -30,6 +30,7 @@ import {
 } from './packets.js';
 import config from './config.js';
 import Logger from './logger.js';
+import { isBanned, describeBan } from './bans.js';
 import getServerWorld from './World.js';
 import { emitBlockAction } from './ServerModLoader.js';
 import Block from '../client/world/block/Block.js';
@@ -250,6 +251,19 @@ function handleLoginPacket(player, packetId, buffer, offset) {
         }
 
         player.username = username;
+
+        // Banned names never reach the world: no player list entry, no chunks,
+        // no inventory. Temp bans that have run out are dropped here, so the
+        // same connection is allowed again once the ban expires.
+        const ban = isBanned(username);
+        if (ban) {
+            log.info('Server', `${username} refused - banned${ban.reason ? ': ' + ban.reason : ''}`);
+            if (player.ws.readyState === 1) {
+                player.ws.send(createDisconnectPacket(describeBan(ban)));
+                player.ws.close();
+            }
+            return;
+        }
 
         if (!config.allowMods && player.mods && player.mods.length > 0) {
             const modNames = player.mods.map(m => m.name).join(', ');

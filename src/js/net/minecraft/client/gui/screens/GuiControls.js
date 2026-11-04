@@ -141,7 +141,12 @@ export default class GuiControls extends GuiScreen {
                     0,
                     this.keyButtonWidth,
                     this.rowHeight,
-                    () => this.refreshConflicts(),
+                    key => {
+                        // Write the pressed key back into the settings, otherwise the
+                        // button only shows the new bind and nothing gets saved.
+                        settings[binding.setting] = key;
+                        this.refreshConflicts();
+                    },
                     defaults[binding.setting]
                 );
 

@@ -1,13 +1,17 @@
 import GuiScreen from "../GuiScreen.js";
 import GuiButton from "../widgets/GuiButton.js";
 import FontRenderer from "../../render/gui/FontRenderer.js";
+import { resolveTimeMarkers } from "../../../util/TimeFormat.js";
 
 export default class GuiDisconnected extends GuiScreen {
 
     constructor(message) {
         super();
 
-        this.message = this.normalizeMessage(message);
+        // The server cannot know the player's time zone, so ban expiry lines
+        // arrive as {{until:<epoch ms>}} markers and are turned into a local
+        // date and time here.
+        this.message = resolveTimeMarkers(this.normalizeMessage(message));
     }
 
     normalizeMessage(message) {
@@ -39,7 +43,14 @@ export default class GuiDisconnected extends GuiScreen {
     init() {
         super.init();
 
-        this.multilineMessage = this.minecraft.fontRenderer.listFormattedStringToWidth(this.message, this.width - 50);
+        // Split on explicit newlines first, then wrap each line, so a ban or
+        // kick keeps its reason on its own line instead of running the whole
+        // message together.
+        this.multilineMessage = this.message
+            .split("\n")
+            .flatMap((line) => line.length
+                ? this.minecraft.fontRenderer.listFormattedStringToWidth(line, this.width - 50)
+                : [""]);
 
         let y = this.height / 2 - 50;
         this.buttonList.push(new GuiButton(this.minecraft, "Done", this.width / 2 - 100, y + 130, 200, 20, () => {
@@ -54,8 +65,12 @@ export default class GuiDisconnected extends GuiScreen {
         // Render title
         this.drawCenteredString(stack, "Disconnected from server:", this.width / 2, this.height / 2 - 20, 0x80FFFFFF);
 
+        // One extra pixel between rows so a three-line kick or ban screen reads
+        // as separate lines instead of a block.
+        const lineHeight = FontRenderer.FONT_HEIGHT + 2;
+
         for(let i = 0; i < this.multilineMessage.length; i++) {
-            this.drawCenteredString(stack, this.multilineMessage[i], this.width / 2, this.height / 2 + i * FontRenderer.FONT_HEIGHT);
+            this.drawCenteredString(stack, this.multilineMessage[i], this.width / 2, this.height / 2 + i * lineHeight, 0xFFFFFFFF, false);
         }
 
         super.drawScreen(stack, mouseX, mouseY, partialTicks);

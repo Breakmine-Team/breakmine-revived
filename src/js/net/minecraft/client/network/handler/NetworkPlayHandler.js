@@ -403,13 +403,43 @@ export default class NetworkPlayHandler extends PacketHandler {
 
     handleDisconnect(packet) {
         this.disconnectReason = packet.getReason();
-        this.minecraft.loadWorld(null);
-        this.minecraft.displayScreen(new GuiDisconnected(this.disconnectReason));
+        this.showDisconnectScreen();
     }
 
     onDisconnect() {
-        this.minecraft.loadWorld(null);
-        this.minecraft.displayScreen(new GuiDisconnected(this.disconnectReason || "Disconnected from server"));
+        // A close the client started itself is a quit to the title screen;
+        // loadWorld(null) already navigates there.
+        if (this.networkManager && this.networkManager.closedIntentionally) {
+            return;
+        }
+        this.showDisconnectScreen();
+    }
+
+    /**
+     * Show the disconnect screen immediately, then tear the world down behind
+     * it. loadWorld(null) ends by displaying the main menu, so showing the
+     * screen first and putting it back afterwards is what stops a kicked or
+     * banned player from landing on the title screen.
+     */
+    showDisconnectScreen() {
+        const screen = new GuiDisconnected(this.disconnectReason || "Disconnected from server");
+        this.minecraft.displayScreen(screen);
+
+        // The 0x00 packet and the socket close both arrive here; tear down once.
+        if (this.disconnectTeardownStarted) {
+            return;
+        }
+        this.disconnectTeardownStarted = true;
+
+        Promise.resolve(this.minecraft.loadWorld(null))
+            .catch((error) => console.error("[Network] Disconnect teardown failed:", error))
+            .finally(() => {
+                const current = this.minecraft.currentScreen;
+                const onMainMenu = current !== null && current.constructor && current.constructor.name === "GuiMainMenu";
+                if (current === null || onMainMenu) {
+                    this.minecraft.displayScreen(screen);
+                }
+            });
     }
 
     getNetworkManager() {

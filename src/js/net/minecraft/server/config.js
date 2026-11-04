@@ -17,6 +17,11 @@ const defaults = {
     default_gamemode: 'creative',
     default_op: true,
     op_player_list: [],
+    // Names an operator removed with /deop. Checked before default_op so a
+    // server that opens op to everyone can still demote a single player.
+    deop_player_list: [],
+    // Operators that may also kick, ban and unban. A super op is an op too.
+    super_op_player_list: [],
     motd: 'Brand new server',
     allowMods: false,
     // Server-side mods are sent to every client on join. The folder is
@@ -363,5 +368,51 @@ function getServerIcon() {
 }
 
 config.getServerIcon = getServerIcon;
+
+function serializeNameList(list) {
+    const names = Array.isArray(list) ? list : [];
+    return '[' + names.map(name => `"${String(name).replace(/["\[\],]/g, '')}"`).join(', ') + ']';
+}
+
+// Persist the op/deop lists back into the active server's config file. Only
+// those two lines are touched, so comments and hand-edited keys survive.
+function writePlayerLists() {
+    const configPath = getConfigPath(config.server);
+    const dir = getServerDir(config.server);
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+
+    const lines = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8').split('\n') : [];
+    const values = {
+        op_player_list: serializeNameList(config.op_player_list),
+        deop_player_list: serializeNameList(config.deop_player_list),
+        super_op_player_list: serializeNameList(config.super_op_player_list)
+    };
+
+    const written = new Set();
+    const out = lines.map(line => {
+        const eqIdx = line.indexOf('=');
+        if (eqIdx === -1 || line.trim().startsWith('#')) {
+            return line;
+        }
+        const key = line.slice(0, eqIdx).trim();
+        if (!(key in values)) {
+            return line;
+        }
+        written.add(key);
+        return `${key}=${values[key]}`;
+    });
+
+    for (const key of Object.keys(values)) {
+        if (!written.has(key)) {
+            out.push(`${key}=${values[key]}`);
+        }
+    }
+
+    fs.writeFileSync(configPath, out.join('\n'));
+}
+
+config.writePlayerLists = writePlayerLists;
 
 export default config;

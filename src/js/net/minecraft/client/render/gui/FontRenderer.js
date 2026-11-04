@@ -15,8 +15,10 @@ export default class FontRenderer {
     static CHAR_INDEX_LOOKUP = "\u00c0\u00c1\u00c2\u00c8\u00ca\u00cb\u00cd\u00d3\u00d4\u00d5\u00da\u00df\u00e3\u00f5\u011f\u0130\u0131\u0152\u0153\u015e\u015f\u0174\u0175\u017e\u0207\u0151\u0171\u0150\u0170\u0000\u0000\u0000 !\"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\u0000\u00c7\u00fc\u00e9\u00e2\u00e4\u00e0\u00e5\u00e7\u00ea\u00eb\u00e8\u00ef\u00ee\u00ec\u00c4\u00c5\u00c9\u00e6\u00c6\u00f4\u00f6\u00f2\u00fb\u00f9\u00ff\u00d6\u00dc\u00f8\u00a3\u00d8\u00d7\u0192\u00e1\u00ed\u00f3\u00fa\u00f1\u00d1\u00aa\u00ba\u00bf\u00ae\u00ac\u00bd\u00bc\u00a1\u00ab\u00bb\u2591\u2592\u2593\u2502\u2524\u2561\u2562\u2556\u2555\u2563\u2551\u2557\u255d\u255c\u255b\u2510\u2514\u2534\u252c\u251c\u2500\u253c\u255e\u255f\u255a\u2554\u2569\u2566\u2560\u2550\u256c\u2567\u2568\u2564\u2565\u2559\u2558\u2552\u2553\u256b\u256a\u2518\u250c\u2588\u2584\u258c\u2590\u2580\u03b1\u03b2\u0393\u03c0\u03a3\u03c3\u03bc\u03c4\u03a6\u0398\u03a9\u03b4\u221e\u2205\u2208\u2229\u2261\u00b1\u2265\u2264\u2320\u2321\u00f7\u2248\u00b0\u2219\u00b7\u221a\u207f\u00b2\u25a0\u0000";
     static COLOR_PREFIX = '\u00a7';
 
-    // How far the top of an italic glyph leans right of its bottom, per pixel of height.
-    static ITALIC_SHEAR = 0.375;
+    // How far an italic glyph leans per pixel of height. Half a pixel per row,
+    // taken downwards with floor(), shifts exactly one whole pixel every two
+    // rows: an even staircase instead of an uneven one.
+    static ITALIC_SHEAR = 0.5;
 
     static COLOR_HEX_MAP = {
         '0': '000000',
@@ -51,6 +53,9 @@ export default class FontRenderer {
     constructor(minecraft) {
         this.charWidths = [];
         this.italicLeftInk = [];
+        // Italic glyphs baked per screen scale, and their tinted versions.
+        this.isolatedGlyphs = new Map();
+        this.tintedGlyphs = new Map();
 
         this.filterCache = {};
         this.lastAppliedFilter = null;
@@ -181,6 +186,99 @@ export default class FontRenderer {
         return -1;
     }
 
+    /**
+     * Where the context's current transform puts GUI pixels on the canvas
+     * backing store, or null when it is not a plain 2d context.
+     */
+    getScreenMatrix(stack) {
+        try {
+            const transform = stack.getTransform();
+            const scaleX = Math.abs(transform.a);
+            const scaleY = Math.abs(transform.d);
+
+            if (!(scaleX > 0) || !(scaleY > 0)) {
+                return null;
+            }
+
+            return {
+                offsetX: transform.e,
+                offsetY: transform.f,
+                scaleX: scaleX,
+                scaleY: scaleY,
+                scale: Math.max(scaleX, scaleY)
+            };
+        } catch (e) {
+            return null;
+        }
+    }
+
+    /**
+     * The italic form of one glyph, baked at the screen's own resolution.
+     *
+     * Each row is copied one whole *screen* pixel further left than the row
+     * above it, every two rows, so the lean is a staircase of screen pixels
+     * rather than of 1px font cells - at any GUI scale it reads as an even
+     * slant instead of a handful of chunky steps. Rows come straight out of the
+     * atlas with smoothing off, so the glyph keeps the exact pixels it has
+     * upright: no blur, no resampling, and nothing outside its own cell is ever
+     * sampled.
+     */
+    bakeItalicGlyph(index, resolution) {
+        const size = FontRenderer.FIELD_SIZE;
+        const rows = Math.max(1, Math.round(size * resolution));
+        const margin = Math.ceil(FontRenderer.ITALIC_SHEAR * rows) + 1;
+
+        const canvas = document.createElement("canvas");
+        canvas.width = rows + margin * 2;
+        canvas.height = rows + margin * 2;
+
+        const context = canvas.getContext("2d");
+        context.imageSmoothingEnabled = false;
+
+        const cellX = (index % FontRenderer.BITMAP_SIZE) * size;
+        const cellY = Math.floor(index / FontRenderer.BITMAP_SIZE) * size;
+
+        for (let row = 0; row < rows; row++) {
+            const sourceRow = Math.min(size - 1, Math.floor(row / resolution));
+            // Rounded per screen row, so the lean advances one screen pixel at
+            // a time instead of one GUI-scale-sized block at a time.
+            const shift = Math.round(FontRenderer.ITALIC_SHEAR * row);
+
+            context.drawImage(
+                this.texture,
+                cellX, cellY + sourceRow, size, 1,
+                margin - shift, margin + row, rows, 1
+            );
+        }
+
+        return {canvas: canvas, margin: margin, resolution: resolution};
+    }
+
+    getItalicGlyph(index, screenScale) {
+        const resolution = Math.max(1, Math.round(screenScale * 8) / 8);
+        const key = index + "@" + resolution;
+
+        let glyph = this.isolatedGlyphs.get(key);
+        if (!glyph) {
+            glyph = this.bakeItalicGlyph(index, resolution);
+            this.isolatedGlyphs.set(key, glyph);
+        }
+
+        return glyph;
+    }
+
+    getTintedGlyph(index, glyph) {
+        const key = index + "@" + glyph.resolution + "#" + this.r + "," + this.g + "," + this.b;
+
+        let tinted = this.tintedGlyphs.get(key);
+        if (!tinted) {
+            tinted = Gui.colorize(glyph.canvas, this.r, this.g, this.b);
+            this.tintedGlyphs.set(key, tinted);
+        }
+
+        return tinted;
+    }
+
     drawStringRaw(stack, string, x, y, color = -1, isShadow = false, size = "8", noColor = true) {
         if (typeof string !== "string") string = String(string ?? "");
         stack.save();
@@ -288,22 +386,35 @@ export default class FontRenderer {
 
                 const drawGlyphAt = (offsetX) => {
                     if (italic) {
-                        // Render the full character at full resolution, then apply shear transform
-                        stack.save();
-                        // Shear transformation: transform(a, b, c, d, e, f)
-                        // x' = a*x + c*y + e, y' = b*x + d*y + f
-                        // Top rows lean right of the bottom rows, and the translation
-                        // is chosen so the glyph's leftmost lit pixel sits on localX.
-                        stack.transform(1, 0, -FontRenderer.ITALIC_SHEAR, 1, localX + offsetX + italicShiftX, y);
-                        Gui.drawSpriteRGB(
-                            stack, this.texture,
-                            textureOffsetX, textureOffsetY,
-                            FontRenderer.FIELD_SIZE, FontRenderer.FIELD_SIZE,
-                            0, 0,
-                            FontRenderer.FIELD_SIZE, FontRenderer.FIELD_SIZE,
-                            this.r, this.g, this.b, 1.0
-                        );
-                        stack.restore();
+                        // Baked at the screen's own scale, then drawn straight
+                        // onto the device pixel grid: the lean steps by one
+                        // screen pixel whatever the GUI scale, and the blit is
+                        // 1:1 so nothing is resampled.
+                        const matrix = this.getScreenMatrix(stack);
+                        const glyph = this.getItalicGlyph(index, matrix ? matrix.scale : 1);
+                        const offset = Math.round(italicShiftX || 0);
+
+                        if (matrix) {
+                            stack.save();
+                            stack.setTransform(1, 0, 0, 1, 0, 0);
+                            stack.imageSmoothingEnabled = false;
+                            stack.drawImage(
+                                this.getTintedGlyph(index, glyph),
+                                Math.round(matrix.offsetX + (localX + offsetX + offset) * matrix.scaleX) - glyph.margin,
+                                Math.round(matrix.offsetY + y * matrix.scaleY) - glyph.margin
+                            );
+                            stack.restore();
+                        } else {
+                            Gui.drawSpriteRGB(
+                                stack, glyph.canvas,
+                                0, 0,
+                                glyph.canvas.width, glyph.canvas.height,
+                                localX + offsetX + offset - glyph.margin,
+                                y - glyph.margin,
+                                glyph.canvas.width, glyph.canvas.height,
+                                this.r, this.g, this.b, 1.0
+                            );
+                        }
                     } else {
                         Gui.drawSpriteRGB(
                             stack, this.texture,

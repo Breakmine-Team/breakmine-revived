@@ -514,6 +514,9 @@ export default class NetworkManager {
 
     close() {
         this.connected = false;
+        // The client asked for this (quitting to the title screen), so the
+        // disconnect must not put a kick/ban screen on top of the main menu.
+        this.closedIntentionally = true;
 
         // Tear down the voice chat session when leaving the server.
         if (this.minecraft?.voiceChat) {
