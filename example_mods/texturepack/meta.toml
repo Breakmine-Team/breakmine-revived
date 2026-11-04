@@ -1,0 +1,6 @@
+[pack]
+id = "example_pack"
+name = "Example Pack"
+description = "This is an example pack"
+version = "1.0"
+author = "SpinningCubes"
