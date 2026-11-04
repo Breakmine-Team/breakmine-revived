@@ -1,0 +1,3610 @@
+{
+  "measuredAt": "2026-10-05",
+  "method": "sequential disposable headless Chromium 151 / SwiftShader; viewport 960x640; seed 6888349110149677383; 20s stationary, other routes 6s",
+  "variants": {
+    "baseline": {
+      "environment": {
+        "browser": "151.0.7922.34",
+        "renderer": "headless Chromium / SwiftShader",
+        "seed": "6888349110149677383",
+        "scenarioMs": 6000,
+        "variant": "baseline"
+      },
+      "firstNativePublishedMs": 20825.199999999255,
+      "nineNativePublishedMs": 39461.800000000745,
+      "peakBrowserProcessPssKiB": 1576778,
+      "scenarios": [
+        {
+          "name": "stationary",
+          "start": 42962.599999997765,
+          "initialChunks": 1,
+          "end": 62987.89999999851,
+          "chunks": 9,
+          "error": null,
+          "streaming": {
+            "active": 9,
+            "desired": 25,
+            "decorationDesired": 9,
+            "publicationQueue": 0,
+            "generationInFlight": 0,
+            "terrainInFlight": 0,
+            "meshQueue": 0,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 134217728,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 67108864,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 177000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1484561,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51424
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 1149195
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 193101
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 71736
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19105
+              }
+            ]
+          },
+          "frames": {
+            "n": 223,
+            "median": 83.30000000000291,
+            "p95": 100,
+            "p99": 299.8999999999942,
+            "max": 1116.699999999997,
+            "over16": 223,
+            "over33": 223,
+            "over50": 223
+          },
+          "ready": 8
+        },
+        {
+          "name": "walking",
+          "start": 63217.699999999255,
+          "initialChunks": 9,
+          "end": 69223.30000000075,
+          "chunks": 6,
+          "error": null,
+          "streaming": {
+            "active": 6,
+            "desired": 25,
+            "decorationDesired": 9,
+            "publicationQueue": 0,
+            "generationInFlight": 3,
+            "terrainInFlight": 0,
+            "meshQueue": 0,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 134217728,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 67108864,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 177000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1503475,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51363
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 1169009
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 193223
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 70832
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19048
+              }
+            ]
+          },
+          "frames": {
+            "n": 83,
+            "median": 66.69999999999709,
+            "p95": 100,
+            "p99": 116.69999999999709,
+            "max": 150,
+            "over16": 82,
+            "over33": 82,
+            "over50": 69
+          },
+          "ready": 0
+        },
+        {
+          "name": "sprinting",
+          "start": 69354.5,
+          "initialChunks": 6,
+          "end": 75372.09999999776,
+          "chunks": 3,
+          "error": null,
+          "streaming": {
+            "active": 3,
+            "desired": 25,
+            "decorationDesired": 9,
+            "publicationQueue": 0,
+            "generationInFlight": 0,
+            "terrainInFlight": 1,
+            "meshQueue": 0,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 134217728,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 67108864,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 177000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1528844,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51370
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 1194313
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 193283
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 70831
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19047
+              }
+            ]
+          },
+          "frames": {
+            "n": 125,
+            "median": 49.90000000000873,
+            "p95": 83.30000000000291,
+            "p99": 100,
+            "max": 233.3000000000029,
+            "over16": 123,
+            "over33": 116,
+            "over50": 28
+          },
+          "ready": 3
+        },
+        {
+          "name": "turn-return",
+          "start": 75487.80000000075,
+          "initialChunks": 3,
+          "end": 81506.89999999851,
+          "chunks": 3,
+          "error": null,
+          "streaming": {
+            "active": 3,
+            "desired": 25,
+            "decorationDesired": 9,
+            "publicationQueue": 0,
+            "generationInFlight": 0,
+            "terrainInFlight": 1,
+            "meshQueue": 0,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 134217728,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 67108864,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 177000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1495218,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51362
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 1159439
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 194540
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 70831
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19046
+              }
+            ]
+          },
+          "frames": {
+            "n": 63,
+            "median": 66.69999999999709,
+            "p95": 166.6999999999971,
+            "p99": 250,
+            "max": 766.5,
+            "over16": 63,
+            "over33": 63,
+            "over50": 48
+          },
+          "ready": 0
+        },
+        {
+          "name": "A-B-A",
+          "start": 81716.09999999776,
+          "initialChunks": 3,
+          "end": 87806.80000000075,
+          "chunks": 5,
+          "error": null,
+          "streaming": {
+            "active": 5,
+            "desired": 25,
+            "decorationDesired": 9,
+            "publicationQueue": 0,
+            "generationInFlight": 0,
+            "terrainInFlight": 1,
+            "meshQueue": 0,
+            "lightQueue": 2,
+            "warmRender": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 134217728,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 67108864,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 177000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1444288,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51356
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 1105932
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 197136
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 70823
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19041
+              }
+            ]
+          },
+          "frames": {
+            "n": 74,
+            "median": 66.59999999999127,
+            "p95": 166.6999999999971,
+            "p99": 250,
+            "max": 666.6999999999971,
+            "over16": 73,
+            "over33": 67,
+            "over50": 42
+          },
+          "ready": 2
+        },
+        {
+          "name": "flight",
+          "start": 88167.30000000075,
+          "initialChunks": 5,
+          "end": 94202.39999999851,
+          "chunks": 0,
+          "error": null,
+          "streaming": {
+            "active": 0,
+            "desired": 25,
+            "decorationDesired": 9,
+            "publicationQueue": 0,
+            "generationInFlight": 0,
+            "terrainInFlight": 1,
+            "meshQueue": 0,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 134217728,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 67108864,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 177000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1443976,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51360
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 1105624
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 197119
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 70829
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19044
+              }
+            ]
+          },
+          "frames": {
+            "n": 131,
+            "median": 33.40000000000873,
+            "p95": 83.40000000000873,
+            "p99": 100,
+            "max": 116.59999999999127,
+            "over16": 130,
+            "over33": 120,
+            "over50": 26
+          },
+          "ready": 0
+        },
+        {
+          "name": "long-exploration",
+          "start": 94322,
+          "initialChunks": 0,
+          "end": 100330.19999999925,
+          "chunks": 0,
+          "error": null,
+          "streaming": {
+            "active": 0,
+            "desired": 25,
+            "decorationDesired": 9,
+            "publicationQueue": 0,
+            "generationInFlight": 0,
+            "terrainInFlight": 1,
+            "meshQueue": 0,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 134217728,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 67108864,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 177000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1327264,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51360
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 989596
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 196435
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 70829
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19044
+              }
+            ]
+          },
+          "frames": {
+            "n": 125,
+            "median": 33.40000000000873,
+            "p95": 100,
+            "p99": 133.1999999999971,
+            "max": 133.39999999999418,
+            "over16": 125,
+            "over33": 119,
+            "over50": 27
+          },
+          "ready": 0
+        }
+      ],
+      "stages": {
+        "getTerrainChunksAtAsync": {
+          "n": 27,
+          "median": 1818.1000000014901,
+          "p95": 2134.5,
+          "p99": 2286.5,
+          "max": 2325.300000000745,
+          "over16": 27,
+          "over33": 27,
+          "over50": 27
+        },
+        "ensureDecorationTerrain": {
+          "n": 7,
+          "median": 3549.7999999970198,
+          "p95": 11349,
+          "p99": 11349,
+          "max": 11874.89999999851,
+          "over16": 6,
+          "over33": 6,
+          "over50": 6
+        },
+        "getChunksAtAsync": {
+          "n": 6,
+          "median": 2775.400000002235,
+          "p95": 6399.300000000745,
+          "p99": 6399.300000000745,
+          "max": 6686.300000000745,
+          "over16": 6,
+          "over33": 6,
+          "over50": 6
+        },
+        "loadVanillaChunk": {
+          "n": 14,
+          "median": 26.899999998509884,
+          "p95": 40.399999998509884,
+          "p99": 40.399999998509884,
+          "max": 45.5,
+          "over16": 14,
+          "over33": 2,
+          "over50": 0
+        },
+        "updateLights": {
+          "n": 840,
+          "median": 0,
+          "p95": 0.09999999776482582,
+          "p99": 0.10000000149011612,
+          "max": 134.89999999850988,
+          "over16": 8,
+          "over33": 8,
+          "over50": 7
+        },
+        "render": {
+          "n": 840,
+          "median": 12.700000002980232,
+          "p95": 23.800000000745058,
+          "p99": 37.5,
+          "max": 70.60000000149012,
+          "over16": 358,
+          "over33": 14,
+          "over50": 3
+        }
+      },
+      "metrics": {
+        "counts": {
+          "terrainGenerated": 108,
+          "dependencyCacheHits": 150,
+          "sourceExecutions": 67,
+          "decorationResultHits": 1,
+          "completedCacheMisses": 15
+        },
+        "timings": {
+          "workerRoundTripMs": {
+            "count": 33,
+            "total": 68787.10000001267,
+            "median": 1852,
+            "p95": 2892.300000000745,
+            "p99": 6393.5,
+            "max": 6684.39999999851,
+            "over16": 33,
+            "over33": 33,
+            "over50": 33,
+            "retainedSamples": 33
+          },
+          "workerGenerationMs": {
+            "count": 33,
+            "total": 65883.20000001416,
+            "median": 1787,
+            "p95": 2853,
+            "p99": 6307.400000002235,
+            "max": 6677.599999997765,
+            "over16": 32,
+            "over33": 32,
+            "over50": 32,
+            "retainedSamples": 33
+          },
+          "workerQueueAndMessagingMs": {
+            "count": 33,
+            "total": 2904.6999999918044,
+            "median": 36.600000001490116,
+            "p95": 94.69999999925494,
+            "p99": 111.79999999701977,
+            "max": 1630.300000000745,
+            "over16": 25,
+            "over33": 18,
+            "over50": 10,
+            "retainedSamples": 33
+          },
+          "terrainGenerationMs": {
+            "count": 33,
+            "total": 48636.000000003725,
+            "median": 1741,
+            "p95": 2090.800000000745,
+            "p99": 2258.7000000067055,
+            "max": 3178.2999999932945,
+            "over16": 29,
+            "over33": 29,
+            "over50": 29,
+            "retainedSamples": 33
+          },
+          "sourceFeatureMs": {
+            "count": 33,
+            "total": 16880.500000003725,
+            "median": 0,
+            "p95": 2783.099999997765,
+            "p99": 3483.4000000059605,
+            "max": 6273.20000000298,
+            "over16": 5,
+            "over33": 5,
+            "over50": 5,
+            "retainedSamples": 33
+          }
+        }
+      },
+      "hashes": {
+        "0,0": {
+          "blocks": "ed63e07f76ee244b27249a55ceff7c0e3d18e82f8d1f3ecd51828a2a48feda1f",
+          "biomes": "3dd3b6d3b93976a5f8bce94254208fe03dec7e28cc45154891c885f31579a055",
+          "heightmap": "d2dc041c67023275068ea738f6bd1bb808cf26901560fef7ee48f5f4a4ea6085",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "-1,0": {
+          "blocks": "2a83a0b067904501b89da3d25b1454c6f13d0b21cb39296e5779b88faa3a8e7b",
+          "biomes": "4bbdf4d4b2593ecf6f571fb3642d73c9ae60db6fd24660c2fe79fc140d220fef",
+          "heightmap": "df2df1e56869a8ef81322a40641af5c8bc3819afabdda31d49f78e7b14f64857",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "0,-1": {
+          "blocks": "9aa0f1970bf5b950f28cc3c06db406cf3dddc4b2d6d2ccf1499a07fe9bcd37eb",
+          "biomes": "252790d3ddc49868849edf3c4c29a397eef36eb966e31d66484a27c2533e2cab",
+          "heightmap": "65dec33710cd0137cbea61939afef83ea6da8122094e27b3b3339dfcc7c67ca1",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "0,1": {
+          "blocks": "9b65588cda3260654099837bc273318647f28cef7bf000eeaff66f00605c8717",
+          "biomes": "ab1f74cb36a80094753c607214c057e3000d5150dd2423b65fcd7a761febb605",
+          "heightmap": "267b36c159aa90c8fe85b27aa1538fd49b0d6eee5e6b0868cf8cad3c094dc1ee",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "1,0": {
+          "blocks": "92bab1cb05591126d9310fe71c6f18eec6c78782c20bd4ef420e11bb1cd53edb",
+          "biomes": "11357a09d3b8b48d959570f1ad69c1d39164a57fb61aa7eb869bad10b5de0b97",
+          "heightmap": "c6a78ba4cd31a9627a3c0544dd5e3280e64e1c6770b1fb49de0ae8b003989eb2",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "-1,-1": {
+          "blocks": "c48c96c11272414f49bdac46b553d3ecd9aced9407786ed8e8037aabd22e477e",
+          "biomes": "e295e361066a1705ff4b648e4a6aab4e5da22a17cb473f1b375ef3eb03c75546",
+          "heightmap": "62f53f038d85154b9e097ed094846dfc9a14a5f3561cf11177eb04396ad40189",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "-1,1": {
+          "blocks": "9c2a44f8bbf0c93369c06b06eee392daec0a3ee00c58c0730c0dfe6084c84b31",
+          "biomes": "f791124dc153947bf5533844cb35b2453b7cf2a8743e8d8cecfe180b7f0b2b80",
+          "heightmap": "7960ed7953fb6bd1db805dc37f5e7361fc6b3a394220ffc800241652b2bca4ff",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "1,-1": {
+          "blocks": "1a0bc1c618566895dbbe0dd04b9f3d0af5e14d4aadf7c3a67fcf5c3fc9a6f1d9",
+          "biomes": "f08c798ef7ba77c7c67a1cc4005a70d8693ab31c263021a69c6359a386fe3654",
+          "heightmap": "fd86c9db4ce38f4770b571c8f04730aabd842284c6e34bfd516e257b69bd617f",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "1,1": {
+          "blocks": "f09e150775709d2aab2710241ec0cb0179a954a98f8b6e886e3ebb7f94d9f365",
+          "biomes": "0fe0296d1bad53c9338275226318fc959442910e4bf2b0062ab5e27587af5102",
+          "heightmap": "26b80319471e6146160fc7cd98f6e96cc6e25ef3e2d54ac0855665b06c98ac75",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "2,0": {
+          "blocks": "4332fcf53e868266b8f419cd241a7dd2cba2c029242e954d2860e73d6f3eff0e",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "283895ceb883d7fc04b9f1eac7ad094b81cc67858e72bdb6ff2806bf2887298f",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "2,-1": {
+          "blocks": "536e89d0eb14c63740aa54019e642ba85a501ed0612404fb41b75caeaa8f550a",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "430ab089c431a15505e8f23928504862feceb0b8c5a9e39a4edc30e998e13e2a",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "2,1": {
+          "blocks": "ed08f01ce1cf8957542dbdbaa72147ea5caa9ca5bfb4871910cbfa0140d0c984",
+          "biomes": "162ab0734552be1e8dbe009380cbdbf93d64f7fffe69af0c930ba7ebc359dde1",
+          "heightmap": "8ad07403691c95d42dcad1dd5b2796af36aea28b5d11fc585e697f7c13483619",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        }
+      },
+      "errors": []
+    },
+    "budget": {
+      "environment": {
+        "browser": "151.0.7922.34",
+        "renderer": "headless Chromium / SwiftShader",
+        "seed": "6888349110149677383",
+        "scenarioMs": 6000,
+        "variant": "budget"
+      },
+      "firstNativePublishedMs": 18506.900000002235,
+      "nineNativePublishedMs": 42363.800000000745,
+      "peakBrowserProcessPssKiB": 1426185,
+      "scenarios": [
+        {
+          "name": "stationary",
+          "start": 36958.900000002235,
+          "initialChunks": 1,
+          "end": 57012,
+          "chunks": 5,
+          "error": null,
+          "streaming": {
+            "active": 5,
+            "desired": 25,
+            "decorationDesired": 9,
+            "publicationQueue": 4,
+            "generationInFlight": 0,
+            "terrainInFlight": 0,
+            "meshQueue": 9,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 134217728,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 67108864,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 188000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1306539,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 52607
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 969726
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 193759
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 71166
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19281
+              }
+            ]
+          },
+          "frames": {
+            "n": 302,
+            "median": 66.69999999999709,
+            "p95": 83.40000000000146,
+            "p99": 99.90000000000146,
+            "max": 183.40000000000146,
+            "over16": 302,
+            "over33": 296,
+            "over50": 257
+          },
+          "ready": 4
+        },
+        {
+          "name": "walking",
+          "start": 57182.60000000149,
+          "initialChunks": 5,
+          "end": 63220.300000000745,
+          "chunks": 6,
+          "error": null,
+          "streaming": {
+            "active": 6,
+            "desired": 25,
+            "decorationDesired": 9,
+            "publicationQueue": 0,
+            "generationInFlight": 1,
+            "terrainInFlight": 0,
+            "meshQueue": 11,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 134217728,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 67108864,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 188000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1288382,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51747
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 953145
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 194022
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 70187
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19281
+              }
+            ]
+          },
+          "frames": {
+            "n": 122,
+            "median": 50,
+            "p95": 66.70000000000437,
+            "p99": 83.30000000000291,
+            "max": 116.69999999999709,
+            "over16": 122,
+            "over33": 111,
+            "over50": 40
+          },
+          "ready": 4
+        },
+        {
+          "name": "sprinting",
+          "start": 63323.10000000149,
+          "initialChunks": 6,
+          "end": 69355,
+          "chunks": 1,
+          "error": null,
+          "streaming": {
+            "active": 1,
+            "desired": 25,
+            "decorationDesired": 9,
+            "publicationQueue": 0,
+            "generationInFlight": 1,
+            "terrainInFlight": 0,
+            "meshQueue": 0,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 134217728,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 67108864,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 188000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1320555,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51706
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 986499
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 194023
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 69099
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19228
+              }
+            ]
+          },
+          "frames": {
+            "n": 143,
+            "median": 49.89999999999418,
+            "p95": 50.10000000000582,
+            "p99": 66.59999999999854,
+            "max": 66.60000000000582,
+            "over16": 143,
+            "over33": 123,
+            "over50": 18
+          },
+          "ready": 1
+        },
+        {
+          "name": "turn-return",
+          "start": 69451.60000000149,
+          "initialChunks": 1,
+          "end": 75477.20000000298,
+          "chunks": 2,
+          "error": null,
+          "streaming": {
+            "active": 2,
+            "desired": 25,
+            "decorationDesired": 9,
+            "publicationQueue": 0,
+            "generationInFlight": 7,
+            "terrainInFlight": 0,
+            "meshQueue": 1,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 134217728,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 67108864,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 188000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1394700,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51713
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 1058056
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 196622
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 69081
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19228
+              }
+            ]
+          },
+          "frames": {
+            "n": 86,
+            "median": 66.69999999999709,
+            "p95": 116.59999999999127,
+            "p99": 116.69999999999709,
+            "max": 149.89999999999418,
+            "over16": 86,
+            "over33": 86,
+            "over50": 63
+          },
+          "ready": 1
+        },
+        {
+          "name": "A-B-A",
+          "start": 75605.60000000149,
+          "initialChunks": 2,
+          "end": 81631.20000000298,
+          "chunks": 0,
+          "error": null,
+          "streaming": {
+            "active": 0,
+            "desired": 25,
+            "decorationDesired": 9,
+            "publicationQueue": 7,
+            "generationInFlight": 0,
+            "terrainInFlight": 0,
+            "meshQueue": 0,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 134217728,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 67108864,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 188000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1426185,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51707
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 1086418
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 199748
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 69082
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19230
+              }
+            ]
+          },
+          "frames": {
+            "n": 140,
+            "median": 33.39999999999418,
+            "p95": 83.30000000000291,
+            "p99": 83.39999999999418,
+            "max": 100,
+            "over16": 139,
+            "over33": 123,
+            "over50": 27
+          },
+          "ready": 0
+        },
+        {
+          "name": "flight",
+          "start": 81727.5,
+          "initialChunks": 0,
+          "end": 87765.20000000298,
+          "chunks": 0,
+          "error": null,
+          "streaming": {
+            "active": 0,
+            "desired": 25,
+            "decorationDesired": 9,
+            "publicationQueue": 0,
+            "generationInFlight": 0,
+            "terrainInFlight": 1,
+            "meshQueue": 0,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 134217728,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 67108864,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 188000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1390391,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51714
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 1050572
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 199794
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 69082
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19229
+              }
+            ]
+          },
+          "frames": {
+            "n": 161,
+            "median": 33.39999999999418,
+            "p95": 50,
+            "p99": 83.30000000000291,
+            "max": 100,
+            "over16": 155,
+            "over33": 135,
+            "over50": 8
+          },
+          "ready": 4
+        },
+        {
+          "name": "long-exploration",
+          "start": 87848.20000000298,
+          "initialChunks": 0,
+          "end": 93864.60000000149,
+          "chunks": 0,
+          "error": null,
+          "streaming": {
+            "active": 0,
+            "desired": 25,
+            "decorationDesired": 9,
+            "publicationQueue": 0,
+            "generationInFlight": 0,
+            "terrainInFlight": 1,
+            "meshQueue": 0,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 134217728,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 67108864,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 188000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1228675,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51706
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 888848
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 199810
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 69082
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19229
+              }
+            ]
+          },
+          "frames": {
+            "n": 180,
+            "median": 33.30000000000291,
+            "p95": 50,
+            "p99": 50,
+            "max": 66.59999999999127,
+            "over16": 169,
+            "over33": 136,
+            "over50": 2
+          },
+          "ready": 0
+        }
+      ],
+      "stages": {
+        "getTerrainChunksAtAsync": {
+          "n": 24,
+          "median": 1573.0999999977648,
+          "p95": 1752.800000000745,
+          "p99": 1763.9000000022352,
+          "max": 2131.400000002235,
+          "over16": 24,
+          "over33": 24,
+          "over50": 24
+        },
+        "ensureDecorationTerrain": {
+          "n": 7,
+          "median": 4524.199999999255,
+          "p95": 9898.20000000298,
+          "p99": 9898.20000000298,
+          "max": 10059.099999997765,
+          "over16": 6,
+          "over33": 6,
+          "over50": 6
+        },
+        "getChunksAtAsync": {
+          "n": 6,
+          "median": 2345.300000000745,
+          "p95": 5372.800000000745,
+          "p99": 5372.800000000745,
+          "max": 6817.400000002235,
+          "over16": 6,
+          "over33": 6,
+          "over50": 6
+        },
+        "render": {
+          "n": 1150,
+          "median": 0.8999999985098839,
+          "p95": 19.600000001490116,
+          "p99": 23.899999998509884,
+          "max": 60.900000002235174,
+          "over16": 234,
+          "over33": 8,
+          "over50": 1
+        }
+      },
+      "metrics": {
+        "counts": {
+          "terrainGenerated": 90,
+          "dependencyCacheHits": 192,
+          "sourceExecutions": 86,
+          "decorationResultHits": 0,
+          "completedCacheMisses": 19,
+          "publishedChunks": 15,
+          "lightRegions": 8,
+          "meshSections": 23
+        },
+        "timings": {
+          "frameWorkMs": {
+            "count": 1520,
+            "total": 59912.39999993518,
+            "median": 31.800000000745058,
+            "p95": 67.30000000074506,
+            "p99": 88.5,
+            "max": 171.19999999925494,
+            "over16": 1520,
+            "over33": 625,
+            "over50": 393,
+            "retainedSamples": 1520
+          },
+          "streamingFrameWorkMs": {
+            "count": 1520,
+            "total": 2329.3999999687076,
+            "median": 0,
+            "p95": 5.100000001490116,
+            "p99": 6.899999998509884,
+            "max": 19.100000001490116,
+            "over16": 1,
+            "over33": 0,
+            "over50": 0,
+            "retainedSamples": 1520
+          },
+          "frameIntervalMs": {
+            "count": 1519,
+            "total": 71077,
+            "median": 39.100000001490116,
+            "p95": 76.39999999850988,
+            "p99": 99.29999999701977,
+            "max": 183.40000000223517,
+            "over16": 1519,
+            "over33": 1305,
+            "over50": 466,
+            "retainedSamples": 1519
+          },
+          "workerRoundTripMs": {
+            "count": 30,
+            "total": 57177.10000000149,
+            "median": 1622.5,
+            "p95": 2885.699999999255,
+            "p99": 5370.699999999255,
+            "max": 6813.900000002235,
+            "over16": 30,
+            "over33": 30,
+            "over50": 30,
+            "retainedSamples": 30
+          },
+          "workerGenerationMs": {
+            "count": 30,
+            "total": 54867.899999994785,
+            "median": 1570.2999999970198,
+            "p95": 2873.599999997765,
+            "p99": 5310.800000000745,
+            "max": 6773.699999999255,
+            "over16": 30,
+            "over33": 30,
+            "over50": 30,
+            "retainedSamples": 30
+          },
+          "workerQueueAndMessagingMs": {
+            "count": 30,
+            "total": 2309.8000000081956,
+            "median": 25.400000002235174,
+            "p95": 59.899999998509884,
+            "p99": 92.60000000149012,
+            "max": 1465.699999999255,
+            "over16": 22,
+            "over33": 11,
+            "over50": 4,
+            "retainedSamples": 30
+          },
+          "terrainGenerationMs": {
+            "count": 30,
+            "total": 35869.099999997765,
+            "median": 1518,
+            "p95": 1666.2999999970198,
+            "p99": 1698.5,
+            "max": 1736.7000000029802,
+            "over16": 26,
+            "over33": 26,
+            "over50": 26,
+            "retainedSamples": 30
+          },
+          "sourceFeatureMs": {
+            "count": 30,
+            "total": 18717.10000000149,
+            "median": 0,
+            "p95": 2281,
+            "p99": 5097.599999997765,
+            "max": 5283.70000000298,
+            "over16": 6,
+            "over33": 6,
+            "over50": 6,
+            "retainedSamples": 30
+          },
+          "publishSliceMs": {
+            "count": 4842,
+            "total": 417.0999999679625,
+            "median": 0,
+            "p95": 0.19999999925494194,
+            "p99": 0.6999999992549419,
+            "max": 16.5,
+            "over16": 0,
+            "over33": 0,
+            "over50": 0,
+            "retainedSamples": 2048
+          },
+          "readyToPublishedMs": {
+            "count": 15,
+            "total": 45228.600000005215,
+            "median": 1893.300000000745,
+            "p95": 7537.60000000149,
+            "p99": 7537.60000000149,
+            "max": 8377.800000000745,
+            "over16": 15,
+            "over33": 15,
+            "over50": 15,
+            "retainedSamples": 15
+          },
+          "lightSliceMs": {
+            "count": 2746,
+            "total": 265.2000000104308,
+            "median": 0.09999999776482582,
+            "p95": 0.30000000074505806,
+            "p99": 0.3999999985098839,
+            "max": 4.300000000745058,
+            "over16": 0,
+            "over33": 0,
+            "over50": 0,
+            "retainedSamples": 2048
+          },
+          "meshSliceMs": {
+            "count": 5002,
+            "total": 1592,
+            "median": 0.09999999776482582,
+            "p95": 1.699999999254942,
+            "p99": 3.100000001490116,
+            "max": 16.900000002235174,
+            "over16": 1,
+            "over33": 0,
+            "over50": 0,
+            "retainedSamples": 2048
+          },
+          "meshCpuMs": {
+            "count": 23,
+            "total": 1488.6000000089407,
+            "median": 45.900000005960464,
+            "p95": 119.90000000968575,
+            "p99": 124.59999999403954,
+            "max": 133.90000000223517,
+            "over16": 23,
+            "over33": 17,
+            "over50": 11,
+            "retainedSamples": 23
+          },
+          "meshElapsedMs": {
+            "count": 23,
+            "total": 26873.40000000596,
+            "median": 1065.800000000745,
+            "p95": 2023.6000000014901,
+            "p99": 2623.5,
+            "max": 3576.300000000745,
+            "over16": 23,
+            "over33": 23,
+            "over50": 23,
+            "retainedSamples": 23
+          }
+        }
+      },
+      "hashes": {
+        "0,0": {
+          "blocks": "ed63e07f76ee244b27249a55ceff7c0e3d18e82f8d1f3ecd51828a2a48feda1f",
+          "biomes": "3dd3b6d3b93976a5f8bce94254208fe03dec7e28cc45154891c885f31579a055",
+          "heightmap": "d2dc041c67023275068ea738f6bd1bb808cf26901560fef7ee48f5f4a4ea6085",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "-1,0": {
+          "blocks": "2a83a0b067904501b89da3d25b1454c6f13d0b21cb39296e5779b88faa3a8e7b",
+          "biomes": "4bbdf4d4b2593ecf6f571fb3642d73c9ae60db6fd24660c2fe79fc140d220fef",
+          "heightmap": "df2df1e56869a8ef81322a40641af5c8bc3819afabdda31d49f78e7b14f64857",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "0,-1": {
+          "blocks": "9aa0f1970bf5b950f28cc3c06db406cf3dddc4b2d6d2ccf1499a07fe9bcd37eb",
+          "biomes": "252790d3ddc49868849edf3c4c29a397eef36eb966e31d66484a27c2533e2cab",
+          "heightmap": "65dec33710cd0137cbea61939afef83ea6da8122094e27b3b3339dfcc7c67ca1",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "0,1": {
+          "blocks": "9b65588cda3260654099837bc273318647f28cef7bf000eeaff66f00605c8717",
+          "biomes": "ab1f74cb36a80094753c607214c057e3000d5150dd2423b65fcd7a761febb605",
+          "heightmap": "267b36c159aa90c8fe85b27aa1538fd49b0d6eee5e6b0868cf8cad3c094dc1ee",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "1,0": {
+          "blocks": "92bab1cb05591126d9310fe71c6f18eec6c78782c20bd4ef420e11bb1cd53edb",
+          "biomes": "11357a09d3b8b48d959570f1ad69c1d39164a57fb61aa7eb869bad10b5de0b97",
+          "heightmap": "c6a78ba4cd31a9627a3c0544dd5e3280e64e1c6770b1fb49de0ae8b003989eb2",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "-1,-1": {
+          "blocks": "c48c96c11272414f49bdac46b553d3ecd9aced9407786ed8e8037aabd22e477e",
+          "biomes": "e295e361066a1705ff4b648e4a6aab4e5da22a17cb473f1b375ef3eb03c75546",
+          "heightmap": "62f53f038d85154b9e097ed094846dfc9a14a5f3561cf11177eb04396ad40189",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "-1,1": {
+          "blocks": "9c2a44f8bbf0c93369c06b06eee392daec0a3ee00c58c0730c0dfe6084c84b31",
+          "biomes": "f791124dc153947bf5533844cb35b2453b7cf2a8743e8d8cecfe180b7f0b2b80",
+          "heightmap": "7960ed7953fb6bd1db805dc37f5e7361fc6b3a394220ffc800241652b2bca4ff",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "1,-1": {
+          "blocks": "1a0bc1c618566895dbbe0dd04b9f3d0af5e14d4aadf7c3a67fcf5c3fc9a6f1d9",
+          "biomes": "f08c798ef7ba77c7c67a1cc4005a70d8693ab31c263021a69c6359a386fe3654",
+          "heightmap": "fd86c9db4ce38f4770b571c8f04730aabd842284c6e34bfd516e257b69bd617f",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "1,1": {
+          "blocks": "f09e150775709d2aab2710241ec0cb0179a954a98f8b6e886e3ebb7f94d9f365",
+          "biomes": "0fe0296d1bad53c9338275226318fc959442910e4bf2b0062ab5e27587af5102",
+          "heightmap": "26b80319471e6146160fc7cd98f6e96cc6e25ef3e2d54ac0855665b06c98ac75",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "2,0": {
+          "blocks": "4332fcf53e868266b8f419cd241a7dd2cba2c029242e954d2860e73d6f3eff0e",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "283895ceb883d7fc04b9f1eac7ad094b81cc67858e72bdb6ff2806bf2887298f",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "3,0": {
+          "blocks": "547d10acb236b0245313cc1c5bebbffe854dada48c041940ad74420d198ca43b",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "b0e1ba3595a61308957406449b03841807d727741d2e057ed721c9f0795b392b",
+          "fluidUpdates": "fadb52391d636b7ad0c170edec04f1ecb32fb21497a15eb1db08a3212586b18a"
+        },
+        "2,-1": {
+          "blocks": "c384c2489c04dd624cfdf1d5e73ea4bd3681f40dad023807161073377392ffe7",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "a7bcb5f009247675a07f2c9cc9fc0afc73806b5800de0253f76c126773b44dfb",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "2,1": {
+          "blocks": "a813b009908c84e9ca9f262c8f1b4670e530ad0e0daf5417dea2a842cd4212b8",
+          "biomes": "162ab0734552be1e8dbe009380cbdbf93d64f7fffe69af0c930ba7ebc359dde1",
+          "heightmap": "3be8f7b19e93773511acf0bca4a97b5ade364548dd830741c719327b66165792",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "3,-1": {
+          "blocks": "daf36a41590ffe4a3c9040e79c541c6465b6089dc4449854eeb765cdca24a533",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "eccf88fed573e8f165860d507b520cb46ff10d8732467672aba9a42518cfdfcd",
+          "fluidUpdates": "94f827a0c665dcaef5d8c77017a606c37a3209b22ffbf650d5848592c3ae2536"
+        }
+      },
+      "errors": []
+    },
+    "cache": {
+      "environment": {
+        "browser": "151.0.7922.34",
+        "renderer": "headless Chromium / SwiftShader",
+        "seed": "6888349110149677383",
+        "scenarioMs": 6000,
+        "variant": "cache"
+      },
+      "firstNativePublishedMs": 16978.800000000745,
+      "nineNativePublishedMs": 37278.300000000745,
+      "peakBrowserProcessPssKiB": 1626472,
+      "scenarios": [
+        {
+          "name": "stationary",
+          "start": 33778.5,
+          "initialChunks": 1,
+          "end": 53795.800000000745,
+          "chunks": 8,
+          "error": null,
+          "streaming": {
+            "active": 8,
+            "desired": 25,
+            "decorationDesired": 9,
+            "publicationQueue": 1,
+            "generationInFlight": 0,
+            "terrainInFlight": 0,
+            "meshQueue": 13,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 134217728,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 9,
+              "bytes": 4460544,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 49,
+              "bytes": 24285184,
+              "budget": 67108864,
+              "hits": 51,
+              "misses": 49,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 177000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1348275,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 52138
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 1012511
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 190831
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 73272
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19523
+              }
+            ]
+          },
+          "frames": {
+            "n": 347,
+            "median": 50.099999999998545,
+            "p95": 66.70000000000437,
+            "p99": 83.40000000000146,
+            "max": 183.39999999999418,
+            "over16": 347,
+            "over33": 337,
+            "over50": 193
+          },
+          "ready": 7
+        },
+        {
+          "name": "walking",
+          "start": 53932.699999999255,
+          "initialChunks": 9,
+          "end": 59991.199999999255,
+          "chunks": 8,
+          "error": null,
+          "streaming": {
+            "active": 8,
+            "desired": 25,
+            "decorationDesired": 9,
+            "publicationQueue": 1,
+            "generationInFlight": 0,
+            "terrainInFlight": 0,
+            "meshQueue": 10,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 3,
+              "bytes": 9482240,
+              "budget": 134217728,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 12,
+              "bytes": 5947392,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 56,
+              "bytes": 27754496,
+              "budget": 67108864,
+              "hits": 79,
+              "misses": 56,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 177000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1378111,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51428
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 1043165
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 191924
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 72071
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19523
+              }
+            ]
+          },
+          "frames": {
+            "n": 144,
+            "median": 33.400000000001455,
+            "p95": 50.10000000000582,
+            "p99": 66.80000000000291,
+            "max": 83.39999999999418,
+            "over16": 141,
+            "over33": 121,
+            "over50": 13
+          },
+          "ready": 2
+        },
+        {
+          "name": "sprinting",
+          "start": 60101,
+          "initialChunks": 8,
+          "end": 66124.69999999925,
+          "chunks": 4,
+          "error": null,
+          "streaming": {
+            "active": 4,
+            "desired": 25,
+            "decorationDesired": 9,
+            "publicationQueue": 0,
+            "generationInFlight": 1,
+            "terrainInFlight": 0,
+            "meshQueue": 2,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 9,
+              "bytes": 31824856,
+              "budget": 134217728,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 13,
+              "bytes": 6443008,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 66,
+              "bytes": 32710656,
+              "budget": 67108864,
+              "hits": 119,
+              "misses": 66,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 177000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1498668,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51382
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 1162857
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 193099
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 71838
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19492
+              }
+            ]
+          },
+          "frames": {
+            "n": 172,
+            "median": 33.30000000000291,
+            "p95": 50,
+            "p99": 50.10000000000582,
+            "max": 66.59999999999854,
+            "over16": 166,
+            "over33": 124,
+            "over50": 4
+          },
+          "ready": 2
+        },
+        {
+          "name": "turn-return",
+          "start": 66202.69999999925,
+          "initialChunks": 4,
+          "end": 72222.80000000075,
+          "chunks": 11,
+          "error": null,
+          "streaming": {
+            "active": 11,
+            "desired": 25,
+            "decorationDesired": 9,
+            "publicationQueue": 0,
+            "generationInFlight": 2,
+            "terrainInFlight": 0,
+            "meshQueue": 50,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 134217728,
+              "hits": 9,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 14,
+              "bytes": 6938624,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 68,
+              "bytes": 33701888,
+              "budget": 67108864,
+              "hits": 152,
+              "misses": 68,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 177000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1566360,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51378
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 1220319
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 204059
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 71098
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19506
+              }
+            ]
+          },
+          "frames": {
+            "n": 71,
+            "median": 83.30000000000291,
+            "p95": 133.3000000000029,
+            "p99": 133.40000000000873,
+            "max": 166.6999999999971,
+            "over16": 71,
+            "over33": 70,
+            "over50": 67
+          },
+          "ready": 7
+        },
+        {
+          "name": "A-B-A",
+          "start": 72379.89999999851,
+          "initialChunks": 11,
+          "end": 78395.89999999851,
+          "chunks": 12,
+          "error": null,
+          "streaming": {
+            "active": 12,
+            "desired": 25,
+            "decorationDesired": 9,
+            "publicationQueue": 0,
+            "generationInFlight": 5,
+            "terrainInFlight": 0,
+            "meshQueue": 57,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 134217728,
+              "hits": 22,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 16,
+              "bytes": 7929856,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 77,
+              "bytes": 38162432,
+              "budget": 67108864,
+              "hits": 185,
+              "misses": 77,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 177000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1593544,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51378
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 1247191
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 204371
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 71098
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19506
+              }
+            ]
+          },
+          "frames": {
+            "n": 103,
+            "median": 50,
+            "p95": 100,
+            "p99": 116.69999999999709,
+            "max": 116.70000000001164,
+            "over16": 102,
+            "over33": 94,
+            "over50": 49
+          },
+          "ready": 14
+        },
+        {
+          "name": "flight",
+          "start": 78569.59999999776,
+          "initialChunks": 12,
+          "end": 84590.5,
+          "chunks": 0,
+          "error": null,
+          "streaming": {
+            "active": 0,
+            "desired": 25,
+            "decorationDesired": 9,
+            "publicationQueue": 0,
+            "generationInFlight": 0,
+            "terrainInFlight": 1,
+            "meshQueue": 0,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 17,
+              "bytes": 58123872,
+              "budget": 134217728,
+              "hits": 22,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 21,
+              "bytes": 10407936,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 83,
+              "bytes": 41136128,
+              "budget": 67108864,
+              "hits": 197,
+              "misses": 85,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 177000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1568890,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51378
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 1222409
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 204499
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 71098
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19506
+              }
+            ]
+          },
+          "frames": {
+            "n": 158,
+            "median": 33.30000000000291,
+            "p95": 83.19999999999709,
+            "p99": 83.39999999999418,
+            "max": 100,
+            "over16": 137,
+            "over33": 114,
+            "over50": 27
+          },
+          "ready": 5
+        },
+        {
+          "name": "long-exploration",
+          "start": 84663.39999999851,
+          "initialChunks": 0,
+          "end": 90691.80000000075,
+          "chunks": 0,
+          "error": null,
+          "streaming": {
+            "active": 0,
+            "desired": 25,
+            "decorationDesired": 9,
+            "publicationQueue": 0,
+            "generationInFlight": 0,
+            "terrainInFlight": 1,
+            "meshQueue": 0,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 17,
+              "bytes": 58123872,
+              "budget": 134217728,
+              "hits": 22,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 22,
+              "bytes": 10903552,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 93,
+              "bytes": 46092288,
+              "budget": 67108864,
+              "hits": 203,
+              "misses": 96,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 177000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1614138,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51385
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 1267619
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 204531
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 71097
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19506
+              }
+            ]
+          },
+          "frames": {
+            "n": 201,
+            "median": 33.30000000000291,
+            "p95": 33.40000000000873,
+            "p99": 50,
+            "max": 66.69999999999709,
+            "over16": 161,
+            "over33": 130,
+            "over50": 2
+          },
+          "ready": 0
+        }
+      ],
+      "stages": {
+        "getTerrainChunksAtAsync": {
+          "n": 81,
+          "median": 345.80000000074506,
+          "p95": 1537.6000000014901,
+          "p99": 1580.300000000745,
+          "max": 1963.300000000745,
+          "over16": 54,
+          "over33": 54,
+          "over50": 54
+        },
+        "ensureDecorationTerrain": {
+          "n": 9,
+          "median": 2564.7000000029802,
+          "p95": 9109.699999999255,
+          "p99": 9109.699999999255,
+          "max": 9217.400000002235,
+          "over16": 9,
+          "over33": 9,
+          "over50": 9
+        },
+        "getChunksAtAsync": {
+          "n": 8,
+          "median": 2109.7000000029802,
+          "p95": 3838.300000000745,
+          "p99": 3838.300000000745,
+          "max": 4934.5,
+          "over16": 8,
+          "over33": 8,
+          "over50": 8
+        },
+        "render": {
+          "n": 1212,
+          "median": 2.699999999254942,
+          "p95": 17.600000001490116,
+          "p99": 25.399999998509884,
+          "max": 57.600000001490116,
+          "over16": 101,
+          "over33": 7,
+          "over50": 1
+        }
+      },
+      "metrics": {
+        "counts": {
+          "terrainGenerated": 96,
+          "dependencyCacheHits": 261,
+          "sourceExecutions": 111,
+          "decorationResultHits": 0,
+          "completedCacheMisses": 22,
+          "publishedChunks": 39,
+          "lightRegions": 22,
+          "meshSections": 45,
+          "warmRestores": 18
+        },
+        "timings": {
+          "frameWorkMs": {
+            "count": 1592,
+            "total": 58880.60000000894,
+            "median": 29,
+            "p95": 67.60000000149012,
+            "p99": 90.80000000074506,
+            "max": 176.30000000074506,
+            "over16": 1592,
+            "over33": 636,
+            "over50": 349,
+            "retainedSamples": 1592
+          },
+          "streamingFrameWorkMs": {
+            "count": 1592,
+            "total": 2824.0000000931323,
+            "median": 0.10000000149011612,
+            "p95": 4.900000002235174,
+            "p99": 6.199999999254942,
+            "max": 11.400000002235174,
+            "over16": 0,
+            "over33": 0,
+            "over50": 0,
+            "retainedSamples": 1592
+          },
+          "frameIntervalMs": {
+            "count": 1591,
+            "total": 70097.09999999776,
+            "median": 35.099999997764826,
+            "p95": 77.30000000074506,
+            "p99": 100.19999999925494,
+            "max": 185.30000000074506,
+            "over16": 1591,
+            "over33": 954,
+            "over50": 518,
+            "retainedSamples": 1591
+          },
+          "workerRoundTripMs": {
+            "count": 61,
+            "total": 57817.800000008196,
+            "median": 448.30000000074506,
+            "p95": 2441.400000002235,
+            "p99": 3833.10000000149,
+            "max": 4931,
+            "over16": 61,
+            "over33": 61,
+            "over50": 61,
+            "retainedSamples": 61
+          },
+          "workerGenerationMs": {
+            "count": 61,
+            "total": 54790.30000001192,
+            "median": 417.5,
+            "p95": 2397.5,
+            "p99": 3792.599999997765,
+            "max": 4874.20000000298,
+            "over16": 61,
+            "over33": 61,
+            "over50": 61,
+            "retainedSamples": 61
+          },
+          "workerQueueAndMessagingMs": {
+            "count": 61,
+            "total": 3027.7999999932945,
+            "median": 24.99999999627471,
+            "p95": 68.40000000223517,
+            "p99": 86.29999999701977,
+            "max": 1331.5999999977648,
+            "over16": 45,
+            "over33": 18,
+            "over50": 9,
+            "retainedSamples": 61
+          },
+          "terrainGenerationMs": {
+            "count": 61,
+            "total": 33689.20000000298,
+            "median": 337.79999999701977,
+            "p95": 1498.699999999255,
+            "p99": 1540.2000000067055,
+            "max": 1561.699999999255,
+            "over16": 53,
+            "over33": 53,
+            "over50": 53,
+            "retainedSamples": 61
+          },
+          "sourceFeatureMs": {
+            "count": 61,
+            "total": 20803.90000001341,
+            "median": 0,
+            "p95": 2381.4999999962747,
+            "p99": 3770.300000000745,
+            "max": 4842.10000000149,
+            "over16": 8,
+            "over33": 8,
+            "over50": 8,
+            "retainedSamples": 61
+          },
+          "publishSliceMs": {
+            "count": 6444,
+            "total": 425.10000003129244,
+            "median": 0,
+            "p95": 0.10000000149011612,
+            "p99": 0.30000000074505806,
+            "max": 8.300000000745058,
+            "over16": 0,
+            "over33": 0,
+            "over50": 0,
+            "retainedSamples": 2048
+          },
+          "readyToPublishedMs": {
+            "count": 39,
+            "total": 39591.300000000745,
+            "median": 338,
+            "p95": 4445.099999997765,
+            "p99": 5224.199999999255,
+            "max": 6094.89999999851,
+            "over16": 39,
+            "over33": 36,
+            "over50": 36,
+            "retainedSamples": 39
+          },
+          "lightSliceMs": {
+            "count": 6012,
+            "total": 379.29999996721745,
+            "median": 0,
+            "p95": 0.10000000149011612,
+            "p99": 0.20000000298023224,
+            "max": 3.7999999970197678,
+            "over16": 0,
+            "over33": 0,
+            "over50": 0,
+            "retainedSamples": 2048
+          },
+          "meshSliceMs": {
+            "count": 8162,
+            "total": 1965.00000006333,
+            "median": 0.09999999776482582,
+            "p95": 1.5,
+            "p99": 3.100000001490116,
+            "max": 9.5,
+            "over16": 0,
+            "over33": 0,
+            "over50": 0,
+            "retainedSamples": 2048
+          },
+          "meshCpuMs": {
+            "count": 45,
+            "total": 1918.5000000596046,
+            "median": 34.900000005960464,
+            "p95": 89.00000001490116,
+            "p99": 96.90000000223517,
+            "max": 108.70000000670552,
+            "over16": 36,
+            "over33": 24,
+            "over50": 15,
+            "retainedSamples": 45
+          },
+          "meshElapsedMs": {
+            "count": 45,
+            "total": 35491.39999999851,
+            "median": 675.9000000022352,
+            "p95": 1611.800000000745,
+            "p99": 2437.39999999851,
+            "max": 2863.699999999255,
+            "over16": 43,
+            "over33": 43,
+            "over50": 43,
+            "retainedSamples": 45
+          },
+          "warmRestoreMs": {
+            "count": 18,
+            "total": 1.5,
+            "median": 0.09999999776482582,
+            "p95": 0.10000000149011612,
+            "p99": 0.10000000149011612,
+            "max": 0.20000000298023224,
+            "over16": 0,
+            "over33": 0,
+            "over50": 0,
+            "retainedSamples": 18
+          }
+        }
+      },
+      "hashes": {
+        "0,0": {
+          "blocks": "ed63e07f76ee244b27249a55ceff7c0e3d18e82f8d1f3ecd51828a2a48feda1f",
+          "biomes": "3dd3b6d3b93976a5f8bce94254208fe03dec7e28cc45154891c885f31579a055",
+          "heightmap": "d2dc041c67023275068ea738f6bd1bb808cf26901560fef7ee48f5f4a4ea6085",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "-1,0": {
+          "blocks": "2a83a0b067904501b89da3d25b1454c6f13d0b21cb39296e5779b88faa3a8e7b",
+          "biomes": "4bbdf4d4b2593ecf6f571fb3642d73c9ae60db6fd24660c2fe79fc140d220fef",
+          "heightmap": "df2df1e56869a8ef81322a40641af5c8bc3819afabdda31d49f78e7b14f64857",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "0,-1": {
+          "blocks": "9aa0f1970bf5b950f28cc3c06db406cf3dddc4b2d6d2ccf1499a07fe9bcd37eb",
+          "biomes": "252790d3ddc49868849edf3c4c29a397eef36eb966e31d66484a27c2533e2cab",
+          "heightmap": "65dec33710cd0137cbea61939afef83ea6da8122094e27b3b3339dfcc7c67ca1",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "0,1": {
+          "blocks": "9b65588cda3260654099837bc273318647f28cef7bf000eeaff66f00605c8717",
+          "biomes": "ab1f74cb36a80094753c607214c057e3000d5150dd2423b65fcd7a761febb605",
+          "heightmap": "267b36c159aa90c8fe85b27aa1538fd49b0d6eee5e6b0868cf8cad3c094dc1ee",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "1,0": {
+          "blocks": "92bab1cb05591126d9310fe71c6f18eec6c78782c20bd4ef420e11bb1cd53edb",
+          "biomes": "11357a09d3b8b48d959570f1ad69c1d39164a57fb61aa7eb869bad10b5de0b97",
+          "heightmap": "c6a78ba4cd31a9627a3c0544dd5e3280e64e1c6770b1fb49de0ae8b003989eb2",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "-1,-1": {
+          "blocks": "c48c96c11272414f49bdac46b553d3ecd9aced9407786ed8e8037aabd22e477e",
+          "biomes": "e295e361066a1705ff4b648e4a6aab4e5da22a17cb473f1b375ef3eb03c75546",
+          "heightmap": "62f53f038d85154b9e097ed094846dfc9a14a5f3561cf11177eb04396ad40189",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "-1,1": {
+          "blocks": "9c2a44f8bbf0c93369c06b06eee392daec0a3ee00c58c0730c0dfe6084c84b31",
+          "biomes": "f791124dc153947bf5533844cb35b2453b7cf2a8743e8d8cecfe180b7f0b2b80",
+          "heightmap": "7960ed7953fb6bd1db805dc37f5e7361fc6b3a394220ffc800241652b2bca4ff",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "1,-1": {
+          "blocks": "1a0bc1c618566895dbbe0dd04b9f3d0af5e14d4aadf7c3a67fcf5c3fc9a6f1d9",
+          "biomes": "f08c798ef7ba77c7c67a1cc4005a70d8693ab31c263021a69c6359a386fe3654",
+          "heightmap": "fd86c9db4ce38f4770b571c8f04730aabd842284c6e34bfd516e257b69bd617f",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "1,1": {
+          "blocks": "f09e150775709d2aab2710241ec0cb0179a954a98f8b6e886e3ebb7f94d9f365",
+          "biomes": "0fe0296d1bad53c9338275226318fc959442910e4bf2b0062ab5e27587af5102",
+          "heightmap": "26b80319471e6146160fc7cd98f6e96cc6e25ef3e2d54ac0855665b06c98ac75",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "2,0": {
+          "blocks": "4332fcf53e868266b8f419cd241a7dd2cba2c029242e954d2860e73d6f3eff0e",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "283895ceb883d7fc04b9f1eac7ad094b81cc67858e72bdb6ff2806bf2887298f",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "2,-1": {
+          "blocks": "536e89d0eb14c63740aa54019e642ba85a501ed0612404fb41b75caeaa8f550a",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "430ab089c431a15505e8f23928504862feceb0b8c5a9e39a4edc30e998e13e2a",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "2,1": {
+          "blocks": "ed08f01ce1cf8957542dbdbaa72147ea5caa9ca5bfb4871910cbfa0140d0c984",
+          "biomes": "162ab0734552be1e8dbe009380cbdbf93d64f7fffe69af0c930ba7ebc359dde1",
+          "heightmap": "8ad07403691c95d42dcad1dd5b2796af36aea28b5d11fc585e697f7c13483619",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "3,0": {
+          "blocks": "547d10acb236b0245313cc1c5bebbffe854dada48c041940ad74420d198ca43b",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "b0e1ba3595a61308957406449b03841807d727741d2e057ed721c9f0795b392b",
+          "fluidUpdates": "fadb52391d636b7ad0c170edec04f1ecb32fb21497a15eb1db08a3212586b18a"
+        },
+        "4,0": {
+          "blocks": "46594369d461cbd8b0f4b266f714bd537af846323297484a00797ef00684e2f8",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "222c11ba5b1105391ac3396c552574fa8a9a9091d3e2aefeb93e0dde5953625f",
+          "fluidUpdates": "9fb836f31c96204ea3829617391e2b19a34e4fc034fd4b46d8243639e1833653"
+        },
+        "3,-1": {
+          "blocks": "daf36a41590ffe4a3c9040e79c541c6465b6089dc4449854eeb765cdca24a533",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "eccf88fed573e8f165860d507b520cb46ff10d8732467672aba9a42518cfdfcd",
+          "fluidUpdates": "94f827a0c665dcaef5d8c77017a606c37a3209b22ffbf650d5848592c3ae2536"
+        },
+        "3,1": {
+          "blocks": "1b66cbb13b74ac6121b2990b21420ac9d79de98dbb42d7fbc66ec737f761ee4a",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "9cbb00681f7569a839ef5131be5f4c5f60f349369a4a302f9424bb73f5eb817d",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "4,-1": {
+          "blocks": "6820948ab09edad5190d8e85be90a86629cc489e6836356147af118a1f2c521c",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "0698863a8619a8a45d1c3de848bb803ee1b9e32bd45e3e260735e9b6bdafaf2e",
+          "fluidUpdates": "3c0faf3037f113411dc251225b668e72547a6d17af810a439889867a5aee13b3"
+        },
+        "4,1": {
+          "blocks": "1a841c10fc5b98cba7e9d49761749f365193f5f4ae9ccb97841da6de356930cf",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "2c14cfc32994336a26c07ed2991ef1bc6de4a3c1172525bbd8ff35e41897c719",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "5,0": {
+          "blocks": "87be587ee9ab2fbacf91833d5a41ca6b22eb835cca04aefcbdb9ac47db9802fd",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "172f4e4c4f729505ee74f84b46b20da19560d91c820d45b7610b927b49ffcdd8",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "5,-1": {
+          "blocks": "14340a806e3b49b63715aa492c9ad9ede190cf91e1ab500c945b37dcb4ab5f6f",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "3c23cda141189ab47aa0c772a8b5e53b9ebf1357831f6e6d68c815fb4a1d7ab8",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "5,1": {
+          "blocks": "4036586a408f8285324ea3755a6eb1ebe493de90d10d63918aa5bbece3639508",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "f9b5975d872054b34aa16a9a2037dc9c6ca1e7370633b4365abee227928435de",
+          "fluidUpdates": "c20836e3ea1f753db6a9630bd176772184a9ce52ca8345800f925a550f04fc51"
+        }
+      },
+      "errors": []
+    },
+    "priority": {
+      "environment": {
+        "browser": "151.0.7922.34",
+        "renderer": "headless Chromium / SwiftShader",
+        "seed": "6888349110149677383",
+        "scenarioMs": 6000,
+        "variant": "priority"
+      },
+      "firstNativePublishedMs": 16890.300000000745,
+      "nineNativePublishedMs": 38166.800000000745,
+      "peakBrowserProcessPssKiB": 1421066,
+      "scenarios": [
+        {
+          "name": "stationary",
+          "start": 33241.300000000745,
+          "initialChunks": 1,
+          "end": 53342,
+          "chunks": 8,
+          "error": null,
+          "streaming": {
+            "active": 8,
+            "desired": 49,
+            "decorationDesired": 49,
+            "publicationQueue": 1,
+            "generationInFlight": 0,
+            "terrainInFlight": 0,
+            "meshQueue": 13,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 134217728,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 9,
+              "bytes": 4460544,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 49,
+              "bytes": 24285184,
+              "budget": 67108864,
+              "hits": 51,
+              "misses": 49,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 177000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1331762,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 52569
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 1000134
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 188478
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 71160
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19421
+              }
+            ]
+          },
+          "frames": {
+            "n": 320,
+            "median": 66.59999999999854,
+            "p95": 83.30000000000291,
+            "p99": 100,
+            "max": 166.59999999999854,
+            "over16": 320,
+            "over33": 315,
+            "over50": 237
+          },
+          "ready": 7
+        },
+        {
+          "name": "walking",
+          "start": 53497.099999997765,
+          "initialChunks": 8,
+          "end": 59506.5,
+          "chunks": 9,
+          "error": null,
+          "streaming": {
+            "active": 9,
+            "desired": 49,
+            "decorationDesired": 49,
+            "publicationQueue": 0,
+            "generationInFlight": 6,
+            "terrainInFlight": 0,
+            "meshQueue": 7,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 134217728,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 9,
+              "bytes": 4460544,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 63,
+              "bytes": 31223808,
+              "budget": 67108864,
+              "hits": 79,
+              "misses": 63,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 177000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1362094,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 52569
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 1029228
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 189716
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 71160
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19421
+              }
+            ]
+          },
+          "frames": {
+            "n": 138,
+            "median": 33.400000000001455,
+            "p95": 66.70000000000437,
+            "p99": 66.80000000000291,
+            "max": 100,
+            "over16": 136,
+            "over33": 114,
+            "over50": 28
+          },
+          "ready": 1
+        },
+        {
+          "name": "sprinting",
+          "start": 59633.5,
+          "initialChunks": 9,
+          "end": 65678,
+          "chunks": 12,
+          "error": null,
+          "streaming": {
+            "active": 12,
+            "desired": 49,
+            "decorationDesired": 49,
+            "publicationQueue": 0,
+            "generationInFlight": 0,
+            "terrainInFlight": 1,
+            "meshQueue": 0,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 3,
+              "bytes": 9482240,
+              "budget": 134217728,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 15,
+              "bytes": 7434240,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 64,
+              "bytes": 31719424,
+              "budget": 67108864,
+              "hits": 89,
+              "misses": 65,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 177000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1393486,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51568
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 1064608
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 188922
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 68985
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19403
+              }
+            ]
+          },
+          "frames": {
+            "n": 161,
+            "median": 33.30000000000291,
+            "p95": 50.10000000000582,
+            "p99": 66.69999999999709,
+            "max": 83.40000000000146,
+            "over16": 155,
+            "over33": 115,
+            "over50": 15
+          },
+          "ready": 6
+        },
+        {
+          "name": "turn-return",
+          "start": 65787.39999999851,
+          "initialChunks": 12,
+          "end": 71835.30000000075,
+          "chunks": 15,
+          "error": null,
+          "streaming": {
+            "active": 15,
+            "desired": 49,
+            "decorationDesired": 49,
+            "publicationQueue": 0,
+            "generationInFlight": 0,
+            "terrainInFlight": 1,
+            "meshQueue": 72,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 134217728,
+              "hits": 3,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 15,
+              "bytes": 7434240,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 80,
+              "bytes": 39649280,
+              "budget": 67108864,
+              "hits": 129,
+              "misses": 81,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 177000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1397972,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51561
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 1058740
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 199322
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 68946
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19403
+              }
+            ]
+          },
+          "frames": {
+            "n": 78,
+            "median": 83.30000000000291,
+            "p95": 100,
+            "p99": 100,
+            "max": 116.70000000001164,
+            "over16": 78,
+            "over33": 78,
+            "over50": 73
+          },
+          "ready": 3
+        },
+        {
+          "name": "A-B-A",
+          "start": 72038.80000000075,
+          "initialChunks": 15,
+          "end": 78119,
+          "chunks": 15,
+          "error": null,
+          "streaming": {
+            "active": 15,
+            "desired": 49,
+            "decorationDesired": 49,
+            "publicationQueue": 0,
+            "generationInFlight": 0,
+            "terrainInFlight": 1,
+            "meshQueue": 62,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 0,
+              "bytes": 0,
+              "budget": 134217728,
+              "hits": 9,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 21,
+              "bytes": 10407936,
+              "budget": 268435456,
+              "hits": 0,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 87,
+              "bytes": 43118592,
+              "budget": 67108864,
+              "hits": 184,
+              "misses": 88,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 177000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1411342,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51561
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 1067588
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 203842
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 68947
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19404
+              }
+            ]
+          },
+          "frames": {
+            "n": 103,
+            "median": 50,
+            "p95": 100,
+            "p99": 100,
+            "max": 116.59999999999127,
+            "over16": 102,
+            "over33": 93,
+            "over50": 48
+          },
+          "ready": 6
+        },
+        {
+          "name": "flight",
+          "start": 78305.39999999851,
+          "initialChunks": 15,
+          "end": 84329.80000000075,
+          "chunks": 3,
+          "error": null,
+          "streaming": {
+            "active": 3,
+            "desired": 49,
+            "decorationDesired": 49,
+            "publicationQueue": 0,
+            "generationInFlight": 0,
+            "terrainInFlight": 1,
+            "meshQueue": 0,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 18,
+              "bytes": 64210352,
+              "budget": 134217728,
+              "hits": 9,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 21,
+              "bytes": 10407936,
+              "budget": 268435456,
+              "hits": 6,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 97,
+              "bytes": 48074752,
+              "budget": 67108864,
+              "hits": 279,
+              "misses": 99,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 177000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1413458,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51561
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 1069284
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 204262
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 68947
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19404
+              }
+            ]
+          },
+          "frames": {
+            "n": 163,
+            "median": 33.30000000000291,
+            "p95": 66.70000000001164,
+            "p99": 83.40000000000873,
+            "max": 133.39999999999418,
+            "over16": 144,
+            "over33": 118,
+            "over50": 17
+          },
+          "ready": 6
+        },
+        {
+          "name": "long-exploration",
+          "start": 84393.30000000075,
+          "initialChunks": 3,
+          "end": 90406.59999999776,
+          "chunks": 0,
+          "error": null,
+          "streaming": {
+            "active": 0,
+            "desired": 49,
+            "decorationDesired": 49,
+            "publicationQueue": 0,
+            "generationInFlight": 0,
+            "terrainInFlight": 1,
+            "meshQueue": 0,
+            "lightQueue": 0,
+            "warmRender": {
+              "entries": 21,
+              "bytes": 74201616,
+              "budget": 134217728,
+              "hits": 9,
+              "misses": 0,
+              "evictions": 0
+            },
+            "nativeCache": {
+              "entries": 21,
+              "bytes": 10407936,
+              "budget": 268435456,
+              "hits": 6,
+              "misses": 0,
+              "evictions": 0
+            },
+            "terrainCache": {
+              "entries": 114,
+              "bytes": 56500224,
+              "budget": 67108864,
+              "hits": 319,
+              "misses": 115,
+              "evictions": 0
+            }
+          },
+          "heap": {
+            "used": 177000000,
+            "total": 199000000
+          },
+          "processMemory": {
+            "pssKiB": 1357392,
+            "processes": [
+              {
+                "type": "browser",
+                "pssKiB": 51561
+              },
+              {
+                "type": "renderer",
+                "pssKiB": 1013038
+              },
+              {
+                "type": "GPU",
+                "pssKiB": 204444
+              },
+              {
+                "type": "network.mojom.NetworkService",
+                "pssKiB": 68946
+              },
+              {
+                "type": "audio.mojom.AudioService",
+                "pssKiB": 19403
+              }
+            ]
+          },
+          "frames": {
+            "n": 208,
+            "median": 33.30000000000291,
+            "p95": 33.40000000000873,
+            "p99": 33.5,
+            "max": 50,
+            "over16": 158,
+            "over33": 134,
+            "over50": 0
+          },
+          "ready": 0
+        }
+      ],
+      "stages": {
+        "getTerrainChunksAtAsync": {
+          "n": 114,
+          "median": 334.30000000074506,
+          "p95": 1500.4000000022352,
+          "p99": 1564.5,
+          "max": 2009.5,
+          "over16": 66,
+          "over33": 66,
+          "over50": 66
+        },
+        "ensureDecorationTerrain": {
+          "n": 15,
+          "median": 1733.199999999255,
+          "p95": 8806.39999999851,
+          "p99": 8806.39999999851,
+          "max": 9433.39999999851,
+          "over16": 15,
+          "over33": 15,
+          "over50": 15
+        },
+        "getChunksAtAsync": {
+          "n": 5,
+          "median": 3657.300000000745,
+          "p95": 3835.10000000149,
+          "p99": 3835.10000000149,
+          "max": 4978.199999999255,
+          "over16": 4,
+          "over33": 4,
+          "over50": 4
+        },
+        "render": {
+          "n": 1187,
+          "median": 1.199999999254942,
+          "p95": 18.100000001490116,
+          "p99": 30.400000002235174,
+          "max": 64.59999999776483,
+          "over16": 145,
+          "over33": 9,
+          "over50": 2
+        }
+      },
+      "metrics": {
+        "counts": {
+          "terrainGenerated": 115,
+          "dependencyCacheHits": 158,
+          "sourceExecutions": 74,
+          "decorationResultHits": 0,
+          "completedCacheMisses": 21,
+          "publishedChunks": 30,
+          "lightRegions": 12,
+          "meshSections": 50,
+          "warmRestores": 9,
+          "prewarmReprioritized": 9
+        },
+        "timings": {
+          "frameWorkMs": {
+            "count": 1557,
+            "total": 58900.69999998063,
+            "median": 28.5,
+            "p95": 70.40000000223517,
+            "p99": 85.60000000149012,
+            "max": 174.30000000074506,
+            "over16": 1557,
+            "over33": 615,
+            "over50": 440,
+            "retainedSamples": 1557
+          },
+          "streamingFrameWorkMs": {
+            "count": 1557,
+            "total": 2883.5999999903142,
+            "median": 0.10000000149011612,
+            "p95": 4.800000000745058,
+            "p99": 7,
+            "max": 19.700000002980232,
+            "over16": 1,
+            "over33": 0,
+            "over50": 0,
+            "retainedSamples": 1557
+          },
+          "frameIntervalMs": {
+            "count": 1556,
+            "total": 70164.09999999776,
+            "median": 35.099999997764826,
+            "p95": 81.10000000149012,
+            "p99": 98.30000000074506,
+            "max": 183.89999999850988,
+            "over16": 1556,
+            "over33": 938,
+            "over50": 522,
+            "retainedSamples": 1556
+          },
+          "workerRoundTripMs": {
+            "count": 70,
+            "total": 58272.29999997094,
+            "median": 402.3999999985099,
+            "p95": 2007,
+            "p99": 3832.699999999255,
+            "max": 4974,
+            "over16": 70,
+            "over33": 70,
+            "over50": 70,
+            "retainedSamples": 70
+          },
+          "workerGenerationMs": {
+            "count": 70,
+            "total": 55339.999999996275,
+            "median": 371.29999999701977,
+            "p95": 1581.3999999985099,
+            "p99": 3814.89999999851,
+            "max": 4938,
+            "over16": 70,
+            "over33": 70,
+            "over50": 70,
+            "retainedSamples": 70
+          },
+          "workerQueueAndMessagingMs": {
+            "count": 70,
+            "total": 2932.599999975413,
+            "median": 17.199999999254942,
+            "p95": 64.59999999776483,
+            "p99": 77.90000000223517,
+            "max": 1377.5999999977648,
+            "over16": 36,
+            "over33": 16,
+            "over50": 8,
+            "retainedSamples": 70
+          },
+          "terrainGenerationMs": {
+            "count": 70,
+            "total": 40699.5000000149,
+            "median": 359.19999999925494,
+            "p95": 1471.3000000044703,
+            "p99": 1492.800000000745,
+            "max": 1577.7999999970198,
+            "over16": 66,
+            "over33": 66,
+            "over50": 66,
+            "retainedSamples": 70
+          },
+          "sourceFeatureMs": {
+            "count": 70,
+            "total": 14377.200000017881,
+            "median": 0,
+            "p95": 0,
+            "p99": 3791.400000002235,
+            "max": 4908.400000002235,
+            "over16": 4,
+            "over33": 4,
+            "over50": 4,
+            "retainedSamples": 70
+          },
+          "publishSliceMs": {
+            "count": 6435,
+            "total": 445.1000000052154,
+            "median": 0,
+            "p95": 0.10000000149011612,
+            "p99": 0.5999999977648258,
+            "max": 6.599999997764826,
+            "over16": 0,
+            "over33": 0,
+            "over50": 0,
+            "retainedSamples": 2048
+          },
+          "readyToPublishedMs": {
+            "count": 30,
+            "total": 45315.69999998063,
+            "median": 853.3999999985099,
+            "p95": 4713,
+            "p99": 5664.099999997765,
+            "max": 6820.699999999255,
+            "over16": 30,
+            "over33": 30,
+            "over50": 27,
+            "retainedSamples": 30
+          },
+          "lightSliceMs": {
+            "count": 3370,
+            "total": 198.2000000141561,
+            "median": 0,
+            "p95": 0.19999999925494194,
+            "p99": 0.20000000298023224,
+            "max": 3.7999999970197678,
+            "over16": 0,
+            "over33": 0,
+            "over50": 0,
+            "retainedSamples": 2048
+          },
+          "meshSliceMs": {
+            "count": 8802,
+            "total": 2182.8000000417233,
+            "median": 0.09999999776482582,
+            "p95": 1.1000000014901161,
+            "p99": 2.100000001490116,
+            "max": 16.800000000745058,
+            "over16": 1,
+            "over33": 0,
+            "over50": 0,
+            "retainedSamples": 2048
+          },
+          "meshCpuMs": {
+            "count": 50,
+            "total": 2057.2000000439584,
+            "median": 33.900000002235174,
+            "p95": 90.90000000596046,
+            "p99": 109.60000000149012,
+            "max": 113.59999999031425,
+            "over16": 43,
+            "over33": 26,
+            "over50": 16,
+            "retainedSamples": 50
+          },
+          "meshElapsedMs": {
+            "count": 50,
+            "total": 34800.70000001043,
+            "median": 548.3000000007451,
+            "p95": 1526,
+            "p99": 2742.10000000149,
+            "max": 2910.400000002235,
+            "over16": 47,
+            "over33": 44,
+            "over50": 44,
+            "retainedSamples": 50
+          },
+          "warmRestoreMs": {
+            "count": 9,
+            "total": 1.1000000014901161,
+            "median": 0.10000000149011612,
+            "p95": 0.19999999925494194,
+            "p99": 0.19999999925494194,
+            "max": 0.20000000298023224,
+            "over16": 0,
+            "over33": 0,
+            "over50": 0,
+            "retainedSamples": 9
+          }
+        }
+      },
+      "hashes": {
+        "0,0": {
+          "blocks": "ed63e07f76ee244b27249a55ceff7c0e3d18e82f8d1f3ecd51828a2a48feda1f",
+          "biomes": "3dd3b6d3b93976a5f8bce94254208fe03dec7e28cc45154891c885f31579a055",
+          "heightmap": "d2dc041c67023275068ea738f6bd1bb808cf26901560fef7ee48f5f4a4ea6085",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "-1,0": {
+          "blocks": "2a83a0b067904501b89da3d25b1454c6f13d0b21cb39296e5779b88faa3a8e7b",
+          "biomes": "4bbdf4d4b2593ecf6f571fb3642d73c9ae60db6fd24660c2fe79fc140d220fef",
+          "heightmap": "df2df1e56869a8ef81322a40641af5c8bc3819afabdda31d49f78e7b14f64857",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "0,-1": {
+          "blocks": "9aa0f1970bf5b950f28cc3c06db406cf3dddc4b2d6d2ccf1499a07fe9bcd37eb",
+          "biomes": "252790d3ddc49868849edf3c4c29a397eef36eb966e31d66484a27c2533e2cab",
+          "heightmap": "65dec33710cd0137cbea61939afef83ea6da8122094e27b3b3339dfcc7c67ca1",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "0,1": {
+          "blocks": "9b65588cda3260654099837bc273318647f28cef7bf000eeaff66f00605c8717",
+          "biomes": "ab1f74cb36a80094753c607214c057e3000d5150dd2423b65fcd7a761febb605",
+          "heightmap": "267b36c159aa90c8fe85b27aa1538fd49b0d6eee5e6b0868cf8cad3c094dc1ee",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "1,0": {
+          "blocks": "92bab1cb05591126d9310fe71c6f18eec6c78782c20bd4ef420e11bb1cd53edb",
+          "biomes": "11357a09d3b8b48d959570f1ad69c1d39164a57fb61aa7eb869bad10b5de0b97",
+          "heightmap": "c6a78ba4cd31a9627a3c0544dd5e3280e64e1c6770b1fb49de0ae8b003989eb2",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "-1,-1": {
+          "blocks": "c48c96c11272414f49bdac46b553d3ecd9aced9407786ed8e8037aabd22e477e",
+          "biomes": "e295e361066a1705ff4b648e4a6aab4e5da22a17cb473f1b375ef3eb03c75546",
+          "heightmap": "62f53f038d85154b9e097ed094846dfc9a14a5f3561cf11177eb04396ad40189",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "-1,1": {
+          "blocks": "9c2a44f8bbf0c93369c06b06eee392daec0a3ee00c58c0730c0dfe6084c84b31",
+          "biomes": "f791124dc153947bf5533844cb35b2453b7cf2a8743e8d8cecfe180b7f0b2b80",
+          "heightmap": "7960ed7953fb6bd1db805dc37f5e7361fc6b3a394220ffc800241652b2bca4ff",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "1,-1": {
+          "blocks": "1a0bc1c618566895dbbe0dd04b9f3d0af5e14d4aadf7c3a67fcf5c3fc9a6f1d9",
+          "biomes": "f08c798ef7ba77c7c67a1cc4005a70d8693ab31c263021a69c6359a386fe3654",
+          "heightmap": "fd86c9db4ce38f4770b571c8f04730aabd842284c6e34bfd516e257b69bd617f",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "1,1": {
+          "blocks": "f09e150775709d2aab2710241ec0cb0179a954a98f8b6e886e3ebb7f94d9f365",
+          "biomes": "0fe0296d1bad53c9338275226318fc959442910e4bf2b0062ab5e27587af5102",
+          "heightmap": "26b80319471e6146160fc7cd98f6e96cc6e25ef3e2d54ac0855665b06c98ac75",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "2,0": {
+          "blocks": "4332fcf53e868266b8f419cd241a7dd2cba2c029242e954d2860e73d6f3eff0e",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "283895ceb883d7fc04b9f1eac7ad094b81cc67858e72bdb6ff2806bf2887298f",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "2,-1": {
+          "blocks": "536e89d0eb14c63740aa54019e642ba85a501ed0612404fb41b75caeaa8f550a",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "430ab089c431a15505e8f23928504862feceb0b8c5a9e39a4edc30e998e13e2a",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "2,1": {
+          "blocks": "ed08f01ce1cf8957542dbdbaa72147ea5caa9ca5bfb4871910cbfa0140d0c984",
+          "biomes": "162ab0734552be1e8dbe009380cbdbf93d64f7fffe69af0c930ba7ebc359dde1",
+          "heightmap": "8ad07403691c95d42dcad1dd5b2796af36aea28b5d11fc585e697f7c13483619",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "3,0": {
+          "blocks": "547d10acb236b0245313cc1c5bebbffe854dada48c041940ad74420d198ca43b",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "b0e1ba3595a61308957406449b03841807d727741d2e057ed721c9f0795b392b",
+          "fluidUpdates": "fadb52391d636b7ad0c170edec04f1ecb32fb21497a15eb1db08a3212586b18a"
+        },
+        "3,-1": {
+          "blocks": "daf36a41590ffe4a3c9040e79c541c6465b6089dc4449854eeb765cdca24a533",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "eccf88fed573e8f165860d507b520cb46ff10d8732467672aba9a42518cfdfcd",
+          "fluidUpdates": "94f827a0c665dcaef5d8c77017a606c37a3209b22ffbf650d5848592c3ae2536"
+        },
+        "3,1": {
+          "blocks": "1b66cbb13b74ac6121b2990b21420ac9d79de98dbb42d7fbc66ec737f761ee4a",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "9cbb00681f7569a839ef5131be5f4c5f60f349369a4a302f9424bb73f5eb817d",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "4,0": {
+          "blocks": "53350ed3c8db9cb0c443f8251aa583784a2db653db0dbc9d46d4dd22978bad5e",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "6ad30744f670d52d12ff0b9ef31b56a9ff0f7d79b775d691a997791f2742f015",
+          "fluidUpdates": "9fb836f31c96204ea3829617391e2b19a34e4fc034fd4b46d8243639e1833653"
+        },
+        "4,-1": {
+          "blocks": "6820948ab09edad5190d8e85be90a86629cc489e6836356147af118a1f2c521c",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "0698863a8619a8a45d1c3de848bb803ee1b9e32bd45e3e260735e9b6bdafaf2e",
+          "fluidUpdates": "3c0faf3037f113411dc251225b668e72547a6d17af810a439889867a5aee13b3"
+        },
+        "4,1": {
+          "blocks": "1a841c10fc5b98cba7e9d49761749f365193f5f4ae9ccb97841da6de356930cf",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "2c14cfc32994336a26c07ed2991ef1bc6de4a3c1172525bbd8ff35e41897c719",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "5,0": {
+          "blocks": "87be587ee9ab2fbacf91833d5a41ca6b22eb835cca04aefcbdb9ac47db9802fd",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "172f4e4c4f729505ee74f84b46b20da19560d91c820d45b7610b927b49ffcdd8",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "5,-1": {
+          "blocks": "14340a806e3b49b63715aa492c9ad9ede190cf91e1ab500c945b37dcb4ab5f6f",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "3c23cda141189ab47aa0c772a8b5e53b9ebf1357831f6e6d68c815fb4a1d7ab8",
+          "fluidUpdates": "3a3ed164e42500a1c5b2d0093f0a813d27dc50d038f330cc100a7e70ece2e6e4"
+        },
+        "5,1": {
+          "blocks": "4036586a408f8285324ea3755a6eb1ebe493de90d10d63918aa5bbece3639508",
+          "biomes": "39c8452f5af7f23cc0c4175bf125c998669437838aa6cee2eea547017de8b360",
+          "heightmap": "f9b5975d872054b34aa16a9a2037dc9c6ca1e7370633b4365abee227928435de",
+          "fluidUpdates": "c20836e3ea1f753db6a9630bd176772184a9ce52ca8345800f925a550f04fc51"
+        }
+      },
+      "errors": []
+    }
+  }
+}

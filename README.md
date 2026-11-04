@@ -1,14 +1,18 @@
-# Breakmine workspace
+# Breakmine
 
-This repository contains the Breakmine applications as separate boundaries:
+Breakmine is a browser and Electron game. The game lives at the repository
+root; the website is a separate app under `apps/`.
 
-- `apps/game/` — browser and Electron game client, integrated server, and legacy auth service.
-- `apps/website/` — public website, Discord authentication, and Cloudflare Worker API.
-- `apps/wiki/` — Wiki and Mods service.
-- `apps/studio/` — standalone studio page.
-- `packages/` — future shared types and multiplayer protocol packages.
-- `examples/` — reference mods.
-- `archive/` — legacy releases and imports.
+- `src/`, `libraries/`, `index.html` — Breakmine browser/Electron game and integrated server.
+- `apps/website/` — public website and Cloudflare Worker API.
+- `packages/` — world-generation and gameplay parity tooling.
+
+## Vanillith
+
+Vanillith 0.2.0-alpha is an in-progress singleplayer generator. It supports
+saved worlds and survival gameplay, with some features still being built.
+Start with the [Vanillith guide](docs/VANILLITH.md)
+or see the [worldgen status](packages/vanilla-worldgen/PORT_STATUS.md).
 
 ## Common commands
 
@@ -18,5 +22,3 @@ npm run build
 npm run website:dev
 npm run website:worker:check
 ```
-
-See [docs/REPOSITORY.md](docs/REPOSITORY.md) for the migration map.

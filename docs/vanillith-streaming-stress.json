@@ -1,0 +1,784 @@
+{
+  "environment": {
+    "browser": "151.0.7922.34",
+    "renderer": "headless Chromium / SwiftShader",
+    "seed": "6888349110149677383",
+    "scenarioMs": 6000,
+    "variant": "cache"
+  },
+  "firstNativePublishedMs": 16271.199999999255,
+  "nineNativePublishedMs": 37807.400000002235,
+  "peakBrowserProcessPssKiB": 1539463,
+  "scenarios": [
+    {
+      "name": "stationary",
+      "start": 32045.199999999255,
+      "initialChunks": 1,
+      "end": 52093.800000000745,
+      "chunks": 7,
+      "error": null,
+      "streaming": {
+        "active": 7,
+        "desired": 25,
+        "decorationDesired": 9,
+        "publicationQueue": 2,
+        "generationInFlight": 0,
+        "terrainInFlight": 0,
+        "meshQueue": 9,
+        "lightQueue": 0,
+        "warmRender": {
+          "entries": 0,
+          "bytes": 0,
+          "budget": 134217728,
+          "hits": 0,
+          "misses": 0,
+          "evictions": 0
+        },
+        "nativeCache": {
+          "entries": 9,
+          "bytes": 4460544,
+          "budget": 268435456,
+          "hits": 0,
+          "misses": 0,
+          "evictions": 0
+        },
+        "terrainCache": {
+          "entries": 49,
+          "bytes": 24285184,
+          "budget": 67108864,
+          "hits": 51,
+          "misses": 49,
+          "evictions": 0
+        }
+      },
+      "heap": {
+        "used": 177000000,
+        "total": 199000000
+      },
+      "processMemory": {
+        "pssKiB": 1414473,
+        "processes": [
+          {
+            "type": "browser",
+            "pssKiB": 52296
+          },
+          {
+            "type": "renderer",
+            "pssKiB": 1081346
+          },
+          {
+            "type": "GPU",
+            "pssKiB": 189804
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "pssKiB": 71834
+          },
+          {
+            "type": "audio.mojom.AudioService",
+            "pssKiB": 19193
+          }
+        ]
+      },
+      "frames": {
+        "n": 338,
+        "median": 66.59999999999854,
+        "p95": 66.80000000000291,
+        "p99": 83.39999999999418,
+        "max": 183.3000000000029,
+        "over16": 337,
+        "over33": 326,
+        "over50": 216
+      },
+      "ready": 6
+    },
+    {
+      "name": "walking",
+      "start": 52251.39999999851,
+      "initialChunks": 7,
+      "end": 58270.099999997765,
+      "chunks": 6,
+      "error": null,
+      "streaming": {
+        "active": 6,
+        "desired": 25,
+        "decorationDesired": 9,
+        "publicationQueue": 0,
+        "generationInFlight": 3,
+        "terrainInFlight": 0,
+        "meshQueue": 9,
+        "lightQueue": 0,
+        "warmRender": {
+          "entries": 3,
+          "bytes": 9482240,
+          "budget": 134217728,
+          "hits": 0,
+          "misses": 0,
+          "evictions": 0
+        },
+        "nativeCache": {
+          "entries": 9,
+          "bytes": 4460544,
+          "budget": 268435456,
+          "hits": 0,
+          "misses": 0,
+          "evictions": 0
+        },
+        "terrainCache": {
+          "entries": 56,
+          "bytes": 27754496,
+          "budget": 67108864,
+          "hits": 79,
+          "misses": 56,
+          "evictions": 0
+        }
+      },
+      "heap": {
+        "used": 177000000,
+        "total": 199000000
+      },
+      "processMemory": {
+        "pssKiB": 1442141,
+        "processes": [
+          {
+            "type": "browser",
+            "pssKiB": 52296
+          },
+          {
+            "type": "renderer",
+            "pssKiB": 1107848
+          },
+          {
+            "type": "GPU",
+            "pssKiB": 190970
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "pssKiB": 71834
+          },
+          {
+            "type": "audio.mojom.AudioService",
+            "pssKiB": 19193
+          }
+        ]
+      },
+      "frames": {
+        "n": 130,
+        "median": 50,
+        "p95": 66.69999999999709,
+        "p99": 83.30000000000291,
+        "max": 99.90000000000146,
+        "over16": 128,
+        "over33": 113,
+        "over50": 33
+      },
+      "ready": 2
+    },
+    {
+      "name": "sprinting",
+      "start": 58370.300000000745,
+      "initialChunks": 6,
+      "end": 64391.199999999255,
+      "chunks": 3,
+      "error": null,
+      "streaming": {
+        "active": 3,
+        "desired": 25,
+        "decorationDesired": 9,
+        "publicationQueue": 1,
+        "generationInFlight": 0,
+        "terrainInFlight": 0,
+        "meshQueue": 1,
+        "lightQueue": 0,
+        "warmRender": {
+          "entries": 9,
+          "bytes": 31930024,
+          "budget": 134217728,
+          "hits": 0,
+          "misses": 0,
+          "evictions": 0
+        },
+        "nativeCache": {
+          "entries": 13,
+          "bytes": 6443008,
+          "budget": 268435456,
+          "hits": 0,
+          "misses": 0,
+          "evictions": 0
+        },
+        "terrainCache": {
+          "entries": 61,
+          "bytes": 30232576,
+          "budget": 67108864,
+          "hits": 99,
+          "misses": 61,
+          "evictions": 0
+        }
+      },
+      "heap": {
+        "used": 177000000,
+        "total": 199000000
+      },
+      "processMemory": {
+        "pssKiB": 1426577,
+        "processes": [
+          {
+            "type": "browser",
+            "pssKiB": 51421
+          },
+          {
+            "type": "renderer",
+            "pssKiB": 1095990
+          },
+          {
+            "type": "GPU",
+            "pssKiB": 190752
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "pssKiB": 69276
+          },
+          {
+            "type": "audio.mojom.AudioService",
+            "pssKiB": 19138
+          }
+        ]
+      },
+      "frames": {
+        "n": 165,
+        "median": 33.30000000000291,
+        "p95": 50,
+        "p99": 66.69999999999709,
+        "max": 66.70000000000437,
+        "over16": 162,
+        "over33": 126,
+        "over50": 8
+      },
+      "ready": 3
+    },
+    {
+      "name": "turn-return",
+      "start": 64476.5,
+      "initialChunks": 3,
+      "end": 70485.89999999851,
+      "chunks": 13,
+      "error": null,
+      "streaming": {
+        "active": 13,
+        "desired": 25,
+        "decorationDesired": 9,
+        "publicationQueue": 0,
+        "generationInFlight": 1,
+        "terrainInFlight": 0,
+        "meshQueue": 69,
+        "lightQueue": 0,
+        "warmRender": {
+          "entries": 0,
+          "bytes": 0,
+          "budget": 134217728,
+          "hits": 9,
+          "misses": 0,
+          "evictions": 0
+        },
+        "nativeCache": {
+          "entries": 13,
+          "bytes": 6443008,
+          "budget": 268435456,
+          "hits": 0,
+          "misses": 0,
+          "evictions": 0
+        },
+        "terrainCache": {
+          "entries": 71,
+          "bytes": 35188736,
+          "budget": 67108864,
+          "hits": 114,
+          "misses": 71,
+          "evictions": 0
+        }
+      },
+      "heap": {
+        "used": 177000000,
+        "total": 199000000
+      },
+      "processMemory": {
+        "pssKiB": 1536285,
+        "processes": [
+          {
+            "type": "browser",
+            "pssKiB": 51421
+          },
+          {
+            "type": "renderer",
+            "pssKiB": 1195110
+          },
+          {
+            "type": "GPU",
+            "pssKiB": 201340
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "pssKiB": 69276
+          },
+          {
+            "type": "audio.mojom.AudioService",
+            "pssKiB": 19138
+          }
+        ]
+      },
+      "frames": {
+        "n": 64,
+        "median": 83.40000000000873,
+        "p95": 133.3000000000029,
+        "p99": 150,
+        "max": 200,
+        "over16": 64,
+        "over33": 63,
+        "over50": 60
+      },
+      "ready": 10
+    },
+    {
+      "name": "A-B-A",
+      "start": 70687.30000000075,
+      "initialChunks": 13,
+      "end": 76692.19999999925,
+      "chunks": 10,
+      "error": null,
+      "streaming": {
+        "active": 10,
+        "desired": 25,
+        "decorationDesired": 9,
+        "publicationQueue": 0,
+        "generationInFlight": 8,
+        "terrainInFlight": 0,
+        "meshQueue": 38,
+        "lightQueue": 0,
+        "warmRender": {
+          "entries": 1,
+          "bytes": 3149824,
+          "budget": 134217728,
+          "hits": 22,
+          "misses": 0,
+          "evictions": 0
+        },
+        "nativeCache": {
+          "entries": 14,
+          "bytes": 6938624,
+          "budget": 268435456,
+          "hits": 0,
+          "misses": 0,
+          "evictions": 0
+        },
+        "terrainCache": {
+          "entries": 84,
+          "bytes": 41631744,
+          "budget": 67108864,
+          "hits": 150,
+          "misses": 84,
+          "evictions": 0
+        }
+      },
+      "heap": {
+        "used": 177000000,
+        "total": 199000000
+      },
+      "processMemory": {
+        "pssKiB": 1539463,
+        "processes": [
+          {
+            "type": "browser",
+            "pssKiB": 51423
+          },
+          {
+            "type": "renderer",
+            "pssKiB": 1197206
+          },
+          {
+            "type": "GPU",
+            "pssKiB": 202417
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "pssKiB": 69277
+          },
+          {
+            "type": "audio.mojom.AudioService",
+            "pssKiB": 19140
+          }
+        ]
+      },
+      "frames": {
+        "n": 100,
+        "median": 50.09999999999127,
+        "p95": 100,
+        "p99": 116.69999999999709,
+        "max": 133.3000000000029,
+        "over16": 97,
+        "over33": 93,
+        "over50": 52
+      },
+      "ready": 11
+    },
+    {
+      "name": "flight",
+      "start": 76823.30000000075,
+      "initialChunks": 10,
+      "end": 82857.69999999925,
+      "chunks": 0,
+      "error": null,
+      "streaming": {
+        "active": 0,
+        "desired": 25,
+        "decorationDesired": 9,
+        "publicationQueue": 0,
+        "generationInFlight": 0,
+        "terrainInFlight": 1,
+        "meshQueue": 0,
+        "lightQueue": 0,
+        "warmRender": {
+          "entries": 13,
+          "bytes": 46383856,
+          "budget": 134217728,
+          "hits": 23,
+          "misses": 0,
+          "evictions": 0
+        },
+        "nativeCache": {
+          "entries": 22,
+          "bytes": 10903552,
+          "budget": 268435456,
+          "hits": 0,
+          "misses": 0,
+          "evictions": 0
+        },
+        "terrainCache": {
+          "entries": 86,
+          "bytes": 42622976,
+          "budget": 67108864,
+          "hits": 154,
+          "misses": 88,
+          "evictions": 0
+        }
+      },
+      "heap": {
+        "used": 177000000,
+        "total": 199000000
+      },
+      "processMemory": {
+        "pssKiB": 1489545,
+        "processes": [
+          {
+            "type": "browser",
+            "pssKiB": 51422
+          },
+          {
+            "type": "renderer",
+            "pssKiB": 1147226
+          },
+          {
+            "type": "GPU",
+            "pssKiB": 202481
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "pssKiB": 69277
+          },
+          {
+            "type": "audio.mojom.AudioService",
+            "pssKiB": 19139
+          }
+        ]
+      },
+      "frames": {
+        "n": 154,
+        "median": 33.39999999999418,
+        "p95": 66.69999999999709,
+        "p99": 66.70000000001164,
+        "max": 83.40000000000873,
+        "over16": 149,
+        "over33": 128,
+        "over50": 20
+      },
+      "ready": 3
+    },
+    {
+      "name": "long-exploration",
+      "start": 82940.80000000075,
+      "initialChunks": 0,
+      "end": 142986.69999999925,
+      "chunks": 0,
+      "error": null,
+      "streaming": {
+        "active": 0,
+        "desired": 25,
+        "decorationDesired": 9,
+        "publicationQueue": 0,
+        "generationInFlight": 1,
+        "terrainInFlight": 0,
+        "meshQueue": 0,
+        "lightQueue": 0,
+        "warmRender": {
+          "entries": 13,
+          "bytes": 46383856,
+          "budget": 134217728,
+          "hits": 23,
+          "misses": 0,
+          "evictions": 0
+        },
+        "nativeCache": {
+          "entries": 27,
+          "bytes": 13381632,
+          "budget": 268435456,
+          "hits": 0,
+          "misses": 0,
+          "evictions": 0
+        },
+        "terrainCache": {
+          "entries": 135,
+          "bytes": 66908160,
+          "budget": 67108864,
+          "hits": 170,
+          "misses": 214,
+          "evictions": 79
+        }
+      },
+      "heap": {
+        "used": 177000000,
+        "total": 199000000
+      },
+      "processMemory": {
+        "pssKiB": 1325168,
+        "processes": [
+          {
+            "type": "browser",
+            "pssKiB": 51428
+          },
+          {
+            "type": "renderer",
+            "pssKiB": 982567
+          },
+          {
+            "type": "GPU",
+            "pssKiB": 202772
+          },
+          {
+            "type": "network.mojom.NetworkService",
+            "pssKiB": 69266
+          },
+          {
+            "type": "audio.mojom.AudioService",
+            "pssKiB": 19135
+          }
+        ]
+      },
+      "frames": {
+        "n": 1893,
+        "median": 33.30000000000291,
+        "p95": 49.89999999999418,
+        "p99": 66.69999999998254,
+        "max": 183.29999999998836,
+        "over16": 1632,
+        "over33": 1283,
+        "over50": 35
+      },
+      "ready": 0
+    }
+  ],
+  "metrics": {
+    "counts": {
+      "terrainGenerated": 214,
+      "dependencyCacheHits": 333,
+      "sourceExecutions": 137,
+      "decorationResultHits": 0,
+      "completedCacheMisses": 28,
+      "publishedChunks": 36,
+      "lightRegions": 16,
+      "meshSections": 47,
+      "warmRestores": 20
+    },
+    "timings": {
+      "frameWorkMs": {
+        "count": 3233,
+        "total": 104026.90000005439,
+        "median": 26,
+        "p95": 36.600000001490116,
+        "p99": 53,
+        "max": 168.40000000223517,
+        "over16": 3233,
+        "over33": 656,
+        "over50": 409,
+        "retainedSamples": 2048
+      },
+      "streamingFrameWorkMs": {
+        "count": 3233,
+        "total": 2852.299999989569,
+        "median": 0,
+        "p95": 3,
+        "p99": 4,
+        "max": 11.199999999254942,
+        "over16": 0,
+        "over33": 0,
+        "over50": 0,
+        "retainedSamples": 2048
+      },
+      "frameIntervalMs": {
+        "count": 3232,
+        "total": 123499.19999999925,
+        "median": 30.800000000745058,
+        "p95": 44.19999999925494,
+        "p99": 63.80000000074506,
+        "max": 196.30000000074506,
+        "over16": 3232,
+        "over33": 1291,
+        "over50": 573,
+        "retainedSamples": 2048
+      },
+      "workerRoundTripMs": {
+        "count": 98,
+        "total": 112204.30000000447,
+        "median": 1055.4000000022352,
+        "p95": 2000.1000000014901,
+        "p99": 4626.199999999255,
+        "max": 5063.300000000745,
+        "over16": 98,
+        "over33": 98,
+        "over50": 98,
+        "retainedSamples": 98
+      },
+      "workerGenerationMs": {
+        "count": 98,
+        "total": 108763.7000000216,
+        "median": 1016.1000000014901,
+        "p95": 1992.3999999985099,
+        "p99": 4565.5,
+        "max": 5032.60000000149,
+        "over16": 98,
+        "over33": 98,
+        "over50": 98,
+        "retainedSamples": 98
+      },
+      "workerQueueAndMessagingMs": {
+        "count": 98,
+        "total": 3441.0999999828637,
+        "median": 17.900000002235174,
+        "p95": 60.69999999925494,
+        "p99": 88.90000000223517,
+        "max": 1222.4000000022352,
+        "over16": 54,
+        "over33": 17,
+        "over50": 9,
+        "retainedSamples": 98
+      },
+      "terrainGenerationMs": {
+        "count": 98,
+        "total": 82118.40000000224,
+        "median": 726.5,
+        "p95": 1811.5000000037253,
+        "p99": 2041.199999999255,
+        "max": 2058.5,
+        "over16": 87,
+        "over33": 87,
+        "over50": 87,
+        "retainedSamples": 98
+      },
+      "sourceFeatureMs": {
+        "count": 98,
+        "total": 26241.40000000596,
+        "median": 0,
+        "p95": 1771.5999999940395,
+        "p99": 4537.39999999851,
+        "max": 5008.699999999255,
+        "over16": 11,
+        "over33": 11,
+        "over50": 11,
+        "retainedSamples": 98
+      },
+      "publishSliceMs": {
+        "count": 4948,
+        "total": 353.20000000298023,
+        "median": 0,
+        "p95": 0.10000000149011612,
+        "p99": 0.6000000014901161,
+        "max": 8.600000001490116,
+        "over16": 0,
+        "over33": 0,
+        "over50": 0,
+        "retainedSamples": 2048
+      },
+      "readyToPublishedMs": {
+        "count": 36,
+        "total": 36829.29999999702,
+        "median": 118.80000000074506,
+        "p95": 5198.699999999255,
+        "p99": 6294.199999999255,
+        "max": 7295.89999999851,
+        "over16": 36,
+        "over33": 30,
+        "over50": 26,
+        "retainedSamples": 36
+      },
+      "lightSliceMs": {
+        "count": 4191,
+        "total": 295.9999999664724,
+        "median": 0,
+        "p95": 0.19999999925494194,
+        "p99": 0.29999999701976776,
+        "max": 3.199999999254942,
+        "over16": 0,
+        "over33": 0,
+        "over50": 0,
+        "retainedSamples": 2048
+      },
+      "meshSliceMs": {
+        "count": 9279,
+        "total": 2122.2999999411404,
+        "median": 0.09999999776482582,
+        "p95": 0.4000000022351742,
+        "p99": 1.300000000745058,
+        "max": 8.300000000745058,
+        "over16": 0,
+        "over33": 0,
+        "over50": 0,
+        "retainedSamples": 2048
+      },
+      "meshCpuMs": {
+        "count": 47,
+        "total": 2101.29999993369,
+        "median": 30.99999999627471,
+        "p95": 103.8999999910593,
+        "p99": 109.20000000670552,
+        "max": 121.49999999627471,
+        "over16": 41,
+        "over33": 21,
+        "over50": 16,
+        "retainedSamples": 47
+      },
+      "meshElapsedMs": {
+        "count": 47,
+        "total": 36886.5,
+        "median": 548.5999999977648,
+        "p95": 1614.8999999985099,
+        "p99": 2844.199999999255,
+        "max": 2920,
+        "over16": 44,
+        "over33": 44,
+        "over50": 44,
+        "retainedSamples": 47
+      },
+      "warmRestoreMs": {
+        "count": 20,
+        "total": 1.7999999970197678,
+        "median": 0.09999999776482582,
+        "p95": 0.30000000074505806,
+        "p99": 0.30000000074505806,
+        "max": 0.30000000074505806,
+        "over16": 0,
+        "over33": 0,
+        "over50": 0,
+        "retainedSamples": 20
+      }
+    }
+  },
+  "errors": []
+}
