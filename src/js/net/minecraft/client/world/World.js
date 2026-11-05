@@ -78,6 +78,7 @@ export default class World {
             texture.magFilter = THREE.NearestFilter;
             texture.minFilter = THREE.NearestFilter;
             texture.repeat.set(0.7, 0.7);
+            if (this.minecraft.settings.clouds === 'fancy') this.buildFancyClouds(texture.image);
         });
 
         const cloudPlaneSize = 4096;
@@ -95,8 +96,8 @@ export default class World {
         this.clouds.rotation.x = -Math.PI / 2;
         this.clouds.position.y = 192;
         this.group.add(this.clouds);
-        
         this.cloudOffset = 0;
+        this.setCloudMode(this.minecraft.settings.clouds ?? 'fast');
 
         // Update lights async. Time-budget the drain so a large backlog (e.g.
         // the burst of chunks sent when a world loads) can never block the main
@@ -191,11 +192,91 @@ export default class World {
             this.minecraft.worldRenderer.rebuildAll();
         }
 
-        // Update clouds
-        this.cloudOffset += 0.00001;
+        this.updateClouds();
 
         // Update world time
         this.time++;
+    }
+
+    updateClouds() {
+        const player = this.minecraft.player;
+        if (player && Number.isFinite(player.x) && Number.isFinite(player.z)) {
+            // Keep the large cloud sheet centered on the player and scroll its
+            // texture with world coordinates so it moves smoothly across chunks.
+            this.clouds.position.x = player.x;
+            this.clouds.position.z = player.z;
+            this.cloudTexture.offset.x = player.x * 0.0001 + this.cloudOffset;
+            this.cloudTexture.offset.y = -player.z * 0.0001;
+            if (this.fancyClouds) {
+                const period = 256 * 12;
+                this.fancyClouds.position.x = Math.round(player.x / period) * period + this.cloudOffset * 3000;
+                this.fancyClouds.position.z = Math.round(player.z / period) * period;
+            }
+        }
+
+        this.cloudOffset += 0.00001;
+
+        // Clouds use an unlit material, so tint them from the current sky
+        // darkness explicitly to make them dim at night and brighten at dawn.
+        const skyDarken = this.calculateSkylightSubtracted(1.0);
+        const daylight = 1 - Math.min(11, skyDarken) / 11;
+        const brightness = 0.12 + 0.88 * Math.pow(daylight, 1.7);
+        this.clouds.material.color.setRGB(brightness, brightness, brightness);
+        if (this.fancyClouds) this.fancyClouds.material.color.setRGB(brightness, brightness, brightness);
+    }
+
+    setCloudMode(mode) {
+        if (!['off', 'fast', 'fancy'].includes(mode)) mode = 'fast';
+        this.minecraft.settings.clouds = mode;
+        this.clouds.visible = mode === 'fast';
+        if (this.fancyClouds) this.fancyClouds.visible = mode === 'fancy';
+        else if (mode === 'fancy' && this.cloudTexture?.image) this.buildFancyClouds(this.cloudTexture.image);
+        this.minecraft.settings.save?.();
+    }
+
+    buildFancyClouds(image) {
+        if (!image || this.fancyClouds) return;
+        const canvas = document.createElement('canvas');
+        canvas.width = image.width;
+        canvas.height = image.height;
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) return;
+        context.drawImage(image, 0, 0);
+        const { data, width, height } = context.getImageData(0, 0, image.width, image.height);
+        const occupied = new Uint8Array(width * height);
+        for (let i = 0; i < occupied.length; i++) occupied[i] = data[i * 4 + 3] >= 128 ? 1 : 0;
+
+        const positions = [];
+        const cell = 12;
+        const thickness = 4;
+        const halfW = width * cell / 2;
+        const halfH = height * cell / 2;
+        const quad = (a, b, c, d) => positions.push(...a, ...b, ...c, ...a, ...c, ...d);
+        const has = (x, z) => x >= 0 && z >= 0 && x < width && z < height && occupied[z * width + x] !== 0;
+        for (let z = 0; z < height; z++) {
+            for (let x = 0; x < width; x++) {
+                if (!has(x, z)) continue;
+                const x0 = x * cell - halfW, x1 = x0 + cell;
+                const z0 = z * cell - halfH, z1 = z0 + cell;
+                // JAR CloudRenderer extrudes occupied texture cells into a
+                // shallow volume; omit internal side faces between neighbors.
+                quad([x0, thickness, z0], [x1, thickness, z0], [x1, thickness, z1], [x0, thickness, z1]);
+                quad([x0, 0, z1], [x1, 0, z1], [x1, 0, z0], [x0, 0, z0]);
+                if (!has(x, z - 1)) quad([x0, 0, z0], [x1, 0, z0], [x1, thickness, z0], [x0, thickness, z0]);
+                if (!has(x, z + 1)) quad([x1, 0, z1], [x0, 0, z1], [x0, thickness, z1], [x1, thickness, z1]);
+                if (!has(x - 1, z)) quad([x0, 0, z1], [x0, 0, z0], [x0, thickness, z0], [x0, thickness, z1]);
+                if (!has(x + 1, z)) quad([x1, 0, z0], [x1, 0, z1], [x1, thickness, z1], [x1, thickness, z0]);
+            }
+        }
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geometry.computeVertexNormals();
+        const material = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.82, depthWrite: true, side: THREE.DoubleSide });
+        this.fancyClouds = new THREE.Mesh(geometry, material);
+        this.fancyClouds.position.y = 192;
+        this.fancyClouds.visible = this.minecraft.settings.clouds === 'fancy';
+        this.group.add(this.fancyClouds);
+        this.updateClouds();
     }
 
     scheduleBlockTick(x, y, z, delay) {

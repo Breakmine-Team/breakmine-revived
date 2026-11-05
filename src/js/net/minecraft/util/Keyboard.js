@@ -67,6 +67,14 @@ export default class Keyboard {
         return Keyboard.state[key] && Keyboard.enabled;
     }
 
+    /**
+     * True while either shift key is held, even when keyboard input is
+     * disabled for the game (menus still use it, e.g. for tooltip hints).
+     */
+    static isShiftDown() {
+        return !!(Keyboard.state["ShiftLeft"] || Keyboard.state["ShiftRight"]);
+    }
+
     static setEnabled(enabled) {
         Keyboard.enabled = enabled;
 

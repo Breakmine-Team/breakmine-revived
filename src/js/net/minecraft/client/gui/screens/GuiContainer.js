@@ -3,6 +3,7 @@ import Block from "../../world/block/Block.js";
 import { BlockRegistry } from "../../world/block/BlockRegistry.js";
 import GuiTooltip from "../widgets/GuiTooltip.js";
 import ItemStack from "../../item/ItemStack.js";
+import Keyboard from "../../../util/Keyboard.js";
 
 export default class GuiContainer extends GuiScreen {
 
@@ -79,12 +80,31 @@ export default class GuiContainer extends GuiScreen {
                 if (block && block.getDescription()) {
                     let slotX = this.x + this.hoverSlot.x;
                     let slotY = this.y + this.hoverSlot.y;
-                    let tooltipText = `${block.getDescription()}\n§8${BlockRegistry.getNamespacedKeyFromId(hoveredTypeId)}\n§9${block.mod ?? "Unknown Mod"}§r`;
+                    let tooltipText = `${block.getDescription()}\n${this.getShiftTooltipText(block)}§8${BlockRegistry.getNamespacedKeyFromId(hoveredTypeId)}\n§9${block.mod ?? "Unknown Mod"}§r`;
                     let tooltip = new GuiTooltip(this.minecraft, tooltipText, slotX, slotY, 16, 16);
                     tooltip.render(stack, mouseX, mouseY, partialTicks);
                 }
             }
         }
+    }
+
+    /**
+     * The shift part of a block's tooltip: its extra info while shift is
+     * held, otherwise a grey hint that there is some. Blocks without a
+     * shift description add nothing.
+     */
+    getShiftTooltipText(block) {
+        const info = typeof block.getShiftDescription === "function" ? block.getShiftDescription() : null;
+        if (!info || (Array.isArray(info) && info.length === 0)) {
+            return "";
+        }
+
+        if (!Keyboard.isShiftDown()) {
+            return "§7[Shift for info]\n";
+        }
+
+        const lines = Array.isArray(info) ? info : String(info).split(/\r?\n/);
+        return lines.map(line => `§7${line}§r`).join("\n") + "\n";
     }
 
     renderPostItem(stack, mouseX, mouseY, partialTicks) {

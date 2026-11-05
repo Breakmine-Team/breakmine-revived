@@ -60,6 +60,15 @@ export default class BlockShaftPart extends Block {
         return false;
     }
 
+    /**
+     * Radius of the cog wheel this part meshes with, in block units. Two cogs in
+     * mesh turn at speeds in inverse proportion to their radii, so this is what
+     * gives a gear ratio. The built-in cog's teeth reach 9px out from the axle.
+     */
+    getCogRadius() {
+        return 9 / 16;
+    }
+
     /** What is turning this block right now: {rpm, direction}. */
     getDrive(world, x, y, z, tick) {
         return ShaftDrive.resolve(world, x, y, z, tick);
@@ -163,9 +172,11 @@ export default class BlockShaftPart extends Block {
     }
 
     /**
-     * A shaft with two drives pulling it different ways shears and breaks. The
-     * snap splits the run, so afterwards each source drives its own half and
-     * the conflict is gone.
+     * A shaft with two drives pulling it in opposite directions shears and
+     * breaks. The snap splits the run, so afterwards each source drives its own
+     * half and the conflict is gone. Two drives at different speeds but the
+     * same direction are not a conflict - the faster one wins (see
+     * ShaftDrive.compute), so they leave the run in one piece.
      */
     onBlockTick(world, x, y, z) {
         if (!world) {

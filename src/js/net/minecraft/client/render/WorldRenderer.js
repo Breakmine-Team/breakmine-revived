@@ -11,6 +11,7 @@ import Vector3 from "../../util/Vector3.js";
 import TextureAtlas from "./TextureAtlas.js";
 import ItemStack from "../item/ItemStack.js";
 import * as THREE from "../../../../../../libraries/three.module.js";
+import FirstPersonItemRenderer from "./FirstPersonItemRenderer.js";
 import TranslucentMeshBatcher from "./TranslucentMeshBatcher.js";
 import GuiFunctions from "../gui/screens/GuiFunctions.js";
 import SignTextRenderer from "./SignTextRenderer.js";
@@ -305,6 +306,7 @@ export default class WorldRenderer {
         this.equippedProgress = 0;
         this.prevEquippedProgress = 0;
         this.itemToRender = new ItemStack(0, 0);
+        this.firstPersonItemRenderer = new FirstPersonItemRenderer(this);
 
         this.prevFogBrightness = 0;
         this.fogBrightness = 0;
@@ -671,6 +673,10 @@ export default class WorldRenderer {
         // Render overlay with the same FOV as the world
         this.overlay.updateMatrixWorld(true);
         this.webRenderer.render(this.overlay, this.camera);
+
+        // First person item last: it is drawn with its own camera over the
+        // finished world and overlay.
+        this.firstPersonItemRenderer.render(this.webRenderer);
 
         this.emitRenderHook('afterRender', { partialTicks });
     }
@@ -1682,6 +1688,7 @@ export default class WorldRenderer {
         let player = this.minecraft.player;
         let stack = player.renderer.firstPersonGroup;
         stack.visible = false;
+        this.firstPersonItemRenderer.cameraGroup.visible = false;
 
         // Hide hand when F1 is active
         if (GuiFunctions.isGuiHidden()) return;
@@ -1746,8 +1753,16 @@ export default class WorldRenderer {
             stack.scale.y *= 0.4;
             stack.scale.z *= 0.4;
 
-            // Render item
-            player.renderer.updateFirstPerson(player);
+            // The held item has its own scene and camera; hand it the state it
+            // needs and let the dedicated pass place it.
+            this.firstPersonItemRenderer.update(
+                this.itemToRender,
+                player.getEntityBrightness(),
+                equipProgress,
+                swingProgress,
+                partialTicks,
+                { hand: 'main_hand', animation: { type: 'whack' } }
+            );
         } else {
             // Initial offset on screen
             this.translate(stack, -xOffset * 0.3, yOffset * 0.4, -zOffset * 0.4);

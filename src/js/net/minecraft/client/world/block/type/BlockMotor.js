@@ -35,6 +35,7 @@ export default class BlockMotor extends Block {
     constructor(id, textureSlotId) {
         super(id, textureSlotId);
         this.description = "Motor";
+        this.shiftDescription = "Outputs 10,000 SU @ 16 RPM";
         this.hardness = 2.0;
         this.sound = Block.sounds.stone;
         this.multipart = true;

@@ -22,6 +22,7 @@ export default class BlockWaterWheel extends BlockShaftPart {
         super(id, textureSlotId);
 
         this.description = "Water Wheel";
+        this.shiftDescription = "Outputs 900 SU @ 8 RPM";
         this.hardness = 2.0;
         this.sound = Block.sounds.wood;
         this.inventoryTab = EnumCreativeInventoryTab.FACTORIO;

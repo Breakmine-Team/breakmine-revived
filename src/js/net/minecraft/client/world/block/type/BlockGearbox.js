@@ -22,7 +22,8 @@ const AXLE_TEXTURE = 'stone';
  *    crossed axle runs out through the two sides, driven in reverse.
  *  - the vertical gearbox stands with its plates facing the player. Its
  *    horizontal axle therefore leaves across those plates, out through the two
- *    open sides, and its second axle stands up out of the top, in reverse.
+ *    open sides, and its second axle stands up out of the top and the bottom,
+ *    in reverse.
  *
  * Only the axle stubs turn; the casing stays bolted down.
  */
@@ -32,6 +33,7 @@ export default class BlockGearbox extends BlockShaftPart {
         super(id, textureSlotId);
         this.vertical = vertical === true;
         this.description = this.vertical ? "Vertical Gearbox" : "Gearbox";
+        this.shiftDescription = "Tranfers rotation on 2 axes";
         this.hardness = 2.0;
 
         // The plates fill the cell footprint, so neighbours must not cull their
@@ -100,15 +102,18 @@ export default class BlockGearbox extends BlockShaftPart {
         ];
     }
 
-    /** The single stub standing up out of the top of a vertical gearbox. */
-    getTopAxleParts() {
-        return ShaftRenderer.getParts(ShaftRenderer.PART.HALF_SHAFT, ShaftRenderer.AXIS.Y, {texture: AXLE_TEXTURE});
+    /** The upright axle: one stub out of the top and one out of the bottom. */
+    getVerticalAxleParts() {
+        return [
+            ...ShaftRenderer.getParts(ShaftRenderer.PART.HALF_SHAFT, ShaftRenderer.AXIS.Y, {texture: AXLE_TEXTURE, negative: true}),
+            ...ShaftRenderer.getParts(ShaftRenderer.PART.HALF_SHAFT, ShaftRenderer.AXIS.Y, {texture: AXLE_TEXTURE})
+        ];
     }
 
-    /** What turns: the horizontal pair, plus either the crossed pair or the top. */
+    /** What turns: the horizontal pair, plus either the crossed pair or the upright axle. */
     getMovingParts(data) {
         if (this.vertical === true) {
-            return [...this.getAxleParts(this.getAxis(data)), ...this.getTopAxleParts()];
+            return [...this.getAxleParts(this.getAxis(data)), ...this.getVerticalAxleParts()];
         }
 
         return [
@@ -152,7 +157,7 @@ export default class BlockGearbox extends BlockShaftPart {
         if (this.vertical === true) {
             return [
                 {parts: this.getAxleParts(axis), axis: axis, sign: 1},
-                {parts: this.getTopAxleParts(), axis: ShaftRenderer.AXIS.Y, sign: -1}
+                {parts: this.getVerticalAxleParts(), axis: ShaftRenderer.AXIS.Y, sign: -1}
             ];
         }
 

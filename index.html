@@ -790,6 +790,156 @@ window.devtoolsWindow = WindowManager.create({
   };
 })();
 
+// Texture atlas viewer. Run `showAtlas()` in the TinyTools console: it opens a
+// window with the live atlas that can be dragged and zoomed with the wheel.
+(function setupAtlasViewer() {
+  function formatZoom(scale) {
+    return (scale >= 1 ? scale.toFixed(1) : scale.toFixed(2)) + 'x';
+  }
+
+  window.showAtlas = function showAtlas() {
+    const atlas = window.app && window.app.worldRenderer
+      ? window.app.worldRenderer.textureAtlas
+      : null;
+    const source = atlas && atlas.canvas;
+
+    const win = WindowManager.create({
+      title: 'Texture atlas',
+      x: 140,
+      y: 60,
+      width: 620,
+      height: 620,
+      noOverflow: true,
+      content: `
+        <div style="position:relative;height:100%;background:#111;overflow:hidden;">
+          <canvas id="atlasViewCanvas" style="display:block;width:100%;height:100%;cursor:grab;touch-action:none;"></canvas>
+          <div id="atlasViewHud" style="position:absolute;left:6px;bottom:6px;font:11px monospace;color:#ddd;background:rgba(0,0,0,0.55);padding:2px 6px;border-radius:3px;pointer-events:none;white-space:nowrap;"></div>
+        </div>`
+    });
+
+    const canvas = win.bodyEl.querySelector('#atlasViewCanvas');
+    const hud = win.bodyEl.querySelector('#atlasViewHud');
+    const ctx = canvas.getContext('2d');
+
+    // View transform: zoom, plus where the atlas' top-left corner sits on the
+    // canvas. Everything is in device pixels so the texels stay square.
+    let scale = 1;
+    let offsetX = 0;
+    let offsetY = 0;
+    let dragging = false;
+    let lastX = 0;
+    let lastY = 0;
+    let framed = false;
+
+    function devicePixelRatio() {
+      return window.devicePixelRatio || 1;
+    }
+
+    function resize() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = devicePixelRatio();
+      const width = Math.max(1, Math.round(rect.width * dpr));
+      const height = Math.max(1, Math.round(rect.height * dpr));
+
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+
+      if (!framed) frameAtlas();
+    }
+
+    function frameAtlas() {
+      if (!source || !source.width || !canvas.width) return;
+
+      const fit = Math.min(canvas.width / source.width, canvas.height / source.height) * 0.92;
+      scale = fit > 0 ? fit : 1;
+      offsetX = (canvas.width - source.width * scale) / 2;
+      offsetY = (canvas.height - source.height * scale) / 2;
+      framed = true;
+    }
+
+    function updateHud() {
+      if (!source) {
+        hud.textContent = 'Texture atlas not loaded yet';
+        return;
+      }
+      hud.textContent = `${source.width}x${source.height} \u00b7 ${formatZoom(scale)} \u00b7 drag to pan, wheel to zoom`;
+    }
+
+    function draw() {
+      if (!win.el.isConnected) return;
+
+      resize();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = '#111';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      if (source) {
+        // Nearest while zoomed in, so individual texels stay legible.
+        ctx.imageSmoothingEnabled = scale < 1;
+        ctx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
+        ctx.drawImage(source, 0, 0);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+      }
+
+      updateHud();
+      requestAnimationFrame(draw);
+    }
+
+    canvas.addEventListener('wheel', (event) => {
+      event.preventDefault();
+      if (!source) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const dpr = devicePixelRatio();
+      const pointerX = (event.clientX - rect.left) * dpr;
+      const pointerY = (event.clientY - rect.top) * dpr;
+
+      const next = Math.min(64, Math.max(0.02, scale * Math.exp(-event.deltaY * 0.0015)));
+      const applied = next / scale;
+
+      // Keep the texel under the cursor in place while zooming.
+      offsetX = pointerX - (pointerX - offsetX) * applied;
+      offsetY = pointerY - (pointerY - offsetY) * applied;
+      scale = next;
+    }, { passive: false });
+
+    canvas.addEventListener('mousedown', (event) => {
+      event.preventDefault();
+      dragging = true;
+      lastX = event.clientX;
+      lastY = event.clientY;
+      canvas.style.cursor = 'grabbing';
+    });
+
+    window.addEventListener('mousemove', (event) => {
+      if (!dragging || !win.el.isConnected) return;
+
+      const dpr = devicePixelRatio();
+      offsetX += (event.clientX - lastX) * dpr;
+      offsetY += (event.clientY - lastY) * dpr;
+      lastX = event.clientX;
+      lastY = event.clientY;
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      canvas.style.cursor = 'grab';
+    });
+
+    // Double-click refits the whole atlas in the window.
+    canvas.addEventListener('dblclick', () => {
+      framed = false;
+      frameAtlas();
+    });
+
+    requestAnimationFrame(draw);
+    return win;
+  };
+})();
+
 // New Update prompt for standalone file:// builds. Connects to the data-store
 // websocket, which expects a plain filename and replies with a JSON object:
 // { path, contentType, encoding, content }.

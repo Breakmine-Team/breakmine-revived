@@ -11,6 +11,7 @@ import Block from "../world/block/Block.js";
 import BoundingBox from "../../util/BoundingBox.js";
 import { BlockRegistry } from "../world/block/BlockRegistry.js";
 import * as THREE from "../../../../../../libraries/three.module.js";
+import { createSpriteItemMesh } from "./SpriteItemRenderer.js";
 import EnumCreativeInventoryTab from "../gui/EnumCreativeInventoryTab.js";
 import getTrafficConeModel, { getTrafficConeTexture } from "./model/TrafficConeModel.js";
 import getSnailModel, { getSnailTexture } from "./model/SnailModel.js";
@@ -305,13 +306,21 @@ export default class BlockRenderer {
     }
 
     static DummyBlock = class extends Block {
-        constructor(id, texId, texName) {
+        constructor(id, texId, texName, texFaces = null) {
             super(id, texId);
             this.inventoryTab = EnumCreativeInventoryTab.NOTLISTED;
             this.texName = texName;
+            // Optional per-face overrides, keyed by face name
+            this.texFaces = texFaces;
         }
         
         getTextureForFace(face) {
+            if (this.texFaces !== null && face && typeof face.getName === 'function') {
+                const override = this.texFaces[face.getName()];
+                if (override) {
+                    return override;
+                }
+            }
             return this.texName;
         }
     };
@@ -407,7 +416,7 @@ export default class BlockRenderer {
                 partBlock = parts[i][2]['block'];
                 bbox = parts[i][2]['bbox'];
             } else if (parts[i][0] === 'texture') {
-                partBlock = new this.constructor.DummyBlock(999, 0, parts[i][2]['texture']);
+                partBlock = new this.constructor.DummyBlock(999, 0, parts[i][2]['texture'], parts[i][2]['faces'] ?? null);
                 bbox = parts[i][2]['bbox'];
             }
             
@@ -849,9 +858,7 @@ export default class BlockRenderer {
             maxV = minV + (16 / 256);
         }
         
-        let width = boundingBox.maxX - boundingBox.minX;
         let height = boundingBox.maxY - boundingBox.minY;
-        let depth = boundingBox.maxZ - boundingBox.minZ;
 
         // UV span of a single full texture tile, derived from the bound texture's own size
         let uSpan = maxU - minU;
@@ -862,42 +869,40 @@ export default class BlockRenderer {
         const tileMinU = minU;
         const tileMinV = minV;
 
-        switch (face) {
-            case EnumBlockFace.BOTTOM:
-            case EnumBlockFace.TOP:
-                maxU = minU + (uSpan * width);
-                maxV = minV + (vSpan * depth);
-                break;
-            case EnumBlockFace.NORTH:
-            case EnumBlockFace.SOUTH:
-                maxU = minU + (uSpan * width);
-                maxV = minV + (vSpan * height);
-                
-                if (height < 1.0 && block?.topAlign !== true) {
-                    let vOffset = vSpan * (1.0 - height);
-                    minV += vOffset;
-                    maxV += vOffset;
-                }
-                break;
-            case EnumBlockFace.WEST:
-            case EnumBlockFace.EAST:
-                maxU = minU + (uSpan * depth);
-                maxV = minV + (vSpan * height);
+        // Lay the texture over the whole face of the 16x16x16 cell and project
+        // the box onto it, so a shape that does not fill the cell samples the
+        // matching part of its texture instead of a stretched copy pinned to
+        // one corner. A box inset by 1px on every side keeps the texture's
+        // centre; one hanging from the ceiling keeps the texture's top rows.
+        minU = tileMinU + uSpan * (face.isZAxis() ? boundingBox.minZ : boundingBox.minX);
+        maxU = tileMinU + uSpan * (face.isZAxis() ? boundingBox.maxZ : boundingBox.maxX);
 
-                if (height < 1.0 && block?.topAlign !== true) {
-                    let vOffset = vSpan * (1.0 - height);
-                    minV += vOffset;
-                    maxV += vOffset;
-                }
-                break;
+        if (face.isYAxis()) {
+            // Top and bottom faces run X across and Z down.
+            minV = tileMinV + vSpan * boundingBox.minZ;
+            maxV = tileMinV + vSpan * boundingBox.maxZ;
+        } else if (block?.topAlign === true) {
+            // Parts that hang off the top of the cell sample the first rows,
+            // whatever their box says.
+            minV = tileMinV;
+            maxV = tileMinV + (vSpan * height);
+        } else {
+            minV = tileMinV + vSpan * (1 - boundingBox.maxY);
+            maxV = tileMinV + vSpan * (1 - boundingBox.minY);
         }
 
         // A face longer than one block would sample past this tile into the
         // neighbouring tiles stored in the atlas. Wrap the offending axis back
         // inside the tile so the texture repeats instead of bleeding. Measure
         // the spans before the V flip below, which reverses their sign.
-        const wrapsU = (maxU - minU) > uSpan + FACE_UV_EPSILON;
-        const wrapsV = (maxV - minV) > vSpan + FACE_UV_EPSILON;
+        // Wrap as soon as the face's UV rect leaves its tile, in either
+        // direction: a projected box can overhang the tile by starting before
+        // it (a part that reaches outside the cell) just as much as by running
+        // past its end, and both would sample the neighbouring tiles.
+        const wrapsU = minU < tileMinU - FACE_UV_EPSILON
+            || maxU > tileMinU + uSpan + FACE_UV_EPSILON;
+        const wrapsV = minV < tileMinV - FACE_UV_EPSILON
+            || maxV > tileMinV + vSpan + FACE_UV_EPSILON;
 
         minV = 1 - minV;
         maxV = 1 - maxV;
@@ -1573,7 +1578,81 @@ export default class BlockRenderer {
         return material;
     }
 
+    /**
+     * Items are flat sprites packed into the shared atlas, which cannot be
+     * extruded: the pixel scan needs the sprite on its own. Crop the cell out of
+     * the atlas into a small canvas texture carrying image-top UVs.
+     */
+    getSpriteItemTexture(textureName) {
+        const atlas = this.worldRenderer.textureAtlas;
+        if (!atlas || !atlas.isLoaded() || !atlas.canvas) {
+            return null;
+        }
+
+        const coords = atlas.textureMap.get(textureName);
+        if (!coords) {
+            return null;
+        }
+
+        const size = atlas.textureSize;
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+
+        const context = canvas.getContext("2d");
+        context.imageSmoothingEnabled = false;
+        context.drawImage(atlas.canvas, coords.x, coords.y, size, size, 0, 0, size, size);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.magFilter = THREE.NearestFilter;
+        texture.minFilter = THREE.NearestFilter;
+        texture.generateMipmaps = false;
+        texture.flipY = false;
+        return texture;
+    }
+
+    /**
+     * A held item as a real 3D object: the sprite is extruded a couple of pixels
+     * deep so it has an edge when it turns, instead of a single billboard. Each
+     * call builds its own geometry and texture because the hand renderers
+     * dispose whatever they are given when the held item changes.
+     */
+    createHeldItemSprite(block) {
+        const texture = this.getSpriteItemTexture(block.getTextureForFace(EnumBlockFace.NORTH));
+        if (texture === null) {
+            return null;
+        }
+
+        return createSpriteItemMesh(texture);
+    }
+
+    /**
+     * A sprite item for the hand. The mesh stays one block wide: the display
+     * transform's scale is already relative to that box (0.68 in first person),
+     * so scaling here as well made held items fill the whole screen.
+     */
+    createGeneratedItemMesh(block, brightness, firstPerson = false) {
+        return this.createHeldItemSprite(block);
+    }
+
+    /** No trident model is packed here, so a trident item has no special mesh. */
+    createTridentItemModel() {
+        return null;
+    }
+
     renderBlockInHandThirdPerson(group, block, brightness) {
+        // Held items are extruded sprites, so the flat atlas quad is skipped.
+        if (block.getRenderType() === BlockRenderType.ITEM) {
+            const spriteMesh = this.createHeldItemSprite(block);
+            if (spriteMesh !== null) {
+                group.add(spriteMesh);
+                spriteMesh.position.set(0, 9, -5);
+                spriteMesh.rotation.y = Math.PI / 4;
+                spriteMesh.scale.set(6, 6, 6);
+                return;
+            }
+        }
+
         this.tessellator.startDrawing();
         this.beginModelPass();
         this.renderBlock(null, block, false, 0, 0, 0);
@@ -1605,6 +1684,22 @@ export default class BlockRenderer {
     }
 
     renderBlockInFirstPerson(group, block, brightness) {
+        // Held items are extruded sprites, so the flat atlas quad is skipped.
+        if (block.getRenderType() === BlockRenderType.ITEM) {
+            const spriteMesh = this.createHeldItemSprite(block);
+            if (spriteMesh !== null) {
+                group.add(spriteMesh);
+                spriteMesh.scale.set(19, 19, 19);
+                spriteMesh.position.y += 8;
+
+                if (block.isTool === true) {
+                    spriteMesh.rotation.x -= Math.PI / 2.5;
+                    spriteMesh.rotation.z -= Math.PI / 6;
+                }
+                return;
+            }
+        }
+
         this.tessellator.startDrawing();
         this.beginModelPass();
         this.renderBlock(null, block, false, 0, 0, 0);

@@ -29,6 +29,8 @@ export default class GameSettings {
         this.keyPlayerList = 'Tab';
         this.keyVoiceChat = 'KeyO';
 
+        this.clouds = 'fancy';
+
         this.session = null;
 
         this.language = 'en';

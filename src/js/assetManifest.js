@@ -43,6 +43,13 @@ export const uiTextures = [
     "gui/heartHalf.png",
     "gui/heartEmpty.png",
     "gui/ping.png",
+    "gui/pinging_1.png",
+    "gui/pinging_2.png",
+    "gui/pinging_3.png",
+    "gui/pinging_4.png",
+    "gui/pinging_5.png",
+    "gui/join.png",
+    "gui/join_highlighted.png",
     "terrain/pack/minecraft/textures/blocks/destroy_stage_0.png",
     "terrain/pack/minecraft/textures/blocks/destroy_stage_1.png",
     "terrain/pack/minecraft/textures/blocks/destroy_stage_2.png",
@@ -151,7 +158,8 @@ export const atlasBlockTextures = [
     "melon_stem.png", "attached_melon_stem.png", "moldy_cheese.png",
     "flint_cardoor.png", "counter_side.png", "counter_top.png",
     "counter_side_drawer.png", "counter_stove_side.png", "counter_stove_side_on.png",
-    "scaffolding_top.png", "scaffolding_side.png", "scaffolding_bottom.png"
+    "scaffolding_top.png", "scaffolding_side.png", "scaffolding_bottom.png",
+    "shaft_enterance.png", "clock.png"
 ];
 
 const toolMaterials = ['wooden', 'stone', 'iron', 'diamond', 'golden'];

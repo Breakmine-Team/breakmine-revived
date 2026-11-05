@@ -61,22 +61,9 @@ export default class GuiMultiplayer extends GuiScreen {
         this.lanBeenAdded = [];
 
         // Update slot positions for current window size (fixes disappearing on resize)
-        this.worldSlotContainer.slotList = this.saveList.map((data, index) =>
-            new GuiServerSlot(
-                data,
-                this.width / 2 - 110,
-                0,
-                220,
-                36,
-                () => {
-                    this.worldSlotContainer.setSelected(index);
-                },
-                this.minecraft
-            )
-        );
+        this.worldSlotContainer.slotList = this.saveList.map((data, index) => this.createServerSlot(data, index));
 
         const defaultServerFileName = "Nino_Creative.json";
-        const defaultServerFileName2 = "Nino_SMP.json";
 
         this.saveList = [];
         if (this.minecraft.settings.showNino) {
@@ -90,25 +77,13 @@ export default class GuiMultiplayer extends GuiScreen {
             );
         }
 
-        this.worldSlotContainer.slotList = this.saveList.map((data, index) =>
-            new GuiServerSlot(
-                data,
-                this.width / 2 - 110,
-                0,
-                220,
-                36,
-                () => {
-                    this.worldSlotContainer.setSelected(index);
-                },
-                this.minecraft
-            )
-        );
+        this.worldSlotContainer.slotList = this.saveList.map((data, index) => this.createServerSlot(data, index));
 
         this.minecraft.fs.listDir(`servers/`).then(fileList => {
             if (fileList !== null) {
                 fileList.forEach(fileName => {
                     // Skip the default server since we already added it
-                    if (fileName === `servers/${defaultServerFileName}` || fileName === `servers/${defaultServerFileName2}`) {
+                    if (fileName === `servers/${defaultServerFileName}`) {
                         return;
                     }
                     this.minecraft.fs.loadFile(fileName).then(file => {
@@ -130,19 +105,7 @@ export default class GuiMultiplayer extends GuiScreen {
                                 })
 
                                 // Update slotList after adding each server
-                                this.worldSlotContainer.slotList = this.saveList.map((data, index) =>
-                                    new GuiServerSlot(
-                                        data,
-                                        this.width / 2 - 110,
-                                        0,
-                                        220,
-                                        36,
-                                        () => {
-                                            this.worldSlotContainer.setSelected(index);
-                                        },
-                                        this.minecraft
-                                    )
-                                );
+                                this.worldSlotContainer.slotList = this.saveList.map((data, index) => this.createServerSlot(data, index));
                             }
                         }
                     }).catch(error => {
@@ -156,34 +119,7 @@ export default class GuiMultiplayer extends GuiScreen {
         });
 
         this.buttonSelect = new GuiButton(this.minecraft, "Join Server", this.width / 2 - 154, this.height - 52, 150, 20, () => {
-            if (this.selectedWorld !== -1) {
-                const world = this.worldSlotContainer.slotList[this.selectedWorld];
-                const worldName = world.worldName.replaceAll(' ', '_').replaceAll('/', '_');
-                const worldDetails = world.worldDetails;
-                const worldDate = world.worldDate.replaceAll(' ', '_').replaceAll('/', '_');
-
-                // Use the proxy field as the WebSocket address
-                let proxy = null;
-                if (worldDetails && worldDetails.trim() !== '') {
-                    let proxyUrl = worldDetails.trim();
-                    // If it has the "Proxy: " prefix, remove it
-                    if (proxyUrl.startsWith('Proxy: ')) {
-                        proxyUrl = proxyUrl.replace('Proxy: ', '').trim();
-                    }
-                    proxy = { url: `ws://${proxyUrl}` };
-                } else {
-                    // Auto-detect: use proxy if not localhost or 10.0.0.213
-                    let address = worldDate.trim().toLowerCase();
-                    let isLocalhost = address === 'localhost' || address === '127.0.0.1' || address.startsWith('127.0.0.');
-                    let isAllowedHost = address === '10.0.0.213';
-                    
-                    if (!isLocalhost && !isAllowedHost) {
-                        proxy = { url: 'ws://174.169.230.116:6003' };
-                    }
-                }
-
-                this.minecraft.displayScreen(new GuiConnecting(this, worldDetails, undefined, proxy));
-            }
+            this.joinServer(this.selectedWorld);
         });
         this.buttonRename = new GuiButton(this.minecraft, "Direct", this.width / 2 - 74, this.height - 28, 70, 20, () => {
             this.minecraft.displayScreen(new GuiDirectConnect(this));
@@ -238,6 +174,55 @@ export default class GuiMultiplayer extends GuiScreen {
         this.buttonSelect.enabled = false;
         this.buttonRename.enabled = true;
         this.buttonDelete.enabled = false;
+    }
+
+    /**
+     * The slot list is rebuilt whenever servers are added or removed, so every
+     * slot is created here to keep click-to-join wired up in one place.
+     */
+    createServerSlot(data, index) {
+        return new GuiServerSlot(
+            data,
+            this.width / 2 - 110,
+            0,
+            220,
+            36,
+            () => {
+                this.worldSlotContainer.setSelected(index);
+            },
+            this.minecraft,
+            () => this.joinServer(index)
+        );
+    }
+
+    joinServer(index) {
+        if (index < 0 || index >= this.worldSlotContainer.slotList.length) return;
+
+        const world = this.worldSlotContainer.slotList[index];
+        const worldDetails = world.worldDetails;
+        const worldDate = world.worldDate.replaceAll(' ', '_').replaceAll('/', '_');
+
+        // Use the proxy field as the WebSocket address
+        let proxy = null;
+        if (worldDetails && worldDetails.trim() !== '') {
+            let proxyUrl = worldDetails.trim();
+            // If it has the "Proxy: " prefix, remove it
+            if (proxyUrl.startsWith('Proxy: ')) {
+                proxyUrl = proxyUrl.replace('Proxy: ', '').trim();
+            }
+            proxy = { url: `ws://${proxyUrl}` };
+        } else {
+            // Auto-detect: use proxy if not localhost or 10.0.0.213
+            let address = worldDate.trim().toLowerCase();
+            let isLocalhost = address === 'localhost' || address === '127.0.0.1' || address.startsWith('127.0.0.');
+            let isAllowedHost = address === '10.0.0.213';
+
+            if (!isLocalhost && !isAllowedHost) {
+                proxy = { url: 'ws://174.169.230.116:6003' };
+            }
+        }
+
+        this.minecraft.displayScreen(new GuiConnecting(this, worldDetails, undefined, proxy));
     }
 
     drawScreen(stack, mouseX, mouseY, partialTicks) {

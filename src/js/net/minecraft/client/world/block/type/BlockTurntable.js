@@ -22,6 +22,7 @@ export default class BlockTurntable extends BlockShaftPart {
         super(id, textureSlotId);
 
         this.description = "Turntable";
+        this.shiftDescription = "Consumes 200 SU";
         this.hardness = 1.5;
         this.sound = Block.sounds.wood;
         this.inventoryTab = EnumCreativeInventoryTab.FACTORIO;

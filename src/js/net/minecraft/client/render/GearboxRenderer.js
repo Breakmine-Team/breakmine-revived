@@ -20,6 +20,37 @@ const BOXES = [
 ];
 
 const TEXTURE = 'spruce_planks';
+
+// Faces a shaft leaves the casing through wear the shaft entrance plate
+// instead of bare planks. The plates stay spruce.
+const SHAFT_ENTRANCE_TEXTURE = 'shaft_enterance';
+
+// Flat gearbox: its own axle and the crossed one leave through the four sides.
+const SIDE_FACES = {
+    north: SHAFT_ENTRANCE_TEXTURE,
+    south: SHAFT_ENTRANCE_TEXTURE,
+    east: SHAFT_ENTRANCE_TEXTURE,
+    west: SHAFT_ENTRANCE_TEXTURE
+};
+
+// Vertical gearbox: the horizontal axle leaves through the pair of sides that
+// is still open, and the upright axle through the top and the bottom.
+const UPRIGHT_X_FACES = {
+    east: SHAFT_ENTRANCE_TEXTURE,
+    west: SHAFT_ENTRANCE_TEXTURE,
+    top: SHAFT_ENTRANCE_TEXTURE,
+    bottom: SHAFT_ENTRANCE_TEXTURE
+};
+
+const UPRIGHT_Z_FACES = {
+    north: SHAFT_ENTRANCE_TEXTURE,
+    south: SHAFT_ENTRANCE_TEXTURE,
+    top: SHAFT_ENTRANCE_TEXTURE,
+    bottom: SHAFT_ENTRANCE_TEXTURE
+};
+
+const BODY_INDEX = 0;
+
 const PIXEL = 1 / 16;
 const CENTRE = 0.5;
 
@@ -42,10 +73,22 @@ export default class GearboxRenderer {
         const quarterX = vertical ? 1 : 0;
         const quarterY = vertical ? GearboxRenderer.getYawQuarters(facing) : 0;
 
-        return BOXES.map((box) => ['texture', TEXTURE, {
+        return BOXES.map((box, index) => ['texture', TEXTURE, {
             texture: TEXTURE,
-            bbox: GearboxRenderer.orientBox(box, quarterX, quarterY)
+            bbox: GearboxRenderer.orientBox(box, quarterX, quarterY),
+            // Only the body has shafts leaving it, and which of its faces they
+            // leave through depends on how the casing was placed.
+            faces: index === BODY_INDEX ? GearboxRenderer.getEntranceFaces(vertical, facing) : null
         }]);
+    }
+
+    /** Names of the casing faces a shaft leaves through, for this variant. */
+    static getEntranceFaces(vertical, facing) {
+        if (vertical !== true) {
+            return SIDE_FACES;
+        }
+
+        return (facing === 4 || facing === 5) ? UPRIGHT_Z_FACES : UPRIGHT_X_FACES;
     }
 
     /** Quarter turns about Y that put the vertical plates against the player. */

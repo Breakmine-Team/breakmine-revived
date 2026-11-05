@@ -25,6 +25,11 @@ export default class Block {
         // Description for tooltips
         this.description = null;
 
+        // Extra tooltip lines shown while shift is held. When set, the tooltip
+        // shows a grey "[Shift for info]" hint until shift is pressed.
+        // Either a string (newline separated) or an array of lines.
+        this.shiftDescription = null;
+
         // Block hardness (in ticks to break at 20 ticks/sec)
         this.hardness = 1.0;
 
@@ -111,6 +116,19 @@ export default class Block {
 
     getDescription() {
         return this.description ?? "Unnamed Block";
+    }
+
+    /**
+     * Extra tooltip lines revealed while shift is held. Return null (the
+     * default) for blocks that have nothing more to say.
+     */
+    getShiftDescription() {
+        return this.shiftDescription ?? null;
+    }
+
+    setShiftDescription(shiftDescription) {
+        this.shiftDescription = shiftDescription;
+        return this;
     }
 
     getDrop(world, x, y, z) {

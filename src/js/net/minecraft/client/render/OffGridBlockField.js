@@ -123,6 +123,12 @@ export default class OffGridBlockField {
         // replays must not echo every recomputed power nibble back to the
         // server.
         this._suppressCellSync = false;
+
+        // Optional observer for cell writes, local or from the server:
+        // (x, y, z, typeId, data) after every change. The mechanical bearing
+        // keeps a live copy of the structure it carries through this, so it can
+        // put back exactly what the player left behind.
+        this.onCellEdit = null;
     }
 
     /** Attach this field to a world (idempotent) and to the current scene. */
@@ -251,6 +257,14 @@ export default class OffGridBlockField {
         // agreeing with the overlay (hidden faces under placed cells, shown
         // terrain under broken ones).
         this.markWorldSectionsDirty(x, y, z, x, y, z);
+
+        if (typeof this.onCellEdit === "function") {
+            try {
+                this.onCellEdit(x, y, z, typeId ? typeId : 0, typeId ? (data || 0) : 0);
+            } catch (e) {
+                console.error(`offGridField cell edit hook error at ${x},${y},${z}:`, e);
+            }
+        }
 
         // Local interactive writes are mirrored to the server; server writes
         // arrive through applyRemoteWrite() and must not echo back. Replays of

@@ -111,13 +111,6 @@ export default class GuiOptions extends GuiScreen {
                         max: 200
                     },
                     {
-                        name: "Shadows",
-                        settingKey: "shadows",
-                        type: "toggle",
-                        tooltip: "This feature can cause lag and\nis still in development.",
-                        onchange: (_v, mc) => mc.worldRenderer.setShadowsEnabled(_v)
-                    },
-                    {
                         name: "Fog Type",
                         settingKey: "fogType",
                         type: "list",
@@ -126,6 +119,25 @@ export default class GuiOptions extends GuiScreen {
                             { key: "classic", name: "Classic" }
                         ],
                         tooltip: "Modern: Gradual fog\nClassic: Exponential fog"
+                    },
+                    {
+                        name: "Clouds",
+                        settingKey: "clouds",
+                        type: "list",
+                        options: [
+                            { key: "fancy", name: "Fancy" },
+                            { key: "fast", name: "Fast" }
+                        ],
+                        onchange: (value, mc) => {
+                            if (mc.world) mc.world.setCloudMode(value);
+                        }
+                    },
+                    {
+                        name: "Shadows",
+                        settingKey: "shadows",
+                        type: "toggle",
+                        tooltip: "This feature can cause lag and\nis still in development.",
+                        onchange: (_v, mc) => mc.worldRenderer.setShadowsEnabled(_v)
                     },
                     {
                         name: "Realms",

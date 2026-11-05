@@ -14,7 +14,10 @@ import ShaftRenderer from "../../render/ShaftRenderer.js";
  *  - their axles line up and they touch end to end (a run of shafts, a cog on
  *    a shaft), keeping the same turning direction, or
  *  - they are both cogs with the same axle direction and touch rim to rim,
- *    which reverses the direction, exactly like two gears in mesh, or
+ *    which reverses the direction, exactly like two gears in mesh. Their
+ *    speeds then go by radius, so a small cog driving a large one turns it
+ *    slower, once round for every turn-and-two-thirds of the small one (a
+ *    large cog only reaches the cogs on its diagonals, see compute), or
  *  - one of them is a gearbox and the other's axle runs straight into the face
  *    they share. A gearbox passes its own axle straight through, and its
  *    crossed axle meets it like bevel gears, which reverses the direction.
@@ -77,8 +80,8 @@ export default class ShaftDrive {
                 cache.results.set(member.key, ShaftDrive.IDLE);
             } else {
                 cache.results.set(member.key, {
-                    rpm: result.rpm,
-                    direction: result.direction * member.parity
+                    rpm: Math.abs(result.rpm * member.ratio),
+                    direction: (result.direction * member.ratio) >= 0 ? 1 : -1
                 });
             }
         }
@@ -115,7 +118,7 @@ export default class ShaftDrive {
     /**
      * Walk the assembly containing (x, y, z).
      *
-     * @returns {{drive: {rpm: number, direction: number}, members: {key: string, parity: number}[]}}
+     * @returns {{drive: {rpm: number, direction: number}, members: {key: string, ratio: number}[]}}
      */
     static compute(world, x, y, z) {
         const block = ShaftDrive.blockAt(world, x, y, z);
@@ -124,14 +127,17 @@ export default class ShaftDrive {
         }
 
         const startKey = ShaftDrive.keyOf(x, y, z);
-        const parityByKey = new Map();
-        parityByKey.set(startKey, 1);
+
+        // Signed speed factor from the start part to each member: +1 is the
+        // same speed and way, -0.6 is slower and the other way round.
+        const ratioByKey = new Map();
+        ratioByKey.set(startKey, 1);
 
         const queue = [{
             x: x, y: y, z: z,
             block: block,
             axis: ShaftDrive.axisOf(world, x, y, z, block),
-            parity: 1,
+            ratio: 1,
             key: startKey
         }];
 
@@ -145,9 +151,13 @@ export default class ShaftDrive {
 
             const driver = ShaftDrive.findDriver(world, member);
             if (driver !== null) {
+                // Report every source in the start part's frame: undo the gear
+                // ratios met along the walk, so two sources behind different
+                // gearing are compared by what they turn the start at.
+                const scale = Math.abs(member.ratio) || 1;
                 const drive = {
-                    rpm: driver.rpm,
-                    direction: driver.direction * member.parity,
+                    rpm: driver.rpm / scale,
+                    direction: (driver.direction * member.ratio) >= 0 ? 1 : -1,
                     key: member.key
                 };
                 drivers.push(drive);
@@ -157,9 +167,32 @@ export default class ShaftDrive {
                 }
             }
 
-            if (parityByKey.size >= ShaftDrive.MAX_MEMBERS) {
+            if (ratioByKey.size >= ShaftDrive.MAX_MEMBERS) {
                 continue;
             }
+
+            // Add a part reached through `link` to the walk, unless it is
+            // already in the assembly (a loop of gears comes back to itself).
+            const visit = (nx, ny, nz, neighbour, neighbourAxis, link) => {
+                if (link === 0) {
+                    return;
+                }
+
+                const neighbourKey = ShaftDrive.keyOf(nx, ny, nz);
+                if (ratioByKey.has(neighbourKey)) {
+                    return;
+                }
+
+                const neighbourRatio = member.ratio * link;
+                ratioByKey.set(neighbourKey, neighbourRatio);
+                queue.push({
+                    x: nx, y: ny, z: nz,
+                    block: neighbour,
+                    axis: neighbourAxis,
+                    ratio: neighbourRatio,
+                    key: neighbourKey
+                });
+            };
 
             for (const step of ShaftDrive.NEIGHBOURS) {
                 const nx = member.x + step.delta[0];
@@ -172,25 +205,40 @@ export default class ShaftDrive {
                 }
 
                 const neighbourAxis = ShaftDrive.axisOf(world, nx, ny, nz, neighbour);
-                const link = ShaftDrive.link(member.block, member.axis, neighbour, neighbourAxis, step.axis);
-                if (link === 0) {
-                    continue;
-                }
+                visit(nx, ny, nz, neighbour, neighbourAxis,
+                    ShaftDrive.link(member.block, member.axis, neighbour, neighbourAxis, step.axis));
+            }
 
-                const neighbourKey = ShaftDrive.keyOf(nx, ny, nz);
-                if (parityByKey.has(neighbourKey)) {
-                    continue;
-                }
+            // A large cog's wheel fills its cell to the corners, so the only
+            // cogs it is in mesh with sit diagonally from it: those are not
+            // face neighbours, so they are collected here instead of through
+            // the six steps above (where link() refuses the side contact).
+            if (ShaftDrive.isCog(member.block)) {
+                for (const delta of ShaftDrive.diagonalSteps(member.axis)) {
+                    const nx = member.x + delta[0];
+                    const ny = member.y + delta[1];
+                    const nz = member.z + delta[2];
 
-                const neighbourParity = member.parity * link;
-                parityByKey.set(neighbourKey, neighbourParity);
-                queue.push({
-                    x: nx, y: ny, z: nz,
-                    block: neighbour,
-                    axis: neighbourAxis,
-                    parity: neighbourParity,
-                    key: neighbourKey
-                });
+                    const neighbour = ShaftDrive.blockAt(world, nx, ny, nz);
+                    if (!ShaftDrive.isCog(neighbour)) {
+                        continue;
+                    }
+
+                    // Two small cogs only ever mesh side to side.
+                    if (!ShaftDrive.isLargeCog(member.block) && !ShaftDrive.isLargeCog(neighbour)) {
+                        continue;
+                    }
+
+                    const neighbourAxis = ShaftDrive.axisOf(world, nx, ny, nz, neighbour);
+                    if (neighbourAxis !== member.axis) {
+                        continue;
+                    }
+
+                    // Teeth in mesh turn the other way, at the speeds their
+                    // radii give.
+                    visit(nx, ny, nz, neighbour, neighbourAxis,
+                        -ShaftDrive.ratioBetween(member.block, neighbour));
+                }
             }
         }
 
@@ -198,7 +246,7 @@ export default class ShaftDrive {
         for (const entry of queue) {
             members.push({
                 key: entry.key,
-                parity: entry.parity,
+                ratio: entry.ratio,
                 x: entry.x,
                 y: entry.y,
                 z: entry.z,
@@ -206,12 +254,17 @@ export default class ShaftDrive {
             });
         }
 
-        // Two sources turning one assembly different speeds or ways is not a
-        // drive at all: the run is fighting itself, so nothing turns.
+        // Two sources turning one assembly opposite ways fight and neither
+        // wins: nothing turns until one of them is taken away.
+        //
+        // Different speeds in the same direction are not a fight. The faster
+        // source powers the run and drags the slower one along with it, the way
+        // a motor geared into a line that another already turns simply takes
+        // over at its own speed. `source` already holds the fastest driver, so
+        // the assembly turns at that one's RPM.
         const conflict = drivers.some((driver) => drivers.some((other) =>
             other !== driver &&
-            (other.rpm !== driver.rpm ||
-                (other.direction >= 0) !== (driver.direction >= 0))));
+            (other.direction >= 0) !== (driver.direction >= 0)));
 
         return {
             drive: conflict || source === null
@@ -310,8 +363,9 @@ export default class ShaftDrive {
     }
 
     /**
-     * How two touching parts pass rotation on: 1 for a straight link, -1 for
-     * meshing cogs (which turn the other way), 0 for no connection.
+     * How two touching parts pass rotation on, as a signed speed factor: 1 for
+     * a straight link, the radius ratio (negated, because the teeth reverse the
+     * direction) for meshing cogs, 0 for no connection.
      */
     static link(blockA, axisA, blockB, axisB, deltaAxis) {
         // A gearbox passes its own axle straight through and meets the crossed
@@ -348,9 +402,17 @@ export default class ShaftDrive {
             return 1;
         }
 
-        // Rim to rim in the same plane: cog teeth in mesh.
+        // Rim to rim in the same plane: cog teeth in mesh. The wheels turn at
+        // speeds in inverse proportion to their radii, so a small cog driving a
+        // large one turns it slower, and the teeth reverse the direction.
         if (ShaftDrive.isCog(blockA) && ShaftDrive.isCog(blockB)) {
-            return -1;
+            // A large cog is only in mesh with the cogs on its diagonals, so
+            // it does not turn a cog that shares a side with it.
+            if (ShaftDrive.isLargeCog(blockA) || ShaftDrive.isLargeCog(blockB)) {
+                return 0;
+            }
+
+            return -ShaftDrive.ratioBetween(blockA, blockB);
         }
 
         return 0;
@@ -378,6 +440,62 @@ export default class ShaftDrive {
     static isCog(block) {
         return block !== null && block !== undefined &&
             typeof block.isCog === "function" && block.isCog() === true;
+    }
+
+    static isLargeCog(block) {
+        return block !== null && block !== undefined && block.isLargeCog === true;
+    }
+
+    /** Radius of a cog's wheel in block units, or 0 for parts that have none. */
+    static cogRadius(block) {
+        if (block === null || block === undefined || typeof block.getCogRadius !== "function") {
+            return 0;
+        }
+
+        const radius = Number(block.getCogRadius());
+        return Number.isFinite(radius) && radius > 0 ? radius : 0;
+    }
+
+    /**
+     * Speed of cog B for one turn of cog A that meshes with it: radius A over
+     * radius B. A small cog (9px) driving a large one (15px) turns it 0.6 times
+     * as fast; the other way round the small one runs 5/3 as fast.
+     */
+    static ratioBetween(blockA, blockB) {
+        const radiusA = ShaftDrive.cogRadius(blockA);
+        const radiusB = ShaftDrive.cogRadius(blockB);
+
+        if (radiusA <= 0 || radiusB <= 0) {
+            return 1;
+        }
+
+        return radiusA / radiusB;
+    }
+
+    /**
+     * The four steps that sit one cell along both axes of a cog's wheel - its
+     * diagonals in the plane the wheel turns in.
+     */
+    static diagonalSteps(axis) {
+        // Axis constants are not coordinate indices: Y is 0 there, but the
+        // middle coordinate is the one that runs up.
+        const coordinate = axis === ShaftRenderer.AXIS.X ? 0
+            : axis === ShaftRenderer.AXIS.Z ? 2
+                : 1;
+
+        const plane = [0, 1, 2].filter((candidate) => candidate !== coordinate);
+
+        const steps = [];
+        for (const first of [-1, 1]) {
+            for (const second of [-1, 1]) {
+                const delta = [0, 0, 0];
+                delta[plane[0]] = first;
+                delta[plane[1]] = second;
+                steps.push(delta);
+            }
+        }
+
+        return steps;
     }
 
     static keyOf(x, y, z) {

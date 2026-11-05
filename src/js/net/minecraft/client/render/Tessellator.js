@@ -33,11 +33,16 @@ function applyTileWrapToShader(shader) {
 	vec2 wrappedUv = vUv;
 	// vWrap is a mask: 1 wraps U, 2 wraps V, 3 wraps both. Either way the
 	// sample is folded back into the face's own tile.
+	// A tile holds 16 texels. Stop half a texel short of the tile's far edge:
+	// a sample sitting exactly on the boundary lands in the first texel of the
+	// neighbouring tile, which is what made large boxes leak across tiles.
 	if ( mod( vWrap, 2.0 ) > 0.5 && vTileRect.z > 0.0 ) {
 		wrappedUv.x = vTileRect.x + fract( ( vUv.x - vTileRect.x ) / vTileRect.z ) * vTileRect.z;
+		wrappedUv.x = min( wrappedUv.x, vTileRect.x + vTileRect.z * ( 31.0 / 32.0 ) );
 	}
 	if ( vWrap > 1.5 && vTileRect.w > 0.0 ) {
 		wrappedUv.y = vTileRect.y + fract( ( vUv.y - vTileRect.y ) / vTileRect.w ) * vTileRect.w;
+		wrappedUv.y = min( wrappedUv.y, vTileRect.y + vTileRect.w * ( 31.0 / 32.0 ) );
 	}
 	vec4 sampledDiffuseColor = texture2D( map, wrappedUv );
 	#ifdef DECODE_VIDEO_TEXTURE

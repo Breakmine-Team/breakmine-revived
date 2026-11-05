@@ -74,10 +74,11 @@ export default class TextureAtlas {
         this._freeModIndices = [];
 
         const textureFiles = await this.getTextureFiles();
+        const totalSlots = this.texturesPerRow * this.texturesPerRow;
         
         let index = 0;
         for (const textureEntry of textureFiles) {
-            if (index >= this.texturesPerRow * this.texturesPerRow) {
+            if (index >= totalSlots) {
                 console.warn("Texture atlas full, skipping remaining textures");
                 break;
             }
@@ -89,9 +90,27 @@ export default class TextureAtlas {
                     ? this.getTextureName(textureEntry)
                     : textureEntry.name;
                 const image = await this.loadImage(textureFile);
-                
+
+                // Textures bigger than a cell (the 64x64 clock face) keep their
+                // resolution: they are packed at their native size over a square
+                // block of cells. Move to the start of the next row when the
+                // square would run off the edge.
+                const span = this.getTextureSpan(image);
+                if (span > 1) {
+                    const column = index % this.texturesPerRow;
+                    if (column + span > this.texturesPerRow) {
+                        index += this.texturesPerRow - column;
+                    }
+                    if (index + (span - 1) * this.texturesPerRow >= totalSlots) {
+                        console.warn("Texture atlas full, skipping remaining textures");
+                        break;
+                    }
+                }
+
+                const row = Math.floor(index / this.texturesPerRow);
                 const x = (index % this.texturesPerRow) * this.textureSize;
-                const y = Math.floor(index / this.texturesPerRow) * this.textureSize;
+                const y = row * this.textureSize;
+                const size = this.textureSize * span;
 
                 const frameCount = this.getAnimationFrameCount(image);
                 if (frameCount > 1) {
@@ -107,18 +126,22 @@ export default class TextureAtlas {
                         frame: 0,
                         elapsed: 0
                     });
+                } else if (span > 1) {
+                    ctx.drawImage(image, 0, 0, size, size, x, y, size, size);
                 } else {
                     ctx.drawImage(image, x, y, this.textureSize, this.textureSize);
                 }
                 
-                this.textureMap.set(textureName, { x, y, index });
+                this.textureMap.set(textureName, { x, y, index, span });
                 if (textureName === "oak_planks") {
-                    this.textureMap.set("planks_oak", { x, y, index });
+                    this.textureMap.set("planks_oak", { x, y, index, span });
                     this.reverseTextureMap.set(index, "planks_oak");
                 }
                 this.reverseTextureMap.set(index, textureName);
                 
-                index++;
+                // A bigger texture owns its whole square of cells, so the next
+                // one starts on the row below it.
+                index = span > 1 ? (row + span) * this.texturesPerRow : index + 1;
             } catch (error) {
                 console.error(`Failed to load texture: ${textureFile}`, error);
             }
@@ -149,6 +172,21 @@ export default class TextureAtlas {
         if (width !== this.textureSize) return 1;
         if (height <= this.textureSize || height % this.textureSize !== 0) return 1;
         return height / this.textureSize;
+    }
+
+    /**
+     * How many atlas cells a texture covers on each side. Ordinary block
+     * textures are one cell; a square texture larger than a cell (a 64x64 clock
+     * face) gets its own square block of cells so it keeps its resolution.
+     */
+    getTextureSpan(image) {
+        const width = image.naturalWidth || image.width;
+        const height = image.naturalHeight || image.height;
+        if (width <= this.textureSize || width !== height) return 1;
+        if (width % this.textureSize !== 0) return 1;
+
+        const span = width / this.textureSize;
+        return span <= this.texturesPerRow ? span : 1;
     }
 
     /**
@@ -411,7 +449,8 @@ export default class TextureAtlas {
         const coords = this.getTextureCoords(textureName);
         const u = coords.x / this.atlasSize;
         const v = coords.y / this.atlasSize;
-        const size = this.textureSize / this.atlasSize;
+        const span = coords.span || 1;
+        const size = (this.textureSize * span) / this.atlasSize;
         
         return {
             minU: u,

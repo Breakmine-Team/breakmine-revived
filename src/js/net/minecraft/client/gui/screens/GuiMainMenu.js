@@ -17,6 +17,7 @@ import { Version } from "../../../../../../resources/version.js";
 import GuiTooltip from "../widgets/GuiTooltip.js";
 import { checkForUpdate, isElectronApp } from "../../VersionChecker.js";
 import GuiNewVersion from "./GuiNewVersion.js";
+import GuiPlayerPreview from "../widgets/GuiPlayerPreview.js";
 
 export default class GuiMainMenu extends GuiScreen {
 
@@ -30,6 +31,8 @@ export default class GuiMainMenu extends GuiScreen {
         // Filled in by the background update check; see checkForUpdateInBackground.
         this.updateInfo = null;
         this.updateCheckStarted = false;
+
+        this.playerPreview = null;
     }
 
     init() {
@@ -137,6 +140,47 @@ export default class GuiMainMenu extends GuiScreen {
         //}).setEnabled(false).setTooltip("Server not operational currently!\nWill be fixed soon."));
 
         this.initPanoramaRenderer();
+        this.initPlayerPreview();
+    }
+
+    /**
+     * Character shown in the corner of the menu. It renders its own model, so
+     * it works before a world (and therefore a player entity) exists.
+     */
+    initPlayerPreview() {
+        // init() can run again on the same instance, so never leave an old
+        // WebGL context behind
+        if (this.playerPreview) {
+            this.playerPreview.dispose();
+        }
+
+        this.playerPreview = new GuiPlayerPreview(this.minecraft);
+        this.playerPreview.init();
+    }
+
+    drawPlayerPreview(stack, mouseX, mouseY, partialTicks) {
+        if (!this.playerPreview) return;
+
+        const scale = 2;
+        const width = GuiPlayerPreview.WIDTH * scale;
+        const height = GuiPlayerPreview.HEIGHT * scale;
+
+        // Free strip between the button column and the right screen edge
+        const buttonRight = this.width / 2 + 100;
+        const strip = this.width - buttonRight;
+
+        // Narrow windows leave no room beside the button column
+        if (strip < width + 16) return;
+
+        const x = Math.floor(buttonRight + (strip - width) / 2);
+
+        // Level with the button column. It sits below the exact middle of the
+        // screen, so centring on the screen itself leaves the preview too high.
+        const buttonsTop = this.height / 4 + 36;
+        const buttonsBottom = buttonsTop + 108 + 20;
+        const y = Math.round((buttonsTop + buttonsBottom) / 2 - height / 2);
+        
+        this.playerPreview.draw(stack, x, y, mouseX, mouseY, partialTicks, scale);
     }
 
     /**
@@ -241,6 +285,9 @@ export default class GuiMainMenu extends GuiScreen {
         // Draw buttons
         super.drawScreen(stack, mouseX, mouseY, partialTicks);
 
+        // Draw player preview on the right side
+        this.drawPlayerPreview(stack, mouseX, mouseY, partialTicks);
+
         // Draw splash text
         this.drawSplash(stack);
 
@@ -343,6 +390,11 @@ export default class GuiMainMenu extends GuiScreen {
     }
 
     onClose() {
+        if (this.playerPreview) {
+            this.playerPreview.dispose();
+            this.playerPreview = null;
+        }
+
         // Remove blur
         let style = this.minecraft.window.canvas.style;
         style.backdropFilter = "";

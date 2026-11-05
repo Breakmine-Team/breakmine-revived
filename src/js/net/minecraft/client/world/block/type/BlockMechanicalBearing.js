@@ -23,6 +23,7 @@ export default class BlockMechanicalBearing extends BlockShaftPart {
         super(id, textureSlotId);
 
         this.description = "Mechanical Bearing";
+        this.shiftDescription = "Consumes 500 SU";
         this.hardness = 2.0;
         this.sound = Block.sounds.stone;
         this.inventoryTab = EnumCreativeInventoryTab.FACTORIO;
@@ -82,8 +83,11 @@ export default class BlockMechanicalBearing extends BlockShaftPart {
      */
     getRenderRotation(world, x, y, z, data, tick) {
         const field = world ? world.offGridField : null;
+        const group = world ? BearingDrive.getGroup(world, x, y, z) : null;
 
-        if (field && BearingDrive.getGroup(world, x, y, z) !== null) {
+        // Only the field this bearing actually filled carries its structure; a
+        // field owned by another system must not turn the head plate.
+        if (field && group !== null && group.field === field) {
             return {x: 0, y: field.rotation.y, z: 0};
         }
 
