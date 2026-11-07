@@ -68,6 +68,12 @@ export default class BlockMechanicalBearing extends BlockShaftPart {
 
     /** The plate is bolted down: only the axle on top of it turns. */
     getStaticMultipart(world, x, y, z) {
+        // A driven bearing is meshed from its static and rotating parts, so
+        // getMultipart() never runs for it. Register here as well: a bearing
+        // that arrived from a server or a save never runs the placement hooks,
+        // and without this it is never ticked and never picks its load up.
+        BearingDrive.register(world, x, y, z);
+
         return BearingRenderer.getCasingParts();
     }
 

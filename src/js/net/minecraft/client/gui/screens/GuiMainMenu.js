@@ -346,27 +346,27 @@ export default class GuiMainMenu extends GuiScreen {
         let materials = [
             new THREE.MeshBasicMaterial({
                 side: BackSide,
-                map: this.minecraft.getThreeTexture(`gui/title/background${useAltBg ? "/alt" : ""}/panorama_1.png`)
+                map: this.minecraft.getThreeTexture(`gui/title/background${useAltBg ? "/alt2" : ""}/panorama_1.png`)
             }),
             new THREE.MeshBasicMaterial({
                 side: BackSide,
-                map: this.minecraft.getThreeTexture(`gui/title/background${useAltBg ? "/alt" : ""}/panorama_3.png`)
+                map: this.minecraft.getThreeTexture(`gui/title/background${useAltBg ? "/alt2" : ""}/panorama_3.png`)
             }),
             new THREE.MeshBasicMaterial({
                 side: BackSide,
-                map: this.minecraft.getThreeTexture(`gui/title/background${useAltBg ? "/alt" : ""}/panorama_4.png`)
+                map: this.minecraft.getThreeTexture(`gui/title/background${useAltBg ? "/alt2" : ""}/panorama_4.png`)
             }),
             new THREE.MeshBasicMaterial({
                 side: BackSide,
-                map: this.minecraft.getThreeTexture(`gui/title/background${useAltBg ? "/alt" : ""}/panorama_5.png`)
+                map: this.minecraft.getThreeTexture(`gui/title/background${useAltBg ? "/alt2" : ""}/panorama_5.png`)
             }),
             new THREE.MeshBasicMaterial({
                 side: BackSide,
-                map: this.minecraft.getThreeTexture(`gui/title/background${useAltBg ? "/alt" : ""}/panorama_0.png`)
+                map: this.minecraft.getThreeTexture(`gui/title/background${useAltBg ? "/alt2" : ""}/panorama_0.png`)
             }),
             new THREE.MeshBasicMaterial({
                 side: BackSide,
-                map: this.minecraft.getThreeTexture(`gui/title/background${useAltBg ? "/alt" : ""}/panorama_2.png`)
+                map: this.minecraft.getThreeTexture(`gui/title/background${useAltBg ? "/alt2" : ""}/panorama_2.png`)
             })
         ];
 

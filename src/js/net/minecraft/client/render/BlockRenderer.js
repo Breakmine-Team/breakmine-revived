@@ -874,8 +874,13 @@ export default class BlockRenderer {
         // matching part of its texture instead of a stretched copy pinned to
         // one corner. A box inset by 1px on every side keeps the texture's
         // centre; one hanging from the ceiling keeps the texture's top rows.
-        minU = tileMinU + uSpan * (face.isZAxis() ? boundingBox.minZ : boundingBox.minX);
-        maxU = tileMinU + uSpan * (face.isZAxis() ? boundingBox.maxZ : boundingBox.maxX);
+        //
+        // U runs along the face's horizontal axis: X for north/south and for
+        // top/bottom, Z for east/west. Picking the wrong one only shows up on
+        // shapes smaller than a block, where it stretches the sampled span
+        // across the face.
+        minU = tileMinU + uSpan * (face.isXAxis() ? boundingBox.minZ : boundingBox.minX);
+        maxU = tileMinU + uSpan * (face.isXAxis() ? boundingBox.maxZ : boundingBox.maxX);
 
         if (face.isYAxis()) {
             // Top and bottom faces run X across and Z down.

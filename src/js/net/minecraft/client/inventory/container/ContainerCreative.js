@@ -8,25 +8,45 @@ import InventoryPlayer from "../inventory/InventoryPlayer.js";
 
 export default class ContainerCreative extends Container {
 
+    // Block ids the player saved with a middle click; the creative screen keeps
+    // them in local storage so they survive a reload.
+    static bookmarks = new Set();
+
     constructor(player, offset = 0) {
         super();
 
         this.itemList = [];
         this.currentScrollOffset = 0; // Track current scroll position for refresh
+        this.bookmarksDirty = false;
 
         let playerInventory = player.inventory;
 
-        // Add creative inventory slots - 5 rows (original size)
+        // Creative palette - 5 rows plus the hotbar, laid out the way
+        // creative.png draws them.
+        this.paletteSlots = [];
         for (let y = 0; y < 5; ++y) {
             for (let x = 0; x < 9; ++x) {
-                this.addSlot(new Slot(GuiContainerCreative.inventory, y * 9 + x, 9 + x * 18, 18 + y * 18));
+                this.paletteSlots.push(new Slot(GuiContainerCreative.inventory, y * 9 + x, 9 + x * 18, 18 + y * 18));
             }
         }
-
-        // Add player hotbar
         for (let x = 0; x < 9; ++x) {
-            this.addSlot(new Slot(playerInventory, x, 9 + x * 18, 112));
+            this.paletteSlots.push(new Slot(playerInventory, x, 9 + x * 18, 112));
         }
+
+        // The Survival Inventory tab points these slots straight at the
+        // player's inventory on the creative_inventory.png panel: three storage
+        // rows and a hotbar on the same row as the palette hotbar.
+        this.survivalSlots = [];
+        for (let y = 0; y < 3; ++y) {
+            for (let x = 0; x < 9; ++x) {
+                this.survivalSlots.push(new Slot(playerInventory, 9 + y * 9 + x, 9 + x * 18, 54 + y * 18));
+            }
+        }
+        for (let x = 0; x < 9; ++x) {
+            this.survivalSlots.push(new Slot(playerInventory, x, 9 + x * 18, 112));
+        }
+
+        this.slots = this.paletteSlots;
 
         this.initItems(offset);
         this.scrollTo(0);
@@ -48,7 +68,78 @@ export default class ContainerCreative extends Container {
         this.scrollTo(0);
     }
 
+    /**
+     * Fill the palette rows with every block whose name matches the query. An
+     * empty query matches everything, which is what the search page opens on.
+     */
+    updateSearch(query) {
+        const needle = (query ?? "").trim().toLowerCase();
+
+        this.itemList = [];
+
+        Block.blocks.forEach((block) => {
+            if (!block.id || block.id === 99) return;
+            if (block.id === 43 || block.id === -1 || block.id === 59) return;
+
+            const name = String(block.getDescription?.() ?? "").toLowerCase();
+            if (needle === "" || name.includes(needle)) {
+                this.itemList.push(block.getId());
+            }
+        });
+
+        this.scrollTo(0);
+    }
+
+    /**
+     * Fill the palette rows with the bookmarked blocks, in the order they were
+     * saved. Ids that no longer exist are left out.
+     */
+    showBookmarks() {
+        this.itemList = Array.from(ContainerCreative.bookmarks).filter(id => Block.getById(id) !== null);
+        this.scrollTo(0);
+    }
+
+    /**
+     * Add or remove a block from the bookmarks.
+     */
+    toggleBookmark(typeId) {
+        if (!typeId) return;
+
+        if (ContainerCreative.bookmarks.has(typeId)) {
+            ContainerCreative.bookmarks.delete(typeId);
+        } else {
+            ContainerCreative.bookmarks.add(typeId);
+        }
+
+        this.bookmarksDirty = true;
+    }
+
+    /**
+     * Show the player's own inventory instead of the creative palette (or go
+     * back to the palette). Palette slots hand out copies, survival slots are
+     * the real inventory, so only the slot list is swapped here.
+     */
+    showSurvivalInventory(enabled) {
+        this.slots = enabled ? this.survivalSlots : this.paletteSlots;
+
+        if (enabled) {
+            // Nothing to filter on the survival page, and clearing the list
+            // keeps the palette's scroll math at zero while it is hidden.
+            this.itemList = [];
+            this.scrollTo(0);
+        }
+
+        this.dirty = true;
+    }
+
     swapWithHotbar(slot, inventoryPlayer, hotbarIndex) {
+        // Survival slots hold real items, so they move like any other inventory
+        // slot; only the palette hands out a copy of what it shows.
+        if (slot.inventory instanceof InventoryPlayer) {
+            super.swapWithHotbar(slot, inventoryPlayer, hotbarIndex);
+            return;
+        }
+
         let slotInventory = slot.inventory;
         let typeId = slotInventory.getItemInSlot(slot.index);
 
@@ -61,6 +152,12 @@ export default class ContainerCreative extends Container {
         if (slot.inventory instanceof InventoryPlayer) {
             super.onSlotClick(slot, player, mouseButton);
         } else {
+            // Middle click saves what the palette slot shows, so the bookmarks
+            // page can be filled without leaving the palette.
+            if (mouseButton === 2) {
+                this.toggleBookmark(slot.inventory.getItemInSlot(slot.index).getType());
+            }
+
             let inventoryPlayer = player.inventory;
             // The creative palette is a single shared inventory, so the stack in
             // the slot must never be handed out by reference: using the item

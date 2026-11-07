@@ -67,7 +67,9 @@ Can you survive?
 >.<
 \\_(o.o)_/
 The horizons will soon be distant...
-Nahh Brotato that's crazy`.split('\n');
+ATTENTION ATTENTION's a good album...
+Shinedown
+Wee-woo! New update's here!`.split('\n');
 
     static generateSplash() {
         return this.SPLASHES[Math.floor(Math.random() * this.SPLASHES.length)];

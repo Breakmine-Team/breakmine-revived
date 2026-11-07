@@ -836,12 +836,7 @@ export default class Minecraft {
         networkManager.connect('loopback', 0, { url: 'ws://loopback' });
         this.isConnectedToIntegratedServer = true;
 
-        const mods = [];
-        if (this.modLoader) {
-            for (const [modId, entry] of this.modLoader.mods) {
-                mods.push({ id: modId, name: entry.name, version: entry.version });
-            }
-        }
+        const mods = this.modLoader ? this.modLoader.getHandshakeMods() : [];
         networkManager.sendPacket(new HandshakePacket(Minecraft.PROTOCOL_VERSION, ProtocolState.LOGIN, mods));
         networkManager.sendPacket(new LoginStartPacket(this.getSession().getProfile().getUsername()));
     }

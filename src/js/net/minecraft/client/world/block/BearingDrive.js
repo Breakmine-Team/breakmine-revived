@@ -249,6 +249,13 @@ export default class BearingDrive {
             return null;
         }
 
+        // Cell sync stays off for the whole attach, not just for the bulk
+        // fill: the server's field has never held these cells (a bearing
+        // structure is local), so any cell packet from this window is rejected
+        // there and answered with a full snapshot, which empties the field -
+        // and with it the structure. release() turns sync back on.
+        field._suppressCellSync = true;
+
         // Lift the blocks out of the world first, so the field is the only
         // place they are drawn.
         for (const cell of cells) {
@@ -286,12 +293,6 @@ export default class BearingDrive {
                 group.live.delete(cellKey);
             }
         };
-
-        // Cell sync stays off for the carried cells: the server's field has
-        // never held them (a bearing structure is local), so a cell packet is
-        // rejected there and answered with a full snapshot, which empties the
-        // field - and with it the structure.
-        field._suppressCellSync = true;
 
         let groups = BearingDrive.groups.get(world);
         if (!groups) {

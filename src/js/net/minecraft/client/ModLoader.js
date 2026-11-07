@@ -107,8 +107,9 @@ function normalizeOverlayCanvasColor(value) {
  *       null when nothing is targeted, undefined when no world is loaded.
  *   ModAPI.registerService(id, service), ModAPI.getService(id),
  *       ModAPI.resolveTexture('modid:name'), ModAPI.log(...), ModAPI.warn(...)
- * Commands, render hooks, block-action hooks and overlay text are dropped when
- * the mod is disabled or uninstalled; its JSON data is kept.
+ * Commands, render hooks, block-action hooks, overlay text and registered
+ * services are dropped when the mod is disabled or uninstalled; its JSON data
+ * and block registrations are kept.
  * AuthLib is the account module: getAuthToken(), getUserInfo(username),
  * userExists(username), getSkinUrl(username) and getCapeUrl(username). Mods read
  * it rather than calling fetch, so they inherit the API base URL and the auth
@@ -147,6 +148,7 @@ export default class ModLoader {
         this._serverModFilesystems = new Map(); // modId -> MemoryFilesystem (server-supplied mods)
         this._serverModGeneration = 0;       // invalidates an in-flight server mod load
         this._replacedLocalModIds = new Set(); // modIds that had local versions replaced by server versions
+        this._temporaryDisabledModIds = new Set(); // mods switched off only for this session (join a no-mods server)
         this._diskFilesystem = null;         // BridgeFilesystem over the physical mods/ folder (Electron only)
         this._blockBaseClass = null;    // cached Block class for eval sandbox
         this._commandBaseClass = null;  // cached Command class for mod command sandboxes
@@ -169,11 +171,20 @@ export default class ModLoader {
      * small objects: the core can call generic lifecycle hooks without
      * knowing anything about a particular mod's feature set.
      */
-    registerService(serviceId, service) {
+    registerService(serviceId, service, modId = this._activeModId) {
         if (!serviceId || !service) {
             throw new Error('A service id and service instance are required.');
         }
-        this.services.set(String(serviceId), service);
+
+        const id = String(serviceId);
+        this.services.set(id, service);
+
+        // Attribute the service to the mod that registered it, so disabling
+        // that mod also removes its services (and anything they expose, such
+        // as main-menu buttons) instead of leaving them behind until reload.
+        if (modId) {
+            this._trackRegistration(modId).services.set(id, service);
+        }
         return service;
     }
 
@@ -779,14 +790,15 @@ export default class ModLoader {
                 commands: new Set(),
                 hooks: new Set(),
                 blockActions: new Set(),
-                overlayText: new Set()
+                overlayText: new Set(),
+                services: new Map()
             };
             this._modRegistrations.set(modId, record);
         }
         return record;
     }
 
-    /** Remove every command, render hook and block-action hook a mod registered. */
+    /** Remove every command, hook, overlay provider, tab and service a mod registered. */
     releaseModRegistrations(modId) {
         const record = this._modRegistrations.get(modId);
         this._modRegistrations.delete(modId);
@@ -805,9 +817,16 @@ export default class ModLoader {
             const index = this.overlayTextHooks.indexOf(entry);
             if (index !== -1) this.overlayTextHooks.splice(index, 1);
         }
+        for (const [serviceId, service] of record.services) {
+            // Only remove the service this mod registered; another mod may have
+            // taken over the same id since it was added.
+            if (this.services.get(serviceId) === service) {
+                this.services.delete(serviceId);
+            }
+        }
         this.clearCustomTabs(modId);
         return record.commands.size + record.hooks.size +
-            record.blockActions.size + record.overlayText.size;
+            record.blockActions.size + record.overlayText.size + record.services.size;
     }
 
     /**
@@ -847,7 +866,7 @@ export default class ModLoader {
                 return true;
             },
             getLookedAtBlock: (reach = 5) => globalThis.Mixin?.callFunction('game:getLookedAtBlock', reach),
-            registerService: (serviceId, service) => loader.registerService(serviceId, service),
+            registerService: (serviceId, service) => loader.registerService(serviceId, service, modId),
             getService: (serviceId) => loader.getService(serviceId),
             resolveTexture: (key) => loader.resolveTexture(key),
             log: (...args) => console.log(`[Patchwork] [${modId}]`, ...args),
@@ -1348,6 +1367,8 @@ export default class ModLoader {
         }
 
         this.releaseModRegistrations(modId);
+        this._temporaryDisabledModIds.delete(modId);
+        if (entry) this._temporaryDisabledModIds.delete(entry.id);
         this._modApis.delete(modId);
         this.mods.delete(modId);
 
@@ -1362,16 +1383,28 @@ export default class ModLoader {
      * Toggle a mod on/off without uninstalling.
      */
     async toggleMod(modId, enabled) {
+        // An explicit toggle overrides the session-only switch made when
+        // joining a server that refuses mods.
+        this._temporaryDisabledModIds.delete(modId);
+        const loadedEntry = this.mods.get(modId);
+        if (loadedEntry) this._temporaryDisabledModIds.delete(loadedEntry.id);
+
         if (enabled) {
             this.enabledMods.add(modId);
             this._disabledMods.delete(modId);
-            if (!this.mods.has(modId)) {
-                await this._loadMod(modId, await this._fsForMod(modId));
+            const fs = await this._fsForMod(modId);
+            if (this.mods.has(modId)) {
+                // The mod stayed registered while disabled, so only its live
+                // registrations (commands, tabs, services, hooks) need to
+                // come back - not its blocks, items, recipes or textures.
+                await this._reactivateMod(modId, fs);
+            } else {
+                await this._loadMod(modId, fs);
             }
         } else {
             this.enabledMods.delete(modId);
-            // Commands and render hooks are live JS, so they must go away with
-            // the switch; blocks/textures stay registered like they always did.
+            // Commands, hooks and services are live JS, so they must go away
+            // with the switch; blocks/textures stay registered like they always did.
             this.releaseModRegistrations(modId);
             // Remember the refusal, otherwise a wiki-installed folder would be
             // switched straight back on at the next launch.
@@ -1379,6 +1412,71 @@ export default class ModLoader {
         }
         this._saveEnabledSet();
         this._saveDisabledSet();
+    }
+
+    /**
+     * Switch every locally loaded mod off for this session so the player can
+     * join a server that refuses mods. Unlike toggleMod this never touches the
+     * saved enabled set, so reloading the game turns the mods back on.
+     *
+     * @returns {number} how many mods were switched off
+     */
+    temporarilyDisableMods() {
+        let count = 0;
+        for (const [modId, entry] of this.mods) {
+            if (this._serverModIds.has(modId)) continue;
+            if (!this.enabledMods.has(modId) && !this.enabledMods.has(entry.id)) continue;
+            if (this._temporaryDisabledModIds.has(modId)) continue;
+
+            this._temporaryDisabledModIds.add(modId);
+            if (entry.id) this._temporaryDisabledModIds.add(entry.id);
+            this.releaseModRegistrations(modId);
+            count++;
+        }
+        return count;
+    }
+
+    /**
+     * Restore the runtime registrations a disable removed, without reloading
+     * the parts that stayed in place (blocks, items, recipes, textures).
+     */
+    async _reactivateMod(modId, fs = this.filesystem) {
+        const entry = this.mods.get(modId);
+        if (!entry) {
+            return this._loadMod(modId, fs);
+        }
+
+        const previousActiveMod = this._activeModId;
+        this._activeModId = modId;
+        try {
+            this.releaseModRegistrations(modId);
+            entry.commandNames = [];
+
+            const allFiles = await fs.listDir(`mods/${modId}/`);
+            const modPrefix = `mods/${modId}/`;
+            const relFiles = allFiles.map(f => f.startsWith(modPrefix) ? f.slice(modPrefix.length) : f);
+
+            const commandFiles = relFiles
+                .filter(f => f.startsWith('commands/') && f.endsWith('.js'))
+                .map(f => f.replace(/^commands\//, ''));
+
+            const tabFiles = relFiles
+                .filter(f => f.startsWith('tabs/') && f.endsWith('.js'))
+                .map(f => f.replace(/^tabs\//, ''));
+
+            await this._registerModCommands(modId, entry, commandFiles, fs);
+            await this._registerModTabs(modId, entry, tabFiles, fs);
+            await this._callModLoad(modId, entry, fs);
+
+            console.log(`[Patchwork] Re-enabled mod '${entry.name}'`);
+            return entry;
+        } catch (err) {
+            // Do not leave half of the mod's live content registered.
+            this.releaseModRegistrations(modId);
+            throw err;
+        } finally {
+            this._activeModId = previousActiveMod;
+        }
     }
 
     /**
@@ -1511,6 +1609,24 @@ export default class ModLoader {
      * ------------------------------------------------------------------ */
 
     /**
+     * The mods list advertised to a server during login. A mod switched off at
+     * runtime stays in `mods` (its blocks and textures keep working), so the
+     * handshake must filter on `enabledMods`; otherwise a server with mods
+     * disabled kicks the player for a mod they just turned off.
+     *
+     * @returns {Array<{id:string,name:string,version:string}>}
+     */
+    getHandshakeMods() {
+        const mods = [];
+        for (const [modId, entry] of this.mods) {
+            if (!this.enabledMods.has(modId) && !this.enabledMods.has(entry.id)) continue;
+            if (this._temporaryDisabledModIds.has(modId) || this._temporaryDisabledModIds.has(entry.id)) continue;
+            mods.push({ id: modId, name: entry.name || modId, version: entry.version || '0.0.0' });
+        }
+        return mods;
+    }
+
+    /**
      * Snapshot every locally installed mod in the same shape the server's
      * servermods/ directory uses.
      *
@@ -1528,6 +1644,11 @@ export default class ModLoader {
 
         for (const [modId, entry] of this.mods) {
             if (this._serverModIds.has(modId)) continue;
+            // A disabled mod stays registered for its blocks/textures, but it
+            // is not part of what the player runs, so a fresh world must not
+            // load it server-side either.
+            if (!this.enabledMods.has(modId) && !this.enabledMods.has(entry.id)) continue;
+            if (this._temporaryDisabledModIds.has(modId) || this._temporaryDisabledModIds.has(entry.id)) continue;
 
             let fs;
             try {
@@ -2848,7 +2969,9 @@ export default class ModLoader {
                     description: typeof meta.DESCRIPTION === 'string' ? meta.DESCRIPTION : '',
                     license: typeof meta.LICENSE === 'string' ? meta.LICENSE : '',
                     icon: await this.loadModIcon(actualId, fs),
-                    enabled: this.enabledMods.has(actualId) || this.enabledMods.has(modId),
+                    enabled: (this.enabledMods.has(actualId) || this.enabledMods.has(modId))
+                        && !this._temporaryDisabledModIds.has(modId)
+                        && !this._temporaryDisabledModIds.has(actualId),
                     // Folder in the physical mods/ directory rather than an
                     // installed ZIP; the GUI uses this to hide Delete.
                     disk: fs !== this.filesystem

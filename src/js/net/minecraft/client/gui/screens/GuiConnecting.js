@@ -46,14 +46,14 @@ export default class GuiConnecting extends GuiScreen {
     connect(address, port) {
         this.networkManager = new NetworkManager(this.minecraft);
         this.networkManager.setNetworkHandler(new NetworkLoginHandler(this.networkManager));
+        // A server may refuse the login because of mods. The disconnect handler
+        // uses this to offer a retry after switching mods off for the session.
+        this.networkManager.reconnect = () => {
+            this.minecraft.displayScreen(new GuiConnecting(this.previousScreen, this.address, this.port, this.proxy));
+        };
         this.networkManager.connect(address, port, this.proxy);
 
-        const mods = [];
-        if (this.minecraft.modLoader) {
-            for (const [modId, entry] of this.minecraft.modLoader.mods) {
-                mods.push({ id: modId, name: entry.name, version: entry.version });
-            }
-        }
+        const mods = this.minecraft.modLoader ? this.minecraft.modLoader.getHandshakeMods() : [];
         this.networkManager.sendPacket(new HandshakePacket(Minecraft.PROTOCOL_VERSION, ProtocolState.LOGIN, mods));
         this.networkManager.sendPacket(new LoginStartPacket(this.minecraft.getSession().getProfile().getUsername()));
     }

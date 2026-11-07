@@ -13,6 +13,17 @@ export default class EnumCreativeInventoryTab {
     // Shaft machinery (shafts, half-shafts and cogs), formerly the Factorio mod.
     static FACTORIO = new EnumCreativeInventoryTab("Factorio", 9, 342);
 
+    // Not a palette: selecting this tab shows the player's own survival
+    // inventory in the creative screen (creative_inventory.png), the way the
+    // chest tab did in old creative menus. The icon is the chest block.
+    static SURVIVAL_INVENTORY = new EnumCreativeInventoryTab("Survival Inventory", 10, 32);
+
+    // Pinned to the two top right slots of the creative screen. Search filters
+    // the whole block list by typed name, bookmarks lists the blocks the player
+    // saved with a middle click; neither one is a palette category.
+    static SEARCH = new EnumCreativeInventoryTab("Search", 999, 20);
+    static BOOKMARKS = new EnumCreativeInventoryTab("Bookmarks", 998, 20);
+
     // Development-only tab, shown only when the game is opened with ?dev=1.
     static DEBUG = new EnumCreativeInventoryTab("Debug", 8, 1, true);
 

@@ -3,6 +3,7 @@ import GuiButton from "../widgets/GuiButton.js";
 import GuiModSlotContainer from "../widgets/GuiModSlotContainer.js";
 import GuiModSlot from "../widgets/GuiModSlot.js";
 import GuiYesNo from "./GuiYesNo.js";
+import GuiModBrowser from "./GuiModBrowser.js";
 
 const SIDEBAR_MIN_WIDTH = 180;
 const SIDEBAR_MAX_WIDTH = 300;
@@ -24,7 +25,6 @@ export default class GuiMods extends GuiScreen {
         this.mods = [];
         this.modSlotContainer = null;
         this.selectedIndex = -1;
-        this.dirty = false;
 
         // data URL -> decoded image, so the info pane and the rows share one
         // decode per mod icon instead of starting a new load every frame.
@@ -63,11 +63,10 @@ export default class GuiMods extends GuiScreen {
         // --- Layout -------------------------------------------------------
         // Computed before the first await: drawScreen can run while the mod
         // list is still loading, and a layout that is still undefined fed NaN
-        // into the fade gradients. The sidebar runs the full height of the
-        // window; only the info pane stops short, because two rows of buttons
-        // live underneath it.
+        // into the fade gradients. The sidebar stops short of the bottom edge
+        // to leave room for the Browse Mods button.
         this.top = 34;
-        this.bottom = this.height - 8;
+        this.bottom = this.height - 34;
 
         this.sidebarX = 6;
         this.sidebarWidth = Math.max(
@@ -147,7 +146,6 @@ export default class GuiMods extends GuiScreen {
             if (!mod) return;
             const newState = !mod.enabled;
             await this.minecraft.modLoader.toggleMod(mod.id, newState);
-            this.dirty = true;
             await this.refreshModList();
             this.rebuildSlotList();
             this.updateButtonStates();
@@ -161,6 +159,12 @@ export default class GuiMods extends GuiScreen {
             this.uploadModFolder();
         });
 
+        // Sits underneath the sidebar list, rather than in the info pane's
+        // button rows, so it reads as part of the installed-mod list.
+        this.buttonBrowse = new GuiButton(this.minecraft, "Browse Mods", this.sidebarX + 4, this.height - 28, this.sidebarWidth - 8, 20, () => {
+            this.minecraft.displayScreen(new GuiModBrowser(this.minecraft, this));
+        });
+
         this.buttonDelete = new GuiButton(this.minecraft, "Delete", bottomXs[0], bottomY, bottomWidths[0], 20, async () => {
             const mod = this.getSelectedMod();
             if (!mod) return;
@@ -171,7 +175,6 @@ export default class GuiMods extends GuiScreen {
                     alert('Failed to delete mod: ' + err.message);
                     return;
                 }
-                this.dirty = true;
                 await this.refreshModList();
                 this.rebuildSlotList();
                 this.selectedIndex = -1;
@@ -197,6 +200,7 @@ export default class GuiMods extends GuiScreen {
             }
         );
 
+        this.buttonList.push(this.buttonBrowse);
         this.buttonList.push(this.buttonUploadFolder);
         this.buttonList.push(this.buttonUpload);
         this.buttonList.push(this.buttonToggle);
@@ -219,11 +223,9 @@ export default class GuiMods extends GuiScreen {
     }
 
     goBack() {
-        if (this.dirty) {
-            window.location.reload();
-        } else {
-            this.minecraft.displayScreen(this.previousScreen);
-        }
+        // Toggles and deletes are applied by ModLoader at runtime, so there is
+        // no page reload to wait for when leaving the screen.
+        this.minecraft.displayScreen(this.previousScreen);
     }
 
     updateButtonStates() {
@@ -247,7 +249,7 @@ export default class GuiMods extends GuiScreen {
         }
 
         if (this.buttonBack) {
-            this.buttonBack.string = this.dirty ? "Reload" : "Cancel";
+            this.buttonBack.string = "Cancel";
         }
     }
 
@@ -277,7 +279,8 @@ export default class GuiMods extends GuiScreen {
             if (!files || files.length === 0) return;
             try {
                 await this.minecraft.modLoader.installModFromFolder(files);
-                this.dirty = true;
+                // Installs load live - ModLoader registers the blocks, items and
+                // textures immediately - so leaving the screen must not reload.
                 await this.refreshModList();
                 this.rebuildSlotList();
                 this.selectedIndex = this.mods.length - 1;
@@ -298,7 +301,8 @@ export default class GuiMods extends GuiScreen {
             if (!file) return;
             try {
                 await this.minecraft.modLoader.installModFromZip(file);
-                this.dirty = true;
+                // Installs load live - ModLoader registers the blocks, items and
+                // textures immediately - so leaving the screen must not reload.
                 await this.refreshModList();
                 this.rebuildSlotList();
                 this.selectedIndex = this.mods.length - 1;
