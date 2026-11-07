@@ -45,7 +45,11 @@ export default class GuiDirectConnect extends GuiScreen {
                     console.error(error);
                 });
             } else if (this.tunnel) {
-                this.minecraft.displayScreen(new GuiConnecting(this, `tunnel://${this.fieldAddress.text.trim()}`, undefined, null));
+                const code = this.fieldAddress.text.trim().toUpperCase();
+                if (code === "") {
+                    return;
+                }
+                this.minecraft.displayScreen(new GuiConnecting(this, `tunnel://${code}`, undefined, null));
             } else {
                 let proxy = null;
                 let proxyText = this.fieldProxy.text.trim();

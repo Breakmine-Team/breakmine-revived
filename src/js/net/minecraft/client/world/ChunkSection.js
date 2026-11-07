@@ -106,11 +106,11 @@ export default class ChunkSection {
         const wz = this.z << 4;
 
         if (this.world && (
-            !this.world.chunkExists(wx >> 4, wz >> 4) ||
-            !this.world.chunkExists((wx >> 4) + 1, wz >> 4) ||
-            !this.world.chunkExists((wx >> 4) - 1, wz >> 4) ||
-            !this.world.chunkExists(wx >> 4, (wz >> 4) + 1) ||
-            !this.world.chunkExists(wx >> 4, (wz >> 4) - 1)
+            !this.world.chunkReady(wx >> 4, wz >> 4) ||
+            !this.world.chunkReady((wx >> 4) + 1, wz >> 4) ||
+            !this.world.chunkReady((wx >> 4) - 1, wz >> 4) ||
+            !this.world.chunkReady(wx >> 4, (wz >> 4) + 1) ||
+            !this.world.chunkReady(wx >> 4, (wz >> 4) - 1)
         )) {
             return;
         }

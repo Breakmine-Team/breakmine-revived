@@ -336,6 +336,13 @@ export default class NetworkPlayHandler extends PacketHandler {
                 return;
             }
 
+            if (typeof provider.fillChunkFromPacket === "function") {
+                provider.fillChunkFromPacket(
+                    packet.getX(), packet.getZ(), packet.getData(), packet.getMask()
+                );
+                return;
+            }
+
             provider.loadChunk(packet.getX(), packet.getZ());
         }
 
@@ -370,6 +377,14 @@ export default class NetworkPlayHandler extends PacketHandler {
         // The server is authoritative in multiplayer: apply the received state
         // without running block placement callbacks (which would recompute e.g.
         // door facing from the local player and desync from the server).
+        // If the full chunk is still being decoded, defer the edit so the
+        // worker's block array cannot overwrite it when it arrives.
+        const provider = this.minecraft.world.getChunkProvider();
+        if (provider && typeof provider.deferBlockChange === "function"
+            && provider.deferBlockChange(position.getX(), position.getY(), position.getZ(), typeId, blockData)) {
+            return;
+        }
+
         this.minecraft.world.setBlockAtNoEvents(position.getX(), position.getY(), position.getZ(), typeId, blockData);
     }
 

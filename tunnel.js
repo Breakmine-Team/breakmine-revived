@@ -188,7 +188,8 @@ class TunnelServer {
                 // --- Joiner: attach to an existing tunnel ---
                 if (msg.type === 'join') {
                     role = 'joiner';
-                    const tunnel = this.tunnels.get(msg.code);
+                    const code = String(msg.code || '').trim().toUpperCase();
+                    const tunnel = this.tunnels.get(code);
 
                     if (!tunnel) {
                         ws.send(JSON.stringify({ type: 'error', message: 'Tunnel not found or expired' }));
@@ -201,12 +202,12 @@ class TunnelServer {
                         return;
                     }
 
-                    tunnelCode = msg.code;
+                    tunnelCode = code;
                     tunnel.joiners.add(ws);
                     handshakeDone = true;
 
-                    ws.send(JSON.stringify({ type: 'joined', code: msg.code }));
-                    console.log(`[Tunnel] Join: ${msg.code}  (now ${tunnel.joiners.size}/${tunnel.maxJoiners})`);
+                    ws.send(JSON.stringify({ type: 'joined', code }));
+                    console.log(`[Tunnel] Join: ${code}  (now ${tunnel.joiners.size}/${tunnel.maxJoiners})`);
 
                     // Flush any data the provider already sent
                     if (tunnel.buffer && tunnel.buffer.length > 0) {

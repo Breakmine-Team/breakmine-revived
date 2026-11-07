@@ -672,6 +672,22 @@ export default class World {
     }
 
     /**
+     * A worker-backed client chunk exists as an empty shell until its packet
+     * has been decoded. Meshing must wait for that data; otherwise a border
+     * section can bake faces against an empty shell and never be rebuilt when
+     * the real blocks arrive.
+     */
+    chunkReady(chunkX, chunkZ) {
+        if (this.chunkProvider === null) {
+            return false;
+        }
+        if (typeof this.chunkProvider.isChunkReady === "function") {
+            return this.chunkProvider.isChunkReady(chunkX, chunkZ);
+        }
+        return this.chunkExists(chunkX, chunkZ);
+    }
+
+    /**
      * Get the first non-solid block
      */
     getHeightAt(x, z) {

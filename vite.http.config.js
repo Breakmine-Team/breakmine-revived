@@ -25,6 +25,8 @@ export default defineConfig({
     // packaged app is loaded over file://, where a base of "/" would resolve
     // asset URLs against the filesystem root.
     base: "./",
+    // Do not let the generated public/ snapshot shadow src/ during development.
+    publicDir: false,
     build: {
         outDir: "dist",
         assetsInlineLimit: 0,

@@ -42,18 +42,71 @@ export default class TranslucentMeshBatcher {
 
         this.currentVertex = 0;
         this.currentIndex = 0;
+
+        // Source meshes recorded for this frame, and the ones that produced
+        // the buffer currently uploaded to the GPU (see isCached()).
+        this.sources = [];
+        this.sourceCount = 0;
+        this.cachedSources = [];
+        this.cachedSourceCount = 0;
+        this.cachedCameraX = NaN;
+        this.cachedCameraY = NaN;
+        this.cachedCameraZ = NaN;
+        this.cachedVisible = false;
+        this.cacheValid = false;
+    }
+
+    /**
+     * Raw backing array of an attribute, or null when three.js only exposes
+     * accessors for it (interleaved attributes).
+     */
+    static rawArray(attribute) {
+        return attribute && !attribute.isInterleavedBufferAttribute && attribute.array
+            ? attribute.array
+            : null;
     }
 
     clear() {
         this.currentVertex = 0;
         this.currentIndex = 0;
+        this.sourceCount = 0;
     }
 
+    /**
+     * Record a source mesh for this frame. The actual copy happens in
+     * finalize(), which can skip it entirely when nothing moved.
+     *
+     * Geometry is baked into these meshes when a section is meshed, so a
+     * changed vertex means a new Mesh instance. Identity therefore is a sound
+     * dirty check, and a frame that adds the same meshes at the same camera
+     * position would rebuild a byte-identical buffer.
+     */
     addMesh(chunkMesh) {
+        this.sources[this.sourceCount] = chunkMesh;
+        this.sourceCount++;
+    }
+
+    /** Drop the cached build, e.g. when the world that produced it is gone. */
+    invalidate() {
+        this.cacheValid = false;
+    }
+
+    isCached(cameraX, cameraY, cameraZ) {
+        if (!this.cacheValid) return false;
+        if (this.sourceCount !== this.cachedSourceCount) return false;
+        if (this.cachedCameraX !== cameraX
+            || this.cachedCameraY !== cameraY
+            || this.cachedCameraZ !== cameraZ) return false;
+
+        for (let i = 0; i < this.sourceCount; i++) {
+            if (this.sources[i] !== this.cachedSources[i]) return false;
+        }
+        return true;
+    }
+
+    copyMesh(chunkMesh) {
         let geo = chunkMesh.geometry;
         let posAttr = geo.getAttribute('position');
-        let colAttr = geo.getAttribute('color');
-        let uvAttr = geo.getAttribute('uv');
         let idxAttr = geo.getIndex();
 
         if (!posAttr || !idxAttr) return;
@@ -81,40 +134,92 @@ export default class TranslucentMeshBatcher {
         // below equals the old +m path), but posed off-grid field meshes carry
         // a rotation that must rotate the vertices (and normals) into world
         // space instead of just being added.
-        const matrixElements = chunkMesh.matrixWorld.elements;
+        const m = chunkMesh.matrixWorld.elements;
+
+        // Section meshes, which are nearly all of the world's translucent
+        // geometry, only carry a translation. Detecting that lets the copy
+        // loops below drop nine multiplies and a normalise per vertex.
+        const pureTranslation = m[0] === 1 && m[5] === 1 && m[10] === 1
+            && m[1] === 0 && m[2] === 0 && m[4] === 0
+            && m[6] === 0 && m[8] === 0 && m[9] === 0;
 
         let vOffset = this.currentVertex;
         let iOffset = this.currentIndex;
 
-        // 1. Copy positions into WORLD space (through the full pose matrix)
-        for (let i = 0; i < vertexCount; i++) {
-            const dstIdx = (vOffset + i) * 3;
-            const lx = posAttr.getX(i);
-            const ly = posAttr.getY(i);
-            const lz = posAttr.getZ(i);
-            this.positions[dstIdx]     = matrixElements[0] * lx + matrixElements[4] * ly + matrixElements[8]  * lz + matrixElements[12];
-            this.positions[dstIdx + 1] = matrixElements[1] * lx + matrixElements[5] * ly + matrixElements[9]  * lz + matrixElements[13];
-            this.positions[dstIdx + 2] = matrixElements[2] * lx + matrixElements[6] * ly + matrixElements[10] * lz + matrixElements[14];
+        // 1. Copy positions into WORLD space (through the full pose matrix).
+        // The raw attribute arrays are read directly instead of through the
+        // getX/getY/getZ accessors: this runs over every translucent vertex of
+        // the world, so the accessor call overhead dominates otherwise.
+        const posArray = TranslucentMeshBatcher.rawArray(posAttr);
+        const tx = m[12];
+        const ty = m[13];
+        const tz = m[14];
+
+        if (pureTranslation) {
+            for (let i = 0; i < vertexCount; i++) {
+                const src = i * 3;
+                const dst = (vOffset + i) * 3;
+                if (posArray) {
+                    this.positions[dst]     = posArray[src]     + tx;
+                    this.positions[dst + 1] = posArray[src + 1] + ty;
+                    this.positions[dst + 2] = posArray[src + 2] + tz;
+                } else {
+                    this.positions[dst]     = posAttr.getX(i) + tx;
+                    this.positions[dst + 1] = posAttr.getY(i) + ty;
+                    this.positions[dst + 2] = posAttr.getZ(i) + tz;
+                }
+            }
+        } else {
+            for (let i = 0; i < vertexCount; i++) {
+                const src = i * 3;
+                const dst = (vOffset + i) * 3;
+                const lx = posArray ? posArray[src]     : posAttr.getX(i);
+                const ly = posArray ? posArray[src + 1] : posAttr.getY(i);
+                const lz = posArray ? posArray[src + 2] : posAttr.getZ(i);
+                this.positions[dst]     = m[0] * lx + m[4] * ly + m[8]  * lz + tx;
+                this.positions[dst + 1] = m[1] * lx + m[5] * ly + m[9]  * lz + ty;
+                this.positions[dst + 2] = m[2] * lx + m[6] * ly + m[10] * lz + tz;
+            }
         }
 
         // 2. Copy colors (RGBA)
+        let colAttr = geo.getAttribute('color');
         if (colAttr) {
-            let srcSize = colAttr.itemSize;
+            const colArray = TranslucentMeshBatcher.rawArray(colAttr);
+            const srcSize = colAttr.itemSize;
+            const hasAlpha = srcSize >= 4;
+
             for (let i = 0; i < vertexCount; i++) {
                 let dstIdx = (vOffset + i) * 4;
-                this.colors[dstIdx]     = colAttr.getX(i);
-                this.colors[dstIdx + 1] = colAttr.getY(i);
-                this.colors[dstIdx + 2] = colAttr.getZ(i);
-                this.colors[dstIdx + 3] = srcSize >= 4 ? colAttr.getW(i) : 1;
+                if (colArray) {
+                    const src = i * srcSize;
+                    this.colors[dstIdx]     = colArray[src];
+                    this.colors[dstIdx + 1] = colArray[src + 1];
+                    this.colors[dstIdx + 2] = colArray[src + 2];
+                    this.colors[dstIdx + 3] = hasAlpha ? colArray[src + 3] : 1;
+                } else {
+                    this.colors[dstIdx]     = colAttr.getX(i);
+                    this.colors[dstIdx + 1] = colAttr.getY(i);
+                    this.colors[dstIdx + 2] = colAttr.getZ(i);
+                    this.colors[dstIdx + 3] = hasAlpha ? colAttr.getW(i) : 1;
+                }
             }
         }
 
         // 3. Copy UVs
+        let uvAttr = geo.getAttribute('uv');
         if (uvAttr) {
+            const uvArray = TranslucentMeshBatcher.rawArray(uvAttr);
             for (let i = 0; i < vertexCount; i++) {
                 let dstIdx = (vOffset + i) * 2;
-                this.uvs[dstIdx]     = uvAttr.getX(i);
-                this.uvs[dstIdx + 1] = uvAttr.getY(i);
+                if (uvArray) {
+                    const src = i * 2;
+                    this.uvs[dstIdx]     = uvArray[src];
+                    this.uvs[dstIdx + 1] = uvArray[src + 1];
+                } else {
+                    this.uvs[dstIdx]     = uvAttr.getX(i);
+                    this.uvs[dstIdx + 1] = uvAttr.getY(i);
+                }
             }
         } else {
             // Default UVs for untextured geometry
@@ -129,18 +234,36 @@ export default class TranslucentMeshBatcher {
         // material, so a missing attribute means flat-shaded geometry that
         // needs its face normal derived from the winding instead.
         let nrmAttr = geo.getAttribute('normal');
-        if (nrmAttr) {
+        const nrmArray = nrmAttr ? TranslucentMeshBatcher.rawArray(nrmAttr) : null;
+
+        if (nrmAttr && pureTranslation) {
+            // Normals are already unit length and a translation leaves them
+            // alone, so this is a plain copy - no rotate, no sqrt per vertex.
+            for (let i = 0; i < vertexCount; i++) {
+                const dstIdx = (vOffset + i) * 3;
+                if (nrmArray) {
+                    const src = i * 3;
+                    this.normals[dstIdx]     = nrmArray[src];
+                    this.normals[dstIdx + 1] = nrmArray[src + 1];
+                    this.normals[dstIdx + 2] = nrmArray[src + 2];
+                } else {
+                    this.normals[dstIdx]     = nrmAttr.getX(i);
+                    this.normals[dstIdx + 1] = nrmAttr.getY(i);
+                    this.normals[dstIdx + 2] = nrmAttr.getZ(i);
+                }
+            }
+        } else if (nrmAttr) {
             // Rotate normals through the pose matrix too: chunk meshes have an
             // identity rotation (so this is a copy, same as before), posed
             // field meshes rotate the normals into world space.
             for (let i = 0; i < vertexCount; i++) {
                 const dstIdx = (vOffset + i) * 3;
-                const lx = nrmAttr.getX(i);
-                const ly = nrmAttr.getY(i);
-                const lz = nrmAttr.getZ(i);
-                let nx = matrixElements[0] * lx + matrixElements[4] * ly + matrixElements[8]  * lz;
-                let ny = matrixElements[1] * lx + matrixElements[5] * ly + matrixElements[9]  * lz;
-                let nz = matrixElements[2] * lx + matrixElements[6] * ly + matrixElements[10] * lz;
+                const lx = nrmArray ? nrmArray[i * 3]     : nrmAttr.getX(i);
+                const ly = nrmArray ? nrmArray[i * 3 + 1] : nrmAttr.getY(i);
+                const lz = nrmArray ? nrmArray[i * 3 + 2] : nrmAttr.getZ(i);
+                let nx = m[0] * lx + m[4] * ly + m[8]  * lz;
+                let ny = m[1] * lx + m[5] * ly + m[9]  * lz;
+                let nz = m[2] * lx + m[6] * ly + m[10] * lz;
                 const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
                 if (len > 0) { nx /= len; ny /= len; nz /= len; }
                 this.normals[dstIdx]     = nx;
@@ -155,10 +278,11 @@ export default class TranslucentMeshBatcher {
                 this.normals[dstIdx + 2] = 0;
             }
 
+            const idxArray = TranslucentMeshBatcher.rawArray(idxAttr);
             for (let t = 0; t + 2 < indexCount; t += 3) {
-                let ia = vOffset + idxAttr.getX(t);
-                let ib = vOffset + idxAttr.getX(t + 1);
-                let ic = vOffset + idxAttr.getX(t + 2);
+                let ia = vOffset + (idxArray ? idxArray[t]     : idxAttr.getX(t));
+                let ib = vOffset + (idxArray ? idxArray[t + 1] : idxAttr.getX(t + 1));
+                let ic = vOffset + (idxArray ? idxArray[t + 2] : idxAttr.getX(t + 2));
 
                 let abx = this.positions[ib * 3] - this.positions[ia * 3];
                 let aby = this.positions[ib * 3 + 1] - this.positions[ia * 3 + 1];
@@ -184,8 +308,15 @@ export default class TranslucentMeshBatcher {
         }
 
         // 5. Copy indices, offsetting them
-        for (let i = 0; i < indexCount; i++) {
-            this.indices[iOffset + i] = idxAttr.getX(i) + vOffset;
+        const idxArray = TranslucentMeshBatcher.rawArray(idxAttr);
+        if (idxArray) {
+            for (let i = 0; i < indexCount; i++) {
+                this.indices[iOffset + i] = idxArray[i] + vOffset;
+            }
+        } else {
+            for (let i = 0; i < indexCount; i++) {
+                this.indices[iOffset + i] = idxAttr.getX(i) + vOffset;
+            }
         }
 
         this.currentVertex += vertexCount;
@@ -193,8 +324,39 @@ export default class TranslucentMeshBatcher {
     }
 
     finalize(cameraPos) {
+        const cameraX = cameraPos.x;
+        const cameraY = cameraPos.y;
+        const cameraZ = cameraPos.z;
+
+        // Same source meshes at the same camera position: the buffer uploaded
+        // last frame is still exactly what this frame needs, so skip the copy,
+        // the sort and the re-upload.
+        if (this.isCached(cameraX, cameraY, cameraZ)) {
+            this.mesh.visible = this.cachedVisible;
+            return;
+        }
+
+        this.currentVertex = 0;
+        this.currentIndex = 0;
+
+        for (let i = 0; i < this.sourceCount; i++) {
+            this.copyMesh(this.sources[i]);
+        }
+
+        // Remember what produced the buffer that is about to be uploaded.
+        this.cachedSourceCount = this.sourceCount;
+        this.cachedSources.length = this.sourceCount;
+        for (let i = 0; i < this.sourceCount; i++) {
+            this.cachedSources[i] = this.sources[i];
+        }
+        this.cachedCameraX = cameraX;
+        this.cachedCameraY = cameraY;
+        this.cachedCameraZ = cameraZ;
+
         let hasData = this.currentVertex > 0;
+        this.cachedVisible = hasData;
         this.mesh.visible = hasData;
+        this.cacheValid = true;
 
         if (!hasData) return;
 
@@ -227,7 +389,6 @@ export default class TranslucentMeshBatcher {
         for (let i = 0; i < faceCount; i++) {
             let src = sortedFaces[i].start;
             let dst = i * 6;
-
             this.sortedIndices[dst]     = this.indices[src];
             this.sortedIndices[dst + 1] = this.indices[src + 1];
             this.sortedIndices[dst + 2] = this.indices[src + 2];

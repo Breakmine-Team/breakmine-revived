@@ -23,6 +23,13 @@ import SignTextRenderer from "./SignTextRenderer.js";
 const OUTLINE_MERGE_EPSILON = 0.011;
 const BLOCK_OUTLINE_EXPANSION = 0.005;
 
+// Target cell and its six neighbours: the blocks a placement ghost's shape can
+// depend on (stairs, fences, panes, torches). Stored in the preview key so the
+// ghost is rebuilt when the terrain around the target changes.
+const PREVIEW_NEIGHBOUR_OFFSETS = [
+    [0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]
+];
+
 function isNear(a, b) {
     return Math.abs(a - b) <= OUTLINE_MERGE_EPSILON;
 }
@@ -316,6 +323,15 @@ export default class WorldRenderer {
         this.prevFogBrightness = 0;
         this.fogBrightness = 0;
 
+        // Reused fog and colour objects. three.js compares the scene's fog by
+        // identity (materialProperties.fog !== fog) to decide whether a
+        // material needs a new shader program, so handing it a freshly built
+        // THREE.Fog every frame sends every chunk material through
+        // getProgram() again - per material, per frame. Mutate these instead.
+        this.fogLinear = new THREE.Fog(0x000000, 0.0025, 1000);
+        this.fogExp2 = new THREE.FogExp2(0x000000, 0.01);
+        this.backgroundColor = new THREE.Color(0, 0, 0);
+
         this.flushRebuild = false;
 
         this.lastHitResult = null;
@@ -336,6 +352,13 @@ export default class WorldRenderer {
         this.blockPreviewGroup = new THREE.Group();
         this.blockPreviewGroup.visible = false;
         this.scene.add(this.blockPreviewGroup);
+
+        // Meshes and key of the ghost that is currently built; see
+        // updateBlockPlacePreview().
+        this.blockPreviewMeshes = [];
+        this.previewKey = null;
+        this.previewKeyValid = false;
+        this.previewWorld = null;
 
         // Create chunk boundary helper
         this.chunkBoundaryMaterial = new THREE.LineBasicMaterial({
@@ -1274,15 +1297,34 @@ export default class WorldRenderer {
         }
     }
 
+    /**
+     * Point the scene at the shared linear fog, changing its fields in place.
+     * Replacing the object instead would invalidate the cached shader program
+     * of every fogged material (three.js compares the fog by identity).
+     */
+    applyLinearFog(red, green, blue, near, far) {
+        const fog = this.fogLinear;
+        fog.color.setRGB(red, green, blue);
+        fog.near = near;
+        fog.far = far;
+        this.scene.fog = fog;
+    }
+
+    /** Same as applyLinearFog() for the exponential fog used by 'classic'. */
+    applyExp2Fog(red, green, blue, density) {
+        const fog = this.fogExp2;
+        fog.color.setRGB(red, green, blue);
+        fog.density = density;
+        this.scene.fog = fog;
+    }
+
     setupFog(x, z, inWater, partialTicks, inLava) {
         if (inWater) {
-            let color = new THREE.Color(0.2, 0.2, 0.4);
-            this.background.background = color;
-            this.scene.fog = new THREE.Fog(color, 0.0025, 5);
+            this.background.background = this.backgroundColor.setRGB(0.2, 0.2, 0.4);
+            this.applyLinearFog(0.2, 0.2, 0.4, 0.0025, 5);
         } else if (inLava) {
-            let color = new THREE.Color(0.6, 0.1, 0.0);
-            this.background.background = color;
-            this.scene.fog = new THREE.Fog(color, 0.0025, 3);
+            this.background.background = this.backgroundColor.setRGB(0.6, 0.1, 0.0);
+            this.applyLinearFog(0.6, 0.1, 0.0, 0.0025, 3);
         } else {
             let world = this.minecraft.world;
 
@@ -1303,18 +1345,16 @@ export default class WorldRenderer {
             let blue = (fogColor.z + (skyColor.z - fogColor.z) * viewFactor) * brightness;
 
             // Update background color
-            this.background.background = new THREE.Color(red, green, blue);
+            this.background.background = this.backgroundColor.setRGB(red, green, blue);
 
             // Update fog color based on fog type setting
-            const fogColorRgb = new THREE.Color(red, green, blue);
             if (this.minecraft.settings.fogType === 'classic') {
                 // Classic fog: exponential fog that completely obscures past render distance
                 // Using higher density to ensure complete obscurity at render distance
-                const fogDensity = 2.0 / viewDistance;
-                this.scene.fog = new THREE.FogExp2(fogColorRgb, fogDensity);
+                this.applyExp2Fog(red, green, blue, 2.0 / viewDistance);
             } else {
                 // Modern fog: linear fog with gradual fade
-                this.scene.fog = new THREE.Fog(fogColorRgb, 0.0025, viewDistance * 2);
+                this.applyLinearFog(red, green, blue, 0.0025, viewDistance * 2);
             }
 
             let skyMesh = this.listSky.children[0];
@@ -1323,30 +1363,32 @@ export default class WorldRenderer {
             let sunsetMesh = this.listSunset.children[0];
 
             // Update sky and void color
-            skyMesh.material.color.set(new THREE.Color(skyColor.x, skyColor.y, skyColor.z));
-            voidMesh.material.color.set(new THREE.Color(
+            skyMesh.material.color.setRGB(skyColor.x, skyColor.y, skyColor.z);
+            voidMesh.material.color.setRGB(
                 skyColor.x * 0.2 + 0.04,
                 skyColor.y * 0.2 + 0.04,
                 skyColor.z * 0.6 + 0.1
-            ));
+            );
 
             // Update star brightness
             if (starBrightness > 0) {
                 starsMesh.material.opacity = starBrightness;
-                starsMesh.material.color.set(new THREE.Color(starBrightness, starBrightness, starBrightness));
+                starsMesh.material.color.setRGB(starBrightness, starBrightness, starBrightness);
             }
             this.listStars.visible = starBrightness > 0;
 
             // Update sunset
             if (sunsetColor !== null) {
                 sunsetMesh.material.opacity = sunsetColor.w;
-                sunsetMesh.material.color.set(new THREE.Color(sunsetColor.x, sunsetColor.y, sunsetColor.z));
+                sunsetMesh.material.color.setRGB(sunsetColor.x, sunsetColor.y, sunsetColor.z);
                 sunsetMesh.rotation.x = MathHelper.toRadians(angle <= 0.5 ? 90 : 135);
             }
             sunsetMesh.visible = sunsetColor !== null;
         }
 
-        this.background.fog = this.scene.fog;
+        if (this.background.fog !== this.scene.fog) {
+            this.background.fog = this.scene.fog;
+        }
     }
 
     renderChunks(cameraChunkX, cameraChunkZ) {
@@ -1841,54 +1883,12 @@ export default class WorldRenderer {
                     }
                 }
 
-                // Clear existing hit box lines
-                while (this.blockHitBox.children.length > 0) {
-                    this.blockHitBox.remove(this.blockHitBox.children[0]);
-                }
-
                 // Build one outline for the whole shape. Multipart blocks
                 // (stairs, fences, ...) share edges between their boxes; the
                 // merger removes those internal seams so the highlight wraps
                 // the combined silhouette instead of every part separately.
                 let segments = mergeBlockOutlineEdges(boxes, BLOCK_OUTLINE_EXPANSION);
-                if (segments.length > 0) {
-                    let positions = new Float32Array(segments.length * 6);
-                    let offset = 0;
-
-                    for (let segment of segments) {
-                        let start = segment.start;
-                        let end = segment.end;
-                        let fixedA = segment.fixedA;
-                        let fixedB = segment.fixedB;
-
-                        if (segment.axis === 0) {
-                            positions[offset++] = start;
-                            positions[offset++] = fixedA;
-                            positions[offset++] = fixedB;
-                            positions[offset++] = end;
-                            positions[offset++] = fixedA;
-                            positions[offset++] = fixedB;
-                        } else if (segment.axis === 1) {
-                            positions[offset++] = fixedA;
-                            positions[offset++] = start;
-                            positions[offset++] = fixedB;
-                            positions[offset++] = fixedA;
-                            positions[offset++] = end;
-                            positions[offset++] = fixedB;
-                        } else {
-                            positions[offset++] = fixedA;
-                            positions[offset++] = fixedB;
-                            positions[offset++] = start;
-                            positions[offset++] = fixedA;
-                            positions[offset++] = fixedB;
-                            positions[offset++] = end;
-                        }
-                    }
-
-                    let geometry = new THREE.BufferGeometry();
-                    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-                    this.blockHitBox.add(new THREE.LineSegments(geometry, this.blockHitBoxMaterial));
-                }
+                this.updateBlockHitBoxOutline(segments);
 
                 // A hit on the summoned field addresses cells in local space:
                 // pose the outline group so the box wraps the block where it
@@ -1906,6 +1906,74 @@ export default class WorldRenderer {
         }
 
         this.lastHitResult = hitResult;
+    }
+
+    /**
+     * Write the selection outline into one reused geometry.
+     *
+     * Building a fresh BufferGeometry and LineSegments every frame leaked a GPU
+     * buffer every frame: the old ones were removed from the group without ever
+     * being disposed, and the block under the crosshair is redrawn every frame
+     * even while standing still.
+     */
+    updateBlockHitBoxOutline(segments) {
+        const needed = segments.length * 6;
+
+        if (this.blockHitBoxLines === undefined) {
+            this.blockHitBoxPositions = new Float32Array(Math.max(needed, 1024));
+            this.blockHitBoxGeometry = new THREE.BufferGeometry();
+            this.blockHitBoxAttribute = new THREE.BufferAttribute(this.blockHitBoxPositions, 3)
+                .setUsage(THREE.DynamicDrawUsage);
+            this.blockHitBoxGeometry.setAttribute('position', this.blockHitBoxAttribute);
+            this.blockHitBoxLines = new THREE.LineSegments(this.blockHitBoxGeometry, this.blockHitBoxMaterial);
+            // The buffer is rewritten in place, which leaves three.js's cached
+            // bounding sphere stale, so keep the outline out of frustum culling.
+            this.blockHitBoxLines.frustumCulled = false;
+            this.blockHitBox.add(this.blockHitBoxLines);
+        } else if (needed > this.blockHitBoxPositions.length) {
+            this.blockHitBoxPositions = new Float32Array(Math.ceil(needed * 1.5));
+            this.blockHitBoxAttribute = new THREE.BufferAttribute(this.blockHitBoxPositions, 3)
+                .setUsage(THREE.DynamicDrawUsage);
+            this.blockHitBoxGeometry.setAttribute('position', this.blockHitBoxAttribute);
+        }
+
+        const positions = this.blockHitBoxPositions;
+        let offset = 0;
+
+        for (let segment of segments) {
+            let start = segment.start;
+            let end = segment.end;
+            let fixedA = segment.fixedA;
+            let fixedB = segment.fixedB;
+
+            if (segment.axis === 0) {
+                positions[offset++] = start;
+                positions[offset++] = fixedA;
+                positions[offset++] = fixedB;
+                positions[offset++] = end;
+                positions[offset++] = fixedA;
+                positions[offset++] = fixedB;
+            } else if (segment.axis === 1) {
+                positions[offset++] = fixedA;
+                positions[offset++] = start;
+                positions[offset++] = fixedB;
+                positions[offset++] = fixedA;
+                positions[offset++] = end;
+                positions[offset++] = fixedB;
+            } else {
+                positions[offset++] = fixedA;
+                positions[offset++] = fixedB;
+                positions[offset++] = start;
+                positions[offset++] = fixedA;
+                positions[offset++] = fixedB;
+                positions[offset++] = end;
+            }
+        }
+
+        this.blockHitBoxAttribute.updateRange.offset = 0;
+        this.blockHitBoxAttribute.updateRange.count = needed;
+        this.blockHitBoxAttribute.needsUpdate = true;
+        this.blockHitBoxGeometry.setDrawRange(0, segments.length * 2);
     }
 
     updateBlockPlacePreview(partialTicks) {
@@ -1956,10 +2024,26 @@ export default class WorldRenderer {
         if (!isReplaceable || (typeof block.canPlaceAt === "function" &&
             !block.canPlaceAt(queryWorld, x, y, z, hitResult.face))) return;
 
+        const blockData = this.getBlockPlacementData(block, hitResult);
+
+        // Standing still on the same target rebuilt an identical ghost every
+        // single frame: new geometry, a cloned material, and a proxy world to
+        // render it through. Reuse the built meshes while nothing that shapes
+        // them has changed and only re-apply the pulsing opacity. Field
+        // (summoned) hits keep rebuilding: their pose is not part of the key.
+        if (!field && this.blockPreviewMeshes.length > 0
+            && this.isPreviewCurrent(world, typeId, x, y, z, hitResult.face, blockData)) {
+            this.updateBlockPreviewPulse();
+            this.blockPreviewGroup.visible = true;
+            return;
+        }
+
         // Clear existing preview meshes
         while (this.blockPreviewGroup.children.length > 0) {
             this.blockPreviewGroup.remove(this.blockPreviewGroup.children[0]);
         }
+        this.blockPreviewMeshes.length = 0;
+        this.previewKeyValid = false;
 
         if (field) {
             // Pose the ghost group with the field; the mesh below is placed at
@@ -1982,14 +2066,11 @@ export default class WorldRenderer {
 
         // Render against a proxy world that reports the placement block data
         // and shape for the target position, without touching real chunk storage.
-        let fakeWorld = this.createPreviewWorld(queryWorld, typeId, x, y, z, this.getBlockPlacementData(block, hitResult));
+        let fakeWorld = this.createPreviewWorld(queryWorld, typeId, x, y, z, blockData);
 
         // Blocks like stairs, torches and door compute their orientation in
         // onBlockPlaced; run it against the fake world so the ghost matches.
         block.onBlockPlaced(fakeWorld, x, y, z, hitResult.face);
-
-        let previewOpacity = Math.cos(performance.now() / 300) * 0.2 + 0.8;
-        previewOpacity = Math.min(previewOpacity * 0.2 + 0.3, 0.6);
 
         tessellator.startDrawing();
         tessellator.setRenderingPass(true);
@@ -2012,26 +2093,115 @@ export default class WorldRenderer {
                 mesh.position.set(x >> 4 << 4, y >> 4 << 4, z >> 4 << 4);
             }
             mesh.material.transparent = true;
-            mesh.material.opacity = previewOpacity;
             mesh.material.depthWrite = false;
             mesh.material.alphaTest = 0;
             mesh.renderOrder = 10001;
 
-            // Tint the ghost toward white so it reads as a light preview
+            // Keep the colours the mesh was built with: the pulse tints from
+            // them each frame instead of re-tinting an already tinted buffer,
+            // which used to creep the ghost towards white the longer it stayed
+            // on screen.
             let colorAttr = mesh.geometry.getAttribute('color');
             if (colorAttr) {
-                for (let i = 0; i < colorAttr.count; i++) {
-                    colorAttr.setXYZ(i,
-                        1 - (1 - colorAttr.getX(i)) * 0.55 * previewOpacity,
-                        1 - (1 - colorAttr.getY(i)) * 0.55 * previewOpacity,
-                        1 - (1 - colorAttr.getZ(i)) * 0.55 * previewOpacity
-                    );
-                }
-                colorAttr.needsUpdate = true;
+                mesh.userData.baseColors = Float32Array.from(colorAttr.array);
             }
         }
 
+        this.blockPreviewMeshes = previewMeshes;
+        if (!field) {
+            this.rememberPreview(world, typeId, x, y, z, hitResult.face, blockData);
+        }
+
+        this.updateBlockPreviewPulse();
         this.blockPreviewGroup.visible = true;
+    }
+
+    /**
+     * True when the ghost built for an earlier frame is still the ghost this
+     * frame would build: same world, held block, target cell and face,
+     * orientation data, and the same blocks around the target.
+     */
+    isPreviewCurrent(world, typeId, x, y, z, face, blockData) {
+        const key = this.previewKey;
+        if (this.previewKeyValid !== true || this.previewWorld !== world || key === null) {
+            return false;
+        }
+
+        if (key[0] !== typeId || key[1] !== x || key[2] !== y || key[3] !== z) {
+            return false;
+        }
+        if (key[4] !== face.x || key[5] !== face.y || key[6] !== face.z || key[7] !== blockData) {
+            return false;
+        }
+
+        for (let i = 0; i < PREVIEW_NEIGHBOUR_OFFSETS.length; i++) {
+            const offset = PREVIEW_NEIGHBOUR_OFFSETS[i];
+            if (key[8 + i] !== world.getBlockAt(x + offset[0], y + offset[1], z + offset[2])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    rememberPreview(world, typeId, x, y, z, face, blockData) {
+        if (this.previewKey === null) {
+            this.previewKey = new Float64Array(8 + PREVIEW_NEIGHBOUR_OFFSETS.length);
+        }
+
+        const key = this.previewKey;
+        key[0] = typeId;
+        key[1] = x;
+        key[2] = y;
+        key[3] = z;
+        key[4] = face.x;
+        key[5] = face.y;
+        key[6] = face.z;
+        key[7] = blockData;
+
+        for (let i = 0; i < PREVIEW_NEIGHBOUR_OFFSETS.length; i++) {
+            const offset = PREVIEW_NEIGHBOUR_OFFSETS[i];
+            key[8 + i] = world.getBlockAt(x + offset[0], y + offset[1], z + offset[2]);
+        }
+
+        this.previewWorld = world;
+        this.previewKeyValid = true;
+    }
+
+    /** Drop the built ghost, e.g. when the world that produced it is gone. */
+    invalidateBlockPreview() {
+        this.previewKeyValid = false;
+        this.previewWorld = null;
+        this.blockPreviewMeshes.length = 0;
+    }
+
+    /**
+     * Apply the ghost's pulsing opacity and its tint toward white, recomputed
+     * from the colours captured when the mesh was built.
+     */
+    updateBlockPreviewPulse() {
+        let previewOpacity = Math.cos(performance.now() / 300) * 0.2 + 0.8;
+        previewOpacity = Math.min(previewOpacity * 0.2 + 0.3, 0.6);
+
+        for (const mesh of this.blockPreviewMeshes) {
+            mesh.material.opacity = previewOpacity;
+
+            const colorAttr = mesh.geometry.getAttribute('color');
+            const baseColors = mesh.userData.baseColors;
+            if (!colorAttr || !baseColors) continue;
+
+            const array = colorAttr.array;
+            const stride = colorAttr.itemSize;
+            for (let i = 0; i < baseColors.length; i += stride) {
+                array[i]     = 1 - (1 - baseColors[i])     * 0.55 * previewOpacity;
+                array[i + 1] = 1 - (1 - baseColors[i + 1]) * 0.55 * previewOpacity;
+                array[i + 2] = 1 - (1 - baseColors[i + 2]) * 0.55 * previewOpacity;
+                if (stride >= 4) {
+                    array[i + 3] = baseColors[i + 3];
+                }
+            }
+            colorAttr.needsUpdate = true;
+        }
     }
 
     createPreviewWorld(world, typeId, px, py, pz, baseData) {
@@ -2321,6 +2491,11 @@ export default class WorldRenderer {
             this.overlay.add(this.blockBreakMesh);
         }
         this.blockBreakMesh.visible = false;
+
+        // The batched translucent buffer belongs to the world that was just
+        // torn down; never let the next world reuse it.
+        this.translucentBatcher?.invalidate();
+        this.invalidateBlockPreview();
 
         this.webRenderer.clear();
 

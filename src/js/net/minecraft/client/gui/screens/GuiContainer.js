@@ -19,6 +19,14 @@ export default class GuiContainer extends GuiScreen {
         this.tooltip = null;
     }
 
+    /**
+     * Container screens place their slots' items (and the stack on the cursor)
+     * through the item renderer, so those layers belong on top of the screen.
+     */
+    usesGuiItems() {
+        return true;
+    }
+
     init() {
         super.init();
 

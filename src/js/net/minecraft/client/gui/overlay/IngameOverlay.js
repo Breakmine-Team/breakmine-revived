@@ -356,12 +356,39 @@ export default class IngameOverlay extends Gui {
 
         const canvas = this.window.canvasGuiItemCount;
         const countContext = canvas.getContext('2d');
-        countContext.clearRect(0, 0, canvas.width, canvas.height);
+
+        // This layer is window-sized and is composited over the world every
+        // frame. Rebuilding it unconditionally meant a full-screen clear and a
+        // full-screen blit per frame for numbers that almost never change - in
+        // Creative every stack has count 1, so nothing was drawn at all.
+        const counts = this.itemCounts || (this.itemCounts = new Int32Array(9));
+        let changed = this.itemCountsFresh !== true
+            || canvas.width !== this.itemCountsWidth
+            || canvas.height !== this.itemCountsHeight;
+        let hasCounts = false;
 
         for (let i = 0; i < 9; i++) {
             let itemStack = this.minecraft.player.inventory.getItemInSlot(i);
-            if (!itemStack.isEmpty() && itemStack.getCount() > 1) {
-                const countText = itemStack.getCount().toString();
+            let count = (!itemStack || itemStack.isEmpty() || itemStack.getCount() <= 1)
+                ? 0
+                : itemStack.getCount();
+
+            if (count !== counts[i]) {
+                counts[i] = count;
+                changed = true;
+            }
+            if (count > 0) {
+                hasCounts = true;
+            }
+        }
+
+        if (changed) {
+            countContext.clearRect(0, 0, canvas.width, canvas.height);
+
+            for (let i = 0; i < 9; i++) {
+                if (counts[i] === 0) continue;
+
+                const countText = counts[i].toString();
                 const countWidth = this.minecraft.fontRenderer.getStringWidth(stack, countText);
                 this.minecraft.fontRenderer.drawString(
                     countContext,
@@ -372,9 +399,16 @@ export default class IngameOverlay extends Gui {
                     true
                 );
             }
+
+            this.itemCountsFresh = true;
+            this.itemCountsWidth = canvas.width;
+            this.itemCountsHeight = canvas.height;
+            this.itemCountsDrawn = hasCounts;
         }
 
-        stack.drawImage(canvas, 0, 0);
+        if (this.itemCountsDrawn) {
+            stack.drawImage(canvas, 0, 0);
+        }
     }
 
     getOSInfo() {

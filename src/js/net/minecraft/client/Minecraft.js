@@ -474,7 +474,7 @@ export default class Minecraft {
             if (this.world !== null) {
                 this.world.cleanup();
                 const provider = this.world.getChunkProvider();
-                if (provider instanceof ChunkProviderGenerateWorker) {
+                if (provider && typeof provider.terminate === "function") {
                     provider.terminate();
                 }
                 this.world.getChunkProvider().getChunks().clear();
@@ -1655,6 +1655,13 @@ export default class Minecraft {
         for (let x = chunkX - radius; x <= chunkX + radius; x++) {
             for (let z = chunkZ - radius; z <= chunkZ + radius; z++) {
                 if (!provider.chunkExists(x, z)) {
+                    return false;
+                }
+                // A worker-backed chunk exists as an empty shell before its
+                // packet has been decoded. Keep the loading screen up until
+                // the real terrain is installed so the player cannot fall
+                // through it.
+                if (typeof provider.isChunkReady === "function" && !provider.isChunkReady(x, z)) {
                     return false;
                 }
             }

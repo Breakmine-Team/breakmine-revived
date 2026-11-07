@@ -67,6 +67,8 @@ class TunnelLib {
         /** @private */ this._closingTarget = false;
         /** @private */ this._onPeerJoin   = null;
         /** @private */ this._onPeerLeave  = null;
+        /** @private */ this._pendingToTarget = [];
+        /** @private */ this._pendingToTargetBytes = 0;
     }
 
     /**
@@ -237,12 +239,18 @@ class TunnelLib {
             return;
         }
 
+        this._targetWs.onopen = () => {
+            this._flushPendingToTarget();
+        };
+
         this._targetWs.onmessage = (event) => {
             this._forwardToTunnel(event.data);
         };
 
         this._targetWs.onclose = () => {
             this._targetWs = null;
+            this._pendingToTarget = [];
+            this._pendingToTargetBytes = 0;
             // If we closed the target ourselves (e.g. the last peer left while
             // lazy), keep the tunnel alive so the join slot stays open. Only a
             // genuine target failure tears the tunnel down.
@@ -261,6 +269,38 @@ class TunnelLib {
     _forwardToTarget(data) {
         if (this._targetWs && this._targetWs.readyState === 1) {
             this._targetWs.send(data);
+            return;
+        }
+
+        // The target is opened lazily on peer_connected. The joiner sends its
+        // handshake/login immediately, which can arrive first; queue those
+        // frames instead of silently dropping them.
+        const size = typeof data === 'string' ? data.length : (data?.byteLength || 0);
+        if (this._pendingToTargetBytes + size > 1_048_576) {
+            console.warn('[TunnelLib] Dropping frame: loopback target is not ready');
+            return;
+        }
+        this._pendingToTarget.push(data);
+        this._pendingToTargetBytes += size;
+    }
+
+    /** Send queued joiner frames once the loopback target opens. */
+    _flushPendingToTarget() {
+        if (!this._targetWs || this._targetWs.readyState !== 1) return;
+
+        const pending = this._pendingToTarget;
+        this._pendingToTarget = [];
+        this._pendingToTargetBytes = 0;
+
+        for (let i = 0; i < pending.length; i++) {
+            if (!this._targetWs || this._targetWs.readyState !== 1) {
+                this._pendingToTarget = pending.slice(i);
+                this._pendingToTargetBytes = this._pendingToTarget.reduce((sum, frame) => {
+                    return sum + (typeof frame === 'string' ? frame.length : (frame?.byteLength || 0));
+                }, 0);
+                return;
+            }
+            this._targetWs.send(pending[i]);
         }
     }
 
@@ -272,6 +312,8 @@ class TunnelLib {
     }
 
     _closeTarget() {
+        this._pendingToTarget = [];
+        this._pendingToTargetBytes = 0;
         if (this._targetWs) {
             this._closingTarget = true;
             this._targetWs.close();

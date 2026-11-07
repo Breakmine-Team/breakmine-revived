@@ -30,6 +30,7 @@ export default class GuiPlayerPreview {
 
         this.clock = new THREE.Clock();
         this.animTime = 0;
+        this.animationMode = "normal";
 
         this.renderCanvas = null;
         this.glRenderer = null;
@@ -40,6 +41,7 @@ export default class GuiPlayerPreview {
         this.skinImage = null;
         this.skinUsername = null;
         this.playerMeshes = [];
+        this.lastWalkBob = 0;
 
         // How far above the frame centre the drawn character actually lands,
         // measured from a real render (see measureSilhouetteOffset)
@@ -222,6 +224,27 @@ export default class GuiPlayerPreview {
         }
     }
 
+    setAnimationMode(mode) {
+        if (mode === "normal" || mode === "walk" || mode === "run") {
+            this.animationMode = mode;
+        }
+        return this;
+    }
+
+    /**
+     * Screen-space Y of the top of the rendered head, for GUI overlays such
+     * as the nametag. Must be called after the most recent draw().
+     */
+    getHeadTopY(y, height) {
+        if (!this.modelReady || !this.camera) return y + 8;
+
+        const visibleHeight = 2 * Math.tan(MathHelper.toRadians(this.camera.fov / 2)) * this.camera.position.z;
+        const pixelsPerModelUnit = height / visibleHeight;
+        const headTop = 16 - this.modelOffsetY + this.lastWalkBob;
+
+        return y + height / 2 - headTop * pixelsPerModelUnit;
+    }
+
     /**
      * Render the model and blit it at the given GUI position.
      *
@@ -230,7 +253,23 @@ export default class GuiPlayerPreview {
     draw(stack, x, y, mouseX, mouseY, partialTicks = 0, scale = 1) {
         if (!this.modelReady || !this.glRenderer) return;
 
-        this.animTime = this.clock.getElapsedTime() * 20;
+        const elapsed = this.clock.getElapsedTime();
+        this.animTime = elapsed * 20;
+
+        let limbSwing = 0;
+        let limbSwingStrength = 0;
+        if (this.animationMode === "walk") {
+            limbSwing = elapsed * 7.0;
+            limbSwingStrength = 0.8;
+        } else if (this.animationMode === "run") {
+            limbSwing = elapsed * 12.0;
+            limbSwingStrength = 1.3;
+        }
+
+        const walkBob = limbSwingStrength > 0
+            ? Math.abs(Math.sin(limbSwing * 0.6662)) * (this.animationMode === "run" ? 0.18 : 0.1)
+            : 0;
+        this.lastWalkBob = walkBob;
 
         const width = GuiPlayerPreview.WIDTH * scale;
         const height = GuiPlayerPreview.HEIGHT * scale;
@@ -248,11 +287,11 @@ export default class GuiPlayerPreview {
         const headYaw = Math.max(-headLimit, Math.min(headLimit, totalYaw));
         const bodyYaw = totalYaw - headYaw;
 
-        this.modelGroup.position.set(0, GuiPlayerPreview.MODEL_BASE_Y - this.modelOffsetY, 0);
+        this.modelGroup.position.set(0, GuiPlayerPreview.MODEL_BASE_Y - this.modelOffsetY + walkBob, 0);
         this.modelGroup.scale.set(-1, -1, 1);
         this.modelGroup.rotation.y = MathHelper.toRadians(-bodyYaw + 180);
 
-        this.model.render(this.modelGroup, 0, 0, this.animTime, headYaw, pitch, 0);
+        this.model.render(this.modelGroup, limbSwing, limbSwingStrength, this.animTime, headYaw, pitch, 0);
         this.modelGroup.updateMatrixWorld(true);
 
         this.glRenderer.render(this.scene, this.camera);
@@ -284,6 +323,7 @@ export default class GuiPlayerPreview {
         this.renderCanvas = null;
         this.skinImage = null;
         this.skinUsername = null;
+        this.lastWalkBob = 0;
         this.modelOffsetY = 0;
         this.modelReady = false;
     }

@@ -119,6 +119,8 @@ db.exec(`
         cape_path TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+    -- Skin history was removed; users.skin_path is the single active skin again.
+    DROP TABLE IF EXISTS user_skins;
     CREATE TABLE IF NOT EXISTS revoked_tokens (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         token_jti TEXT UNIQUE NOT NULL,
@@ -146,6 +148,28 @@ const stmts = {
 };
 
 setInterval(() => stmts.cleanExpiredTokens.run(Date.now()), 3600000);
+
+function removeSkinFile(filename) {
+    if (!filename) return;
+    const skinPath = path.resolve(SKIN_UPLOAD_DIR, filename);
+    if (fs.existsSync(skinPath)) fs.unlinkSync(skinPath);
+}
+
+async function sendSkinFile(res, filename) {
+    const skinPath = path.resolve(SKIN_UPLOAD_DIR, filename);
+    if (!fs.existsSync(skinPath)) return false;
+
+    const image = sharp(skinPath);
+    const metadata = await image.metadata();
+
+    res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600' });
+    if (metadata.width === 64 && metadata.height === 64) {
+        image.extract({ left: 0, top: 0, width: 64, height: 32 }).png().pipe(res);
+    } else {
+        res.sendFile(skinPath);
+    }
+    return true;
+}
 
 const app = express();
 
@@ -397,12 +421,13 @@ app.post('/api/upload_skin', authenticateToken, upload.single('file'), (req, res
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
         const user = stmts.findById.get(req.user.sub);
-        if (user?.skin_path) {
-            const oldPath = path.join(SKIN_UPLOAD_DIR, user.skin_path);
-            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        const previousSkin = user?.skin_path;
+        stmts.updateSkinPath.run(req.file.filename, req.user.sub);
+
+        if (previousSkin && previousSkin !== req.file.filename) {
+            removeSkinFile(previousSkin);
         }
 
-        stmts.updateSkinPath.run(req.file.filename, req.user.sub);
         Logger.info('Skin', `Uploaded: ${req.user.username}`);
         res.json({ message: 'Skin uploaded successfully', filename: req.file.filename });
     } catch (err) {
@@ -419,20 +444,9 @@ app.get('/skin/:username', async (req, res) => {
         const user = stmts.findByUsername.get(usernameVal.value);
         if (!user || !user.skin_path) return res.status(404).json({ error: 'Skin not found' });
 
-        const skinPath = path.resolve(SKIN_UPLOAD_DIR, user.skin_path);
-        if (!fs.existsSync(skinPath)) {
+        if (!await sendSkinFile(res, user.skin_path)) {
             stmts.updateSkinPath.run(null, user.id);
             return res.status(404).json({ error: 'Skin not found' });
-        }
-
-        const image = sharp(skinPath);
-        const metadata = await image.metadata();
-        if (metadata.width === 64 && metadata.height === 64) {
-            res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600' });
-            image.extract({ left: 0, top: 0, width: 64, height: 32 }).png().pipe(res);
-        } else {
-            res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600' });
-            res.sendFile(skinPath);
         }
     } catch (err) {
         Logger.error('Skin', `GetSkin failed: ${err.message}`);

@@ -12,6 +12,19 @@ export default class ItemRenderer {
         this.itemSprites = new Map();
         this.dirtyGroups = new Set();
         this.zIndex = 0;
+
+        // Both item layers are window-sized and are composited over the world
+        // every frame. This tracks what they currently show so they are only
+        // redrawn when their contents (or the size / atlas) really change -
+        // the HUD asks for the same sprites every frame.
+        this.revision = 0;
+        this.drawnRevision = -1;
+        this.drawnGuiScale = -1;
+        this.drawnCanvasWidth = -1;
+        this.drawnCanvasHeight = -1;
+        this.drawnItemsWidth = -1;
+        this.drawnItemsHeight = -1;
+        this.drawnAtlasImage = null;
     }
 
     initialize() {
@@ -47,24 +60,55 @@ export default class ItemRenderer {
     }
 
     render(partialTicks) {
-        this.camera.left = -this.window.width / 2;
-        this.camera.right = this.window.width / 2;
-        this.camera.top = this.window.height / 2;
-        this.camera.bottom = -this.window.height / 2;
-        this.camera.setViewOffset(this.window.width, this.window.height, this.window.width / 2, this.window.height / 2, this.window.width, this.window.height);
-        this.camera.updateProjectionMatrix();
-
-        this.webRenderer.clear();
-        this.webRenderer.render(this.scene, this.camera);
-
-        this.ctx2d.clearRect(0, 0, this.canvas2d.width, this.canvas2d.height);
-
         let atlas = this.minecraft.worldRenderer?.textureAtlas;
         let image = (atlas && atlas.isLoaded()) ? atlas.canvas : null;
         let fallbackImage = this.minecraft.worldRenderer?.textureTerrain?.image;
-        if (!image && !fallbackImage) return;
-
         let guiScale = Math.min(this.window.scaleFactor, 4);
+
+        // Redraw only when something that ends up on these canvases changed.
+        // Clearing and re-rendering them every frame meant a full-size webgl
+        // clear plus a static scene re-render, a full-size 2D clear and the
+        // same sprite draws - all of it thrown away again one frame later.
+        let needsRedraw = this.revision !== this.drawnRevision
+            || guiScale !== this.drawnGuiScale
+            || this.canvas2d.width !== this.drawnCanvasWidth
+            || this.canvas2d.height !== this.drawnCanvasHeight
+            || this.window.canvasItems.width !== this.drawnItemsWidth
+            || this.window.canvasItems.height !== this.drawnItemsHeight
+            || image !== this.drawnAtlasImage;
+
+        if (!needsRedraw) {
+            return;
+        }
+
+        this.drawnRevision = this.revision;
+        this.drawnGuiScale = guiScale;
+        this.drawnCanvasWidth = this.canvas2d.width;
+        this.drawnCanvasHeight = this.canvas2d.height;
+        this.drawnItemsWidth = this.window.canvasItems.width;
+        this.drawnItemsHeight = this.window.canvasItems.height;
+        this.drawnAtlasImage = image;
+
+        // autoClear is off, so every redraw starts with an explicit wipe; a
+        // redraw may follow items that moved or disappeared.
+        this.webRenderer.clear();
+
+        if (this.scene.children.length > 0) {
+            this.camera.left = -this.window.width / 2;
+            this.camera.right = this.window.width / 2;
+            this.camera.top = this.window.height / 2;
+            this.camera.bottom = -this.window.height / 2;
+            this.camera.setViewOffset(this.window.width, this.window.height, this.window.width / 2, this.window.height / 2, this.window.width, this.window.height);
+            this.camera.updateProjectionMatrix();
+
+            this.webRenderer.render(this.scene, this.camera);
+        }
+
+        this.ctx2d.clearRect(0, 0, this.canvas2d.width, this.canvas2d.height);
+        if (!image && !fallbackImage) {
+            return;
+        }
+
         this.ctx2d.save();
         this.ctx2d.scale(guiScale, guiScale);
 
@@ -74,6 +118,16 @@ export default class ItemRenderer {
         }
 
         this.ctx2d.restore();
+    }
+
+    /** True when the 3D item layer holds anything to composite. */
+    hasBlockItems() {
+        return this.scene.children.length > 0;
+    }
+
+    /** True when the 2D sprite layer holds anything to composite. */
+    hasSprites() {
+        return this.itemSprites.size > 0;
     }
 
     prepareRender(groupId) {
@@ -113,6 +167,7 @@ export default class ItemRenderer {
             meta.zIndex = this.zIndex;
             meta.dirty = false;
             this.items[pairId] = meta;
+            this.revision++;
         } else {
             if (meta.dirty || meta.typeId !== block.getId() || meta.x !== x || meta.y !== y || meta.brightness !== brightness || meta.zIndex !== this.zIndex) {
                 this.scene.remove(meta.group);
@@ -124,6 +179,20 @@ export default class ItemRenderer {
 
     _renderSpriteInGui(groupId, renderId, block, x, y, brightness) {
         let pairId = groupId + ':' + renderId;
+        let textureName = block.getTextureForFace(EnumBlockFace.NORTH);
+        let existing = this.itemSprites.get(pairId);
+
+        // The HUD asks for the same sprites every frame. Only touch the layer
+        // when an entry actually changes, so the redraw check in render()
+        // stays meaningful (and a static hotbar stops reallocating an entry
+        // per slot per frame).
+        if (existing && existing.block.getId() === block.getId()
+            && existing.x === x && existing.y === y
+            && existing.brightness === brightness && existing.zIndex === this.zIndex
+            && existing.textureName === textureName) {
+            return;
+        }
+
         this.itemSprites.set(pairId, {
             groupId,
             renderId,
@@ -132,8 +201,9 @@ export default class ItemRenderer {
             y,
             brightness,
             zIndex: this.zIndex,
-            textureName: block.getTextureForFace(EnumBlockFace.NORTH)
+            textureName
         });
+        this.revision++;
     }
 
     _drawSprite(entry, image) {
@@ -192,6 +262,7 @@ export default class ItemRenderer {
             this.items[i].dirty = true;
         }
         this.itemSprites.clear();
+        this.revision++;
     }
 
     reset() {
@@ -201,6 +272,10 @@ export default class ItemRenderer {
         this.items = [];
         this.itemSprites.clear();
         this.webRenderer.clear();
+        // The sprite layer has to be wiped here as well: render() only redraws
+        // it when its contents change, and it is still composited every frame.
+        this.ctx2d.clearRect(0, 0, this.canvas2d.width, this.canvas2d.height);
+        this.revision++;
     }
 
     scheduleDirty(groupId) {
@@ -208,16 +283,24 @@ export default class ItemRenderer {
     }
 
     destroy(groupId, renderId = null) {
+        let changed = false;
+
         for (let i in this.items) {
             if (this.items[i].groupId === groupId && (renderId === null || this.items[i].renderId === renderId)) {
                 this.scene.remove(this.items[i].group);
                 delete this.items[i];
+                changed = true;
             }
         }
         for (const [key, entry] of this.itemSprites) {
             if (entry.groupId === groupId && (renderId === null || entry.renderId === renderId)) {
                 this.itemSprites.delete(key);
+                changed = true;
             }
+        }
+
+        if (changed) {
+            this.revision++;
         }
     }
 }

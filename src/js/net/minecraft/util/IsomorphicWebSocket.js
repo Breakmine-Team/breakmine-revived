@@ -17,6 +17,37 @@ if (isNode) {
     NativeWS = window.WebSocket;
 }
 
+/**
+ * Normalize a tunnel URL/hostname into an absolute WebSocket URL.
+ * Settings store the hostname form (e.g. "tunnel.breakmine.com"), so the
+ * joiner must normalize it the same way the host does.
+ */
+function normalizeTunnelServerUrl(serverUrl) {
+    if (typeof serverUrl !== 'string' || serverUrl.trim() === '') return '';
+
+    let url = serverUrl.trim();
+
+    // Accept an http(s) URL in the setting as well as a bare hostname.
+    if (/^https?:\/\//i.test(url)) {
+        url = url.replace(/^http(s?):\/\//i, (_match, secure) => secure ? 'wss://' : 'ws://');
+    }
+    if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(url)) {
+        const proto = isNode
+            ? 'ws'
+            : (typeof location !== 'undefined' && location.protocol === 'https:' ? 'wss' : 'ws');
+        url = `${proto}://${url}`;
+    }
+
+    return url;
+}
+
+function defaultTunnelServerUrl() {
+    const proto = isNode
+        ? 'ws'
+        : (typeof location !== 'undefined' && location.protocol === 'https:' ? 'wss' : 'ws');
+    return `${proto}://tunnel.breakmine.com`;
+}
+
 export class LoopbackServer {
     #listeners = new Set();
     #worker = null;
@@ -234,13 +265,12 @@ export class TunnelSocket extends EventTarget {
 
         this._ws = null;
         this._handshakeDone = false;
-        this._code = code;
+        this._code = String(code ?? '').trim().toUpperCase();
 
-        // Resolve server URL
-        const resolvedUrl = serverUrl || IsomorphicWebSocket.tunnelServerUrl || (() => {
-            const proto = isNode ? 'ws' : (location.protocol === 'https:' ? 'wss:' : 'ws');
-            return `${proto}://tunnel.breakmine.com`;
-        })();
+        // Resolve server URL. The configured setting may be a bare hostname.
+        const resolvedUrl = normalizeTunnelServerUrl(
+            serverUrl || IsomorphicWebSocket.tunnelServerUrl || defaultTunnelServerUrl()
+        );
 
         // Always try wss:// first, then fall back to ws://
         const fallbacks = [];

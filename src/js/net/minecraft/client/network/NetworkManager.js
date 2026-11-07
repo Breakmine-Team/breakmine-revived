@@ -58,6 +58,10 @@ export default class NetworkManager {
         this.address = address;
         this.port = port;
         this.useProxy = !!proxy;
+        // Tunnel joins use the same configurable relay as tunnel hosting.
+        this.tunnelServerUrl = typeof address === 'string' && address.startsWith('tunnel://')
+            ? (this.minecraft?.settings?.tunnelServer || null)
+            : null;
         this._protocolFallbacks = [];
 
         if (wsUrl.startsWith('ws://')) {
@@ -79,7 +83,9 @@ export default class NetworkManager {
             return;
         }
 
-        const socket = new IsomorphicWebSocket(url);
+        const socket = new IsomorphicWebSocket(url, {
+            tunnelServerUrl: this.tunnelServerUrl
+        });
         socket.binaryType = "arraybuffer";
         this.socket = socket;
 

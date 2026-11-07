@@ -11,6 +11,16 @@ export default class GuiScreen extends Gui {
         this.selectedButtonIndex = -1;
     }
 
+    /**
+     * True when this screen draws items through the item renderer (container
+     * slots, the stack held on the cursor). Those screens need the item layers
+     * composited above them; every other screen is drawn over the HUD, so the
+     * hotbar's item models have to stay underneath it.
+     */
+    usesGuiItems() {
+        return false;
+    }
+
     setup(minecraft, width, height) {
         this.minecraft = minecraft;
         this.width = width;
