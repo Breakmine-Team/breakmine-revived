@@ -119,7 +119,10 @@ export default class BlockRenderer {
      * does not rotate. A bare number turns the block around Y.
      */
     getBlockRotation(world, block, x, y, z, tick = null) {
-        if (block === null || typeof block.getRenderRotation !== 'function') {
+        if (block === null || typeof block.getRenderRotation !== 'function'
+            || block.getRenderRotation === Block.prototype.getRenderRotation) {
+            // The base implementation is a constant 0. Most blocks inherit it,
+            // so skip the world data lookup and method call entirely.
             return null;
         }
 
@@ -212,12 +215,17 @@ export default class BlockRenderer {
         return tessellator.draw(new THREE.Group());
     }
 
-    renderBlock(world, block, ambientOcclusion, x, y, z) {
+    renderBlock(world, block, ambientOcclusion, x, y, z, knownRotation = undefined) {
         // Blocks can turn themselves around their own center; the angle is
         // baked into the vertices below and cleared before the next block.
+        // Callers that already resolved the rotation (chunk meshing does, to
+        // decide whether the block needs its own mesh) pass it in; null means
+        // "known static" and skips a second world/block lookup.
         const blockRotation = this.suppressRotation
             ? null
-            : this.getBlockRotation(world, block, x, y, z);
+            : knownRotation !== undefined
+                ? knownRotation
+                : this.getBlockRotation(world, block, x, y, z);
         if (blockRotation !== null) {
             this.applyBlockRotation(x, y, z, blockRotation);
         }
@@ -503,6 +511,9 @@ export default class BlockRenderer {
 
     renderParts(world, parts, x, y, z, respectFaces = false, cullHidden = false, multipartBlock = null) {
         let resolvedParts = this.resolveParts(parts);
+        // Every part of this block shares one metadata value; resolving it
+        // once avoids a chunk lookup for every face of every part.
+        const blockData = this.getBlockDataAt(world, x, y, z);
 
         // Collect occluders for boundary faces lazily: not every shape has a
         // part touching every side of its cell. Full opaque cubes are the
@@ -556,7 +567,7 @@ export default class BlockRenderer {
                         }
                     }
 
-                    this.renderFace(world, partBlock, bbox, face, false, x, y, z);
+                    this.renderFace(world, partBlock, bbox, face, false, x, y, z, blockData);
                 }
             } finally {
                 if (partRotation !== null) {
@@ -706,6 +717,8 @@ export default class BlockRenderer {
 
     renderSolidBlock(world, block, ambientOcclusion, x, y, z) {
         let boundingBox = block.getBoundingBox(world, x, y, z);
+        let blockData = this.getBlockDataAt(world, x, y, z);
+        let blockAmbientOcclusion = block.getAmbientOcclusion() && ambientOcclusion;
 
         // neighborId is fetched once per face here instead of inside
         // shouldRenderFace() as well, halving the world-space block lookups
@@ -716,7 +729,7 @@ export default class BlockRenderer {
             let neighborBlock = world ? Block.getById(neighborId) : null;
 
             if (world === null || block.shouldRenderFace(world, x, y, z, face, neighborId) || (neighborBlock !== null && (neighborBlock.path === true || neighborBlock.noFaceCull === true || neighborBlock.multipart === true))) {
-                this.renderFace(world, block, boundingBox, face, block.getAmbientOcclusion() && ambientOcclusion, x, y, z);
+                this.renderFace(world, block, boundingBox, face, blockAmbientOcclusion, x, y, z, blockData);
             }
         }
     }
@@ -808,6 +821,8 @@ export default class BlockRenderer {
 
     renderPath(world, block, ambientOcclusion, x, y, z) {
         let boundingBox = new BoundingBox(0, 0, 0, 1, 1 - (1/16), 1);
+        let blockData = this.getBlockDataAt(world, x, y, z);
+        let blockAmbientOcclusion = block.getAmbientOcclusion() && ambientOcclusion;
 
         for (let i = 0; i < FACES.length; i++) {
             let face = FACES[i];
@@ -815,23 +830,28 @@ export default class BlockRenderer {
             let neighborBlock = world ? Block.getById(neighborId) : null;
 
             if (world === null || block.shouldRenderFace(world, x, y, z, face, neighborId) || (neighborBlock !== null && (neighborBlock.path === true || neighborBlock.noFaceCull === true || neighborBlock.multipart === true))) {
-                this.renderFace(world, block, boundingBox, face, block.getAmbientOcclusion() && ambientOcclusion, x, y, z);
+                this.renderFace(world, block, boundingBox, face, blockAmbientOcclusion, x, y, z, blockData);
             }
         }
     }
 
-    renderFace(world, block, boundingBox, face, ambientOcclusion, x, y, z) {
+    /** Block metadata at an absolute position, using the chunk directly. */
+    getBlockDataAt(world, x, y, z) {
+        if (!world) return 0;
+        const chunk = world.getChunkAt(x >> 4, z >> 4);
+        return chunk ? chunk.getBlockDataAt(x & 15, y, z & 15) : 0;
+    }
+
+    renderFace(world, block, boundingBox, face, ambientOcclusion, x, y, z, knownBlockData = undefined) {
         let chunkX = x >> 4;
         let chunkY = y >> 4;
         let chunkZ = z >> 4;
 
-        let blockData = 0;
-        if (world) {
-            let chunk = world.getChunkAt(chunkX, chunkZ);
-            if (chunk) {
-                blockData = chunk.getBlockDataAt(x & 15, y, z & 15);
-            }
-        }
+        // Most callers already resolved the block's metadata; only fall back
+        // to a chunk lookup for callers that render a one-off face.
+        let blockData = knownBlockData !== undefined
+            ? knownBlockData
+            : this.getBlockDataAt(world, x, y, z);
 
         let minX = x + boundingBox.minX;
         let minY = y + boundingBox.minY;
@@ -843,9 +863,10 @@ export default class BlockRenderer {
         let minU, minV;
         let maxU, maxV;
         
-        if (this.worldRenderer.textureAtlas && this.worldRenderer.textureAtlas.isLoaded()) {
+        const atlas = this.worldRenderer.textureAtlas;
+        if (atlas && atlas.isLoaded()) {
             let textureName = block.getTextureForFace(face, blockData, x, y, z, world);
-            let uvs = this.worldRenderer.textureAtlas.getUVs(textureName);
+            let uvs = atlas.getUVs(textureName);
             minU = uvs.minU;
             maxU = uvs.maxU;
             minV = uvs.minV;
@@ -923,7 +944,8 @@ export default class BlockRenderer {
         if (wrapsV) {
             wrapFlags |= 2;
         }
-        if (world && typeof block.doSlideFaceAnimate === 'function') {
+        if (world && typeof block.doSlideFaceAnimate === 'function'
+            && block.doSlideFaceAnimate !== Block.prototype.doSlideFaceAnimate) {
             let slideOffset = 0;
             let tick = world.ticks || 0;
             let result = block.doSlideFaceAnimate(face, x, y, z, world, tick);
@@ -967,9 +989,15 @@ export default class BlockRenderer {
             wrapRect = [minU, minV, maxU - minU, maxV - minV, wrapFlags];
         }
 
-        let rotation = block.getRotationForFace(face, blockData, x, y, z, world);
+        // The base implementations are constants; skip the virtual calls for
+        // the many blocks that inherit them.
+        let rotation = block.getRotationForFace === Block.prototype.getRotationForFace
+            ? 0
+            : block.getRotationForFace(face, blockData, x, y, z, world);
 
-        let color = block.getColor(world, x, y, z, face);
+        let color = block.getColor === Block.prototype.getColor
+            ? 0xffffff
+            : block.getColor(world, x, y, z, face);
         let red = (color >> 16 & 255) / 255.0;
         let green = (color >> 8 & 255) / 255.0;
         let blue = (color & 255) / 255.0;

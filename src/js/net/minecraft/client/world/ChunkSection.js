@@ -155,131 +155,139 @@ export default class ChunkSection {
             };
         }
 
-        for (let i = 0; i < 2; i++) {
-            let isTranslucentRenderPhase = i === 1;
+        // One scan feeds both render passes. The old code walked all 4,096
+        // cells twice and repeated block lookups, rotation checks and overlay
+        // coverage in each pass. Rotating blocks are resolved once here too.
+        const animationTick = ChunkSection.animationTick();
+        const overlay = this.world.offGridField;
+        const checkOverlay = overlay !== null && !overlay.isPosed();
+        const sectionX = this.x * ChunkSection.SIZE;
+        const sectionY = this.y * ChunkSection.SIZE;
+        const sectionZ = this.z * ChunkSection.SIZE;
+        const blocks = this.blocks;
 
+        const opaqueBlocks = [];
+        const translucentBlocks = [];
+        const opaqueRotating = [];
+        const translucentRotating = [];
+
+        for (let x = 0; x < ChunkSection.SIZE; x++) {
+            const absoluteX = sectionX + x;
+            for (let y = 0; y < ChunkSection.SIZE; y++) {
+                const absoluteY = sectionY + y;
+                for (let z = 0; z < ChunkSection.SIZE; z++) {
+                    const typeId = blocks[y << 8 | z << 4 | x];
+                    if (typeId === 0) {
+                        continue;
+                    }
+
+                    const absoluteZ = sectionZ + z;
+
+                    // A flat summoned overlay living at this grid cell renders
+                    // instead of the real block; drawing both puts two coplanar
+                    // meshes at the same world coordinates (z-fighting).
+                    if (checkOverlay && overlay.covers(absoluteX, absoluteY, absoluteZ)) {
+                        continue;
+                    }
+
+                    const block = Block.getById(typeId);
+                    if (block === null) {
+                        continue;
+                    }
+
+                    const translucent = block.isTranslucent();
+                    const rotation = renderer.blockRenderer.getBlockRotation(
+                        this.world, block, absoluteX, absoluteY, absoluteZ, animationTick
+                    );
+
+                    if (rotation !== null) {
+                        // Resolve the rotating group and static casing once;
+                        // both the opaque and translucent passes reuse them.
+                        const entry = {
+                            x, y, z,
+                            block,
+                            translucent,
+                            staticParts: renderer.blockRenderer.getStaticParts(
+                                block, this.world, absoluteX, absoluteY, absoluteZ
+                            ),
+                            groups: renderer.blockRenderer.getRotatingGroups(
+                                block, this.world, absoluteX, absoluteY, absoluteZ
+                            )
+                        };
+                        (translucent ? translucentRotating : opaqueRotating).push(entry);
+                        continue;
+                    }
+
+                    (translucent ? translucentBlocks : opaqueBlocks).push({ x, y, z, block });
+                }
+            }
+        }
+
+        const renderPass = (blocksToRender, rotatingBlocks, isTranslucentRenderPhase) => {
             tessellator.startDrawing();
             tessellator.setRenderingPass(isTranslucentRenderPhase);
             renderer.blockRenderer.beginModelPass();
 
-            // Collect blocks for this pass
-            let blocksToRender = [];
-            let rotatingBlocks = [];
-            
-            for (let x = 0; x < ChunkSection.SIZE; x++) {
-                for (let y = 0; y < ChunkSection.SIZE; y++) {
-                    for (let z = 0; z < ChunkSection.SIZE; z++) {
-                        let typeId = this.getBlockAt(x, y, z);
-
-                        if (typeId !== 0) {
-                            // A flat summoned overlay living at this grid cell
-                            // renders instead of the real block; drawing both
-                            // puts two coplanar meshes at the same world
-                            // coordinates (z-fighting).
-                            const overlay = this.world.offGridField;
-                            if (overlay && !overlay.isPosed() && overlay.covers(
-                                    this.x * ChunkSection.SIZE + x,
-                                    this.y * ChunkSection.SIZE + y,
-                                    this.z * ChunkSection.SIZE + z)) {
-                                continue;
-                            }
-
-                            let block = Block.getById(typeId);
-                            if (block === null || block.isTranslucent() !== isTranslucentRenderPhase) {
-                                continue;
-                            }
-                            
-                            // Blocks that turn themselves get their own mesh,
-                            // so the section mesh stays put and the object can
-                            // be rotated every frame.
-                            if (renderer.blockRenderer.getBlockRotation(
-                                    this.world, block,
-                                    this.x * ChunkSection.SIZE + x,
-                                    this.y * ChunkSection.SIZE + y,
-                                    this.z * ChunkSection.SIZE + z,
-                                    ChunkSection.animationTick()                            ) !== null) {
-                                // A block may spin only some of its parts: the
-                                // still casing goes into the section mesh, and
-                                // the moving parts become the block's own mesh.
-                                const absoluteX = this.x * ChunkSection.SIZE + x;
-                                const absoluteY = this.y * ChunkSection.SIZE + y;
-                                const absoluteZ = this.z * ChunkSection.SIZE + z;
-                                const staticParts = renderer.blockRenderer.getStaticParts(
-                                    block, this.world, absoluteX, absoluteY, absoluteZ
-                                );
-
-                                if (staticParts !== null) {
-                                    renderer.blockRenderer.renderParts(
-                                        this.world, staticParts,
-                                        absoluteX, absoluteY, absoluteZ, false, true, block
-                                    );
-                                }
-
-                                rotatingBlocks.push({x: x, y: y, z: z, block: block});
-                                continue;
-                            }
-
-                            blocksToRender.push({
-                                x: x,
-                                y: y,
-                                z: z,
-                                block: block
-                            });
-                        }
-                    }
+            // A block may spin only some of its parts: the still casing goes
+            // into the section mesh, and the moving parts become the block's
+            // own mesh.
+            for (const blockData of rotatingBlocks) {
+                if (blockData.staticParts !== null) {
+                    const absoluteX = sectionX + blockData.x;
+                    const absoluteY = sectionY + blockData.y;
+                    const absoluteZ = sectionZ + blockData.z;
+                    renderer.blockRenderer.renderParts(
+                        this.world, blockData.staticParts,
+                        absoluteX, absoluteY, absoluteZ, false, true, blockData.block
+                    );
                 }
             }
 
             // Sort translucent blocks back-to-front from camera for proper depth ordering
             if (isTranslucentRenderPhase && cameraPos) {
-                let sectionWorldX = this.x * ChunkSection.SIZE;
-                let sectionWorldY = this.y * ChunkSection.SIZE;
-                let sectionWorldZ = this.z * ChunkSection.SIZE;
-
                 blocksToRender.sort((a, b) => {
-                    // Calculate world positions of block centers
-                    let ax = sectionWorldX + a.x + 0.5;
-                    let ay = sectionWorldY + a.y + 0.5;
-                    let az = sectionWorldZ + a.z + 0.5;
-                    
-                    let bx = sectionWorldX + b.x + 0.5;
-                    let by = sectionWorldY + b.y + 0.5;
-                    let bz = sectionWorldZ + b.z + 0.5;
+                    const ax = sectionX + a.x + 0.5;
+                    const ay = sectionY + a.y + 0.5;
+                    const az = sectionZ + a.z + 0.5;
 
-                    // Calculate squared distances to camera
-                    let distASq = (ax - cameraPos.x) * (ax - cameraPos.x) + 
-                                (ay - cameraPos.y) * (ay - cameraPos.y) + 
-                                (az - cameraPos.z) * (az - cameraPos.z);
-                    let distBSq = (bx - cameraPos.x) * (bx - cameraPos.x) + 
-                                (by - cameraPos.y) * (by - cameraPos.y) + 
-                                (bz - cameraPos.z) * (bz - cameraPos.z);
+                    const bx = sectionX + b.x + 0.5;
+                    const by = sectionY + b.y + 0.5;
+                    const bz = sectionZ + b.z + 0.5;
 
-                    // Sort far to near (far blocks render first)
+                    const distASq = (ax - cameraPos.x) * (ax - cameraPos.x) +
+                        (ay - cameraPos.y) * (ay - cameraPos.y) +
+                        (az - cameraPos.z) * (az - cameraPos.z);
+                    const distBSq = (bx - cameraPos.x) * (bx - cameraPos.x) +
+                        (by - cameraPos.y) * (by - cameraPos.y) +
+                        (bz - cameraPos.z) * (bz - cameraPos.z);
+
                     return distBSq - distASq;
                 });
             }
 
-            // Render blocks in (potentially sorted) order
-            for (let blockData of blocksToRender) {
-                let absoluteX = this.x * ChunkSection.SIZE + blockData.x;
-                let absoluteY = this.y * ChunkSection.SIZE + blockData.y;
-                let absoluteZ = this.z * ChunkSection.SIZE + blockData.z;
+            for (const blockData of blocksToRender) {
+                const absoluteX = sectionX + blockData.x;
+                const absoluteY = sectionY + blockData.y;
+                const absoluteZ = sectionZ + blockData.z;
 
-                renderer.blockRenderer.renderBlock(this.world, blockData.block, ambientOcclusion, absoluteX, absoluteY, absoluteZ);
+                // The scan already proved this block is static, so skip the
+                // second rotation lookup inside renderBlock.
+                renderer.blockRenderer.renderBlock(
+                    this.world, blockData.block, ambientOcclusion,
+                    absoluteX, absoluteY, absoluteZ, null
+                );
             }
 
             // Each rotating block becomes a mesh of its own, centered on its
             // cell so the object can spin around the block's middle.
-            for (let blockData of rotatingBlocks) {
-                let absoluteX = this.x * ChunkSection.SIZE + blockData.x;
-                let absoluteY = this.y * ChunkSection.SIZE + blockData.y;
-                let absoluteZ = this.z * ChunkSection.SIZE + blockData.z;
+            for (const blockData of rotatingBlocks) {
+                const absoluteX = sectionX + blockData.x;
+                const absoluteY = sectionY + blockData.y;
+                const absoluteZ = sectionZ + blockData.z;
 
                 // Parts that turn on different axles (a gearbox's crossed
                 // pairs) each become their own mesh; anything else is one mesh.
-                const groups = renderer.blockRenderer.getRotatingGroups(
-                    blockData.block, this.world, absoluteX, absoluteY, absoluteZ
-                );
+                const groups = blockData.groups;
                 const partGroups = groups !== null ? groups.map((group) => group.parts) : [null];
 
                 let meshes = [];
@@ -339,20 +347,23 @@ export default class ChunkSection {
             }
 
             if (tessellator.addedVertices > 0) {
-                let mesh = tessellator.draw(this.group);
-                
+                const mesh = tessellator.draw(this.group);
+
                 if (isTranslucentRenderPhase) {
                     mesh.userData.isTranslucent = true;
-                    
+
                     // CRITICAL: Hide it! The global batcher will draw it instead.
-                    mesh.visible = false; 
+                    mesh.visible = false;
                 }
             }
 
             // Custom-model blocks use their own textures, so each model type
             // forms its own mesh next to the atlas mesh.
             renderer.blockRenderer.flushModelPasses(this.group);
-        }
+        };
+
+        renderPass(opaqueBlocks, opaqueRotating, false);
+        renderPass(translucentBlocks, translucentRotating, true);
     }
     
     /**

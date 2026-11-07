@@ -176,6 +176,11 @@ export default class WorldRenderer {
         this.minecraft = minecraft;
         this.window = window;
         this.chunkSectionUpdateQueue = [];
+        // Milliseconds spent rebuilding queued section meshes per rendered
+        // frame. A section cannot be interrupted once started, so this is a
+        // soft budget; it still prevents a whole batch from landing in one
+        // frame when the queue is large.
+        this.chunkMeshBudgetMs = 4;
 
         // Shadows are a global graphics option (Options -> Shadows, off by
         // default). Dynamic lights are a separate option that also forces lit
@@ -504,6 +509,15 @@ export default class WorldRenderer {
         let cameraChunkX = Math.floor(player.x) >> 4;
         let cameraChunkZ = Math.floor(player.z) >> 4;
         this.emitRenderHook('renderChunks', { partialTicks, cameraChunkX, cameraChunkZ, player });
+
+        // Rebuild a small slice of the section queue before drawing. This has
+        // to stay on the render loop rather than onTick(): when a frame is
+        // slow the timer runs several catch-up ticks, and meshing the full
+        // 16-section tick budget on each one turns a hitch into a feedback
+        // loop. Sections queued by renderChunks() this frame wait for the
+        // next frame, which also gives updateRotatingBlocks() a chance to
+        // orient any meshes that were just created.
+        this.updateChunkMeshing();
         this.renderChunks(cameraChunkX, cameraChunkZ);
         this.updateChunkBoundaryLines(cameraChunkX, cameraChunkZ);
 
@@ -751,6 +765,24 @@ export default class WorldRenderer {
         this.chunkSectionLines.geometry = sectionGeometry;
     }
 
+    /**
+     * Rebuild a bounded slice of the queued section meshes once per frame.
+     * At least one section is attempted when the queue is non-empty; the
+     * deadline stops the rest so a large stream of new chunks cannot consume
+     * the whole frame.
+     */
+    updateChunkMeshing(budgetMs = this.chunkMeshBudgetMs) {
+        if (this.chunkSectionUpdateQueue.length === 0) return;
+
+        const deadline = performance.now() + budgetMs;
+        do {
+            const chunkSection = this.chunkSectionUpdateQueue.shift();
+            if (chunkSection != null) {
+                chunkSection.rebuild(this);
+            }
+        } while (this.chunkSectionUpdateQueue.length > 0 && performance.now() < deadline);
+    }
+
     onTick() {
         this.emitRenderHook('onTick');
 
@@ -763,21 +795,6 @@ export default class WorldRenderer {
         if (this.dynamicLightUpdateTimer >= 5) {
             this.dynamicLightUpdateTimer = 0;
             this.updateDynamicLights();
-        }
-
-        // Rebuild chunk sections each tick. 16 per tick keeps the frame
-        // budget low (the full meshing of one section is expensive); the
-        // queue holds flagged sections, and WorldRenderer re-queues from
-        // isModified every frame, so waiting sections are not lost.
-        let rebuildCount = Math.min(16, this.chunkSectionUpdateQueue.length);
-        for (let i = 0; i < rebuildCount; i++) {
-            if (this.chunkSectionUpdateQueue.length !== 0) {
-                let chunkSection = this.chunkSectionUpdateQueue.shift();
-                if (chunkSection != null) {
-                    // Rebuild chunk
-                    chunkSection.rebuild(this);
-                }
-            }
         }
 
         this.prevFogBrightness = this.fogBrightness;

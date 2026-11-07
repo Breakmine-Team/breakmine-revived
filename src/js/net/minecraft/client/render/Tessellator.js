@@ -140,10 +140,14 @@ export default class Tessellator {
         this.partRotationPivot = null;
         this.partRotationAngles = null;
 
+        this.vertices = [];
+        this.uv = [];
+        this.colors = [];
         this.tileRects = [];
         this.wraps = [];
         this.tileWrap = null;
         this.tileWrapFlags = 0;
+        this.usesTileWrap = false;
     }
 
     // Material meshes are built from. A getter so callers can keep using
@@ -186,15 +190,18 @@ export default class Tessellator {
 
     startDrawing() {
         this.addedVertices = 0;
-        this.vertices = [];
-        this.uv = [];
-        this.colors = [];
+        // Reuse the buffers between meshes. draw() copies them into typed
+        // arrays, so nothing retains the JS arrays after a flush.
+        this.vertices.length = 0;
+        this.uv.length = 0;
+        this.colors.length = 0;
         // Per-vertex atlas tile rect (minU, minV, uSpan, vSpan) and a flag that
         // tells the shader to wrap the U coordinate inside that rect. Used by
         // animated faces (e.g. conveyor belts) so the texture scrolls within
-        // its own tile instead of sliding across the whole atlas.
-        this.tileRects = [];
-        this.wraps = [];
+        // its own tile instead of sliding across the whole atlas. Most meshes
+        // never use this, so the data is only materialized on demand.
+        this.tileRects.length = 0;
+        this.wraps.length = 0;
         this.tileWrap = null;
         this.tileWrapFlags = 0;
         this.usesTileWrap = false;
@@ -205,6 +212,18 @@ export default class Tessellator {
     // or null to disable wrapping. Kept as state so the block renderer doesn't
     // have to thread it through every addVertexWithUV call.
     setTileWrap(rect) {
+        // A wrapping face can appear after non-wrapping geometry in the same
+        // mesh. Give the earlier vertices the neutral rect before enabling the
+        // attributes, otherwise the buffer lengths would stop matching.
+        if (rect !== null && !this.usesTileWrap) {
+            const missing = this.addedVertices * 4 - this.tileRects.length;
+            for (let i = 0; i < missing; i += 4) {
+                this.tileRects.push(0, 0, 1, 1);
+                this.wraps.push(0);
+            }
+            this.usesTileWrap = true;
+        }
+
         this.tileWrap = rect;
         // rect[4] is a wrap mask (1 = U, 2 = V); a plain rect keeps the
         // original U-only wrap used by animated faces.
@@ -293,14 +312,16 @@ export default class Tessellator {
         this.colors.push(this.blue);
         this.colors.push(this.alpha);
 
-        // Add tile wrap data (minU, minV, uSpan, vSpan) and the wrap flag
-        if (this.tileWrap !== null) {
-            this.tileRects.push(this.tileWrap[0], this.tileWrap[1], this.tileWrap[2], this.tileWrap[3]);
-            this.wraps.push(this.tileWrapFlags);
-            this.usesTileWrap = true;
-        } else {
-            this.tileRects.push(0, 0, 1, 1);
-            this.wraps.push(0);
+        // Add tile wrap data (minU, minV, uSpan, vSpan) and the wrap flag.
+        // Until the first wrapping face appears this data is not needed at all.
+        if (this.usesTileWrap) {
+            if (this.tileWrap !== null) {
+                this.tileRects.push(this.tileWrap[0], this.tileWrap[1], this.tileWrap[2], this.tileWrap[3]);
+                this.wraps.push(this.tileWrapFlags);
+            } else {
+                this.tileRects.push(0, 0, 1, 1);
+                this.wraps.push(0);
+            }
         }
     }
 
@@ -494,18 +515,22 @@ export default class Tessellator {
             geometry.setAttribute('aWrap', new THREE.BufferAttribute(new Float32Array(this.wraps), 1));
         }
 
-        // Create index array
-        let index = [];
-        let verticesPerFace = 4;
-        for (let i = 0; i < this.addedVertices / verticesPerFace; i++) {
-            index.push(i * verticesPerFace + 0);
-            index.push(i * verticesPerFace + 2);
-            index.push(i * verticesPerFace + 1);
-            index.push(i * verticesPerFace + 0);
-            index.push(i * verticesPerFace + 3);
-            index.push(i * verticesPerFace + 2);
+        // Create the index buffer directly at its final size. Uint16 is enough
+        // for every normal section and halves the index bandwidth; only fall
+        // back to 32-bit for unusually large meshes.
+        const faces = this.addedVertices / 4;
+        const IndexArray = this.addedVertices <= 65535 ? Uint16Array : Uint32Array;
+        const index = new IndexArray(faces * 6);
+        for (let i = 0, j = 0; i < faces; i++) {
+            const vertex = i * 4;
+            index[j++] = vertex;
+            index[j++] = vertex + 2;
+            index[j++] = vertex + 1;
+            index[j++] = vertex;
+            index[j++] = vertex + 3;
+            index[j++] = vertex + 2;
         }
-        geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(index), 1));
+        geometry.setIndex(new THREE.BufferAttribute(index, 1));
 
         // Compute bounding sphere so Three.js knows the exact geometric center for depth sorting
         geometry.computeBoundingSphere();

@@ -14,6 +14,11 @@ export default class ChunkProviderGenerateWorker extends ChunkProvider {
         this.pendingChunks = new Map();
         this.pendingBatchProgress = new Map();
         this._nextBatchId = 0;
+        // Keep terrain streaming to one gameplay batch at a time. Without
+        // this, the provider can post several 32-chunk batches while the
+        // worker is still busy, producing a large result burst and a long
+        // main-thread deserialization spike.
+        this._gameplayBatchInFlight = false;
 
         // Keep this spelled as `new Worker(new URL(...))`. Assigning the URL to
         // a variable first makes the bundler treat the file as a plain asset and
@@ -23,6 +28,7 @@ export default class ChunkProviderGenerateWorker extends ChunkProvider {
 
         this.worker.onmessage = (e) => this._onWorkerMessage(e.data);
         this.worker.onerror = (e) => {
+            this._gameplayBatchInFlight = false;
             console.error("WorldGen worker error:", e.message, e);
         };
     }
@@ -35,6 +41,10 @@ export default class ChunkProviderGenerateWorker extends ChunkProvider {
         }
 
         if (data.type === "chunkGenerated" || data.type === "batchGenerated") {
+            if (data.type === "batchGenerated") {
+                this._gameplayBatchInFlight = false;
+            }
+
             const results = data.results;
             for (const result of results) {
                 const key = result.x + (result.z << 16);
@@ -47,7 +57,7 @@ export default class ChunkProviderGenerateWorker extends ChunkProvider {
                         this.chunks.set(key, chunk);
                         this.world.group.add(chunk.group);
 
-                        this.world.updateChunkLight(chunk);
+                        this.world.queueChunkLight(chunk);
                     } catch (err) {
                         console.error("Failed to deserialize chunk", result.x, result.z, err);
                     }
@@ -127,7 +137,7 @@ export default class ChunkProviderGenerateWorker extends ChunkProvider {
     }
 
     requestChunksInRadius(centerX, centerZ, radius) {
-        if (!this.worker) return;
+        if (!this.worker || this._gameplayBatchInFlight) return;
 
         const needed = [];
         for (let x = -radius + 1; x < radius; x++) {
@@ -145,7 +155,9 @@ export default class ChunkProviderGenerateWorker extends ChunkProvider {
 
         needed.sort((a, b) => a[2] - b[2]);
 
-        const BATCH = 32;
+        // Smaller batches keep the worker message (and the synchronous
+        // deserialization it triggers) from blocking a whole frame.
+        const BATCH = 8;
         const batch = needed.slice(0, BATCH);
 
         for (const [cx, cz] of batch) {
@@ -153,6 +165,7 @@ export default class ChunkProviderGenerateWorker extends ChunkProvider {
             this.pendingChunks.set(key, { resolve: null });
         }
 
+        this._gameplayBatchInFlight = true;
         this.worker.postMessage({
             type: "generateBatch",
             coords: batch.map(([cx, cz]) => [cx, cz]),
@@ -183,7 +196,7 @@ export default class ChunkProviderGenerateWorker extends ChunkProvider {
         this.chunks.set(index, chunk);
         this.world.group.add(chunk.group);
 
-        this.world.updateChunkLight(chunk);
+        this.world.queueChunkLight(chunk);
 
         return chunk;
     }
@@ -264,6 +277,7 @@ export default class ChunkProviderGenerateWorker extends ChunkProvider {
             this.worker.terminate();
             this.worker = null;
         }
+        this._gameplayBatchInFlight = false;
         this.pendingChunks.clear();
     }
 

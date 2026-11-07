@@ -447,16 +447,24 @@ export default class TextureAtlas {
 
     getUVs(textureName) {
         const coords = this.getTextureCoords(textureName);
+        // Meshing asks for the same handful of tiles once per face. The coords
+        // object is replaced whenever the atlas is rebuilt, so caching on it
+        // stays correct across texture-pack and mod reloads.
+        if (coords.uvs !== undefined) {
+            return coords.uvs;
+        }
+
         const u = coords.x / this.atlasSize;
         const v = coords.y / this.atlasSize;
         const span = coords.span || 1;
         const size = (this.textureSize * span) / this.atlasSize;
         
-        return {
+        coords.uvs = {
             minU: u,
             maxU: u + size,
             minV: v,
             maxV: v + size
         };
+        return coords.uvs;
     }
 }
