@@ -95,10 +95,16 @@ ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 VOLUME ["/data"]
 EXPOSE 6006 6007 6008
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||6006)+'/',{headers:{host:process.env.SITE_HOSTNAMES?.split(',')[0]||'breakmine.com'}}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+# The image runs either the HTTP API (cors.js, PORT) or the multiplayer server
+# (server.js, SERVER_PORT), so probe whichever one the container is running.
+# The server speaks WebSocket only, so a TCP connect is the right check there.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=5 \
+    CMD if [ -n "$SERVER_PORT" ]; then node -e "const net=require('net');const s=net.connect(+process.env.SERVER_PORT,'127.0.0.1');s.on('connect',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1))"; else node -e "fetch('http://127.0.0.1:'+(process.env.PORT||6006)+'/',{headers:{host:process.env.SITE_HOSTNAMES?.split(',')[0]||'breakmine.com'}}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; fi
 
 # Run the API and the tunnel relay together. `kill 0` forwards SIGTERM/SIGINT
 # to the whole process group so both children shut down gracefully.
 # If SERVER_PORT is set, run the multiplayer server instead.
-CMD ["bash", "-c", "if [ -n \"$SERVER_PORT\" ]; then node /app/server.js; else trap 'kill 0' SIGTERM SIGINT; node cors.js & node tunnel.js & wait; fi"]
+# `exec` matters for the multiplayer server: it makes node PID 1 so Docker's
+# SIGTERM reaches its shutdown handler directly instead of orphaning it behind
+# bash, which is what left the old instance running on redeploy.
+CMD ["bash", "-c", "if [ -n \"$SERVER_PORT\" ]; then exec node /app/server.js; else trap 'kill 0' SIGTERM SIGINT; node cors.js & node tunnel.js & wait; fi"]

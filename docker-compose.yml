@@ -50,6 +50,9 @@ services:
       dockerfile: Dockerfile
     image: breakmine-server:latest
     restart: unless-stopped
+    # Saving a large world on SIGTERM can take a few seconds; Docker's 10s
+    # default used to force-kill it, and Dokploy then saw a stuck old instance.
+    stop_grace_period: 30s
     environment:
       DATA_DIR: /data
       SERVER_PORT: "6008"
