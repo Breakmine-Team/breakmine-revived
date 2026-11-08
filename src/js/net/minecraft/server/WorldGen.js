@@ -52,14 +52,13 @@ function createGenerator(world, seedLong, worldType) {
 let cachedGenerator = null;
 let cachedGeneratorKey = null;
 
-function getGeneratorKey() {
-    return getWorldType() + ':' + seedToLong(config.seed).toString();
+function getGeneratorKey(worldType = getWorldType()) {
+    return worldType + ':' + seedToLong(config.seed).toString();
 }
 
-function getGenerator() {
+function getGenerator(worldType = getWorldType()) {
     if (!WorldGeneratorClass) return null;
 
-    const worldType = getWorldType();
     const seedLong = seedToLong(config.seed);
     const key = worldType + ':' + seedLong.toString();
 
@@ -92,8 +91,8 @@ class ServerChunk {
     }
 }
 
-function generateBaseBlocks(chunkX, chunkZ) {
-    const generator = getGenerator();
+function generateBaseBlocks(chunkX, chunkZ, worldType = getWorldType()) {
+    const generator = getGenerator(worldType);
     if (!generator || !PrimerClass) return null;
 
     const chunk = new ServerChunk();
@@ -113,12 +112,12 @@ function generateBaseBlocks(chunkX, chunkZ) {
 const baseCache = new Map();
 const BASE_CACHE_MAX = 256;
 
-function getBaseBlocks(chunkX, chunkZ) {
-    const key = getGeneratorKey() + ':' + chunkX + ',' + chunkZ;
+function getBaseBlocks(chunkX, chunkZ, worldType = getWorldType()) {
+    const key = getGeneratorKey(worldType) + ':' + chunkX + ',' + chunkZ;
     let blocks = baseCache.get(key);
     if (blocks) return blocks;
 
-    blocks = generateBaseBlocks(chunkX, chunkZ);
+    blocks = generateBaseBlocks(chunkX, chunkZ, worldType);
     if (!blocks) return null;
 
     baseCache.set(key, blocks);
@@ -168,10 +167,9 @@ class PopulateWorldStub {
 let cachedPopulateGenerator = null;
 let cachedPopulateGeneratorKey = null;
 
-function getPopulateGenerator() {
+function getPopulateGenerator(worldType = getWorldType()) {
     if (!WorldGeneratorClass) return null;
 
-    const worldType = getWorldType();
     const seedLong = seedToLong(config.seed);
     const key = worldType + ':' + seedLong.toString();
 
@@ -187,8 +185,8 @@ function getPopulateGenerator() {
 
 const populateStub = new PopulateWorldStub();
 
-function generateBlocks(chunkX, chunkZ) {
-    const base = getBaseBlocks(chunkX, chunkZ);
+function generateBlocks(chunkX, chunkZ, worldType = getWorldType()) {
+    const base = getBaseBlocks(chunkX, chunkZ, worldType);
     if (!base) return null;
 
     // Copy the base terrain before population writes into it: the base cache
@@ -196,7 +194,7 @@ function generateBlocks(chunkX, chunkZ) {
     // tree spill) always sees the same terrain, regardless of generation order.
     const blocks = new Uint16Array(base);
 
-    const populateGenerator = getPopulateGenerator();
+    const populateGenerator = getPopulateGenerator(worldType);
     if (!populateGenerator) return blocks;
 
     populateStub.blocks = blocks;
@@ -216,14 +214,14 @@ function generateBlocks(chunkX, chunkZ) {
 const blockCache = new Map();
 const BLOCK_CACHE_MAX = 64;
 
-function getColumnBlocks(chunkX, chunkZ) {
-    if (getWorldType() === 'flat') return null;
+function getColumnBlocks(chunkX, chunkZ, worldType = getWorldType()) {
+    if (worldType === 'flat') return null;
 
-    const key = getGeneratorKey() + ':' + chunkX + ',' + chunkZ;
+    const key = getGeneratorKey(worldType) + ':' + chunkX + ',' + chunkZ;
     let blocks = blockCache.get(key);
     if (blocks) return blocks;
 
-    blocks = generateBlocks(chunkX, chunkZ);
+    blocks = generateBlocks(chunkX, chunkZ, worldType);
     if (!blocks) return null;
 
     blockCache.set(key, blocks);
@@ -251,9 +249,9 @@ function flatBlockId(worldY) {
 // section is copied straight into the packet, so what the client receives is
 // byte-for-byte what was written to disk. Only sections the player never
 // touched are regenerated.
-function generateChunkColumn(chunkX, chunkZ, subChunks) {
+function generateChunkColumn(chunkX, chunkZ, subChunks, worldType = getWorldType()) {
     const buffer = Buffer.alloc(SECTION_SIZE * SECTION_COUNT + 256);
-    const column = getColumnBlocks(chunkX, chunkZ);
+    const column = getColumnBlocks(chunkX, chunkZ, worldType);
 
     for (let sectionIndexY = 0; sectionIndexY < SECTION_COUNT; sectionIndexY++) {
         const sectionOffset = sectionIndexY * SECTION_SIZE;
@@ -294,10 +292,10 @@ function generateChunkColumn(chunkX, chunkZ, subChunks) {
 // Base block id for unmodified positions, backed by generated terrain so the
 // server's block logic (bluestone simulation, neighbor ticks) sees the same
 // world the clients do.
-function getBaseBlockAt(x, y, z) {
+function getBaseBlockAt(x, y, z, worldType = getWorldType()) {
     const cx = Math.floor(x / 16);
     const cz = Math.floor(z / 16);
-    const blocks = getColumnBlocks(cx, cz);
+    const blocks = getColumnBlocks(cx, cz, worldType);
     if (!blocks) {
         return flatBlockId(y);
     }
@@ -307,8 +305,8 @@ function getBaseBlockAt(x, y, z) {
 // Raw generated terrain for a chunk column, or null for flat worlds where the
 // column is a pure function of y. The subchunk store uses this to materialize a
 // section the first time a block inside it is modified.
-function getGeneratedColumn(chunkX, chunkZ) {
-    return getColumnBlocks(chunkX, chunkZ);
+function getGeneratedColumn(chunkX, chunkZ, worldType = getWorldType()) {
+    return getColumnBlocks(chunkX, chunkZ, worldType);
 }
 
 function getFlatBlockId(worldY) {
@@ -328,13 +326,13 @@ const LIQUID_IDS = new Set([9, 55]); // WATER, LAVA
 const SPAWN_SEARCH_RADII = [16, 32, 64, 96];
 
 // Highest non-air, non-tree block in a generated column at world (x, z).
-function getSurfaceTop(x, z, blocks) {
+function getSurfaceTop(x, z, blocks, worldType = getWorldType()) {
     const lx = x & 15;
     const lz = z & 15;
 
     // The hellish world has a bedrock roof and floating islands above the
     // ground, so the scan stops below both; otherwise spawn lands on the roof.
-    const topY = getWorldType() === 'hellish' && HellWorldGeneratorClass
+    const topY = worldType === 'hellish' && HellWorldGeneratorClass
         ? HellWorldGeneratorClass.SPAWN_SCAN_TOP
         : 255;
 
@@ -351,8 +349,8 @@ function getColumnBlock(blocks, x, y, z) {
 
 // Top of a column the player can spawn on, or -1 when it cannot: a liquid
 // surface, no ground at all, or no room to stand (a trunk or bush overhead).
-function getSpawnTop(blocks, x, z, requireDry = true) {
-    const top = getSurfaceTop(x, z, blocks);
+function getSpawnTop(blocks, x, z, requireDry = true, worldType = getWorldType()) {
+    const top = getSurfaceTop(x, z, blocks, worldType);
     if (top <= 1 || top + 2 >= 256) return -1;
 
     const surface = getColumnBlock(blocks, x, top, z);
@@ -369,7 +367,7 @@ function getSpawnTop(blocks, x, z, requireDry = true) {
 // Chunks are visited one at a time, each fully evaluated before moving on: the
 // block caches only hold a few dozen chunks, so walking the block grid row by
 // row would evict and regenerate the same chunks over and over.
-function findSpawnInRadius(radius, getBlocks, requireDry) {
+function findSpawnInRadius(radius, getBlocks, requireDry, worldType = getWorldType()) {
     let best = null;
     const minChunk = Math.floor(-radius / 16);
     const maxChunk = Math.floor(radius / 16);
@@ -387,7 +385,7 @@ function findSpawnInRadius(radius, getBlocks, requireDry) {
                     const dx = chunkX * 16 + lx;
                     if (dx < -radius || dx > radius) continue;
 
-                    const top = getSpawnTop(blocks, dx, dz, requireDry);
+                    const top = getSpawnTop(blocks, dx, dz, requireDry, worldType);
                     if (top < 0) continue;
 
                     const dist = Math.abs(dx) + Math.abs(dz);
@@ -409,13 +407,13 @@ function findSpawnInRadius(radius, getBlocks, requireDry) {
 const probeCache = new Map();
 const PROBE_CACHE_MAX = 256;
 
-function getProbeBlocks(chunkX, chunkZ) {
-    if (getWorldType() === 'flat') return null;
+function getProbeBlocks(chunkX, chunkZ, worldType = getWorldType()) {
+    if (worldType === 'flat') return null;
 
-    const generator = getGenerator();
+    const generator = getGenerator(worldType);
     if (!generator || !PrimerClass) return null;
 
-    const key = getGeneratorKey() + ':' + chunkX + ',' + chunkZ;
+    const key = getGeneratorKey(worldType) + ':' + chunkX + ',' + chunkZ;
     const cached = probeCache.get(key);
     if (cached) return cached;
 
@@ -430,7 +428,7 @@ function getProbeBlocks(chunkX, chunkZ) {
     // walkable surface, and the spawn scan only reads up to SPAWN_SCAN_TOP,
     // so the probe pass skips it. That roughly halves the cost of the wide
     // spawn search on lava-heavy worlds.
-    if (getWorldType() !== 'hellish') {
+    if (worldType !== 'hellish') {
         generator.naturalize(chunkX, chunkZ, primer);
     }
 
@@ -445,10 +443,10 @@ function getProbeBlocks(chunkX, chunkZ) {
 // Population adds trees and plants that base terrain does not have, so the
 // chosen chunk is checked again with the real blocks and the best free column
 // near the candidate is used.
-function confirmSpawn(candidate) {
+function confirmSpawn(candidate, worldType = getWorldType()) {
     const chunkX = Math.floor(candidate.x / 16);
     const chunkZ = Math.floor(candidate.z / 16);
-    const blocks = getColumnBlocks(chunkX, chunkZ);
+    const blocks = getColumnBlocks(chunkX, chunkZ, worldType);
     if (!blocks) return null;
 
     let best = null;
@@ -456,7 +454,7 @@ function confirmSpawn(candidate) {
         for (let lx = 0; lx < 16; lx++) {
             const x = chunkX * 16 + lx;
             const z = chunkZ * 16 + lz;
-            const top = getSpawnTop(blocks, x, z);
+            const top = getSpawnTop(blocks, x, z, true, worldType);
             if (top < 0) continue;
 
             const dist = Math.abs(x - candidate.x) + Math.abs(z - candidate.z);
@@ -472,7 +470,35 @@ function confirmSpawn(candidate) {
 let cachedSpawn = null;
 let cachedSpawnKey = null;
 
-function getSpawnPosition() {
+const altSpawnCache = new Map();
+
+function getSpawnPositionFor(worldType) {
+    if (worldType === 'flat') {
+        return { x: 0, y: 10, z: 0 };
+    }
+
+    const cached = altSpawnCache.get(worldType);
+    if (cached) return cached;
+
+    for (const radius of [16, 32, 64, 96]) {
+        const candidate = findSpawnInRadius(radius, (cx, cz) => getProbeBlocks(cx, cz, worldType), true, worldType);
+        if (candidate) {
+            const spawn = confirmSpawn(candidate, worldType) || { x: candidate.x, y: candidate.y, z: candidate.z };
+            altSpawnCache.set(worldType, spawn);
+            return spawn;
+        }
+    }
+
+    const fallback = findSpawnInRadius(96, (cx, cz) => getColumnBlocks(cx, cz, worldType), false, worldType);
+    const spawn = fallback ? { x: fallback.x, y: fallback.y, z: fallback.z } : { x: 0, y: 64, z: 0 };
+    altSpawnCache.set(worldType, spawn);
+    return spawn;
+}
+
+function getSpawnPosition(worldType = getWorldType()) {
+    if (worldType !== getWorldType()) {
+        return getSpawnPositionFor(worldType);
+    }
     if (getWorldType() === 'flat') {
         return { x: 0, y: 10, z: 0 };
     }

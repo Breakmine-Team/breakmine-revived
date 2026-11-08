@@ -251,6 +251,19 @@ export default class NetworkManager {
                         finish();
                     });
                 }
+            } else if (payload.type === 'cape:state') {
+                this.minecraft?.capeManager?.handleState(payload.username, payload.cape);
+            } else if (payload.type === 'dimension') {
+                const world = this.minecraft?.world;
+                if (world) {
+                    world.clearChunks();
+                    if (payload.worldType) {
+                        world.setWorldType(payload.worldType);
+                    }
+                }
+                if (this.minecraft && typeof this.minecraft.showLoadingScreen === 'function') {
+                    this.minecraft.showLoadingScreen(payload.dimension === 1 ? 'Entering the Nether...' : 'Leaving the Nether...');
+                }
             } else if (payload.type === 'playerState') {
                 const player = this.minecraft?.player;
                 if (player) {
@@ -511,6 +524,9 @@ export default class NetworkManager {
         }
 
         this.connected = false;
+
+        // Capes belong to the session that advertised them
+        this.minecraft?.capeManager?.reset();
 
         // Tear down the voice chat session when the connection drops.
         if (this.minecraft?.voiceChat) {

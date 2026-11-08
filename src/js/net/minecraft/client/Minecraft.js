@@ -18,6 +18,7 @@ import {BiomeRegistry} from "./world/biome/BiomeRegistry.js";
 import FontRenderer from "./render/gui/FontRenderer.js";
 import GrassColorizer from "./render/GrassColorizer.js";
 import ModLoader from "./ModLoader.js";
+import CapeManager from "./render/CapeManager.js";
 import GuiMainMenu from "./gui/screens/GuiMainMenu.js";
 import GuiLoadingScreen from "./gui/screens/GuiLoadingScreen.js";
 import GuiLoadingIntegratedServer from "./gui/screens/GuiLoadingIntegratedServer.js";
@@ -173,6 +174,9 @@ export default class Minecraft {
 
         // Create mod loader and expose it
         this.modLoader = new ModLoader(this);
+
+        // Per-player capes advertised by the server (JSON channel)
+        this.capeManager = new CapeManager(this);
 
         this.tunnelLib = new TunnelLib(this.settings.tunnelServer);
 

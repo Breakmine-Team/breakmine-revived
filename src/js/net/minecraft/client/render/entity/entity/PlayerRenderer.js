@@ -1,4 +1,5 @@
 import ModelPlayer from "../../model/model/ModelPlayer.js";
+import { createCapeGeometry } from "../../CapeGeometry.js";
 import EntityRenderer from "../EntityRenderer.js";
 import Block from "../../../world/block/Block.js";
 import * as AuthLib from "../../../network/AuthLib.js";
@@ -25,6 +26,10 @@ export default class PlayerRenderer extends EntityRenderer {
         this.skinTextures = new Map();
         this.pendingSkinLoads = new Map();
         this.lastEntity = null;
+
+        // Built-in cape mesh; cape mods, when installed, own this instead
+        this.capeMesh = null;
+        this.capeAngle = 0;
 
         // First person right-hand holder
         this.handModel = null;
@@ -188,7 +193,70 @@ export default class PlayerRenderer extends EntityRenderer {
         }
 
         const capeService = this.worldRenderer.minecraft.modLoader?.getService('cape_plus');
-        capeService?.onRendererRebuilt?.(this, entity);
+        if (capeService) {
+            this.capeMesh = null;
+            capeService.onRendererRebuilt?.(this, entity);
+        } else {
+            this.buildCape(entity);
+        }
+    }
+
+    /**
+     * Attach the player's cape as a quad hanging from the shoulders. The cape
+     * texture arrives separately from the skin (the server broadcasts it), so
+     * the mesh is rebuilt whenever a texture becomes available.
+     */
+    buildCape(entity) {
+        this.capeMesh = null;
+        this.capeAngle = 0;
+
+        const texture = this.worldRenderer.minecraft.capeManager?.getTexture(entity?.username);
+        if (!texture || !this.model?.body?.bone) return;
+
+        const userData = texture.userData || {};
+        const geometry = createCapeGeometry(userData.capeWidth || 64, userData.capeHeight || 32);
+        const material = new THREE.MeshBasicMaterial({
+            map: texture,
+            transparent: true,
+            alphaTest: 0.5,
+            side: THREE.DoubleSide,
+            depthWrite: true
+        });
+
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(0, 0, 2.1);
+        mesh.castShadow = false;
+        mesh.receiveShadow = false;
+
+        this.model.body.bone.add(mesh);
+        this.capeMesh = mesh;
+    }
+
+    /**
+     * Sway the cape with movement: it lifts while falling and trails behind
+     * when running, settling back against the back at rest.
+     */
+    updateCape(entity) {
+        if (!this.capeMesh) return;
+
+        const dx = entity.x - entity.prevX;
+        const dz = entity.z - entity.prevZ;
+        const dy = entity.y - entity.prevY;
+
+        const horizontal = Math.min(0.1, Math.hypot(dx, dz));
+        let target = 0.06 + horizontal * 4.0;
+
+        if (dy < 0) {
+            target += Math.min(0.8, -dy * 3.0);
+        } else {
+            target -= Math.min(0.2, dy * 2.0);
+        }
+
+        target += Math.sin(entity.ticksExisted * 0.35) * 0.015;
+        target = Math.max(0.02, Math.min(1.1, target));
+
+        this.capeAngle += (target - this.capeAngle) * 0.2;
+        this.capeMesh.rotation.x = this.capeAngle;
     }
 
     render(entity, partialTicks) {
@@ -208,6 +276,8 @@ export default class PlayerRenderer extends EntityRenderer {
         }
 
         super.render(entity, partialTicks);
+
+        this.updateCape(entity);
 
         const capeService = this.worldRenderer.minecraft.modLoader?.getService('cape_plus');
         capeService?.render?.(this, entity, partialTicks);

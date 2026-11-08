@@ -2,7 +2,7 @@ import { Buffer } from '../../../../../libraries/buffer.js';
 import { readLongBE } from './binary.js';
 import { readVarInt, readString, broadcast, ensureReadable, MalformedPacketError } from './protocol.js';
 import { addPlayer, removePlayer, getPlayers, updatePosition, loadPlayerData, findPlayerByUsername, normalizeInventoryState, savePlayerData, isSpectator } from './players.js';
-import { addWorldChange, saveWorld, getBlockAt, getAllBlockInventoriesState, getSpawnPosition, deleteBlockInventory, getBlockInventories, getWorldTime, getBlockMetadata, setBlockInventory } from './world.js';
+import { addWorldChange, saveWorld, getBlockAt, getAllBlockInventoriesState, getSpawnPosition, deleteBlockInventory, getBlockInventories, getWorldTime, getBlockMetadata, setBlockInventory, setActiveDimension, getDimensionType, NETHER_DIMENSION } from './world.js';
 import { addItemEntity, removeItemEntity, getItemEntity, getAllItemEntities } from './entities.js';
 import { handleCommand } from './commands.js';
 import {
@@ -153,6 +153,10 @@ function handlePacket(player, buffer) {
         return;
     }
 
+    // Every block read/write made while handling this packet belongs to the
+    // sending player's dimension.
+    setActiveDimension(player.dimension ?? 0);
+
     try {
         let offset = 0;
         const [length, lenBytes] = readVarInt(buffer, offset);
@@ -296,10 +300,16 @@ function handleLoginPacket(player, packetId, buffer, offset) {
 
         player.protocolState = 'play';
 
-        const spawn = getSpawnPosition();
+        let spawn = getSpawnPosition();
 
         // Load player data if exists
         const playerData = loadPlayerData(username);
+        player.dimension = playerData && Number(playerData.dimension) === NETHER_DIMENSION
+            ? NETHER_DIMENSION
+            : 0;
+        if (player.dimension === NETHER_DIMENSION) {
+            spawn = getSpawnPosition(NETHER_DIMENSION);
+        }
         if (playerData) {
             player.x = typeof playerData.x === 'number' ? playerData.x : spawn.x;
             player.y = typeof playerData.y === 'number' ? playerData.y : spawn.y;
@@ -319,7 +329,7 @@ function handleLoginPacket(player, packetId, buffer, offset) {
             const px = Math.floor(player.x);
             const py = Math.floor(player.y);
             const pz = Math.floor(player.z);
-            if (isSolidBlock(getBlockAt(px, py, pz)) && isSolidBlock(getBlockAt(px, py + 1, pz))) {
+            if (isSolidBlock(getBlockAt(px, py, pz, player.dimension)) && isSolidBlock(getBlockAt(px, py + 1, pz, player.dimension))) {
                 player.x = spawn.x;
                 player.y = spawn.y;
                 player.z = spawn.z;
@@ -491,6 +501,7 @@ function handlePlayPacket(player, packetId, buffer, offset) {
             player.onGround = buffer.readUInt8(offset + 24) === 1;
             broadcastMovement(player);
             checkAndSendChunks(player);
+            checkPortalTravel(player);
             break;
         }
 
@@ -513,6 +524,7 @@ function handlePlayPacket(player, packetId, buffer, offset) {
             player.onGround = buffer.readUInt8(offset + 32) === 1;
             broadcastMovement(player);
             checkAndSendChunks(player);
+            checkPortalTravel(player);
             break;
         }
 
@@ -675,6 +687,7 @@ function emitServerBlockAction(action, player, x, y, z, options = {}) {
 }
 
 function handlePlayerDigging(player, buffer, offset) {
+    setActiveDimension(player.dimension ?? 0);
     ensureReadable(buffer, offset, 10);
     const status = buffer.readUInt8(offset); // 0: Started, 1: Cancelled, 2: Finished
     const [x, y, z] = readPosition(buffer, offset + 1);
@@ -758,6 +771,7 @@ function handleUpdateSignText(player, buffer, offset) {
 }
 
 function handleBlockPlacement(player, buffer, offset) {
+    setActiveDimension(player.dimension ?? 0);
     ensureReadable(buffer, offset, 11);
     const [x, y, z] = readPosition(buffer, offset);
     const direction = buffer.readUInt8(offset + 8);
@@ -786,6 +800,13 @@ function handleBlockPlacement(player, buffer, offset) {
         // Clicking the top of an existing pavement slope adds a layer to it
         // instead of placing a floating layer above, matching snow layers.
         const targetId = getBlockAt(x, y, z);
+
+        // Flint and steel inside a finished obsidian frame lights it.
+        if (heldItemId === 236) {
+            lightPortal(player, x, y, z);
+            return;
+        }
+
         if (heldBlock?.isPavementSlope === true && targetId === heldItemId) {
             const layerData = (getBlockMetadata(x, y, z) || 0) & 7;
             if (layerData < 7) {
@@ -1055,6 +1076,148 @@ function handlePickupItem(player, buffer, offset) {
     }
 }
 
+const PORTAL_ID = 356;
+const PORTAL_COOLDOWN_MS = 3000;
+
+function broadcastBlockToDimension(dimension, x, y, z, blockId, metadata) {
+    for (const other of getPlayers().values()) {
+        if ((other.dimension ?? 0) !== dimension || other.ws?.readyState !== 1) continue;
+        sendBlockChange(other.ws, x, y, z, (blockId << 4) | (metadata & 0xF));
+    }
+}
+
+// Flint and steel lights a 2x3 obsidian frame. The clicked block may be any
+// interior block (the usual case) or part of the frame; both portal planes are
+// tried. Returns true when a frame was found and filled.
+function lightPortal(player, x, y, z) {
+    const dimension = player.dimension ?? 0;
+    const isFrame = (bx, by, bz) => getBlockAt(bx, by, bz, dimension) === 256;
+    const isOpen = (bx, by, bz) => {
+        const id = getBlockAt(bx, by, bz, dimension);
+        return id === 0 || id === PORTAL_ID;
+    };
+
+    for (const [dx, dz] of [[1, 0], [0, 1]]) {
+        // The click can land on the interior or on any part of the rim (the
+        // usual target is the bottom obsidian block), so try every anchor that
+        // puts the clicked block somewhere in the 2x3 frame.
+        for (let ox = -1; ox <= 2; ox++) {
+            for (let oy = -1; oy <= 3; oy++) {
+                const bx = x - ox * dx;
+                const by = y - oy;
+                const bz = z - ox * dz;
+
+                let valid = true;
+                for (let i = 0; i < 2 && valid; i++) {
+                    for (let j = 0; j < 3; j++) {
+                        if (!isOpen(bx + i * dx, by + j, bz + i * dz)) {
+                            valid = false;
+                            break;
+                        }
+                    }
+                }
+                if (!valid) continue;
+
+                // Obsidian rim: bottom, top and both sides.
+                for (let i = -1; i <= 2 && valid; i++) {
+                    if (!isFrame(bx + i * dx, by - 1, bz + i * dz)
+                        || !isFrame(bx + i * dx, by + 3, bz + i * dz)) {
+                        valid = false;
+                    }
+                }
+                for (let j = 0; j < 3 && valid; j++) {
+                    if (!isFrame(bx - dx, by + j, bz - dz)
+                        || !isFrame(bx + 2 * dx, by + j, bz + 2 * dz)) {
+                        valid = false;
+                    }
+                }
+                if (!valid) continue;
+
+                // Metadata 0 lies along X (thin in Z), 1 lies along Z (thin in
+                // X), so the 2px plate is oriented like the frame it fills.
+                const portalData = dx === 0 ? 1 : 0;
+                for (let i = 0; i < 2; i++) {
+                    for (let j = 0; j < 3; j++) {
+                        addWorldChange(bx + i * dx, by + j, bz + i * dz, PORTAL_ID, portalData, dimension);
+                        broadcastBlockToDimension(dimension, bx + i * dx, by + j, bz + i * dz, PORTAL_ID, portalData);
+                    }
+                }
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+// Walking into a portal block swaps the player to the other dimension. Each
+// player carries their own dimension, so others keep playing where they are.
+function checkPortalTravel(player) {
+    if (Date.now() < (player.portalCooldown || 0)) return;
+
+    const dimension = player.dimension ?? 0;
+    const px = Math.floor(player.x);
+    const py = Math.floor(player.y);
+    const pz = Math.floor(player.z);
+
+    if (getBlockAt(px, py, pz, dimension) !== PORTAL_ID && getBlockAt(px, py + 1, pz, dimension) !== PORTAL_ID) {
+        return;
+    }
+
+    travelToDimension(player, dimension === NETHER_DIMENSION ? 0 : NETHER_DIMENSION);
+}
+
+function travelToDimension(player, targetDimension) {
+    if ((player.dimension ?? 0) === targetDimension) return;
+
+    // The nether is 1/8 scale, like the real game.
+    const scale = targetDimension === NETHER_DIMENSION ? 1 / 8 : 8;
+    const tx = Math.floor(player.x * scale);
+    const tz = Math.floor(player.z * scale);
+    const ty = Math.max(4, Math.min(Math.floor(player.y), targetDimension === NETHER_DIMENSION ? 100 : 200));
+
+    // Carve a pocket, floor it with obsidian and put a return portal in it so
+    // the player can come back instead of being stranded.
+    for (let dx = 0; dx < 4; dx++) {
+        for (let dz = 0; dz < 2; dz++) {
+            for (let dy = 0; dy < 5; dy++) {
+                addWorldChange(tx + dx, ty + dy, tz + dz, 0, 0, targetDimension);
+            }
+            addWorldChange(tx + dx, ty - 1, tz + dz, 256, 0, targetDimension);
+        }
+    }
+
+    for (let dx = 0; dx < 2; dx++) {
+        for (let dy = 0; dy < 3; dy++) {
+            addWorldChange(tx + dx, ty + dy, tz, PORTAL_ID, 0, targetDimension);
+        }
+    }
+
+    player.dimension = targetDimension;
+    player.x = tx + 2.5;
+    player.y = ty;
+    player.z = tz + 0.5;
+    player.onGround = false;
+    player.portalCooldown = Date.now() + PORTAL_COOLDOWN_MS;
+
+    // Everything around the arrival point has to stream in again.
+    playerChunks.set(player.eid, new Set());
+    savePlayerData(player);
+
+    if (player.ws.readyState === 1) {
+        player.ws.send(JSON.stringify({
+            type: 'dimension',
+            dimension: targetDimension,
+            worldType: getDimensionType(targetDimension)
+        }));
+    }
+
+    checkAndSendChunks(player);
+    sendSpawnPosition(player);
+    sendPlayerPositionLook(player);
+    broadcast(createEntityTeleportPacket(player), getPlayers());
+}
+
 function checkAndSendChunks(player) {
     const renderDistance = 5;
     const playerChunkX = Math.floor(player.x / 16);
@@ -1083,7 +1246,7 @@ function cleanupPlayerChunks(eid) {
 // around it, and tell the client to re-arm its loading gate so the player only
 // becomes active once the terrain around the spawn is loaded. Returns nothing.
 function respawnPlayer(player) {
-    const spawn = getSpawnPosition();
+    const spawn = getSpawnPosition(player.dimension ?? 0);
 
     player.x = spawn.x;
     player.y = spawn.y;
@@ -1134,5 +1297,6 @@ export {
     handlePacket,
     cleanupPlayerChunks,
     respawnPlayer,
-    flushSaveWorld
+    flushSaveWorld,
+    lightPortal
 };

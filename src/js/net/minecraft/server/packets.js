@@ -2,7 +2,7 @@ import { Buffer } from '../../../../../libraries/buffer.js';
 import { writeLongBE } from './binary.js';
 import { makePacket, writeVarInt, writeString, broadcast, varIntSize } from './protocol.js';
 import { getPlayers, getPlayerCount } from './players.js';
-import { generateFlatChunkColumn, getWorldType, getSpawnPosition } from './world.js';
+import { generateFlatChunkColumn, getWorldType, getSpawnPosition, getDimensionType } from './world.js';
 import config from './config.js';
 import { readServerMods } from './serverMods.js';
 import {
@@ -43,10 +43,10 @@ function sendJoinGame(player) {
 
     data.writeInt32BE(player.eid, offset); offset += 4;
     data.writeUInt8(player.gamemode ?? 1, offset); offset += 1;           // Gamemode
-    data.writeUInt8(0, offset); offset += 1;           // Dimension: Overworld
+    data.writeUInt8(player.dimension ?? 0, offset); offset += 1;           // Dimension
     data.writeUInt8(1, offset); offset += 1;           // Difficulty: Normal
     data.writeUInt8(60, offset); offset += 1;          // Max Players
-    offset += writeString(data, getWorldType(), offset); // Level Type
+    offset += writeString(data, getDimensionType(player.dimension ?? 0), offset); // Level Type
     data.writeUInt8(0, offset); offset += 1;           // Reduced Debug Info
 
     player.ws.send(makePacket(0x01, data.subarray(0, offset)));
@@ -93,7 +93,7 @@ function sendRespawn(player, dimension) {
     data.writeUInt8(dimension, offset); offset += 1;   // Dimension
     data.writeUInt8(1, offset); offset += 1;           // Difficulty: Normal
     data.writeUInt8(60, offset); offset += 1;          // Max Players
-    offset += writeString(data, getWorldType(), offset); // Level Type
+    offset += writeString(data, getDimensionType(dimension), offset); // Level Type
     data.writeUInt8(0, offset); offset += 1;           // Reduced Debug Info
 
     player.ws.send(makePacket(0x07, data.subarray(0, offset)));
@@ -101,7 +101,7 @@ function sendRespawn(player, dimension) {
 
 function sendSpawnPosition(player) {
     const data = Buffer.alloc(12);
-    const spawn = getSpawnPosition();
+    const spawn = getSpawnPosition(player.dimension ?? 0);
     data.writeInt32BE(spawn.x, 0);       // Spawn X
     data.writeInt32BE(spawn.y, 4);       // Spawn Y (on the surface, never in a cave)
     data.writeInt32BE(spawn.z, 8);       // Spawn Z
@@ -109,10 +109,11 @@ function sendSpawnPosition(player) {
 }
 
 function sendChunks(player) {
+    const dimension = player.dimension ?? 0;
     // Send a 5x5 chunk area around spawn to give client enough terrain
     for (let cx = -2; cx <= 2; cx++) {
         for (let cz = -2; cz <= 2; cz++) {
-            sendSingleChunk(player, cx, cz);
+            sendSingleChunk(player, cx, cz, dimension);
         }
     }
 
@@ -120,8 +121,8 @@ function sendChunks(player) {
     sendPlayerPositionLook(player);
 }
 
-function sendSingleChunk(player, chunkX, chunkZ) {
-    const compressedData = generateFlatChunkColumn(chunkX, chunkZ);
+function sendSingleChunk(player, chunkX, chunkZ, dimension = player.dimension ?? 0) {
+    const compressedData = generateFlatChunkColumn(chunkX, chunkZ, dimension);
     const bitmask = 0xFFFF; // Sections 0-15 present
     
     // Header: chunkX(4) + chunkZ(4) + groundUp(1) + bitmask(2) + sizeVarInt(max 5)

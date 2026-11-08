@@ -30,6 +30,33 @@ const blockInventories = new Map();
 let currentWorldName = 'main';
 let worldTime = 0; // In-game time (0-24000 ticks)
 
+// Nether dimension (dimension 1). It has its own block store, clock and save
+// file, so players in different dimensions never read each other's terrain.
+const NETHER_DIMENSION = 1;
+const netherChunks = new SubChunkStore('hellish');
+let netherTime = 6000;
+
+// Block reads/writes without an explicit dimension follow the player whose
+// packet is being handled; the server is single-threaded, so this scopes every
+// block interaction to that player's dimension.
+let activeDimension = 0;
+
+function setActiveDimension(dimension = 0) {
+    activeDimension = dimension === NETHER_DIMENSION ? NETHER_DIMENSION : 0;
+}
+
+function getActiveDimension() {
+    return activeDimension;
+}
+
+function getDimensionType(dimension = 0) {
+    return dimension === NETHER_DIMENSION ? 'hellish' : worldGen.getWorldType();
+}
+
+function getDimensionStore(dimension = 0) {
+    return dimension === NETHER_DIMENSION ? netherChunks : subChunks;
+}
+
 // World-scoped modules (currently the off-grid state) register here instead
 // of world.js importing them: that keeps the world storage module free of
 // feature-specific code and lets those modules load/save next to the world
@@ -328,6 +355,68 @@ function loadV3World(data) {
     readInventories(data, offset);
 }
 
+const NETHER_SAVE_MAGIC = 'BMWN';
+// Bumped from 1: v1 nether saves were written by a build whose store filled
+// freshly materialised sections with overworld terrain, so they are discarded
+// instead of streaming corrupt 16x16x16 overworld cubes into the nether.
+const NETHER_SAVE_VERSION = 2;
+
+// The nether keeps its own save file next to the overworld one: same section
+// layout, own clock. Only modified subchunks are written, exactly like the
+// overworld store.
+function saveDimensionFile(store, file, time) {
+    const sections = store.serializeSections();
+    let totalSize = 4 + 1 + 8 + 4;
+    for (const section of sections) {
+        totalSize += 14 + section.data.length;
+    }
+
+    const buffer = Buffer.alloc(totalSize);
+    let offset = 0;
+    buffer.write(NETHER_SAVE_MAGIC, offset, 'ascii'); offset += 4;
+    buffer.writeUInt8(NETHER_SAVE_VERSION, offset); offset += 1;
+    writeLongBE(time, buffer, offset); offset += 8;
+    buffer.writeUInt32BE(sections.length, offset); offset += 4;
+
+    for (const section of sections) {
+        buffer.writeInt32BE(section.cx, offset);
+        buffer.writeInt32BE(section.cz, offset + 4);
+        buffer.writeUInt8(section.sy, offset + 8);
+        buffer.writeUInt8(0, offset + 9);
+        buffer.writeUInt32BE(section.data.length, offset + 10);
+        offset += 14;
+        buffer.set(section.data, offset);
+        offset += section.data.length;
+    }
+
+    fs.writeFileSync(file, buffer);
+}
+
+function loadDimensionFile(store, file) {
+    if (!fs.existsSync(file)) return;
+
+    const data = fs.readFileSync(file);
+    if (data.length < 17 || data.toString('ascii', 0, 4) !== NETHER_SAVE_MAGIC) return;
+    if (data.readUInt8(4) !== NETHER_SAVE_VERSION) return;
+
+    netherTime = Number(readLongBE(data, 5)) || 6000;
+    let offset = 13;
+    const count = data.readUInt32BE(offset);
+    offset += 4;
+
+    for (let i = 0; i < count; i++) {
+        if (offset + 14 > data.length) break;
+        const cx = data.readInt32BE(offset);
+        const cz = data.readInt32BE(offset + 4);
+        const sy = data.readUInt8(offset + 8);
+        const length = data.readUInt32BE(offset + 10);
+        offset += 14;
+        if (offset + length > data.length) break;
+        store.loadSection(cx, cz, sy, data.subarray(offset, offset + length));
+        offset += length;
+    }
+}
+
 function initWorld(worldName = 'main') {
     subChunks.clear();
     blockInventories.clear();
@@ -342,6 +431,10 @@ function initWorld(worldName = 'main') {
     }
 
     const worldFile = getWorldFile(worldName);
+
+    netherChunks.clear();
+    netherTime = 6000;
+    loadDimensionFile(netherChunks, path.join(worldDir, 'world_nether.bin'));
 
     migrateOldWorld(worldName);
 
@@ -393,6 +486,8 @@ function saveWorld() {
         fs.mkdirSync(worldDir, { recursive: true });
     }
     const worldFile = getWorldFile(currentWorldName);
+
+    saveDimensionFile(netherChunks, path.join(worldDir, 'world_nether.bin'), netherTime);
 
     // Serialize block inventories
     const inventoryEntries = [];
@@ -483,7 +578,7 @@ function saveWorld() {
     //log.info('World', `World saved (${currentWorldName})`);
 }
 
-function addWorldChange(x, y, z, blockId, metadata = 0) {
+function addWorldChange(x, y, z, blockId, metadata = 0, dimension = activeDimension) {
     // The world only stores y 0-255. Clamp so a block placed/teleported outside
     // that range can never throw. X/Z become int32 chunk coordinates, so clamp
     // those too to survive super-far /tp coordinates.
@@ -491,7 +586,7 @@ function addWorldChange(x, y, z, blockId, metadata = 0) {
     const clampedX = Math.max(-2147483648, Math.min(2147483647, x));
     const clampedZ = Math.max(-2147483648, Math.min(2147483647, z));
     const blockState = (blockId << 4) | (metadata & 0xF);
-    return subChunks.writeBlockState(clampedX, clampedY, clampedZ, blockState);
+    return getDimensionStore(dimension).writeBlockState(clampedX, clampedY, clampedZ, blockState);
 }
 
 function getWorldChanges() {
@@ -502,13 +597,15 @@ function getSubChunkStore() {
     return subChunks;
 }
 
-function getBlockAt(x, y, z) {
-    const blockState = subChunks.readBlockState(x, y, z);
-    return blockState !== null ? (blockState >> 4) : worldGen.getBaseBlockAt(x, y, z);
+function getBlockAt(x, y, z, dimension = activeDimension) {
+    const blockState = getDimensionStore(dimension).readBlockState(x, y, z);
+    return blockState !== null
+        ? (blockState >> 4)
+        : worldGen.getBaseBlockAt(x, y, z, getDimensionType(dimension));
 }
 
-function getBlockMetadata(x, y, z) {
-    const blockState = subChunks.readBlockState(x, y, z);
+function getBlockMetadata(x, y, z, dimension = activeDimension) {
+    const blockState = getDimensionStore(dimension).readBlockState(x, y, z);
     return blockState !== null ? (blockState & 0xF) : 0;
 }
 
@@ -571,12 +668,16 @@ function listWorlds() {
     return worlds;
 }
 
-function getWorldTime() {
-    return worldTime;
+function getWorldTime(dimension = 0) {
+    return dimension === NETHER_DIMENSION ? netherTime : worldTime;
 }
 
-function setWorldTime(time) {
-    worldTime = time;
+function setWorldTime(time, dimension = 0) {
+    if (dimension === NETHER_DIMENSION) {
+        netherTime = time;
+    } else {
+        worldTime = time;
+    }
 }
 
 function deleteBlockInventory(key) {
@@ -590,13 +691,17 @@ const HELLISH_TIME = 6000;
 function tickWorldTime() {
     if (worldGen.getWorldType() === 'hellish') {
         worldTime = HELLISH_TIME;
-        return;
+    } else {
+        worldTime = (worldTime + 1) % 24000;
     }
-    worldTime = (worldTime + 1) % 24000;
+
+    // The nether clock is pinned like the standalone hellish world: its sky
+    // never cycles.
+    netherTime = HELLISH_TIME;
 }
 
-function generateFlatChunkColumn(chunkX, chunkZ) {
-    return worldGen.generateChunkColumn(chunkX, chunkZ, subChunks);
+function generateFlatChunkColumn(chunkX, chunkZ, dimension = activeDimension) {
+    return worldGen.generateChunkColumn(chunkX, chunkZ, getDimensionStore(dimension), getDimensionType(dimension));
 }
 
 // The configured world type ('flat', 'normal' or 'amplified').
@@ -606,11 +711,16 @@ function getWorldType() {
 
 // Safe spawn position for the configured world type (on the surface, never
 // inside a cave opening).
-function getSpawnPosition() {
-    return worldGen.getSpawnPosition();
+function getSpawnPosition(dimension = 0) {
+    return worldGen.getSpawnPosition(getDimensionType(dimension));
 }
 
 export {
+    NETHER_DIMENSION,
+    getDimensionType,
+    getDimensionStore,
+    setActiveDimension,
+    getActiveDimension,
     initWorld,
     saveWorld,
     addWorldChange,

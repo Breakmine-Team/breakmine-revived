@@ -39,6 +39,10 @@ export default class NetworkPlayHandler extends PacketHandler {
         // Ask for the authoritative off-grid state now that the client has a
         // world to bind the field to. The server answers with a snapshot.
         this.networkManager.sendPacket(new ClientOffGridRequestPacket());
+
+        // Capes travel over the JSON channel rather than the binary protocol:
+        // fetch everyone's and publish the account's own cape for this session.
+        this.minecraft.capeManager?.onJoin(this.networkManager);
     }
 
     handleServerChat(packet) {

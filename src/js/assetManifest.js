@@ -140,6 +140,7 @@ export const atlasBlockTextures = [
     "bluestonePusherOn.png", "bluestonePusherOff.png", "bluestoneStickyPusherOff.png",
     "obsidian.png",
     "crying_obsidian.png",
+    "portal.png",
     "piston_top_sticky.png", "cobblestone_frame.png", "cobblestone_frame_on.png",
     "bluestoneRepeaterFront.png", "bluestoneRepeaterBack.png",
     "bluestoneObserverFront.png", "bluestoneObserverBackOn.png",

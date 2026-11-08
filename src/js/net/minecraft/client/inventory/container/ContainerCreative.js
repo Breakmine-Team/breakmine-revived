@@ -5,6 +5,7 @@ import Slot from "../Slot.js";
 import Block from "../../world/block/Block.js";
 import Minecraft from "../../Minecraft.js";
 import InventoryPlayer from "../inventory/InventoryPlayer.js";
+import EnumCreativeInventoryTab from "../../gui/EnumCreativeInventoryTab.js";
 
 export default class ContainerCreative extends Container {
 
@@ -80,6 +81,8 @@ export default class ContainerCreative extends Container {
         Block.blocks.forEach((block) => {
             if (!block.id || block.id === 99) return;
             if (block.id === 43 || block.id === -1 || block.id === 59) return;
+
+            if (EnumCreativeInventoryTab.isHidden(block.inventoryTab)) return;
 
             const name = String(block.getDescription?.() ?? "").toLowerCase();
             if (needle === "" || name.includes(needle)) {
@@ -206,16 +209,15 @@ export default class ContainerCreative extends Container {
 
     initItems(offset) {
         Block.blocks.forEach((block) => {
-            if (block.id && block.id !== 99) {
-                if (Minecraft.MODE !== 1) {
-                    if (block.id !== 43 && block.id !== -1 && block.id !== 59 && block.id > offset) {
-                        this.itemList.push(block.getId());
-                    }
-                } else {
-                    if (block.id > offset) {
-                        this.itemList.push(block.getId());
-                    }
+            if (!block.id || block.id === 99) return;
+            if (EnumCreativeInventoryTab.isHidden(block.inventoryTab)) return;
+
+            if (Minecraft.MODE !== 1) {
+                if (block.id !== 43 && block.id !== -1 && block.id !== 59 && block.id > offset) {
+                    this.itemList.push(block.getId());
                 }
+            } else if (block.id > offset) {
+                this.itemList.push(block.getId());
             }
         });
         this.dirty = true;

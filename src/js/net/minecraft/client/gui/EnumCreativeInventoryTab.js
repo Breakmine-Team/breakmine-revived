@@ -34,6 +34,15 @@ export default class EnumCreativeInventoryTab {
         this.devOnly = devOnly;
     }
 
+    /**
+     * Tabs whose contents must never appear in the creative menu, including the
+     * search page: they hold internal/debug blocks, not player-facing items.
+     */
+    static isHidden(tab) {
+        return tab === EnumCreativeInventoryTab.DEBUG
+            || tab === EnumCreativeInventoryTab.NOTLISTED;
+    }
+
     /** True when the page was opened with ?dev=1. */
     static isDevMode() {
         if (typeof window === 'undefined' || !window.location) return false;

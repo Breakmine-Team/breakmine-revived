@@ -18,7 +18,7 @@ const Logger = require('./src/js/net/minecraft/server/logger.js').default;
 
 // All runtime state lives here: auth.db, secrets.json, uploaded skins and capes.
 // Docker mounts a volume over DATA_DIR so accounts and sessions survive rebuilds.
-const DATA_DIR = process.env.DATA_DIR || path.resolve(__dirname, 'data');
+const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(__dirname, 'data'));
 const SECRETS_FILE = path.join(DATA_DIR, 'secrets.json');
 const SKIN_UPLOAD_DIR = path.join(DATA_DIR, 'skins');
 const CAPE_UPLOAD_DIR = path.join(DATA_DIR, 'capes');
@@ -33,20 +33,33 @@ function loadOrCreateSecrets() {
     fs.mkdirSync(CAPE_UPLOAD_DIR, { recursive: true });
     fs.mkdirSync(path.join(DATA_DIR, 'common-capes'), { recursive: true });
 
+    let secrets = null;
     if (fs.existsSync(SECRETS_FILE)) {
-        const secrets = JSON.parse(fs.readFileSync(SECRETS_FILE, 'utf8'));
-        if (secrets.jwtSecret && secrets.jwtSecret.length >= 64) {
-            return secrets;
+        try {
+            secrets = JSON.parse(fs.readFileSync(SECRETS_FILE, 'utf8'));
+        } catch (err) {
+            secrets = null;
         }
     }
 
-    const secrets = {
-        jwtSecret: crypto.randomBytes(64).toString('hex'),
-        createdAt: new Date().toISOString(),
-    };
+    if (!secrets || !secrets.jwtSecret || secrets.jwtSecret.length < 64) {
+        secrets = {
+            jwtSecret: crypto.randomBytes(64).toString('hex'),
+            createdAt: new Date().toISOString(),
+        };
+        Logger.info('Secrets', 'Generated new JWT secret');
+    }
+
+    // The admin panel password is generated once and stored beside the JWT
+    // secret. ADMIN_PASSWORD overrides it without touching the store.
+    if (!secrets.adminPassword || typeof secrets.adminPassword !== 'string') {
+        secrets.adminPassword = crypto.randomBytes(12).toString('base64url');
+        if (!process.env.ADMIN_PASSWORD) {
+            Logger.info('Admin', `Generated admin panel password: ${secrets.adminPassword}`);
+        }
+    }
 
     fs.writeFileSync(SECRETS_FILE, JSON.stringify(secrets, null, 2), { mode: 0o600 });
-    Logger.info('Secrets', 'Generated new JWT secret');
     return secrets;
 }
 
@@ -135,6 +148,31 @@ if (!db.prepare('PRAGMA table_info(users)').all().some((col) => col.name === 'ca
     Logger.info('Auth', 'Added cape_path column to users');
 }
 
+// Admin-managed cape catalog. A cape is uploaded once and then assigned to
+// accounts; `cape_choices` remembers which one (or '' for none) a player wears.
+db.exec(`
+    CREATE TABLE IF NOT EXISTS capes (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        filename TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS cape_assignments (
+        cape_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        assigned_at INTEGER NOT NULL,
+        PRIMARY KEY (cape_id, user_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_cape_assignments_user ON cape_assignments(user_id);
+
+    CREATE TABLE IF NOT EXISTS cape_choices (
+        user_id TEXT PRIMARY KEY,
+        cape_id TEXT NOT NULL
+    );
+`);
+
 const stmts = {
     createUser: db.prepare('INSERT INTO users (id, username, password_hash, created_at) VALUES (?, ?, ?, ?)'),
     findByUsername: db.prepare('SELECT * FROM users WHERE username = ?'),
@@ -145,6 +183,24 @@ const stmts = {
     revokeToken: db.prepare('INSERT OR IGNORE INTO revoked_tokens (token_jti, revoked_at, expires_at) VALUES (?, ?, ?)'),
     isTokenRevoked: db.prepare('SELECT 1 FROM revoked_tokens WHERE token_jti = ? AND expires_at > ?'),
     cleanExpiredTokens: db.prepare('DELETE FROM revoked_tokens WHERE expires_at <= ?'),
+};
+
+const capeStmts = {
+    listCapes: db.prepare('SELECT * FROM capes ORDER BY name COLLATE NOCASE'),
+    getCape: db.prepare('SELECT * FROM capes WHERE id = ?'),
+    insertCape: db.prepare('INSERT INTO capes (id, name, filename, created_at) VALUES (?, ?, ?, ?)'),
+    deleteCape: db.prepare('DELETE FROM capes WHERE id = ?'),
+    deleteCapeAssignments: db.prepare('DELETE FROM cape_assignments WHERE cape_id = ?'),
+    deleteCapeChoices: db.prepare('DELETE FROM cape_choices WHERE cape_id = ?'),
+    assignCape: db.prepare('INSERT OR IGNORE INTO cape_assignments (cape_id, user_id, assigned_at) VALUES (?, ?, ?)'),
+    unassignCape: db.prepare('DELETE FROM cape_assignments WHERE cape_id = ? AND user_id = ?'),
+    assignmentsForCape: db.prepare('SELECT u.username FROM cape_assignments a JOIN users u ON u.id = a.user_id WHERE a.cape_id = ? ORDER BY u.username COLLATE NOCASE'),
+    capesForUser: db.prepare('SELECT c.* FROM capes c JOIN cape_assignments a ON a.cape_id = c.id WHERE a.user_id = ? ORDER BY c.name COLLATE NOCASE'),
+    isAssigned: db.prepare('SELECT 1 FROM cape_assignments WHERE cape_id = ? AND user_id = ?'),
+    getChoice: db.prepare('SELECT cape_id FROM cape_choices WHERE user_id = ?'),
+    setChoice: db.prepare('INSERT INTO cape_choices (user_id, cape_id) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET cape_id = excluded.cape_id'),
+    clearChoice: db.prepare('DELETE FROM cape_choices WHERE user_id = ?'),
+    clearChoiceForCape: db.prepare('DELETE FROM cape_choices WHERE user_id = ? AND cape_id = ?'),
 };
 
 setInterval(() => stmts.cleanExpiredTokens.run(Date.now()), 3600000);
@@ -244,6 +300,7 @@ app.get('/robots.txt', (req, res) => {
 User-agent: *
 Allow: /
 Disallow: /api/
+Disallow: /admin
 Disallow: /data/
 Disallow: /players/
 Disallow: /worlds/
@@ -262,8 +319,13 @@ app.get('/sitemap.xml', (req, res) => {
     }
 });
 
-app.use(rateLimit({ windowMs: 900000, max: 100, skip: isWsReplay }));
+app.use(rateLimit({
+    windowMs: 900000,
+    max: 100,
+    skip: (req) => isWsReplay(req) || req.path.startsWith('/admin'),
+}));
 app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: false }));
 
 app.use('/api', (req, res, next) => {
     res.set('Cache-Control', 'no-store');
@@ -271,6 +333,7 @@ app.use('/api', (req, res, next) => {
 });
 
 const authLimiter = rateLimit({ windowMs: 900000, max: 10, skip: isWsReplay });
+const adminLimiter = rateLimit({ windowMs: 900000, max: 20, skip: isWsReplay });
 
 function makeUploader(destination, maxSize) {
     return multer({
@@ -408,7 +471,10 @@ app.get('/api/user/:username', (req, res) => {
             created_at: user.created_at,
             last_login: user.last_login,
             has_skin: !!user.skin_path,
-            has_cape: false, // Custom uploads disabled
+            has_cape: (() => {
+                const choice = capeStmts.getChoice.get(user.id);
+                return !!choice && choice.cape_id !== '';
+            })(),
         });
     } catch (err) {
         Logger.error('Auth', `GetUser failed: ${err.message}`);
@@ -464,23 +530,49 @@ app.get('/cape/:username', (req, res) => {
         const usernameVal = validateUsername(req.params.username);
         if (!usernameVal.valid) return res.status(400).json({ error: 'Invalid username' });
 
-        const usernameLower = usernameVal.value.toLowerCase();
-        const capeAllowlist = getCapeAllowlist();
+        const user = stmts.findByUsername.get(usernameVal.value);
+        const requestedId = typeof req.query.id === 'string' ? req.query.id : null;
+
+        // An explicit picker request: only serve capes assigned to that
+        // account, so guessing an id cannot reveal someone else's cape.
+        if (user && requestedId && requestedId !== 'common') {
+            const cape = capeStmts.getCape.get(requestedId);
+            if (cape && capeStmts.isAssigned.get(cape.id, user.id) && sendCapeFile(res, cape.filename)) {
+                return;
+            }
+            return res.status(404).json({ error: 'Cape not found' });
+        }
+
+        // The account's saved choice. An empty choice means "no cape"; no row
+        // means fall back to the allowlist/common cape below.
+        if (user && !requestedId) {
+            const choice = capeStmts.getChoice.get(user.id);
+
+            if (choice) {
+                if (choice.cape_id === '') return res.status(404).json({ error: 'No cape' });
+
+                const cape = capeStmts.getCape.get(choice.cape_id);
+                if (cape && capeStmts.isAssigned.get(cape.id, user.id) && sendCapeFile(res, cape.filename)) {
+                    return;
+                }
+            }
+        }
 
         // 1. Check USER_CAPE_MAP.txt allowlist
-        if (capeAllowlist.has(usernameLower)) {
-            const customCapeFile = capeAllowlist.get(usernameLower);
+        const capeAllowlist = getCapeAllowlist();
+        if (user && capeAllowlist.has(user.username.toLowerCase())) {
+            const customCapeFile = capeAllowlist.get(user.username.toLowerCase());
             const customCapePath = path.resolve(CAPE_UPLOAD_DIR, customCapeFile);
 
             if (fs.existsSync(customCapePath)) {
-                res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600' });
+                res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'no-store' });
                 return res.sendFile(customCapePath);
             }
         }
 
         // 2. Fallback: serve common cape for all non-allowlisted users
         if (fs.existsSync(COMMON_CAPE_PATH)) {
-            res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600' });
+            res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'no-store' });
             return res.sendFile(COMMON_CAPE_PATH);
         }
 
@@ -491,9 +583,376 @@ app.get('/cape/:username', (req, res) => {
     }
 });
 
+// --- Cape catalog, picker API and admin panel -------------------------------
+
+const ADMIN_COOKIE = 'breakmine_admin';
+const ADMIN_SESSION_SECONDS = 12 * 60 * 60;
+const CAPE_NAME_MAX = 40;
+
+function getAdminPassword() {
+    return process.env.ADMIN_PASSWORD || secrets.adminPassword;
+}
+
+function constantTimeEquals(a, b) {
+    const left = Buffer.from(String(a));
+    const right = Buffer.from(String(b));
+    if (left.length !== right.length) return false;
+    return crypto.timingSafeEqual(left, right);
+}
+
+function readCookies(req) {
+    const cookies = {};
+    const header = req.headers.cookie;
+    if (!header) return cookies;
+
+    for (const part of header.split(';')) {
+        const index = part.indexOf('=');
+        if (index < 0) continue;
+        const name = part.slice(0, index).trim();
+        if (!name) continue;
+        try {
+            cookies[name] = decodeURIComponent(part.slice(index + 1).trim());
+        } catch (err) {
+            // Ignore malformed cookie values.
+        }
+    }
+    return cookies;
+}
+
+function getAdminSession(req) {
+    const token = readCookies(req)[ADMIN_COOKIE];
+    if (!token) return null;
+
+    try {
+        const decoded = jwt.verify(token, secrets.jwtSecret, { algorithms: ['HS256'] });
+        return decoded && decoded.admin === true ? decoded : null;
+    } catch (err) {
+        return null;
+    }
+}
+
+function requireAdmin(req, res, next) {
+    if (!getAdminSession(req)) return res.redirect('/admin');
+    next();
+}
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+    }[ch]));
+}
+
+function adminStyles() {
+    return `
+        :root { color-scheme: dark; }
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 24px; background: #14161a; color: #e6e6e6; font: 14px/1.45 system-ui, sans-serif; }
+        h1 { font-size: 20px; margin: 0 0 16px; }
+        h2 { font-size: 16px; margin: 24px 0 10px; }
+        a { color: #7fb8ff; }
+        .card { max-width: 420px; margin: 60px auto; background: #1c2026; border: 1px solid #2c323a; border-radius: 10px; padding: 20px; }
+        label { display: block; margin-bottom: 12px; font-size: 13px; color: #b9c0c9; }
+        input[type=text], input[type=password], input[type=file] { width: 100%; margin-top: 4px; padding: 8px; background: #12151a; border: 1px solid #303742; border-radius: 6px; color: inherit; }
+        button { padding: 6px 12px; background: #2f6fed; color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
+        button.danger { background: #a83232; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 10px; border-bottom: 1px solid #2a3038; vertical-align: top; }
+        .thumb { width: 40px; height: 56px; image-rendering: pixelated; background: #0e1013; border-radius: 4px; }
+        .muted { color: #8d97a3; font-size: 12px; }
+        .pill { display: inline-flex; align-items: center; gap: 4px; background: #262d36; border-radius: 999px; padding: 2px 4px 2px 8px; margin: 0 4px 4px 0; }
+        .pill button { background: transparent; color: #aab4c0; padding: 0 4px; font-size: 14px; }
+        form.inline { display: inline; }
+        .assign { margin-top: 6px; display: flex; gap: 6px; }
+        .assign input { width: 180px; }
+        .msg { padding: 8px 10px; border-radius: 6px; background: #1d3a26; color: #9fe0b1; margin-bottom: 12px; }
+        .error { padding: 8px 10px; border-radius: 6px; background: #3a1d1d; color: #ffb4b4; margin-bottom: 12px; }
+        .topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 18px; }
+        .topbar form { margin: 0; }
+        .upload { background: #1c2026; border: 1px solid #2c323a; border-radius: 10px; padding: 16px; margin-bottom: 20px; display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
+        .upload label { margin: 0; flex: 1 1 220px; }
+    `;
+}
+
+function renderAdminLogin(res, error = '', status = 200) {
+    res.status(status).type('html').send(`<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cape Admin</title><style>${adminStyles()}</style></head>
+<body>
+    <form class="card" method="post" action="/admin/login">
+        <h1>Cape Admin</h1>
+        ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
+        <label>Admin password<input type="password" name="password" autofocus required></label>
+        <button type="submit">Sign in</button>
+    </form>
+</body>
+</html>`);
+}
+
+function renderAdminPanel(req, res) {
+    const capes = capeStmts.listCapes.all();
+    const message = typeof req.query.msg === 'string' ? req.query.msg : '';
+    const error = typeof req.query.err === 'string' ? req.query.err : '';
+
+    const rows = capes.map((cape) => {
+        const assigned = capeStmts.assignmentsForCape.all(cape.id).map((row) => row.username);
+        const id = encodeURIComponent(cape.id);
+        const pills = assigned.length === 0
+            ? '<span class="muted">Not assigned to anyone</span>'
+            : assigned.map((username) => `<form class="inline" method="post" action="/admin/capes/${id}/unassign">
+                    <input type="hidden" name="username" value="${escapeHtml(username)}">
+                    <span class="pill">${escapeHtml(username)}<button type="submit" title="Unassign">×</button></span>
+                </form>`).join(' ');
+
+        return `<tr>
+            <td><img class="thumb" src="/admin/capes/${id}/thumb" alt=""></td>
+            <td><strong>${escapeHtml(cape.name)}</strong><div class="muted">${escapeHtml(cape.id)}</div></td>
+            <td>${pills}
+                <form class="assign" method="post" action="/admin/capes/${id}/assign">
+                    <input type="text" name="username" placeholder="username, othername" required>
+                    <button type="submit">Assign</button>
+                </form>
+            </td>
+            <td><form method="post" action="/admin/capes/${id}/delete" onsubmit="return confirm('Delete this cape and unassign it from everyone?')">
+                <button class="danger" type="submit">Delete</button>
+            </form></td>
+        </tr>`;
+    }).join('');
+
+    res.type('html').send(`<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cape Admin</title><style>${adminStyles()}</style></head>
+<body>
+    <div class="topbar">
+        <h1>Cape Admin</h1>
+        <form method="post" action="/admin/logout"><button type="submit">Sign out</button></form>
+    </div>
+
+    ${message ? `<div class="msg">${escapeHtml(message)}</div>` : ''}
+    ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
+
+    <form class="upload" method="post" action="/admin/capes" enctype="multipart/form-data">
+        <label>Cape name<input type="text" name="name" maxlength="${CAPE_NAME_MAX}" placeholder="e.g. Founder Cape" required></label>
+        <label>Cape PNG (64×32)<input type="file" name="file" accept="image/png" required></label>
+        <button type="submit">Upload cape</button>
+    </form>
+
+    <table>
+        <thead><tr><th></th><th>Name</th><th>Assigned players</th><th></th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="4" class="muted">No capes uploaded yet.</td></tr>'}</tbody>
+    </table>
+</body>
+</html>`);
+}
+
+function sendCapeFile(res, filename) {
+    const capePath = path.resolve(CAPE_UPLOAD_DIR, filename);
+    if (!fs.existsSync(capePath)) return false;
+
+    res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'no-store' });
+    res.sendFile(capePath);
+    return true;
+}
+
+function capeDataUrl(filename) {
+    try {
+        const capePath = path.resolve(CAPE_UPLOAD_DIR, filename);
+        if (!fs.existsSync(capePath)) return null;
+        return 'data:image/png;base64,' + fs.readFileSync(capePath).toString('base64');
+    } catch (err) {
+        return null;
+    }
+}
+
+app.get('/api/capes', authenticateToken, (req, res) => {
+    try {
+        const capes = capeStmts.capesForUser.all(req.user.sub)
+            .map((cape) => ({ id: cape.id, name: cape.name, texture: capeDataUrl(cape.filename) }))
+            .filter((cape) => typeof cape.texture === 'string');
+
+        const choice = capeStmts.getChoice.get(req.user.sub);
+        res.json({ capes, choice: choice ? choice.cape_id : null });
+    } catch (err) {
+        Logger.error('Cape', `List failed: ${err.message}`);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.post('/api/cape/choice', authenticateToken, (req, res) => {
+    try {
+        const raw = req.body ? req.body.capeId : null;
+
+        if (raw === null || raw === undefined) {
+            capeStmts.clearChoice.run(req.user.sub);
+            return res.json({ choice: null });
+        }
+
+        if (typeof raw !== 'string' || raw.length > 64) {
+            return res.status(400).json({ error: 'Invalid cape id' });
+        }
+
+        if (raw === '') {
+            capeStmts.setChoice.run(req.user.sub, '');
+            return res.json({ choice: '' });
+        }
+
+        const cape = capeStmts.getCape.get(raw);
+        if (!cape) return res.status(404).json({ error: 'Cape not found' });
+        if (!capeStmts.isAssigned.get(cape.id, req.user.sub)) {
+            return res.status(403).json({ error: 'That cape is not assigned to you' });
+        }
+
+        capeStmts.setChoice.run(req.user.sub, cape.id);
+        res.json({ choice: cape.id });
+    } catch (err) {
+        Logger.error('Cape', `Choice failed: ${err.message}`);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.get('/admin', (req, res) => {
+    if (!getAdminSession(req)) return renderAdminLogin(res);
+    renderAdminPanel(req, res);
+});
+
+app.post('/admin/login', adminLimiter, (req, res) => {
+    const password = req.body ? req.body.password : '';
+    const expected = getAdminPassword();
+
+    if (!expected || !constantTimeEquals(password, expected)) {
+        Logger.warn('Admin', 'Failed admin panel login');
+        return renderAdminLogin(res, 'Incorrect password.', 401);
+    }
+
+    const token = jwt.sign({ admin: true }, secrets.jwtSecret, { expiresIn: '12h', algorithm: 'HS256' });
+    const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+    const secure = req.secure || forwardedProto === 'https';
+
+    res.setHeader('Set-Cookie', `${ADMIN_COOKIE}=${encodeURIComponent(token)}; Path=/admin; HttpOnly; SameSite=Strict; Max-Age=${ADMIN_SESSION_SECONDS}${secure ? '; Secure' : ''}`);
+    res.redirect('/admin');
+});
+
+app.post('/admin/logout', (req, res) => {
+    res.setHeader('Set-Cookie', `${ADMIN_COOKIE}=; Path=/admin; HttpOnly; SameSite=Strict; Max-Age=0`);
+    res.redirect('/admin');
+});
+
+const uploadCape = makeUploader(CAPE_UPLOAD_DIR, MAX_CAPE_SIZE);
+
+app.post('/admin/capes', requireAdmin, (req, res) => {
+    uploadCape.single('file')(req, res, async (err) => {
+        if (err) {
+            return res.redirect('/admin?err=' + encodeURIComponent(err.message || 'Upload failed.'));
+        }
+
+        const name = String(req.body?.name || '').trim();
+        const file = req.file;
+
+        const fail = (message) => {
+            if (file) {
+                try { fs.unlinkSync(file.path); } catch (removeError) { /* already gone */ }
+            }
+            res.redirect('/admin?err=' + encodeURIComponent(message));
+        };
+
+        if (!file) return fail('Choose a PNG file.');
+        if (name.length < 1 || name.length > CAPE_NAME_MAX) {
+            return fail(`Cape name must be 1-${CAPE_NAME_MAX} characters.`);
+        }
+
+        try {
+            const metadata = await sharp(file.path).metadata();
+            if (metadata.format !== 'png' || metadata.width !== CAPE_WIDTH || metadata.height !== CAPE_HEIGHT) {
+                return fail('Cape PNG must be 64×32 pixels.');
+            }
+
+            const id = uuidv4();
+            capeStmts.insertCape.run(id, name, file.filename, Date.now());
+            Logger.info('Cape', `Uploaded cape "${name}" (${id})`);
+            res.redirect('/admin?msg=' + encodeURIComponent(`Uploaded cape "${name}".`));
+        } catch (error) {
+            fail('Could not read the uploaded PNG.');
+        }
+    });
+});
+
+app.post('/admin/capes/:id/assign', requireAdmin, (req, res) => {
+    const cape = capeStmts.getCape.get(req.params.id);
+    if (!cape) return res.redirect('/admin?err=' + encodeURIComponent('Cape not found.'));
+
+    const requested = String(req.body?.username || '').split(/[,\s]+/).filter(Boolean);
+    if (requested.length === 0) return res.redirect('/admin?err=' + encodeURIComponent('Enter a username.'));
+
+    const assigned = [];
+    const unknown = [];
+
+    for (const name of requested) {
+        const usernameVal = validateUsername(name);
+        const user = usernameVal.valid ? stmts.findByUsername.get(usernameVal.value) : null;
+        if (!user) {
+            unknown.push(name);
+            continue;
+        }
+        capeStmts.assignCape.run(cape.id, user.id, Date.now());
+        assigned.push(user.username);
+    }
+
+    const message = assigned.length > 0 ? `Assigned "${cape.name}" to ${assigned.join(', ')}.` : '';
+    if (unknown.length > 0) {
+        const query = new URLSearchParams();
+        if (message) query.set('msg', message);
+        query.set('err', `Unknown user${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}.`);
+        return res.redirect('/admin?' + query.toString());
+    }
+
+    res.redirect('/admin?msg=' + encodeURIComponent(message));
+});
+
+app.post('/admin/capes/:id/unassign', requireAdmin, (req, res) => {
+    const cape = capeStmts.getCape.get(req.params.id);
+    const usernameVal = validateUsername(String(req.body?.username || ''));
+    const user = cape && usernameVal.valid ? stmts.findByUsername.get(usernameVal.value) : null;
+
+    if (!cape || !user) return res.redirect('/admin?err=' + encodeURIComponent('User or cape not found.'));
+
+    capeStmts.unassignCape.run(cape.id, user.id);
+    capeStmts.clearChoiceForCape.run(user.id, cape.id);
+    res.redirect('/admin?msg=' + encodeURIComponent(`Unassigned "${cape.name}" from ${user.username}.`));
+});
+
+app.post('/admin/capes/:id/delete', requireAdmin, (req, res) => {
+    const cape = capeStmts.getCape.get(req.params.id);
+    if (!cape) return res.redirect('/admin?err=' + encodeURIComponent('Cape not found.'));
+
+    capeStmts.deleteCapeAssignments.run(cape.id);
+    capeStmts.deleteCapeChoices.run(cape.id);
+    capeStmts.deleteCape.run(cape.id);
+
+    try {
+        const capePath = path.resolve(CAPE_UPLOAD_DIR, cape.filename);
+        if (fs.existsSync(capePath)) fs.unlinkSync(capePath);
+    } catch (err) {
+        Logger.warn('Cape', `Could not delete cape file: ${err.message}`);
+    }
+
+    Logger.info('Cape', `Deleted cape "${cape.name}"`);
+    res.redirect('/admin?msg=' + encodeURIComponent(`Deleted cape "${cape.name}".`));
+});
+
+app.get('/admin/capes/:id/thumb', requireAdmin, (req, res) => {
+    const cape = capeStmts.getCape.get(req.params.id);
+    if (!cape || !sendCapeFile(res, cape.filename)) {
+        if (!res.headersSent) res.status(404).end();
+    }
+});
+
 app.use((err, req, res, next) => {
     if (err instanceof multer.MulterError) {
-        const maxSize = req.originalUrl.startsWith('/api/upload_cape') ? MAX_CAPE_SIZE : MAX_SKIN_SIZE;
+        const isCapeUpload = req.originalUrl.startsWith('/api/upload_cape') || req.originalUrl.startsWith('/admin/capes');
+        const maxSize = isCapeUpload ? MAX_CAPE_SIZE : MAX_SKIN_SIZE;
         return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? `File too large. Max ${maxSize / 1024}KB` : err.message });
     }
     if (err.message === 'Only PNG images are allowed') return res.status(400).json({ error: err.message });

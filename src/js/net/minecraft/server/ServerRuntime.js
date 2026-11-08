@@ -1,4 +1,4 @@
-import { initWorld, saveWorld, getSubChunkStore, loadCurrentWorld, getWorldTime, tickWorldTime, setBlockInventory, getBlockInventories, getCurrentWorldName } from './world.js';
+import { initWorld, saveWorld, getSubChunkStore, loadCurrentWorld, getWorldTime, tickWorldTime, setBlockInventory, getBlockInventories, getCurrentWorldName, setActiveDimension } from './world.js';
 import { tickAllFurnaces, broadcastFurnaceChanges } from './Furnace.js';
 import { sendTimeUpdate, sendChatMessage, sendPlayerListEntry } from './packets.js';
 import { handlePacket, cleanupPlayerChunks, respawnPlayer, flushSaveWorld } from './handlers.js';
@@ -78,17 +78,19 @@ export function initServer() {
     // Start server tick loop for block ticking and world time synchronization
     tickInterval = setInterval(() => {
         try {
+            // Block simulation runs against the overworld; packets scope their
+            // own dimension while they are being handled.
+            setActiveDimension(0);
             serverWorld.onTick();
             tickWorldTime();
 
             const furnaces = tickAllFurnaces(getBlockInventories());
             broadcastFurnaceChanges(getPlayers(), furnaces);
 
-            const worldTime = getWorldTime();
             const players = getPlayers();
             for (const player of players.values()) {
                 if (player.ws.readyState === 1) {
-                    sendTimeUpdate(player, worldTime);
+                    sendTimeUpdate(player, getWorldTime(player.dimension ?? 0));
                 }
             }
         } catch (e) {

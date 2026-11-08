@@ -9,6 +9,7 @@ import BlockSand from "./type/BlockSand.js";
 import BlockTorch from "./type/BlockTorch.js";
 import Sound from "./sound/Sound.js";
 import Block from "./Block.js";
+import BlockPortal from "./type/BlockPortal.js";
 import BlockWood from "./type/BlockWood.js";
 import BlockStair from "./type/BlockStair.js";
 import BlockBedrock from "./type/BlockBedrock.js";
@@ -705,6 +706,10 @@ export class BlockRegistry {
         BlockRegistry.LARGE_COG = new BlockLargeCog(349, 0);
         BlockRegistry.MECHANICAL_BEARING = new BlockMechanicalBearing(350, 0);
         BlockRegistry.BLUESTONE_TORCH = new BlockBluestoneTorch(351, 0);
+
+        // Nether portal sheet: walk-through, 2px thick, hidden from the palette.
+        // Ignited by flint and steel on obsidian; the server owns placement.
+        BlockRegistry.PORTAL = new BlockPortal(356, 0);
 
         for (const [key, val] of Object.entries(BlockRegistry)) {
             if (val && typeof val === "object" && val.id !== undefined) {

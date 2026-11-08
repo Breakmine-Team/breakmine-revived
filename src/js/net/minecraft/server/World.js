@@ -5,7 +5,7 @@
 // in single-player (dust propagation, lamps, repeaters, observers, pushers,
 // bulbs, doors) runs authoritatively on the server in multiplayer. Every
 // state change is persisted and broadcast to all connected players.
-import { getBlockAt, getBlockMetadata, addWorldChange } from './world.js';
+import { getBlockAt, getBlockMetadata, addWorldChange, getActiveDimension } from './world.js';
 import { getPlayers } from './players.js';
 import { addItemEntity } from './entities.js';
 import { createSpawnObjectPacket, sendBlockChange } from './packets.js';
@@ -129,9 +129,12 @@ class ServerWorld {
 
     broadcastBlockChange(x, y, z, blockId, blockData) {
         const blockState = (blockId << 4) | (blockData & 0xF);
+        // Only players in the dimension that produced the change see it;
+        // identical coordinates exist in every dimension.
+        const dimension = getActiveDimension();
         const players = getPlayers();
         for (const p of players.values()) {
-            if (p.ws && p.ws.readyState === 1) {
+            if ((p.dimension ?? 0) === dimension && p.ws && p.ws.readyState === 1) {
                 sendBlockChange(p.ws, x, y, z, blockState);
             }
         }

@@ -386,6 +386,41 @@ export function getCapeUrl(username) {
     return `${API_BASE_URL}/cape/${username}`;
 }
 
+async function getProtectedRequest(endpoint) {
+    const token = getAuthToken();
+    if (!token) {
+        throw new Error('You must be signed in.');
+    }
+
+    const { status, data } = await apiRequest('GET', endpoint, {
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+
+    if (status === 401) {
+        clearAuthToken();
+        throw new Error('Your session expired. Sign in again.');
+    }
+
+    if (status < 200 || status >= 300) {
+        throw new Error((data && data.error) || `Server error: ${status}`);
+    }
+
+    return data;
+}
+
+/** Capes assigned to the signed-in account plus the saved choice. */
+export async function getCapes() {
+    return getProtectedRequest('/api/capes');
+}
+
+/**
+ * Save the account's cape choice: a cape id, '' for no cape, or null for the
+ * server default cape.
+ */
+export async function selectCape(capeId) {
+    return postRequest('/api/cape/choice', { capeId: capeId === undefined ? null : capeId }, true);
+}
+
 /**
  * Build a cape URL that explicitly selects a specific owned cape by ID.
  * Used by the cape-picker GUI when the user picks a cape from their

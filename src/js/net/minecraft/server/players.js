@@ -196,6 +196,7 @@ function savePlayerData(player) {
         pitch: player.pitch,
         isFlying: player.isFlying || false,
         gamemode: player.gamemode,
+        dimension: player.dimension ?? 0,
         health: player.health,
         cape: player.cape || null,
         inventory: normalizeInventoryState(player.inventory)

@@ -5,6 +5,7 @@ import GuiTextField from "../widgets/GuiTextField.js";
 import GuiWaitForCompletion from "./GuiWaitForCompletion.js";
 import GuiYesNo from "./GuiYesNo.js";
 import GuiPlayerPreview from "../widgets/GuiPlayerPreview.js";
+import GuiCapesScreen from "./GuiCapesScreen.js";
 import * as AuthLib from "../../network/AuthLib.js";
 import PlayerRenderer from "../../render/entity/entity/PlayerRenderer.js";
 import { ICON_UPLOAD } from "../../render/gui/FontIcons.js";
@@ -105,6 +106,8 @@ export default class GuiAccount extends GuiScreen {
 
         this.playerPreview = new GuiPlayerPreview(this.minecraft);
         this.playerPreview.setAnimationMode(this.animationMode);
+        // Turn slightly so the cape is visible on the previewed character
+        this.playerPreview.setBaseYaw(22);
         this.playerPreview.init();
     }
 
@@ -149,7 +152,11 @@ export default class GuiAccount extends GuiScreen {
         const signOutWidth = Math.floor((layout.leftWidth - gap) / 2);
         const backWidth = layout.leftWidth - gap - signOutWidth;
 
-        this.buttonList.push(new GuiButton(this.minecraft, "Sign Out", layout.leftX, layout.signOutY, signOutWidth, 20, () => {
+        this.buttonList.push(new GuiButton(this.minecraft, "Capes", layout.leftX, layout.panelTop + 64, 90, 20, () => {
+            this.minecraft.displayScreen(new GuiCapesScreen(this.minecraft, this));
+        }).setTooltip("Change your cape"));
+
+        this.buttonList.push(new GuiButton(this.minecraft, "Logout", layout.leftX, layout.signOutY, signOutWidth, 20, () => {
             this.confirmSignOut();
         }));
         this.buttonList.push(new GuiButton(this.minecraft, "Back", layout.leftX + signOutWidth + gap, layout.signOutY, backWidth, 20, () => {
@@ -160,10 +167,10 @@ export default class GuiAccount extends GuiScreen {
     confirmSignOut() {
         this.minecraft.displayScreen(new GuiYesNo(
             this,
-            "Are you sure you want to sign out?",
-            "You can sign back in at any time.",
-            "Sign Out",
-            "Cancel",
+            "Are you sure you want to logout?",
+            "You can log back in at any time.",
+            "Yes",
+            "Nevermind",
             () => this.handleLogout()
         ));
     }
@@ -174,6 +181,9 @@ export default class GuiAccount extends GuiScreen {
         const formX = layout.leftX + Math.floor((layout.leftWidth - formWidth) / 2);
         const panelHeight = layout.leftBottom - layout.panelTop;
         const contentHeight = 194;
+        const gap = 4;
+        const signOutWidth = Math.floor((layout.leftWidth - gap) / 2);
+        const backWidth = layout.leftWidth - gap - signOutWidth;
         const top = layout.panelTop + Math.max(24, Math.floor((panelHeight - contentHeight) / 2));
 
         this.loginLayout = {
@@ -195,11 +205,11 @@ export default class GuiAccount extends GuiScreen {
         this.fieldUsername.text = this.loginUsernameValue;
         this.fieldUsername.cursorPosition = this.fieldUsername.text.length;
 
-        this.actionButton = new GuiButton(this.minecraft, "Login or Register", formX, top + 130, formWidth, 20, () => {
+        this.actionButton = new GuiButton(this.minecraft, "Login or Register", layout.leftX, layout.signOutY, signOutWidth, 20, () => {
             this.handleLogin();
         });
 
-        const backButton = new GuiButton(this.minecraft, "Back", formX, top + 156, formWidth, 20, () => {
+        const backButton = new GuiButton(this.minecraft, "Back", layout.leftX + signOutWidth + gap, layout.signOutY, backWidth, 20, () => {
             this.minecraft.displayScreen(this.parentScreen);
         });
 
@@ -300,6 +310,11 @@ export default class GuiAccount extends GuiScreen {
                 this.minecraft.settings.username = username;
                 this.minecraft.settings.loggedIn = true;
                 this.minecraft.settings.save();
+
+                // The account now has a cape; publish it for the session so it
+                // shows in-game without needing to rejoin.
+                this.minecraft.capeManager?.refreshOwnCape();
+
                 this.errorMessage = `Signed in as ${username}`;
             } catch (error) {
                 this.errorMessage = `Authentication failed: ${this.formatError(error)}`;
@@ -323,6 +338,9 @@ export default class GuiAccount extends GuiScreen {
             this.minecraft.settings.token = "";
             this.minecraft.settings.save();
         }
+
+        // Drop the account cape locally and tell the server it is gone
+        this.minecraft.capeManager?.clearOwnCape();
     }
 
     formatError(error) {

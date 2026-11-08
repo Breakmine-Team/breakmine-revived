@@ -30,7 +30,12 @@ export function chunkCoords(x) {
  * read the same bytes, and only chunks the player actually built in are kept.
  */
 class SubChunkStore {
-    constructor() {
+    constructor(worldType = null) {
+        // Sections are materialised from the generator on first write. The
+        // world type must follow the store: without it the nether store fills
+        // its sections with overworld terrain. null means "use the server's
+        // configured world type" (the overworld store).
+        this.worldType = worldType;
         // key "cx,cz,sy" -> Uint8Array(SECTION_DATA_BYTES) of u16 LE block states
         this.sections = new Map();
         this.dirty = new Set();
@@ -76,7 +81,7 @@ class SubChunkStore {
     generateSection(cx, cz, sy) {
         const out = Buffer.alloc(SECTION_DATA_BYTES);
         const baseY = sy * 16;
-        const column = worldGen.getGeneratedColumn(cx, cz);
+        const column = worldGen.getGeneratedColumn(cx, cz, this.worldType || undefined);
 
         for (let ly = 0; ly < 16; ly++) {
             const worldY = baseY + ly;

@@ -73,17 +73,13 @@ COPY tunnel.js ./
 # rel=service-desc and rel=service-doc.
 COPY catalog.json openapi.json api-docs.html ./
 
-# cors.js requires these two game modules directly:
-#   src/js/net/minecraft/client/fs/IsomorphicFilesystem.js -> ./Filesystem.js, ../lib/pako.js
-#   src/js/net/minecraft/server/logger.js
-# Copy only those (~2 MB) instead of the whole 130 MB source tree.
+# server.js boots ServerRuntime, which loads the block/item registry. Those
+# modules import client UI code (creative inventory tabs, the furnace screen,
+# font icons, ...), so the multiplayer server needs the whole JS source tree,
+# not just fs/server/util. Taking it from the assets stage also guarantees the
+# generated assetManifest.js is present.
 COPY libraries/ ./libraries/
-COPY src/js/net/minecraft/client/fs/ ./src/js/net/minecraft/client/fs/
-COPY src/js/net/minecraft/lib/ ./src/js/net/minecraft/lib/
-COPY src/js/net/minecraft/server/ ./src/js/net/minecraft/server/
-COPY src/js/net/minecraft/util/ ./src/js/net/minecraft/util/
-COPY src/js/net/minecraft/client/world/ ./src/js/net/minecraft/client/world/
-COPY src/js/net/minecraft/client/command/ ./src/js/net/minecraft/client/command/
+COPY --from=assets /app/src/js/ ./src/js/
 COPY server.js ./
 
 # Named volume target. secrets.json is generated here on first boot, so it is

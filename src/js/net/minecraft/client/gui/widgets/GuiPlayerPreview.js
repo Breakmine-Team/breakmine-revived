@@ -4,6 +4,7 @@ import Tessellator from "../../render/Tessellator.js";
 import GuiPlayerTexture from "../screens/container/GuiPlayerTexture.js";
 import MathHelper from "../../../util/MathHelper.js";
 import * as AuthLib from "../../network/AuthLib.js";
+import { createCapeGeometry } from "../../render/CapeGeometry.js";
 
 /**
  * Rotating player model drawn into a 2D GUI through its own offscreen WebGL
@@ -46,6 +47,12 @@ export default class GuiPlayerPreview {
         // How far above the frame centre the drawn character actually lands,
         // measured from a real render (see measureSilhouetteOffset)
         this.modelOffsetY = 0;
+
+        // Cape drawn from the account's own cape, loaded alongside the skin
+        this.capeMesh = null;
+        this.capeTexture = null;
+        this.capeUsername = null;
+        this.baseYaw = 0;
     }
 
     init() {
@@ -109,6 +116,7 @@ export default class GuiPlayerPreview {
         }
 
         this.loadSkin();
+        this.loadCape();
     }
 
     /**
@@ -224,10 +232,104 @@ export default class GuiPlayerPreview {
         }
     }
 
+    loadCape() {
+        this.clearCape();
+
+        // Anonymous sessions have no account cape to fetch
+        if (!this.minecraft?.settings?.loggedIn) return;
+
+        const capeManager = this.minecraft.capeManager;
+        if (capeManager?.getChoice?.() === '') return;
+
+        const username = this.getUsername();
+        if (!username) return;
+
+        // A cape picked in the cape screen wins over the server default
+        const selected = capeManager?.getSelectedTexture?.() || null;
+        const source = selected || `${AuthLib.getCapeUrl(username)}?t=${Date.now()}`;
+
+        this.capeUsername = username;
+
+        try {
+            const image = new Image();
+            image.crossOrigin = "anonymous";
+            image.onload = () => {
+                if (this.capeUsername === username) {
+                    this.applyCapeImage(image);
+                }
+            };
+            image.onerror = () => {
+                // No cape (or the request was blocked): leave the back bare
+            };
+            image.src = source;
+        } catch (e) {
+            console.warn('GuiPlayerPreview cape load error:', e);
+        }
+    }
+
+    /** Reload the cape after the cape picker changed the selection. */
+    reloadCape() {
+        this.loadCape();
+    }
+
+    applyCapeImage(image) {
+        if (!this.modelReady || !image || !this.model?.body?.bone) return;
+
+        this.clearCape();
+
+        const texture = new THREE.Texture(image);
+        texture.magFilter = THREE.NearestFilter;
+        texture.minFilter = THREE.NearestFilter;
+        texture.generateMipmaps = false;
+        texture.needsUpdate = true;
+        this.capeTexture = texture;
+
+        const geometry = createCapeGeometry(image.width, image.height);
+        const material = new THREE.MeshBasicMaterial({
+            map: texture,
+            transparent: true,
+            alphaTest: 0.5,
+            side: THREE.DoubleSide
+        });
+
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(0, 0, 2.1);
+        mesh.castShadow = false;
+        mesh.receiveShadow = false;
+
+        this.model.body.bone.add(mesh);
+        this.capeMesh = mesh;
+    }
+
+    clearCape() {
+        if (this.capeMesh) {
+            if (this.capeMesh.parent) this.capeMesh.parent.remove(this.capeMesh);
+            if (this.capeMesh.geometry) this.capeMesh.geometry.dispose();
+            if (this.capeMesh.material) this.capeMesh.material.dispose();
+            this.capeMesh = null;
+        }
+
+        if (this.capeTexture) {
+            this.capeTexture.dispose();
+            this.capeTexture = null;
+        }
+
+        this.capeUsername = null;
+    }
+
     setAnimationMode(mode) {
         if (mode === "normal" || mode === "walk" || mode === "run") {
             this.animationMode = mode;
         }
+        return this;
+    }
+
+    /**
+     * Turn the preview a little so the back of the model, and therefore the
+     * cape, is visible while the cursor is at rest.
+     */
+    setBaseYaw(degrees) {
+        this.baseYaw = Math.max(-60, Math.min(60, Number(degrees) || 0));
         return this;
     }
 
@@ -280,7 +382,7 @@ export default class GuiPlayerPreview {
         const dx = mouseX - modelCenterX;
         const dy = mouseY - modelCenterY;
 
-        const totalYaw = Math.max(-60, Math.min(60, -dx * 0.2));
+        const totalYaw = Math.max(-60, Math.min(60, this.baseYaw - dx * 0.2));
         const pitch = Math.max(-25, Math.min(25, dy * 0.2));
 
         const headLimit = 20;
@@ -292,6 +394,13 @@ export default class GuiPlayerPreview {
         this.modelGroup.rotation.y = MathHelper.toRadians(-bodyYaw + 180);
 
         this.model.render(this.modelGroup, limbSwing, limbSwingStrength, this.animTime, headYaw, pitch, 0);
+
+        // The cape lifts a little while the walk/run previews play
+        if (this.capeMesh) {
+            this.capeMesh.rotation.x = this.animationMode === "run" ? 0.45
+                : this.animationMode === "walk" ? 0.25 : 0.06;
+        }
+
         this.modelGroup.updateMatrixWorld(true);
 
         this.glRenderer.render(this.scene, this.camera);
@@ -316,6 +425,7 @@ export default class GuiPlayerPreview {
             this.glRenderer = null;
         }
 
+        this.clearCape();
         this.modelGroup.clear();
         this.playerMeshes = [];
         this.scene = null;
