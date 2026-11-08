@@ -37,6 +37,16 @@ export default class BlockShaftPart extends Block {
         this.isShaftPart = true;
     }
 
+    // Shaft parts are machinery rather than terrain: they keep flat lighting
+    // and cast no shading onto the blocks around them.
+    getAmbientOcclusion() {
+        return false;
+    }
+
+    canCastAmbientOcclusion() {
+        return false;
+    }
+
     /**
      * The parts to draw, each `{part, texture, teethTexture, negative}`.
      * See ShaftRenderer.PART for the available kinds.

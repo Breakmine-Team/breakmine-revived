@@ -120,6 +120,9 @@ function addPlayer(player) {
     player.joinTime = Date.now();
     player.gamemode = player.gamemode ?? resolveDefaultGamemode();
     player.health = typeof player.health === 'number' ? player.health : 20;
+    player.ping = typeof player.ping === 'number' ? player.ping : 0;
+    player.pingSentAt = 0;
+    player.pingId = 0;
     player.inventory = normalizeInventoryState(player.inventory);
     players.set(player.eid, player);
 }

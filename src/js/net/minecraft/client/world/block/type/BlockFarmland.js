@@ -27,7 +27,7 @@ export default class BlockFarmland extends Block {
     }
 
     getAmbientOcclusion() {
-        return false;
+        return true;
     }
 
     getParticleTextureFace() {

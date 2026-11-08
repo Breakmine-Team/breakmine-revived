@@ -32,7 +32,7 @@ export default class BlockDoor extends Block {
     }
 
     getAmbientOcclusion() {
-        return false;
+        return true;
     }
 
     canCastAmbientOcclusion() {

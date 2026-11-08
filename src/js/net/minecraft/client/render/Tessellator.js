@@ -11,7 +11,7 @@ import { getLiquidBlockCornerHeights } from "./LiquidMeshHelper.js";
  * stored next to it. Keep this at module scope so every cloned material shares
  * one program (three hashes onBeforeCompile.toString()).
  */
-function applyTileWrapToShader(shader) {
+export function applyTileWrapToShader(shader) {
     shader.vertexShader = shader.vertexShader
         .replace(
             '#include <uv_pars_vertex>',
@@ -120,6 +120,17 @@ export default class Tessellator {
             vertexColors: true
         });
 
+        // Put the tile-wrap patch on the base materials too, so a mesh that
+        // uses one of them directly (not via draw()) still wraps. Note that
+        // three.js's Material.clone() does NOT copy onBeforeCompile, so any
+        // code that clones a tessellator material (held/inventory renderers
+        // swap in getUnlitGUIMaterial(), the first-person renderer clones
+        // for depth flags, ...) must re-apply it with
+        // Tessellator.applyTileWrap(), or oversized multipart bboxes bleed
+        // into neighbouring atlas tiles exactly as they did before.
+        this.litMaterial.onBeforeCompile = applyTileWrapToShader;
+        this.unlitMaterial.onBeforeCompile = applyTileWrapToShader;
+
         // null = follow Tessellator.shadows
         this.shadows = null;
 
@@ -181,6 +192,21 @@ export default class Tessellator {
     // material even when no shadow map is being rendered.
     getLit() {
         return this.getShadows() || Tessellator.dynamicLights;
+    }
+
+    /**
+     * Re-apply the tile-wrap shader patch to a material. Required after
+     * Material.clone(): three.js does not copy onBeforeCompile on clone, so
+     * a cloned tessellator material silently loses the wrap that keeps
+     * faces longer than one block (oversized multipart bboxes) inside
+     * their own atlas tile. Safe on materials whose geometry has no
+     * aTileRect attribute: vWrap defaults to 0 and UVs pass through.
+     */
+    static applyTileWrap(material) {
+        if (!material) return material;
+        material.onBeforeCompile = applyTileWrapToShader;
+        material.needsUpdate = true;
+        return material;
     }
 
     bindTexture(texture) {
@@ -544,9 +570,7 @@ export default class Tessellator {
         }
 
         // Clone the material so opaque and translucent passes maintain separate states
-        let material = this.material.clone();
-        material.onBeforeCompile = applyTileWrapToShader;
-        material.needsUpdate = true;
+        let material = Tessellator.applyTileWrap(this.material.clone());
         let mesh = new THREE.Mesh(geometry, material);
         mesh.castShadow = shadows;
         mesh.receiveShadow = shadows;

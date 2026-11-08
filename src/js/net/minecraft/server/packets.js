@@ -347,6 +347,8 @@ function createSpawnObjectPacket(entity) {
 }
 
 function sendPlayerListEntry(players, action = 0) {
+    const getPing = (player) => Math.max(0, Math.round(Number(player.ping) || 0));
+
     // Size the buffer from the actual data instead of a fixed cap so long
     // usernames / many players can never overrun it.
     let dataSize = varIntSize(action) + varIntSize(players.length);
@@ -355,13 +357,13 @@ function sendPlayerListEntry(players, action = 0) {
         switch (action) {
             case 0: // ADD_PLAYER
                 dataSize += varIntSize(Buffer.byteLength(player.username || '')) + Buffer.byteLength(player.username || '');
-                dataSize += varIntSize(0) + varIntSize(player.gamemode ?? 1) + varIntSize(0) + 1;
+                dataSize += varIntSize(0) + varIntSize(player.gamemode ?? 1) + varIntSize(getPing(player)) + 1;
                 break;
             case 1: // UPDATE_GAMEMODE
                 dataSize += varIntSize(player.gamemode ?? 1);
                 break;
             case 2: // UPDATE_LATENCY
-                dataSize += varIntSize(0);
+                dataSize += varIntSize(getPing(player));
                 break;
             case 3: // UPDATE_DISPLAY_NAME
                 dataSize += 1;
@@ -389,14 +391,14 @@ function sendPlayerListEntry(players, action = 0) {
                 offset += writeString(data, player.username, offset);
                 offset += writeVarInt(data, 0, offset);  // Properties count
                 offset += writeVarInt(data, player.gamemode ?? 1, offset);  // Game mode
-                offset += writeVarInt(data, 0, offset);  // Ping
+                offset += writeVarInt(data, getPing(player), offset);  // Ping
                 data.writeUInt8(0, offset); offset += 1;  // Has display name
                 break;
             case 1: // UPDATE_GAMEMODE
                 offset += writeVarInt(data, player.gamemode ?? 1, offset);
                 break;
             case 2: // UPDATE_LATENCY
-                offset += writeVarInt(data, 0, offset);  // Ping
+                offset += writeVarInt(data, getPing(player), offset);  // Ping
                 break;
             case 3: // UPDATE_DISPLAY_NAME
                 data.writeUInt8(0, offset); offset += 1;  // Has display name

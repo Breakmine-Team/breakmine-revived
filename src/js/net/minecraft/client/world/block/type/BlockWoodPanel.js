@@ -29,6 +29,6 @@ export default class BlockWoodPanel extends Block {
     }
 
     getAmbientOcclusion() {
-        return false;
+        return true;
     }
 }

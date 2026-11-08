@@ -211,6 +211,13 @@ const capeStmts = {
 
 setInterval(() => stmts.cleanExpiredTokens.run(Date.now()), 3600000);
 
+function isSupportedSkinSize(width, height) {
+    if (width === 64 && (height === 32 || height === 64)) return true;
+    // HD skins keep the 64px layout scaled by a whole number. Modern skins are
+    // square; some older HD skins use a half-height (128x64, 256x128) layout.
+    return width >= 128 && width % 64 === 0 && (height === width || height * 2 === width);
+}
+
 function removeSkinFile(filename) {
     if (!filename) return;
     const skinPath = path.resolve(SKIN_UPLOAD_DIR, filename);
@@ -1175,9 +1182,9 @@ app.post('/admin/users/:id/skin', requireAdmin, (req, res) => {
 
         try {
             const metadata = await sharp(file.path).metadata();
-            const validSize = metadata.width === 64 && (metadata.height === 32 || metadata.height === 64);
+            const validSize = isSupportedSkinSize(metadata.width, metadata.height);
             if (metadata.format !== 'png' || !validSize) {
-                return fail('Skin PNG must be 64×64 or 64×32 pixels.');
+                return fail('Skin PNG must be 64×64, 64×32, or a larger HD skin.');
             }
 
             const previousSkin = user.skin_path;

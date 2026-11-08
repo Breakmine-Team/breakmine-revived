@@ -19,7 +19,7 @@ export default class BlockGrassPath extends Block {
     }
 
     getAmbientOcclusion() {
-        return false;
+        return true;
     }
 
     getParticleTextureFace() {

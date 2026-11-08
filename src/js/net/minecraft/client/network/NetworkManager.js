@@ -223,7 +223,11 @@ export default class NetworkManager {
             // retaining the built-in JSON handlers below.
             this.minecraft?.modLoader?.handleNetworkMessage(payload, this);
 
-            if (payload.type === 'serverRules') {
+            if (payload.type === 'ping') {
+                // The server measures the round trip. Keep the payload small so
+                // the probe does not compete with movement/chunk traffic.
+                this.sendJson({ type: 'pong', id: payload.id });
+            } else if (payload.type === 'serverRules') {
                 if (this.minecraft) {
                     this.minecraft.serverRules = {
                         allowTNT: payload.allowTNT !== false,

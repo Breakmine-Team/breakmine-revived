@@ -19,6 +19,7 @@ const log = Logger;
 let tickInterval = null;
 let autosaveInterval = null;
 let playerSaveInterval = null;
+let latencyInterval = null;
 let started = false;
 
 const MAX_CAPE_DATA_URL_LENGTH = 512 * 1024;
@@ -51,6 +52,25 @@ function broadcastCapeState(player) {
     });
     for (const peer of getPlayers().values()) {
         if (peer.ws.readyState === 1) peer.ws.send(message);
+    }
+}
+
+// Measure application-level round trips over the same socket the game uses.
+// Binary keepalives are not sent by this server, and the tab list needs a
+// per-player number, so the probe travels as a tiny JSON message: the client
+// echoes the id and the server computes the elapsed time.
+function probeLatency(player) {
+    if (!player?.ws || player.ws.readyState !== 1) return;
+
+    const now = Date.now();
+    if (player.pingSentAt && now - player.pingSentAt < 5000) return;
+
+    player.pingId = (player.pingId || 0) + 1;
+    player.pingSentAt = now;
+    try {
+        player.ws.send(JSON.stringify({ type: 'ping', id: player.pingId }));
+    } catch (e) {
+        player.pingSentAt = 0;
     }
 }
 
@@ -113,6 +133,14 @@ export function initServer() {
             }
         }
     }, 15 * 1000);
+
+    // Keep the tab-list latency current. One probe is outstanding at a time;
+    // the 5 second guard above avoids piling up probes on a slow connection.
+    latencyInterval = setInterval(() => {
+        for (const player of getPlayers().values()) {
+            probeLatency(player);
+        }
+    }, 2 * 1000);
 
     log.info('Server', `Minecraft server started (world: ${getCurrentWorldName()})`);
 }
@@ -181,7 +209,16 @@ export function onConnection(ws, req) {
             }
 
             const payload = JSON.parse(text);
-            if (payload && payload.type === 'inventory') {
+            if (payload && payload.type === 'pong') {
+                if (player.pingSentAt && payload.id === player.pingId) {
+                    const rtt = Date.now() - player.pingSentAt;
+                    if (Number.isFinite(rtt) && rtt >= 0 && rtt <= 60000) {
+                        player.ping = Math.round(rtt);
+                        protocol.broadcast(sendPlayerListEntry([player], 2), getPlayers());
+                    }
+                    player.pingSentAt = 0;
+                }
+            } else if (payload && payload.type === 'inventory') {
                 player.inventory = normalizeInventoryState(payload.inventory);
                 savePlayerData(player);
             } else if (payload && payload.type === 'modMessage') {
@@ -312,9 +349,11 @@ export function stopServer() {
     if (tickInterval !== null) clearInterval(tickInterval);
     if (autosaveInterval !== null) clearInterval(autosaveInterval);
     if (playerSaveInterval !== null) clearInterval(playerSaveInterval);
+    if (latencyInterval !== null) clearInterval(latencyInterval);
     tickInterval = null;
     autosaveInterval = null;
     playerSaveInterval = null;
+    latencyInterval = null;
 
     // Block edits are persisted by a debounced save; if one is still queued it
     // has to be written now or the last couple of seconds of changes are lost.

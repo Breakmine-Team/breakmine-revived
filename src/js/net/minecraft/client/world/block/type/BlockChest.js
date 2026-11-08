@@ -62,7 +62,7 @@ export default class BlockChest extends Block {
     }
 
     getAmbientOcclusion() {
-        return false;
+        return true;
     }
 
     onMouseButton(world, x, y, z, button) {

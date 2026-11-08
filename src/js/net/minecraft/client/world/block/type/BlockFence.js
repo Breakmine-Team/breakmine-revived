@@ -20,7 +20,7 @@ export default class BlockFence extends Block {
     }
 
     getAmbientOcclusion() {
-        return false;
+        return true;
     }
 
     canCastAmbientOcclusion() {

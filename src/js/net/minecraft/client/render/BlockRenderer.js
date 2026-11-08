@@ -27,6 +27,11 @@ const PART_FACE_EPSILON = 1e-6;
 // UV spans are compared against a tile's own span; same float-noise margin.
 const FACE_UV_EPSILON = 1e-6;
 
+// Ambient occlusion tests a one-pixel probe at each face corner. Geometry has
+// to reach into that probe to count, which is what lets a shape smaller than a
+// block shadow only the part of the cell it really fills.
+const AO_PROBE = 1 / 32;
+
 export default class BlockRenderer {
 
     constructor(worldRenderer) {
@@ -53,6 +58,14 @@ export default class BlockRenderer {
         // object can be rotated every frame instead of re-meshing the section.
         this.rotatingTessellator = new Tessellator();
         this.suppressRotation = false;
+
+        // Scratch cache for ambient-occlusion samples. Every face of a block
+        // asks about the same 3x3x3 neighbourhood, so the answers are kept for
+        // one block at a time (aoBlockX marks which block the cache is for).
+        this.aoCells = new Array(27).fill(undefined);
+        this.aoBlockX = NaN;
+        this.aoBlockY = 0;
+        this.aoBlockZ = 0;
     }
 
     createModelTessellator(texture) {
@@ -198,7 +211,7 @@ export default class BlockRenderer {
         this.buildingRotatingMesh = true;
         try {
             if (parts !== null) {
-                this.renderParts(world, parts, x, y, z, false, true, block);
+                this.renderParts(world, parts, x, y, z, false, true, block, ambientOcclusion);
             } else {
                 this.renderBlock(world, block, ambientOcclusion, x, y, z);
             }
@@ -216,6 +229,13 @@ export default class BlockRenderer {
     }
 
     renderBlock(world, block, ambientOcclusion, x, y, z, knownRotation = undefined) {
+        // Start a fresh occlusion cache for this block; the coords make it
+        // readable only while this block is being built.
+        this.aoCells.fill(undefined);
+        this.aoBlockX = x;
+        this.aoBlockY = y;
+        this.aoBlockZ = z;
+
         // Blocks can turn themselves around their own center; the angle is
         // baked into the vertices below and cleared before the next block.
         // Callers that already resolved the rotation (chunk meshing does, to
@@ -233,9 +253,9 @@ export default class BlockRenderer {
         if (block.path) {
             this.renderPath(world, block, ambientOcclusion, x, y, z);
         } else if (block.multipart === true) {
-            this.renderMultipart(world, block, x, y, z);
+            this.renderMultipart(world, block, ambientOcclusion, x, y, z);
         } else if (block?.lever === true) {
-            this.renderLever(world, block, x, y, z);
+            this.renderLever(world, block, x, y, z, ambientOcclusion);
         } else if (block) {
             // Pass 'this' (the BlockRenderer / WorldRenderer instance) to onRender
             const customRenderHandled = block.onRender(world, x, y, z, this);
@@ -269,12 +289,15 @@ export default class BlockRenderer {
         // Render blocks declared inside this block (e.g. dust inside a lever).
         // The lever renders its inner parts itself so they rotate with it.
         if (block && Array.isArray(block.renderInside) && block.lever !== true) {
-            this.renderParts(world, block.renderInside, x, y, z);
+            this.renderParts(world, block.renderInside, x, y, z, false, false, null, ambientOcclusion);
         }
 
         if (blockRotation !== null) {
             this.clearBlockRotation();
         }
+
+        // The cache is only valid while its block is being built.
+        this.aoBlockX = NaN;
     }
 
     renderFakeBlock(world, blockId, ambientOcclusion, x, y, z, minX, minY, minZ, maxX, maxY, maxZ) {
@@ -349,12 +372,12 @@ export default class BlockRenderer {
         }
     };
 
-    renderMultipart(world, block, x, y, z) {
+    renderMultipart(world, block, ambientOcclusion, x, y, z) {
         const moving = this.buildingRotatingMesh
             ? this.getRotatingParts(block, world, x, y, z)
             : null;
 
-        this.renderParts(world, moving || block.getMultipart(world, x, y, z), x, y, z, false, true, block);
+        this.renderParts(world, moving || block.getMultipart(world, x, y, z), x, y, z, false, true, block, ambientOcclusion);
     }
 
     /**
@@ -509,7 +532,7 @@ export default class BlockRenderer {
         }
     }
 
-    renderParts(world, parts, x, y, z, respectFaces = false, cullHidden = false, multipartBlock = null) {
+    renderParts(world, parts, x, y, z, respectFaces = false, cullHidden = false, multipartBlock = null, ambientOcclusion = false) {
         let resolvedParts = this.resolveParts(parts);
         // Every part of this block shares one metadata value; resolving it
         // once avoids a chunk lookup for every face of every part.
@@ -530,6 +553,12 @@ export default class BlockRenderer {
             let partBlock = resolvedParts[i].partBlock;
             let bbox = resolvedParts[i].bbox;
             let partRotation = resolvedParts[i].rotation;
+
+            // Ambient occlusion follows the block the parts belong to, so a
+            // door or a wire that opts out stays flat while a stair or a clock
+            // gets its corners shaded like any other block.
+            const partAo = ambientOcclusion
+                && (multipartBlock !== null ? multipartBlock : partBlock).getAmbientOcclusion();
 
             // A turned part no longer sits inside its box, so the box-based
             // occluder tests would hide faces that are actually visible.
@@ -567,7 +596,7 @@ export default class BlockRenderer {
                         }
                     }
 
-                    this.renderFace(world, partBlock, bbox, face, false, x, y, z, blockData);
+                    this.renderFace(world, partBlock, bbox, face, partAo, x, y, z, blockData);
                 }
             } finally {
                 if (partRotation !== null) {
@@ -1025,7 +1054,13 @@ export default class BlockRenderer {
             this.tessellator.setColor(red * shade, green * shade, blue * shade);
         }
 
-        this.addFace(world, face, ambientOcclusion, chunkX, chunkY, chunkZ, minX, minY, minZ, maxX, maxY, maxZ, minU, minV, maxU, maxV, red, green, blue, rotation, uSlideOffset, wrapRect);
+        // Ambient occlusion needs the cell and the box this face belongs to,
+        // so each corner can sample the cells just outside the face.
+        const ao = ambientOcclusion
+            ? {face: face, x: x, y: y, z: z, bbox: boundingBox}
+            : null;
+
+        this.addFace(world, face, ao, chunkX, chunkY, chunkZ, minX, minY, minZ, maxX, maxY, maxZ, minU, minV, maxU, maxV, red, green, blue, rotation, uSlideOffset, wrapRect);
     }
 
     renderDecoration(world, block, x, y, z) {
@@ -1159,9 +1194,189 @@ export default class BlockRenderer {
         this.tessellator.setTileWrap(null);
     }
 
+    /**
+     * Brightness for one face corner.
+     *
+     * The corner takes the light of the four cells just outside the face - the
+     * cell in front of it and the 2x2 patch the vertex stands in - and a cell
+     * only counts as lit when its block's shape actually reaches the corner.
+     * That makes a block shadow exactly where its box sits: a slab leaves the
+     * empty half of its cell open, a stair step only darkens behind itself,
+     * while a full cube still darkens the whole corner.
+     *
+     * The old cell-average could only be used on full cubes, so partial and
+     * multipart shapes had ambient occlusion switched off altogether.
+     */
+    setCornerBrightness(world, ao, x, y, z, red = 1, green = 1, blue = 1) {
+        const face = ao.face;
+        const bbox = ao.bbox;
+
+        // The layer just outside the face.
+        const cellX = ao.x + face.x;
+        const cellY = ao.y + face.y;
+        const cellZ = ao.z + face.z;
+
+        // The vertex leans towards the box's max or min side on each of the
+        // face's two axes; that picks the other three cells of the patch.
+        const centreX = ao.x + (bbox.minX + bbox.maxX) / 2;
+        const centreY = ao.y + (bbox.minY + bbox.maxY) / 2;
+        const centreZ = ao.z + (bbox.minZ + bbox.maxZ) / 2;
+
+        let offAX = 0, offAY = 0, offAZ = 0;
+        let offBX = 0, offBY = 0, offBZ = 0;
+
+        if (face.x !== 0) {
+            offAY = y > centreY ? 1 : -1;
+            offBZ = z > centreZ ? 1 : -1;
+        } else if (face.y !== 0) {
+            offAX = x > centreX ? 1 : -1;
+            offBZ = z > centreZ ? 1 : -1;
+        } else {
+            offAX = x > centreX ? 1 : -1;
+            offBY = y > centreY ? 1 : -1;
+        }
+
+        const cell = this.getAoCell(world, cellX, cellY, cellZ, ao);
+        const sideA = this.getAoCell(world, cellX + offAX, cellY + offAY, cellZ + offAZ, ao);
+        const sideB = this.getAoCell(world, cellX + offBX, cellY + offBY, cellZ + offBZ, ao);
+        const diagonal = this.getAoCell(world, cellX + offAX + offBX, cellY + offAY + offBY, cellZ + offAZ + offBZ, ao);
+
+        const occludedA = this.isCellOccluding(sideA, cellX + offAX, cellY + offAY, cellZ + offAZ, x, y, z);
+        const occludedB = this.isCellOccluding(sideB, cellX + offBX, cellY + offBY, cellZ + offBZ, x, y, z);
+
+        // Classic smooth lighting: when both sides of a corner are filled, the
+        // corner is as dark as if the diagonal were filled too.
+        const occludedDiagonal = (occludedA && occludedB)
+            || this.isCellOccluding(diagonal, cellX + offAX + offBX, cellY + offAY + offBY, cellZ + offAZ + offBZ, x, y, z);
+
+        // A corner standing against geometry gets no light from that side.
+        const level = (cell.light
+            + (occludedA ? 0 : sideA.light)
+            + (occludedB ? 0 : sideB.light)
+            + (occludedDiagonal ? 0 : diagonal.light)) / 4;
+
+        let brightness = 0.9 / 15.0 * level + 0.1;
+        let shading = brightness * face.getShading();
+
+        this.tessellator.setColor(red * shading, green * shading, blue * shading);
+    }
+
+    /**
+     * One cell of a corner sample: the light it lets through and the boxes of
+     * the block standing in it. Cached for the block currently being built,
+     * which asks about the same cells from every face.
+     */
+    getAoCell(world, cellX, cellY, cellZ, ao) {
+        const dx = cellX - ao.x;
+        const dy = cellY - ao.y;
+        const dz = cellZ - ao.z;
+
+        // Corner samples always stay inside the block's 3x3x3 neighbourhood.
+        if (this.aoBlockX === ao.x && this.aoBlockY === ao.y && this.aoBlockZ === ao.z
+            && dx >= -1 && dx <= 1 && dy >= -1 && dy <= 1 && dz >= -1 && dz <= 1) {
+            const index = (dx + 1) * 9 + (dy + 1) * 3 + (dz + 1);
+            let entry = this.aoCells[index];
+            if (entry === undefined) {
+                entry = this.sampleAoCell(world, cellX, cellY, cellZ);
+                this.aoCells[index] = entry;
+            }
+            return entry;
+        }
+
+        return this.sampleAoCell(world, cellX, cellY, cellZ);
+    }
+
+    sampleAoCell(world, cellX, cellY, cellZ) {
+        if (world === null) {
+            return {light: 15, boxes: []};
+        }
+
+        let boxes = [];
+        const typeId = world.getBlockAt(cellX, cellY, cellZ);
+
+        if (typeId !== 0) {
+            const block = Block.getById(typeId);
+            // A block that opts out of casting AO (machinery, wires, thin
+            // decoration) never shadows the corners around it.
+            if (block !== null && block.isSolid() && !block.isTranslucent()
+                && this.castsAmbientOcclusion(block)) {
+                boxes = this.getOccluderBoxes(block, world, cellX, cellY, cellZ);
+            }
+        }
+
+        return {light: this.getEffectiveLightLevel(world, cellX, cellY, cellZ), boxes: boxes};
+    }
+
+    /**
+     * Whether a block may shadow its neighbours. `canCastAmbientOcclusion` is
+     * normally a method, but a few blocks set it as a plain property, so both
+     * forms are accepted.
+     */
+    castsAmbientOcclusion(block) {
+        const flag = block.canCastAmbientOcclusion;
+        return typeof flag === 'function' ? flag.call(block) : flag !== false;
+    }
+
+    /**
+     * The boxes a block standing in a whole cell actually fills, in cell-local
+     * coordinates. A multipart block contributes one box per part, so a stair
+     * only shadows where its step is rather than its whole cell.
+     */
+    getOccluderBoxes(block, world, cellX, cellY, cellZ) {
+        if (block.multipart === true) {
+            const parts = block.getMultipart(world, cellX, cellY, cellZ);
+            if (!Array.isArray(parts)) {
+                return [];
+            }
+
+            const boxes = [];
+            for (let i = 0; i < parts.length; i++) {
+                const box = Block.getPartBoundingBox(parts[i]);
+                if (box !== null) {
+                    boxes.push(box);
+                }
+            }
+            return boxes;
+        }
+
+        const box = block.getBoundingBox(world, cellX, cellY, cellZ);
+        return box === null ? [] : [box];
+    }
+
+    /**
+     * True when one of the cell's boxes reaches the corner vertex. The probe is
+     * a one-pixel cube of the cell nearest the vertex, so a box has to really
+     * extend to the corner to shadow it.
+     */
+    isCellOccluding(cell, cellX, cellY, cellZ, vx, vy, vz) {
+        const boxes = cell.boxes;
+        if (boxes.length === 0) {
+            return false;
+        }
+
+        const probeX = Math.min(Math.max(vx, cellX + AO_PROBE), cellX + 1 - AO_PROBE);
+        const probeY = Math.min(Math.max(vy, cellY + AO_PROBE), cellY + 1 - AO_PROBE);
+        const probeZ = Math.min(Math.max(vz, cellZ + AO_PROBE), cellZ + 1 - AO_PROBE);
+
+        for (let i = 0; i < boxes.length; i++) {
+            const box = boxes[i];
+            if (cellX + box.minX < probeX + AO_PROBE && cellX + box.maxX > probeX - AO_PROBE
+                && cellY + box.minY < probeY + AO_PROBE && cellY + box.maxY > probeY - AO_PROBE
+                && cellZ + box.minZ < probeZ + AO_PROBE && cellZ + box.maxZ > probeZ - AO_PROBE) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     addBlockCorner(world, face, ambientOcclusion, chunkX, chunkY, chunkZ, x, y, z, u, v, red, green, blue) {
-        if (ambientOcclusion) {
+        if (ambientOcclusion === true) {
+            // Quads built by hand (the lever's handle) carry no box of their
+            // own, so they keep the old cell-average light.
             this.setAverageBrightness(world, face, x, y, z, red, green, blue);
+        } else if (ambientOcclusion !== null && ambientOcclusion !== false) {
+            this.setCornerBrightness(world, ambientOcclusion, x, y, z, red, green, blue);
         }
 
         this.tessellator.addVertexWithUV(x - (chunkX << 4), y - (chunkY << 4), z - (chunkZ << 4), u, v);
@@ -1431,7 +1646,7 @@ export default class BlockRenderer {
         this.addFace(world, EnumBlockFace.TOP, false, chunkX, chunkY, chunkZ, minX, minY, minZ, maxX, maxY, maxZ, minU, minV, maxU, maxV + 8 / atlasSize);
     }
 
-    renderLever(world, block, x, y, z) {
+    renderLever(world, block, x, y, z, ambientOcclusion = false) {
         let chunkX = x >> 4;
         let chunkY = y >> 4;
         let chunkZ = z >> 4;
@@ -1514,7 +1729,7 @@ export default class BlockRenderer {
         // drawn at the end of the pass).
         if (Array.isArray(block.renderInside)) {
             this.tessellator.material.alphaTest = 0.5;
-            this.renderParts(world, block.renderInside, x, y, z, true);
+            this.renderParts(world, block.renderInside, x, y, z, true, false, null, ambientOcclusion);
         }
 
         this.tessellator.clearRotation();
@@ -1603,7 +1818,11 @@ export default class BlockRenderer {
      * Tessellator.setRenderingPass() mutates the shared instance it hands out.
      */
     getUnlitGUIMaterial(alphaTest = 0.1, tessellator = this.tessellator) {
-        let material = tessellator.unlitMaterial.clone();
+        // Clone() drops onBeforeCompile, so without re-applying the tile
+        // wrap every held/inventory mesh sampled raw atlas UVs: multipart
+        // bboxes bigger than 1x1x1 bled into neighbouring tiles there
+        // while the world mesh (which keeps draw()'s patch) was fine.
+        let material = Tessellator.applyTileWrap(tessellator.unlitMaterial.clone());
         material.transparent = true;
         material.alphaTest = alphaTest;
         material.depthTest = true;
@@ -1801,7 +2020,7 @@ export default class BlockRenderer {
                         break;
                 }
             } else if (block.multipart === true) {
-                this.renderMultipart(null, block, 0, 0, 0);
+                this.renderMultipart(null, block, false, 0, 0, 0);
             } else if (block.path) {
                 this.renderPath(null, block, false, 0, 0, 0);
             }

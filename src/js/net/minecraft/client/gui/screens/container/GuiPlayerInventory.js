@@ -156,6 +156,13 @@ export default class GuiPlayerInventory extends GuiContainerSurvival {
                     for (let child of this.itemGroup.children) {
                         if (child.isMesh) {
                             child.material = child.material.clone();
+                            // clone() drops onBeforeCompile (see Tessellator):
+                            // re-apply the tile wrap or oversized multipart
+                            // bboxes bleed into neighbouring atlas tiles
+                            // in the inventory preview.
+                            if (child.geometry?.getAttribute('aTileRect')) {
+                                Tessellator.applyTileWrap(child.material);
+                            }
                             child.material.depthTest = false;
                             child.material.depthWrite = false;
                             child.material.side = isBlock ? THREE.DoubleSide : THREE.FrontSide;

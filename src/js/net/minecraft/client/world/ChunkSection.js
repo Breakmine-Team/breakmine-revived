@@ -238,7 +238,7 @@ export default class ChunkSection {
                     const absoluteZ = sectionZ + blockData.z;
                     renderer.blockRenderer.renderParts(
                         this.world, blockData.staticParts,
-                        absoluteX, absoluteY, absoluteZ, false, true, blockData.block
+                        absoluteX, absoluteY, absoluteZ, false, true, blockData.block, ambientOcclusion
                     );
                 }
             }

@@ -1,5 +1,6 @@
 import Gui from "../Gui.js";
 import FontRenderer from "../../render/gui/FontRenderer.js";
+import * as AuthLib from "../../network/AuthLib.js";
 
 export default class PlayerListOverlay extends Gui {
 
@@ -13,6 +14,11 @@ export default class PlayerListOverlay extends Gui {
 
         this.header = null;
         this.footer = null;
+
+        // Player heads are loaded from the skin API once per username. The
+        // image is null while it is downloading, so the tab list can fall back
+        // to the default character until it arrives.
+        this.headImages = new Map();
     }
 
     renderPlayerList(stack, width) {
@@ -38,15 +44,13 @@ export default class PlayerListOverlay extends Gui {
 
         let maxPlayerNameWidth = 0;
         let maxScoreValueWidth = 0; // TODO
+        const pingIconWidth = 10;
 
-        // Calculate max scoreboard width entry
+        // Calculate max player name width
         for (let [uuid, playerInfo] of playerInfoMap) {
             if (!playerInfo || !playerInfo.profile) continue;
             let displayName = playerInfo.displayName === null ? playerInfo.profile.getUsername() : playerInfo.displayName;
-            let playerLength = this.getStringWidth(stack, displayName);
-
-            // Find max player length
-            maxPlayerNameWidth = Math.max(maxPlayerNameWidth, playerLength);
+            maxPlayerNameWidth = Math.max(maxPlayerNameWidth, this.getStringWidth(stack, displayName));
         }
 
         // Get the max width of the scoreboard
@@ -64,7 +68,7 @@ export default class PlayerListOverlay extends Gui {
 
         let isOnlineMode = true; // TODO
         let columnWidth = Math.min(
-            columns * ((isOnlineMode ? 9 : 0) + maxPlayerNameWidth + maxScoreWidth + 13),
+            columns * ((isOnlineMode ? 9 : 0) + maxPlayerNameWidth + maxScoreWidth + pingIconWidth + 16),
             screenWidth - 50
         ) / columns;
 
@@ -144,7 +148,7 @@ export default class PlayerListOverlay extends Gui {
 
             // Check if index is inside of range
             if (i < playerInfoMap.size) {
-                let pingX = entryX + columnWidth - 1;
+                let pingIconX = entryX + columnWidth - 1 - pingIconWidth;
                 let displayName = playerInfo.displayName === null ? playerInfo.profile.getUsername() : playerInfo.displayName;
 
                 // Render player entry background
@@ -161,13 +165,12 @@ export default class PlayerListOverlay extends Gui {
                 if (isOnlineMode) {
                     let size = FontRenderer.FONT_HEIGHT - 1;
 
-                    this.drawRect(
+                    this.drawPlayerHead(
                         stack,
+                        playerInfo.profile.getUsername(),
                         entryX,
                         entryY,
-                        entryX + size,
-                        entryY + size,
-                        'rgb(0,0,0)'
+                        size
                     );
 
                     entryX += size + 1;
@@ -176,9 +179,9 @@ export default class PlayerListOverlay extends Gui {
                 // Render player name
                 this.drawString(stack, displayName, entryX + 1.0, entryY - (FontRenderer.FONT_HEIGHT > 9 ? 0.5 : 0.0))
 
-                // Render ping
-                let ping = playerInfo.ping;
-                let spriteOffset = ping < 0 ? 5 : ping < 150 ? 0 : ping < 300 ? 1 : ping < 600 ? 2 : ping < 1000 ? 3 : 4;
+                // Render the latency signal bars
+                let ping = this.getPing(playerInfo.ping);
+                let spriteOffset = ping < 150 ? 0 : ping < 300 ? 1 : ping < 600 ? 2 : ping < 1000 ? 3 : 4;
                 this.drawSprite(
                     stack,
                     this.ingameOverlay.textureCrosshair,
@@ -186,11 +189,11 @@ export default class PlayerListOverlay extends Gui {
                     16 + spriteOffset * 8,
                     10,
                     8,
-                    pingX - FontRenderer.FONT_HEIGHT - 1,
+                    pingIconX,
                     entryY + 1,
                     10,
                     8,
-                    'rgb(0,0,0)'
+                    1.0
                 );
             }
 
@@ -222,12 +225,80 @@ export default class PlayerListOverlay extends Gui {
         }*/
     }
 
+    getPing(ping) {
+        const value = Number(ping);
+        return Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
+    }
+
+    getHeadImage(username) {
+        if (!username) return null;
+
+        let entry = this.headImages.get(username);
+        if (entry) {
+            return entry.image;
+        }
+
+        entry = { image: null, failed: false };
+        this.headImages.set(username, entry);
+
+        try {
+            const image = new Image();
+            image.crossOrigin = "anonymous";
+            image.onload = () => {
+                entry.image = image;
+                this.setDirty();
+            };
+            image.onerror = () => {
+                entry.failed = true;
+            };
+            image.src = `${AuthLib.getSkinUrl(username)}?t=${Date.now()}`;
+        } catch (e) {
+            entry.failed = true;
+        }
+
+        return entry.image;
+    }
+
+    drawPlayerHead(stack, username, x, y, size) {
+        const skin = this.getHeadImage(username);
+        const fallback = this.minecraft.resources["char.png"];
+        const image = skin && skin.complete && skin.naturalWidth > 0 && skin.naturalHeight > 0
+            ? skin
+            : fallback;
+
+        stack.save();
+        // Skin layouts scale in whole 64px steps. The face is the 8x8 tile at
+        // (8, 8) on a 64px-wide skin, so an HD skin's face is at (16, 16),
+        // (32, 32), etc.
+        const headSize = image && image.complete
+            ? 8 * Math.max(1, Math.floor((image.naturalWidth || 0) / 64))
+            : 8;
+        stack.imageSmoothingEnabled = headSize > 8;
+        stack.imageSmoothingQuality = "high";
+        stack.beginPath();
+        stack.rect(x, y, size, size);
+        stack.clip();
+
+        if (image && image.complete && image.naturalWidth >= 16 && image.naturalHeight >= 16) {
+            stack.drawImage(image, headSize, headSize, headSize, headSize, x, y, size, size);
+        } else {
+            stack.fillStyle = "rgb(0,0,0)";
+            stack.fillRect(x, y, size, size);
+        }
+
+        stack.restore();
+    }
+
     setDirty() {
         this.dirty = true;
     }
 
     setHeader(header) {
         this.header = header;
+        // Each join starts a fresh player-list session. Drop cached heads so a
+        // skin changed while the client was disconnected is loaded again.
+        this.headImages.clear();
+        this.dirty = true;
     }
 
     setFooter(footer) {

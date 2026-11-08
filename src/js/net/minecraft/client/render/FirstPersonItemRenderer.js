@@ -2,6 +2,7 @@ import * as THREE from "../../../../../../libraries/three.module.js";
 import Block from "../world/block/Block.js";
 import BlockRenderType from "../../util/BlockRenderType.js";
 import { applyHeldItemDisplay } from './HeldItemModel.js';
+import Tessellator from "./Tessellator.js";
 
 export default class FirstPersonItemRenderer {
 
@@ -68,6 +69,12 @@ export default class FirstPersonItemRenderer {
         model.traverse(node => {
             if (!node.isMesh) return;
             node.material = node.material.clone();
+            // clone() drops onBeforeCompile: without re-applying the tile
+            // wrap, oversized multipart bboxes bleed into the neighbouring
+            // atlas tiles in the hand while looking fine in the world.
+            if (node.geometry?.getAttribute('aTileRect')) {
+                Tessellator.applyTileWrap(node.material);
+            }
             node.material.depthTest = true;
             node.material.depthWrite = true;
             node.renderOrder = 1;

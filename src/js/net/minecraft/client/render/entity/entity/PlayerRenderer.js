@@ -2,6 +2,7 @@ import ModelPlayer from "../../model/model/ModelPlayer.js";
 import { createCapeGeometry } from "../../CapeGeometry.js";
 import EntityRenderer from "../EntityRenderer.js";
 import Block from "../../../world/block/Block.js";
+import Tessellator from "../../Tessellator.js";
 import * as AuthLib from "../../../network/AuthLib.js";
 import * as THREE from "../../../../../../../../libraries/three.module.js";
 
@@ -156,6 +157,12 @@ export default class PlayerRenderer extends EntityRenderer {
                 if (itemGroup.children.length > 0) {
                     let mesh = itemGroup.children[0];
                     mesh.material = mesh.material.clone();
+                    // clone() drops onBeforeCompile (see Tessellator):
+                    // re-apply the tile wrap or oversized multipart bboxes
+                    // bleed into neighbouring atlas tiles in the hand.
+                    if (mesh.geometry?.getAttribute('aTileRect')) {
+                        Tessellator.applyTileWrap(mesh.material);
+                    }
                     mesh.material.depthTest = false;
                 }
             }

@@ -180,7 +180,7 @@ export default class BlockScaffolding extends Block {
     }
 
     getAmbientOcclusion() {
-        return false;
+        return true;
     }
 
     canCastAmbientOcclusion() {

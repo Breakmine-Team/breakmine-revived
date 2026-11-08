@@ -55,8 +55,11 @@ export default class BlockSlab extends Block {
         return true;
     }
 
+    // Half a block still takes its shading from the cells around it; the
+    // occlusion sampler only reads the front half, so it never samples the
+    // slab's own cell.
     getAmbientOcclusion() {
-        return false;
+        return true;
     }
 
     shouldRenderFace(world, x, y, z, face) {
