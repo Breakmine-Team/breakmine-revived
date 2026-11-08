@@ -1,0 +1,35 @@
+# syntax=docker/dockerfile:1
+#
+# The game client, built and served exactly like the Nixpacks deployment did:
+# scripts/build-assets.js + scripts/build-site.js, then `serve -s public`.
+
+FROM node:24-slim AS assets
+
+WORKDIR /app
+
+COPY scripts/ ./scripts/
+COPY src/ ./src/
+COPY libraries/ ./libraries/
+COPY .well-known/ ./.well-known/
+COPY index.html style.css loading.gif catalog.json openapi.json api-docs.html _headers CNAME serve.json ./
+
+RUN node scripts/build-assets.js \
+    && node scripts/build-site.js
+
+FROM node:24-slim
+
+# Only the static server is needed here; installing in its own directory keeps
+# the game's native production dependencies out of this image.
+WORKDIR /srv
+RUN npm init -y >/dev/null 2>&1 \
+    && npm install --no-audit --no-fund serve@14.2.6
+
+WORKDIR /app
+COPY --from=assets /app/public/ ./public/
+COPY serve.json ./serve.json
+COPY serve.json ./public/serve.json
+
+ENV PORT=8000
+EXPOSE 8000
+
+CMD ["sh", "-c", "exec /srv/node_modules/.bin/serve -s public -l tcp://0.0.0.0:${PORT:-8000}"]

@@ -17,7 +17,11 @@ WORKDIR /app
 # so no npm install is needed here.
 COPY scripts/ ./scripts/
 COPY src/ ./src/
-RUN node scripts/build-assets.js
+COPY libraries/ ./libraries/
+COPY .well-known/ ./.well-known/
+COPY index.html style.css loading.gif catalog.json openapi.json api-docs.html _headers CNAME serve.json ./
+RUN node scripts/build-assets.js \
+    && node scripts/build-site.js
 
 # ---- runtime stage -----------------------------------------------------------
 FROM node:24-slim
@@ -48,19 +52,14 @@ RUN if [ -f package-lock.json ]; then \
     && npm cache clean --force
 
 # --- the game client, served for SITE_HOSTNAMES ------------------------------
-# No vite build: index.html is already a native-ESM entry point and the source
-# tree has no bare npm imports, so the raw sources are servable as-is.
-COPY --from=assets /app/src/ /app/public/src/
-COPY index.html style.css /app/public/
-COPY libraries/ /app/public/libraries/
+# scripts/build-site.js assembles exactly the tree the Nixpacks deployment
+# served (index.html, src/, libraries/, loading.gif, CNAME, ...).
+COPY --from=assets /app/public/ /app/public/
 
 # API discovery (RFC 9727). The catalog is copied in twice on purpose:
 # .well-known/api-catalog is the well-known URI, catalog.json is the document
 # itself, which the catalog may be served from per RFC 9727 s4. Both are read
 # by cors.js from /app (not /app/public), so it gets its own copy below.
-COPY .well-known/ /app/public/.well-known/
-COPY catalog.json openapi.json api-docs.html /app/public/
-COPY _headers /app/public/_headers
 
 # --- the auth API -------------------------------------------------------------
 COPY cors.js ./

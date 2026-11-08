@@ -1,6 +1,6 @@
 # The game client plus the auth/skin API.
 #
-#   web   :8000  the client, served from the checkout (published on host 8080)
+#   web   :8000  the client, baked into the image (published on host 8080)
 #   auth  :6006  cors.js, with user data on a volume
 #         :6007  tunnel.js, the WebSocket game-traffic relay
 #   server:6008  the multiplayer game server
@@ -10,21 +10,21 @@
 #   breakmine.com     -> 8000
 #   api.breakmine.com -> 6006
 #
-# One caveat on `web`: it serves the whole checkout, so /data (auth.db and
-# secrets.json) is reachable over HTTP on port 8080. Serve only the client
-# directory if that port is ever exposed publicly.
-
 name: breakmine
 
 services:
   web:
-    image: python:3.11-alpine
-    ports:
-      - "8080:8000"
-    volumes:
-      - .:/app
-    working_dir: /app
-    command: python3 -m http.server 8000
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    image: breakmine-web:latest
+    restart: unless-stopped
+    expose:
+      - "8000"
+    networks:
+      - dokploy-network
+    labels:
+      - "traefik.docker.network=dokploy-network"
 
   auth:
     build:
@@ -43,6 +43,10 @@ services:
     expose:
       - "6006"
       - "6007"
+    networks:
+      - dokploy-network
+    labels:
+      - "traefik.docker.network=dokploy-network"
 
   server:
     build:
@@ -79,6 +83,12 @@ services:
       - server_data:/data
     ports:
       - "6008:6008"
+
+networks:
+  # Dokploy's Traefik only routes to ports on this network; without it the
+  # compose containers are reachable directly but every domain returns 502.
+  dokploy-network:
+    external: true
 
 volumes:
   auth_data:
