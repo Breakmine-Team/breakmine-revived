@@ -192,8 +192,6 @@ export class BlockRegistry {
         const block = this.registry.get(fullKey);
         if (block) {
             this.registry.delete(fullKey);
-            // Only drop the short alias if it still points at this block; a
-            // different namespace may legitimately own the same local name.
             if (this.registry.get(block.name) === block) {
                 this.registry.delete(block.name);
             }
@@ -212,25 +210,13 @@ export class BlockRegistry {
         return this.register(id, block);
     }
 
-    /**
-     * Numeric id for a mod block or item.
-     *
-     * Chunk cells store a block as a u16 whose upper 12 bits are the id and
-     * whose lower 4 are metadata (see ChunkSection), so a 32-bit hash - what
-     * mod ids used to be - cannot be written: it was truncated on the way in and
-     * read back as an unknown block, which is why mod blocks had no mesh, no
-     * collision and no selection box. Hand out an id in the storable range
-     * instead. `register` still indexes the block by its hash and its namespaced
-     * id, so name lookups keep working.
-     */
+    
     static allocateModId(namespacedId) {
-        const FIRST = 1024;   // above every built-in id
-        const LAST = 4095;    // 12-bit limit of a packed block state
+        const FIRST = 1024;   
+        const LAST = 4095;    
         const hash = BlockRegistry.hashString(namespacedId);
         let id = FIRST + (hash % (LAST - FIRST + 1));
 
-        // Deterministic probe: the start comes from the name, so the same mod
-        // set resolves the same way on client and server.
         while (BlockRegistry.idMap.has(id) || Block.blocks.has(id)) {
             id = id >= LAST ? FIRST : id + 1;
         }
@@ -249,9 +235,6 @@ export class BlockRegistry {
         Block.sounds.leaves = new Sound("leaves", 1.0);
 
         BlockRegistry.STONE = new BlockStone(1, 0);
-        // Example of a self-rotating block. It is always registered so the
-        // client and server agree on its id, but it only shows up in the
-        // Debug creative tab, which needs ?dev=1.
         BlockRegistry.DEBUG_SPINNER = new BlockDebugSpinner(3001, 1);
         BlockRegistry.GRASS = new BlockGrass(2, 1);
         BlockRegistry.DIRT = new BlockDirt(3, 2);
@@ -268,7 +251,6 @@ export class BlockRegistry {
         BlockRegistry.TORCH = new BlockTorch(50, 9);
         BlockRegistry.GRASS_PATH = new BlockGrassPath(19, 15);
 
-        // --- FARMING ---
         BlockRegistry.FARMLAND = new BlockFarmland(258, 0);
         BlockRegistry.WHEAT_CROP = new BlockWheat(259, 0);
         BlockRegistry.CARROT_CROP = new BlockCrop(262, 0, {
@@ -368,8 +350,6 @@ export class BlockRegistry {
         BlockRegistry.ITEM_PUMPKIN_PIE = new ItemFood(282, "pumpkin_pie", "Pumpkin Pie", 8);
         BlockRegistry.ITEM_PUMPKIN_SOUP = new ItemFood(283, "pumpkin_soup", "Pumpkin Soup", 10);
 
-        // --- WOOD TYPES ---
-        // Oak
         BlockRegistry.LOG = new BlockLog(17, 4, "oak", "Oak Log");
         BlockRegistry.LOG_BARK = new BlockLogBark(238, 4, "oak", "Oak Bark");
         BlockRegistry.WOOD = new BlockWood(5, 10, "oak", "Oak Planks");
@@ -382,7 +362,6 @@ export class BlockRegistry {
         BlockRegistry.ITEM_OAK_DOOR_PLACER = new ItemDoorPlacer(162, 0, "Oak Door")
         BlockRegistry.OAK_LADDER = new BlockLadder(252, 0);
 
-        // Spruce
         BlockRegistry.SPRUCE_LOG = new BlockLog(59, 0, "spruce", "Spruce Log");
         BlockRegistry.SPRUCE_LOG_BARK = new BlockLogBark(239, 0, "spruce", "Spruce Bark");
         BlockRegistry.SPRUCE_PLANKS = new BlockWood(58, 0, "spruce", "Spruce Planks");
@@ -391,7 +370,6 @@ export class BlockRegistry {
         BlockRegistry.SPRUCE_FENCE = new BlockFence(60, 0, "spruce", 58);
         BlockRegistry.SPRUCE_TABLE = new BlockTable(358, 0, "spruce", BlockRegistry.SPRUCE_PLANKS.id, "Spruce");
 
-        // Birch
         BlockRegistry.BIRCH_LOG = new BlockLog(62, 0, "birch", "Birch Log");
         BlockRegistry.BIRCH_LOG_BARK = new BlockLogBark(240, 0, "birch", "Birch Bark");
         BlockRegistry.BIRCH_PLANKS = new BlockWood(61, 0, "birch", "Birch Planks");
@@ -400,7 +378,6 @@ export class BlockRegistry {
         BlockRegistry.BIRCH_FENCE = new BlockFence(63, 0, "birch", 61);
         BlockRegistry.BIRCH_TABLE = new BlockTable(359, 0, "birch", BlockRegistry.BIRCH_PLANKS.id, "Birch");
 
-        // Jungle
         BlockRegistry.JUNGLE_LOG = new BlockLog(65, 0, "jungle", "Jungle Log");
         BlockRegistry.JUNGLE_LOG_BARK = new BlockLogBark(241, 0, "jungle", "Jungle Bark");
         BlockRegistry.JUNGLE_PLANKS = new BlockWood(64, 0, "jungle", "Jungle Planks");
@@ -409,7 +386,6 @@ export class BlockRegistry {
         BlockRegistry.JUNGLE_FENCE = new BlockFence(66, 0, "jungle", 64);
         BlockRegistry.JUNGLE_TABLE = new BlockTable(360, 0, "jungle", BlockRegistry.JUNGLE_PLANKS.id, "Jungle");
 
-        // Acacia
         BlockRegistry.ACACIA_LOG = new BlockLog(68, 0, "acacia", "Acacia Log");
         BlockRegistry.ACACIA_LOG_BARK = new BlockLogBark(242, 0, "acacia", "Acacia Bark");
         BlockRegistry.ACACIA_PLANKS = new BlockWood(67, 0, "acacia", "Acacia Planks");
@@ -418,23 +394,18 @@ export class BlockRegistry {
         BlockRegistry.ACACIA_FENCE = new BlockFence(69, 0, "acacia", 67);
         BlockRegistry.ACACIA_TABLE = new BlockTable(361, 0, "acacia", BlockRegistry.ACACIA_PLANKS.id, "Acacia");
         
-        // --- STONE & BRICK VARIANTS ---
-        // Cobblestone
         BlockRegistry.COBBLE_STONE = new BlockCobblestone(4, 14);
         BlockRegistry.COBBLESTONE_STAIRS = new BlockStair(155, 0, 4, "Cobblestone");
         BlockRegistry.COBBLESTONE_SLAB = new BlockSlab(70, 0, "cobblestone", "Cobblestone Slab", Block.sounds.stone);
 
-        // Mossy Cobblestone
         BlockRegistry.MOSSY_COBBLESTONE = new BlockMossyCobblestone(6, 14);
         BlockRegistry.MOSSY_COBBLESTONE_STAIRS = new BlockStair(156, 0, 6, "Mossy Cobblestone");
         BlockRegistry.MOSSY_COBBLESTONE_SLAB = new BlockSlab(76, 0, "mossy_cobblestone", "Mossy Cobblestone Slab", Block.sounds.stone);
 
-        // Bricks
         BlockRegistry.BRICK = new BlockBrick(33, 0);
         BlockRegistry.BRICK_STAIRS = new BlockStair(157, 0, 33, "Brick");
         BlockRegistry.BRICK_SLAB = new BlockSlab(77, 0, "brick", "Brick Slab", Block.sounds.stone);
 
-        // --- ORES & MINERAL BLOCKS ---
         BlockRegistry.GOLD_ORE = new BlockStoneLike(21, 0, "gold_ore", "Gold Ore", 3.0, [21, 1], 'iron');
         BlockRegistry.DIAMOND_ORE = new BlockStoneLike(22, 0, "diamond_ore", "Diamond Ore", 3.0, [88, 1], 'iron');
         BlockRegistry.COAL_ORE = new BlockStoneLike(23, 0, "coal_ore", "Coal Ore", 3.0, [87, 2], 'wood');
@@ -449,7 +420,6 @@ export class BlockRegistry {
         BlockRegistry.SAPPHIRE_BLOCK = new BlockStoneLike(82, 0, "sapphire_block", "Sapphire Block");
         BlockRegistry.BLUESTONE_ORE = new BlockStoneLike(176, 0, "bluestone_ore", "Bluestone Ore", 3.0, [176, 1], 'iron');
 
-        // --- FUNCTIONAL / MISC BLOCKS ---
         BlockRegistry.CRAFTING_TABLE = new BlockCraftingTable(31, 0);
         BlockRegistry.BOOKSHELF = new BlockBookshelf(353, 0);
         BlockRegistry.HELLSTONE = new BlockHellstone(354, 0);
@@ -461,7 +431,6 @@ export class BlockRegistry {
         BlockRegistry.WOOD_PANEL = new BlockWoodPanel(37, 0);
         BlockRegistry.BEANS = new BlockBeans(78, 0);
         BlockRegistry.MOLDY_BEANS = new BlockMoldyBeans(79, 0);
-        //BlockRegistry.WIRE = new BlockWire(80, 0);
         BlockRegistry.SIGN = new BlockSign(121, 0);
         BlockRegistry.LAVA = new BlockLava(55, 0);
         BlockRegistry.LOGIC = new BlockLogic(56, 0);
@@ -473,123 +442,100 @@ export class BlockRegistry {
         BlockRegistry.SCAFFOLDING = new BlockScaffolding(326, 0);
         BlockRegistry.SNAIL_STATUE = new BlockSnailStatue(327, 0);
 
-        // Pavement (pavement_light.png is the uncracked white texture)
         BlockRegistry.PAVEMENT_BLACK = new BlockPavement(318, 0, "pavement_black", "Black Pavement");
         BlockRegistry.PAVEMENT_WHITE = new BlockPavement(320, 0, "pavement_light", "White Pavement");
 
-        // Layered pavement slopes (snow-layer style). Metadata 0-7 is 1-8
-        // layers; run the road builder over a height change to fill them in.
         BlockRegistry.PAVEMENT_BLACK_SLOPE = new BlockPavementSlope(323, 0, "pavement_black", "Black Pavement Slope");
         BlockRegistry.PAVEMENT_WHITE_SLOPE = new BlockPavementSlope(325, 0, "pavement_light", "White Pavement Slope");
 
-        // --- COLORED BLOCKS (grouped by color) ---
         BlockRegistry.CLAY = new BlockClay(138, 0, "clay", "Clay");
         BlockRegistry.TERRACOTTA = new BlockTerracotta(139, 0, "terracotta", "Terracotta");
 
-        // White
         BlockRegistry.WHITE_WOOL = new BlockWool(38, 0, "white_wool", "White Wool");
         BlockRegistry.WHITE_CONCRETE = new BlockConcrete(122, 0, "white_concrete", "White Concrete");
         BlockRegistry.WHITE_CONCRETE_POWDER = new BlockConcretePowder(218, 0, "white_concrete_powder", "White Concrete Powder", 122);
         BlockRegistry.WHITE_TERRACOTTA = new BlockTerracotta(140, 0, "white_terracotta", "White Terracotta");
 
-        // Orange
         BlockRegistry.ORANGE_WOOL = new BlockWool(39, 0, "orange_wool", "Orange Wool");
         BlockRegistry.ORANGE_CONCRETE = new BlockConcrete(123, 0, "orange_concrete", "Orange Concrete");
         BlockRegistry.ORANGE_CONCRETE_POWDER = new BlockConcretePowder(219, 0, "orange_concrete_powder", "Orange Concrete Powder", 123);
         BlockRegistry.ORANGE_TERRACOTTA = new BlockTerracotta(141, 0, "orange_terracotta", "Orange Terracotta");
 
-        // Magenta
         BlockRegistry.MAGENTA_WOOL = new BlockWool(40, 0, "magenta_wool", "Magenta Wool");
         BlockRegistry.MAGENTA_CONCRETE = new BlockConcrete(124, 0, "magenta_concrete", "Magenta Concrete");
         BlockRegistry.MAGENTA_CONCRETE_POWDER = new BlockConcretePowder(220, 0, "magenta_concrete_powder", "Magenta Concrete Powder", 124);
         BlockRegistry.MAGENTA_TERRACOTTA = new BlockTerracotta(142, 0, "magenta_terracotta", "Magenta Terracotta");
 
-        // Light Blue
         BlockRegistry.LIGHT_BLUE_WOOL = new BlockWool(41, 0, "light_blue_wool", "Light Blue Wool");
         BlockRegistry.LIGHT_BLUE_CONCRETE = new BlockConcrete(125, 0, "light_blue_concrete", "Light Blue Concrete");
         BlockRegistry.LIGHT_BLUE_CONCRETE_POWDER = new BlockConcretePowder(221, 0, "light_blue_concrete_powder", "Light Blue Concrete Powder", 125);
         BlockRegistry.LIGHT_BLUE_TERRACOTTA = new BlockTerracotta(143, 0, "light_blue_terracotta", "Light Blue Terracotta");
 
-        // Yellow
         BlockRegistry.YELLOW_WOOL = new BlockWool(42, 0, "yellow_wool", "Yellow Wool");
         BlockRegistry.YELLOW_CONCRETE = new BlockConcrete(126, 0, "yellow_concrete", "Yellow Concrete");
         BlockRegistry.YELLOW_CONCRETE_POWDER = new BlockConcretePowder(222, 0, "yellow_concrete_powder", "Yellow Concrete Powder", 126);
         BlockRegistry.YELLOW_TERRACOTTA = new BlockTerracotta(144, 0, "yellow_terracotta", "Yellow Terracotta");
 
-        // Lime
         BlockRegistry.LIME_WOOL = new BlockWool(43, 0, "lime_wool", "Lime Wool");
         BlockRegistry.LIME_CONCRETE = new BlockConcrete(127, 0, "lime_concrete", "Lime Concrete");
         BlockRegistry.LIME_CONCRETE_POWDER = new BlockConcretePowder(223, 0, "lime_concrete_powder", "Lime Concrete Powder", 127);
         BlockRegistry.LIME_TERRACOTTA = new BlockTerracotta(145, 0, "lime_terracotta", "Lime Terracotta");
 
-        // Pink
         BlockRegistry.PINK_WOOL = new BlockWool(44, 0, "pink_wool", "Pink Wool");
         BlockRegistry.PINK_CONCRETE = new BlockConcrete(128, 0, "pink_concrete", "Pink Concrete");
         BlockRegistry.PINK_CONCRETE_POWDER = new BlockConcretePowder(224, 0, "pink_concrete_powder", "Pink Concrete Powder", 128);
         BlockRegistry.PINK_TERRACOTTA = new BlockTerracotta(146, 0, "pink_terracotta", "Pink Terracotta");
 
-        // Gray
         BlockRegistry.GRAY_WOOL = new BlockWool(45, 0, "gray_wool", "Gray Wool");
         BlockRegistry.GRAY_CONCRETE = new BlockConcrete(129, 0, "gray_concrete", "Gray Concrete");
         BlockRegistry.GRAY_CONCRETE_POWDER = new BlockConcretePowder(225, 0, "gray_concrete_powder", "Gray Concrete Powder", 129);
         BlockRegistry.GRAY_TERRACOTTA = new BlockTerracotta(147, 0, "gray_terracotta", "Gray Terracotta");
 
-        // Light Gray
         BlockRegistry.LIGHT_GRAY_WOOL = new BlockWool(46, 0, "light_gray_wool", "Light Gray Wool");
         BlockRegistry.LIGHT_GRAY_CONCRETE = new BlockConcrete(130, 0, "light_gray_concrete", "Light Gray Concrete");
         BlockRegistry.LIGHT_GRAY_CONCRETE_POWDER = new BlockConcretePowder(226, 0, "light_gray_concrete_powder", "Light Gray Concrete Powder", 130);
         BlockRegistry.LIGHT_GRAY_TERRACOTTA = new BlockTerracotta(148, 0, "light_gray_terracotta", "Light Gray Terracotta");
 
-        // Cyan
         BlockRegistry.CYAN_WOOL = new BlockWool(47, 0, "cyan_wool", "Cyan Wool");
         BlockRegistry.CYAN_CONCRETE = new BlockConcrete(131, 0, "cyan_concrete", "Cyan Concrete");
         BlockRegistry.CYAN_CONCRETE_POWDER = new BlockConcretePowder(227, 0, "cyan_concrete_powder", "Cyan Concrete Powder", 131);
         BlockRegistry.CYAN_TERRACOTTA = new BlockTerracotta(149, 0, "cyan_terracotta", "Cyan Terracotta");
 
-        // Purple
         BlockRegistry.PURPLE_WOOL = new BlockWool(48, 0, "purple_wool", "Purple Wool");
         BlockRegistry.PURPLE_CONCRETE = new BlockConcrete(132, 0, "purple_concrete", "Purple Concrete");
         BlockRegistry.PURPLE_CONCRETE_POWDER = new BlockConcretePowder(228, 0, "purple_concrete_powder", "Purple Concrete Powder", 132);
         BlockRegistry.PURPLE_TERRACOTTA = new BlockTerracotta(182, 0, "purple_terracotta", "Purple Terracotta");
 
-        // Blue
         BlockRegistry.BLUE_WOOL = new BlockWool(49, 0, "blue_wool", "Blue Wool");
         BlockRegistry.BLUE_CONCRETE = new BlockConcrete(133, 0, "blue_concrete", "Blue Concrete");
         BlockRegistry.BLUE_CONCRETE_POWDER = new BlockConcretePowder(229, 0, "blue_concrete_powder", "Blue Concrete Powder", 133);
         BlockRegistry.BLUE_TERRACOTTA = new BlockTerracotta(183, 0, "blue_terracotta", "Blue Terracotta");
 
-        // Brown
         BlockRegistry.BROWN_WOOL = new BlockWool(54, 0, "brown_wool", "Brown Wool");
         BlockRegistry.BROWN_CONCRETE = new BlockConcrete(134, 0, "brown_concrete", "Brown Concrete");
         BlockRegistry.BROWN_CONCRETE_POWDER = new BlockConcretePowder(230, 0, "brown_concrete_powder", "Brown Concrete Powder", 134);
         BlockRegistry.BROWN_TERRACOTTA = new BlockTerracotta(184, 0, "brown_terracotta", "Brown Terracotta");
 
-        // Green
         BlockRegistry.GREEN_WOOL = new BlockWool(51, 0, "green_wool", "Green Wool");
         BlockRegistry.GREEN_CONCRETE = new BlockConcrete(135, 0, "green_concrete", "Green Concrete");
         BlockRegistry.GREEN_CONCRETE_POWDER = new BlockConcretePowder(231, 0, "green_concrete_powder", "Green Concrete Powder", 135);
         BlockRegistry.GREEN_TERRACOTTA = new BlockTerracotta(185, 0, "green_terracotta", "Green Terracotta");
 
-        // Red
         BlockRegistry.RED_WOOL = new BlockWool(52, 0, "red_wool", "Red Wool");
         BlockRegistry.RED_CONCRETE = new BlockConcrete(136, 0, "red_concrete", "Red Concrete");
         BlockRegistry.RED_CONCRETE_POWDER = new BlockConcretePowder(232, 0, "red_concrete_powder", "Red Concrete Powder", 136);
         BlockRegistry.RED_TERRACOTTA = new BlockTerracotta(186, 0, "red_terracotta", "Red Terracotta");
 
-        // Black
         BlockRegistry.BLACK_WOOL = new BlockWool(53, 0, "black_wool", "Black Wool");
         BlockRegistry.BLACK_CONCRETE = new BlockConcrete(137, 0, "black_concrete", "Black Concrete");
         BlockRegistry.BLACK_CONCRETE_POWDER = new BlockConcretePowder(233, 0, "black_concrete_powder", "Black Concrete Powder", 137);
         BlockRegistry.BLACK_TERRACOTTA = new BlockTerracotta(187, 0, "black_terracotta", "Black Terracotta");
 
-        // Tan
         BlockRegistry.TAN_WOOL = new BlockWool(57, 0, "tan_wool", "Tan Wool");
 
-        // --- PAINTINGS (wall hangings, one block per painting texture) ---
         BlockRegistry.PAINTING_SALAD_PLATE = new BlockPainting(284, 0, "salad_plate", "Salad Plate");
         BlockRegistry.PAINTING_DEPTH = new BlockPainting(286, 0, "depth", "Depth");
 
-        // --- FLOWERS ---
         BlockRegistry.FLOWER_ROSE = new BlockFlower(189, 0, "poppy", "Rose");
         BlockRegistry.FLOWER_DANDELION = new BlockFlower(190, 0, "dandelion", "Dandelion");
         BlockRegistry.FLOWER_BLUE_ORCHID = new BlockFlower(191, 0, "blue_orchid", "Blue Orchid");
@@ -604,7 +550,6 @@ export class BlockRegistry {
         BlockRegistry.FLOWER_WITHER_ROSE = new BlockFlower(200, 0, "wither_rose", "Wither Rose");
         BlockRegistry.GRASS_PLANT = new BlockGrassPlant(201, 0, "grass", "Grass Plant");
 
-        // --- ITEMS & TOOLS ---
         BlockRegistry.ITEM_APPLE = new ItemApple(83, 14);
         BlockRegistry.ITEM_BREAD = new ItemBread(84, 15);
         BlockRegistry.ITEM_BURGER = new ItemBurger(244, 0);
@@ -700,9 +645,6 @@ export class BlockRegistry {
             BlockRegistry[`${mat.toUpperCase()}_KNIFE`] = new ItemKnife(toolId++, `${texName}_knife`, `${matName} Knife`, mat);
         }
 
-        // --- SHAFT MACHINERY (moved out of the Factorio mod) ---
-        // Registered here so the generic loop below picks them up like every
-        // other base-game block.
         BlockRegistry.SHAFT = new BlockShaft(342, 0);
         BlockRegistry.GEAR = new BlockGear(343, 0);
         BlockRegistry.MOTOR = new BlockMotor(344, 0);
@@ -714,11 +656,8 @@ export class BlockRegistry {
         BlockRegistry.MECHANICAL_BEARING = new BlockMechanicalBearing(350, 0);
         BlockRegistry.BLUESTONE_TORCH = new BlockBluestoneTorch(351, 0);
 
-        // Nether portal sheet: walk-through, 2px thick, hidden from the palette.
-        // Ignited by flint and steel on obsidian; the server owns placement.
         BlockRegistry.PORTAL = new BlockPortal(356, 0);
 
-        // --- STRUCTURE MARKERS (flat coloured blocks for marking areas) ---
         BlockRegistry.STRUCTURE_MARKER_1 = new BlockStructureMarker(400, 0, "red_concrete", "Structure Marker #1");
         BlockRegistry.STRUCTURE_MARKER_2 = new BlockStructureMarker(401, 0, "orange_concrete", "Structure Marker #2");
         BlockRegistry.STRUCTURE_MARKER_3 = new BlockStructureMarker(402, 0, "yellow_concrete", "Structure Marker #3");

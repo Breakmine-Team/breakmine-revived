@@ -18,7 +18,6 @@ export default class WorldGenerator extends Generator {
 
         this.amplified = worldType === "amplified";
 
-        // Initialize block IDs safely inside constructor after registries are loaded
         this.STONE_ID = BlockRegistry.STONE.getId();
         this.WATER_ID = BlockRegistry.WATER.getId();
         this.GRASS_ID = BlockRegistry.GRASS.getId();
@@ -95,10 +94,8 @@ export default class WorldGenerator extends Generator {
 
         this.generateInChunk(chunkX, chunkZ, primer);
 
-        // Generate biomes for this chunk
         this.generateBiomes(chunkX, chunkZ, chunk);
 
-        // Init skylight
         chunk.generateSkylightMap();
         chunk.generateBlockLightMap();
 
@@ -128,10 +125,8 @@ export default class WorldGenerator extends Generator {
     }
 
     populateChunk(chunkX, chunkZ) {
-        // Set seed for chunk
         this.setChunkSeed(chunkX, chunkZ);
 
-        // Access noise data for population
         let absoluteX = chunkX * 16;
         let absoluteZ = chunkZ * 16;
         let amount = Math.floor((this.populationNoiseGenerator.perlin(absoluteX * 0.5, absoluteZ * 0.5) / 8 + this.random.nextDouble() * 4 + 4) / 3);
@@ -142,17 +137,14 @@ export default class WorldGenerator extends Generator {
             amount++;
         }
 
-        // Tree generator
         let bigTree = this.random.nextInt(10) === 0;
         let treeSeed = this.random.seed;
 
-        // Plant the trees in the chunk (Forest and Snowy biomes)
         for (let i = 0; i < amount; i++) {
             let totalX = absoluteX + this.random.nextInt(16) + 8;
             let totalZ = absoluteZ + this.random.nextInt(16) + 8;
             let totalY = this.world.getHeightAt(totalX, totalZ);
 
-            // Check biome
             let biome = this.getBiomeAt(totalX, totalZ);
             if (biome === BiomeRegistry.FOREST) {
                 let tg = bigTree ? new BigTreeGenerator(this.world, treeSeed) : new TreeGenerator(this.world, treeSeed, "oak");
@@ -183,24 +175,18 @@ export default class WorldGenerator extends Generator {
             }
         }
 
-        // Flowers & grass plants: generate in distinct patches
-        // Flower patches are larger and more concentrated
-        let flowerPatches = this.random.nextInt(2); // 0-1 patches instead of 1-2
+        let flowerPatches = this.random.nextInt(2); 
         for (let i = 0; i < flowerPatches; i++) {
             let patchX = absoluteX + this.random.nextInt(16);
             let patchZ = absoluteZ + this.random.nextInt(16);
-            let patchCount = 3 + this.random.nextInt(5); // Reduced from 5-8 to 3-7
+            let patchCount = 3 + this.random.nextInt(5); 
 
-            // Determine patch type: single-type (70%) or double-type (30%)
             let isDoubleType = this.random.nextInt(10) < 3;
             
-            // Select flower type(s) for this patch
             let flowerType1, flowerType2;
             if (this.random.nextInt(4) < 3) {
-                // 75% chance for common flower
                 flowerType1 = this.COMMON_FLOWER_IDS[this.random.nextInt(this.COMMON_FLOWER_IDS.length)];
             } else {
-                // 25% chance for rare flower
                 flowerType1 = this.RARE_FLOWER_IDS[this.random.nextInt(this.RARE_FLOWER_IDS.length)];
             }
             
@@ -219,10 +205,8 @@ export default class WorldGenerator extends Generator {
 
                 if (plantY <= 0 || plantY >= 256) continue;
                 if (this.world.getBlockAt(plantX, plantY - 1, plantZ) !== this.GRASS_ID) continue;
-                // Prevent generating inside tree blocks
                 if (this.world.getBlockAt(plantX, plantY, plantZ) !== 0) continue;
                 
-                // Don't generate flowers in snowy biomes
                 let biome = this.getBiomeAt(plantX, plantZ);
                 if (biome === BiomeRegistry.SNOWY) continue;
 
@@ -233,10 +217,8 @@ export default class WorldGenerator extends Generator {
                     plantId = flowerType1;
                 }
 
-                // Withered roses only generate near stone
                 let witherRoseId = BlockRegistry.FLOWER_WITHER_ROSE.getId();
                 if (plantId === witherRoseId) {
-                    // Check for stone nearby
                     let hasNearbyStone = false;
                     for (let dx = -2; dx <= 2; dx++) {
                         for (let dz = -2; dz <= 2; dz++) {
@@ -254,13 +236,11 @@ export default class WorldGenerator extends Generator {
                         if (hasNearbyStone) break;
                     }
                     if (!hasNearbyStone) {
-                        // Try the other flower type if available
                         if (isDoubleType) {
                             plantId = (plantId === flowerType1) ? flowerType2 : flowerType1;
-                            // Re-check if the alternate is also wither rose
                             if (plantId === witherRoseId) continue;
                         } else {
-                            continue; // Skip withered rose if no stone nearby
+                            continue; 
                         }
                     }
                 }
@@ -269,7 +249,6 @@ export default class WorldGenerator extends Generator {
             }
         }
 
-        // Grass patches are separate and more scattered
         let grassPatches = 2 + this.random.nextInt(3);
         for (let i = 0; i < grassPatches; i++) {
             let patchX = absoluteX + this.random.nextInt(16);
@@ -285,7 +264,6 @@ export default class WorldGenerator extends Generator {
                 if (this.world.getBlockAt(plantX, plantY - 1, plantZ) !== this.GRASS_ID) continue;
                 if (this.world.getBlockAt(plantX, plantY, plantZ) !== 0) continue;
 
-                // Don't generate grass plants in snowy biomes
                 let biome = this.getBiomeAt(plantX, plantZ);
                 if (biome === BiomeRegistry.SNOWY) continue;
 
@@ -293,7 +271,6 @@ export default class WorldGenerator extends Generator {
             }
         }
 
-        // Snow layer generation in Snowy biome
         for (let x = 0; x < 16; x++) {
             for (let z = 0; z < 16; z++) {
                 let worldX = absoluteX + x;
@@ -301,7 +278,6 @@ export default class WorldGenerator extends Generator {
                 let biome = this.getBiomeAt(worldX, worldZ);
 
                 if (biome === BiomeRegistry.SNOWY) {
-                    // Check multiple Y levels to catch under-cliff surfaces
                     let blockBelow = 0;
                     for (let y = this.seaLevel; y < 256; y++) {
                         let blockAbove = this.world.getBlockAt(worldX, y + 1, worldZ);
@@ -311,11 +287,9 @@ export default class WorldGenerator extends Generator {
                         }
                         let blockId = blockBelow;
                         
-                        // Place snow on top of solid blocks if space above is air
                         if (blockId !== 0) {
                             let block = Block.getById(blockId);
                             if (block && block.isSolid && block.isSolid()) {
-                                // Don't place snow on leaves, logs, or already snowy blocks
                                 if (blockId !== this.LEAVE_ID && 
                                     blockId !== this.LOG_ID && 
                                     blockId !== this.SNOW_ID) {
@@ -333,13 +307,11 @@ export default class WorldGenerator extends Generator {
             }
         }
 
-        // Clay patches: small underwater deposits, up to 10 clay per patch
         let clayPatches = 1 + this.random.nextInt(2);
         for (let i = 0; i < clayPatches; i++) {
             let patchX = absoluteX + this.random.nextInt(16);
             let patchZ = absoluteZ + this.random.nextInt(16);
 
-            // Find the sea floor (solid block under water)
             let floorY = -1;
             for (let y = this.seaLevel; y > 0; y--) {
                 if (this.world.getBlockAt(patchX, y, patchZ) === this.WATER_ID) {
@@ -364,7 +336,6 @@ export default class WorldGenerator extends Generator {
                 if (clayY <= 0 || clayY >= 256) continue;
                 let currentId = this.world.getBlockAt(clayX, clayY, clayZ);
                 if (currentId !== this.SAND_ID && currentId !== this.DIRT_ID && currentId !== this.GRAVEL_ID) continue;
-                // Only replace blocks still underwater
                 if (this.world.getBlockAt(clayX, clayY + 1, clayZ) !== this.WATER_ID) continue;
 
                 this.world.setBlockAt(clayX, clayY, clayZ, this.CLAY_ID);
@@ -512,7 +483,7 @@ export default class WorldGenerator extends Generator {
     }
 
     naturalize(chunkX, chunkZ, primer) {
-        const strength = 0.03125; // 1 / 32
+        const strength = 0.03125; 
         const chunkSize = Generator.CHUNK_SIZE;
         const seaLevel = this.seaLevel;
 
@@ -543,13 +514,9 @@ export default class WorldGenerator extends Generator {
                 let topLayerTypeId = this.GRASS_ID;
                 let innerLayerTypeId = this.DIRT_ID;
 
-                // For y in [5,255] the bedrock threshold (nextInt(6)-1, max 4) can never
-                // match, so those 251 nextInt(6) calls only advance the RNG. Advance the
-                // LCG in closed form instead of burning 251 draws per column.
                 this.random.skip(251);
 
                 for (let y = 255; y >= 0; y--) {
-                    // Execute PRNG in exact sequence to preserve seed alignment
                     let bedrockThreshold = -1;
                     if (y < 5) {
                         bedrockThreshold = (this.random.nextInt(6)) - 1;

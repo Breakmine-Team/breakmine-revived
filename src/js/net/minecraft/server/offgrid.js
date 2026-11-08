@@ -1,15 +1,15 @@
-// Server-authoritative state for the off-grid block renderer.
-//
-// The client used to own the whole system: /offgridrenderer summoned blocks
-// into a local OffGridBlockField and ghost blocks into OffGridBlockRenderer.
-// In multiplayer that meant nobody else could see the result. This module is
-// the shared owner of that state: every fill/move/rotate/clear and every
-// summoned-cell edit goes through here, is validated once, and is broadcast
-// with the off-grid packets (see packets.js).
-//
-// Rendering still happens exclusively on clients. This module only stores the
-// render-free parts: cells (local grid coordinates), pose (rotation + offset +
-// pivot) and the ghost-block list.
+
+
+
+
+
+
+
+
+
+
+
+
 import Block from '../client/world/block/Block.js';
 import { BlockRegistry } from '../client/world/block/BlockRegistry.js';
 import { OFF_GRID_MAX_CELLS, OFF_GRID_MAX_DIM, OFF_GRID_MAX_GHOSTS, OFF_GRID_PROTOCOL_VERSION, OFF_GRID_UPDATE_SET_CELL, OFF_GRID_WORLD_HEIGHT } from '../util/OffGridConstants.js';
@@ -69,7 +69,6 @@ function normalizeOffset(offset) {
     };
 }
 
-/** Inclusive axis-aligned bounds of the summoned cells, or null. */
 function getBounds() {
     let minX = Infinity;
     let minY = Infinity;
@@ -90,12 +89,6 @@ function getBounds() {
     return minX > maxX ? null : { minX, minY, minZ, maxX, maxY, maxZ };
 }
 
-/**
- * Freeze the rotation pivot the same way OffGridBlockField.getPivot() does:
- * the first time a pose is needed, centred on the current summoned bounds.
- * Holding it afterwards keeps a structure from re-centring when a cell is
- * added or broken, which would shift every cell under the pose.
- */
 function ensurePivot() {
     if (field.pivot !== null) return field.pivot;
     const bounds = getBounds();
@@ -128,7 +121,6 @@ function getCellCount() {
     return field.cells.size;
 }
 
-/** Render-free snapshot broadcast to clients (both on demand and after edits). */
 function getSnapshot() {
     ensurePivot();
 
@@ -147,11 +139,6 @@ function getSnapshot() {
     };
 }
 
-/**
- * Summon a volume of one block type. This mirrors OffGridBlockField.fill():
- * existing cells inside the volume are overwritten, missing ones are added.
- * Validation (limits, world bounds) belongs to the command handler.
- */
 function applyFill(minXRaw, minYRaw, minZRaw, sizeX, sizeY, sizeZ, typeId, data = 0) {
     if (!Number.isInteger(typeId) || typeId <= 0) return 0;
     if (!Number.isInteger(sizeX) || !Number.isInteger(sizeY) || !Number.isInteger(sizeZ)) return 0;
@@ -190,13 +177,6 @@ function applyFill(minXRaw, minYRaw, minZRaw, sizeX, sizeY, sizeZ, typeId, data 
     return count;
 }
 
-/**
- * Mirror one cell write. Used for interactive edits coming from clients:
- * breaking an existing cell removes it, placing/replacing one requires a
- * valid block and (for new cells) a face-adjacent existing cell.
- *
- * @returns {{valid: boolean, changed: boolean}}
- */
 function applyCellEdit(xRaw, yRaw, zRaw, typeId, data = 0) {
     const x = Math.trunc(xRaw);
     const y = Math.trunc(yRaw);
@@ -244,15 +224,6 @@ function applyCellEdit(xRaw, yRaw, zRaw, typeId, data = 0) {
     return { valid: true, changed: true };
 }
 
-/**
- * Move the whole structure by a (possibly fractional) delta. Whole blocks
- * re-anchor the cells onto the grid; the fractional remainder stays on the
- * pose offset. Out-of-world axes stay purely visual, like the client field.
- *
- * Server-side there is no per-client chunk stream to consult, so a whole
- * block shift always happens when the destination height is valid; clients
- * receive the resulting cells in a snapshot rather than replaying the move.
- */
 function applyMove(dx, dy, dz) {
     if (!isFiniteNumber(dx) || !isFiniteNumber(dy) || !isFiniteNumber(dz)) {
         return { shifted: false };
@@ -286,7 +257,6 @@ function applyMove(dx, dy, dz) {
         field.offset[axis] -= amount;
         shifted = true;
 
-        // Later axes must use the already-shifted bounds.
         if (axis === 'x') {
             bounds.minX += amount;
             bounds.maxX += amount;
@@ -307,7 +277,6 @@ function applyMove(dx, dy, dz) {
     return { shifted };
 }
 
-/** Accumulate a rotation around one axis of the structure's own centre. */
 function applyRotate(degrees, axis) {
     if (!isFiniteNumber(degrees)) return;
     if (axis !== 'x' && axis !== 'y' && axis !== 'z') return;
@@ -316,7 +285,6 @@ function applyRotate(degrees, axis) {
     dirty = true;
 }
 
-/** Add one ghost-block render for every client. */
 function addGhost(x, y, z, typeId, data = 0) {
     if (!isFiniteNumber(x) || !isFiniteNumber(y) || !isFiniteNumber(z)) return false;
     if (!isValidBlockId(typeId)) return false;
@@ -333,7 +301,6 @@ function addGhost(x, y, z, typeId, data = 0) {
     return true;
 }
 
-/** Remove every summoned cell and the pose, leaving ghost renders alone. */
 function applyClearField() {
     field.cells = new Map();
     field.rotation = { x: 0, y: 0, z: 0 };
@@ -342,16 +309,15 @@ function applyClearField() {
     dirty = true;
 }
 
-/** Remove every summoned cell, every ghost render and the pose. */
 function applyClear() {
     applyClearField();
     ghosts = [];
     dirty = true;
 }
 
-// ---------------------------------------------------------------------------
-// Packet broadcast helpers
-// ---------------------------------------------------------------------------
+
+
+
 
 function sendState(player) {
     if (!player || !player.ws || player.ws.readyState !== 1) return;
@@ -376,11 +342,6 @@ function broadcastUpdate(update) {
     }
 }
 
-/**
- * Broadcast a single interactive cell edit. Callers can also use this for the
- * origin player: applying the same update locally is a cheap no-op when the
- * client's prediction already matches.
- */
 function broadcastCellEdit(x, y, z, typeId, data) {
     broadcastUpdate({
         action: OFF_GRID_UPDATE_SET_CELL,
@@ -388,9 +349,9 @@ function broadcastCellEdit(x, y, z, typeId, data) {
     });
 }
 
-// ---------------------------------------------------------------------------
-// Persistence
-// ---------------------------------------------------------------------------
+
+
+
 
 function readStateFile(file) {
     const raw = fs.readFileSync(file, 'utf8');
@@ -401,11 +362,6 @@ function readStateFile(file) {
     return data;
 }
 
-/**
- * Reset and load the state for a world. The hook runs from initWorld(), which
- * may execute before BlockRegistry.create(), so saved block ids are kept as
- * numbers and only validated when a command or edit uses them.
- */
 function loadFromWorld(worldDir) {
     field.cells = new Map();
     field.rotation = { x: 0, y: 0, z: 0 };
@@ -470,7 +426,6 @@ function loadFromWorld(worldDir) {
     }
 }
 
-/** Write the current state if anything changed since the last save. */
 function saveToWorld(worldDir) {
     if (!dirty) return;
 
@@ -493,7 +448,6 @@ function saveToWorld(worldDir) {
         try {
             if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
         } catch (cleanupError) {
-            // The previous state file is still intact.
         }
         log.error('OffGrid', `Failed to save ${file}: ${e.message}`);
     }

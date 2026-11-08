@@ -16,7 +16,6 @@ export default class GuiSwitchButton extends GuiButton {
     }
 
     onPress() {
-        // Play click sound
         if (this.minecraft && this.minecraft.soundManager) {
             this.minecraft.soundManager.playGuiClick();
         }

@@ -43,10 +43,8 @@ export default class GuiIngameMenu extends GuiScreen {
     }
 
     drawScreen(stack, mouseX, mouseY, partialTicks) {
-        // Background
         this.drawRect(stack, 0, 0, this.width, this.height, 'black', 0.6);
 
-        // Title
         this.drawCenteredString(stack, "Game menu", this.width / 2, 50);
 
         super.drawScreen(stack, mouseX, mouseY, partialTicks);

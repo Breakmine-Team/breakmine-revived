@@ -2,8 +2,6 @@ import Gui from "../Gui.js";
 
 export default class GuiTooltip extends Gui {
 
-    // Tooltips are queued during the frame and painted by ScreenRenderer after
-    // every screen element, so they always appear above other widgets.
     static pending = [];
 
     constructor(minecraft, string, x, y, width, height) {
@@ -77,26 +75,22 @@ export default class GuiTooltip extends Gui {
         const borderStart = 'rgba(80, 0, 255, 0.50)';
         const borderEnd = 'rgba(40, 0, 127, 0.50)';
 
-        // Inner bounds directly enclosing text with 1px padding
         const x1 = l1 - padding;
         const y1 = i2 - padding;
         const x2 = l1 + maxWidth + padding;
         const y2 = i2 + k + padding;
 
-        // 1. Draw outer 1px black outline / background rects with proper 1px corner notches
         this.drawRect(stack, x1 - 1, y1 - 2, x2 + 1, y1 - 1, bgColor);
         this.drawRect(stack, x1 - 1, y2 + 1, x2 + 1, y2 + 2, bgColor);
         this.drawRect(stack, x1 - 1, y1 - 1, x2 + 1, y2 + 1, bgColor);
         this.drawRect(stack, x1 - 2, y1 - 1, x1 - 1, y2 + 1, bgColor);
         this.drawRect(stack, x2 + 1, y1 - 1, x2 + 2, y2 + 1, bgColor);
 
-        // 2. Draw inner gradient border lines with 1px corner notches
         this.drawGradientRect(stack, x1 - 1, y1, x1, y2, borderStart, borderEnd);
         this.drawGradientRect(stack, x2, y1, x2 + 1, y2, borderStart, borderEnd);
         this.drawGradientRect(stack, x1, y1 - 1, x2, y1, borderStart, borderStart);
         this.drawGradientRect(stack, x1, y2, x2, y2 + 1, borderEnd, borderEnd);
 
-        // 3. Render text lines with reduced line spacing
         let currentY = i2;
         for (let k1 = 0; k1 < lines.length; ++k1) {
             const s1 = lines[k1];

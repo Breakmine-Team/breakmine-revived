@@ -127,7 +127,6 @@ export default class GuiSelectWorld extends GuiScreen {
                 try {
                     zip.file(rel, fs.readFileSync(full));
                 } catch (e) {
-                    // Skip unreadable files.
                 }
             }
         }
@@ -226,9 +225,6 @@ export default class GuiSelectWorld extends GuiScreen {
         }
     }
 
-    // Strip a single wrapping folder (e.g. a zipped folder, or the whole
-    // world dir) so files land at the world root: serverconfig.conf,
-    // world_data.bin, players/<username>.json.
     _normalizeImportPaths(paths) {
         const cleaned = paths
             .map(p => p.split('/').filter(s => s.length > 0).join('/'))
@@ -253,7 +249,6 @@ export default class GuiSelectWorld extends GuiScreen {
         super.mouseClicked(mouseX, mouseY, mouseButton);
     }
 
-    // Forward drag/release so the scrollbar thumb can be dragged.
     mouseDragged(mouseX, mouseY, mouseButton) {
         this.worldSlotContainer.mouseDragged(mouseX, mouseY, mouseButton);
         super.mouseDragged(mouseX, mouseY, mouseButton);
@@ -264,8 +259,6 @@ export default class GuiSelectWorld extends GuiScreen {
         super.mouseReleased(mouseX, mouseY, mouseButton);
     }
 
-    // Forward mouse wheel events to the list (handled by the container).
-    // `amount` is the raw wheel delta; sign indicates direction.
     mouseScrolled(mouseX, mouseY, amount) {
         this.worldSlotContainer.mouseScrolled(mouseX, mouseY, amount);
         super.mouseScrolled(mouseX, mouseY, amount);

@@ -1,6 +1,5 @@
 const translations = {
 
-    // ---------------------------------------------------------------- general
     "Settings": "Beállítások",
     "Options": "Beállítások",
     "Done": "Kész",
@@ -28,7 +27,6 @@ const translations = {
     "Amplified": "Felnagyított",
     "Preset": "Előbeállítás",
 
-    // -------------------------------------------------------------- main menu
     "Singleplayer": "Egyjátékos",
     "Multiplayer": "Többjátékos",
     "Mods": "Modok",
@@ -66,7 +64,6 @@ const translations = {
     "The update failed.": "A frissítés sikertelen.",
     "Could not start the update.": "Nem sikerült elindítani a frissítést.",
 
-    // ---------------------------------------------------------------- options
     "Ambient Occlusion": "Környezeti árnyékolás",
     "Shades the edges where blocks meet": "Árnyékolja a blokkok találkozási éleit",
     "View Bobbing": "Nézet billegése",
@@ -110,7 +107,6 @@ const translations = {
     "Red: Break | Green: Place": "Piros: törés | Zöld: elhelyezés",
     "Yellow: Open inventory | Blue: Cycle hotbar": "Sárga: leltár | Kék: gyorssáv váltása",
 
-    // ------------------------------------------------------------ world screens
     "Select World": "Világ kiválasztása",
     "Play Selected World": "Kiválasztott világ indítása",
     "Create New World": "Új világ létrehozása",
@@ -154,7 +150,6 @@ const translations = {
     "Mountains of Oz": "Óz hegyei",
     "Really cool mountains.": "Nagyon menő hegyek.",
 
-    // -------------------------------------------------------------- multiplayer
     "Play Multiplayer": "Többjátékos indítása",
     "Join Server": "Csatlakozás szerverhez",
     "Join Player": "Csatlakozás játékoshoz",
@@ -183,7 +178,6 @@ const translations = {
     "Are you sure you want to remove this server?": "Biztosan eltávolítod ezt a szervert?",
     "Multiplayer is still in development, expect bugs and breaking changes.": "A többjátékos mód még fejlesztés alatt áll, számíts hibákra és törő változásokra.",
 
-    // ----------------------------------------------------------------- account
     "Log Out": "Kijelentkezés",
     "Login or Register": "Bejelentkezés vagy regisztráció",
     "Upload Skin": "Skin feltöltése",
@@ -207,7 +201,6 @@ const translations = {
     "'s skin": " skinje",
     "Authenticating user": "Felhasználó hitelesítése",
 
-    // -------------------------------------------------------------- in-game UI
     "Game menu": "Játékmenü",
     "Back to game": "Vissza a játékhoz",
     "Share World": "Világ megosztása",
@@ -233,7 +226,6 @@ const translations = {
     "Fruit": "Gyümölcs",
     "Stem": "Inda",
 
-    // ------------------------------------------------------------------ loading
     "Loading terrain...": "Terep betöltése...",
     "Building terrain...": "Terep építése...",
     "Importing mods...": "Modok importálása...",
@@ -251,7 +243,6 @@ const translations = {
     "Cancel Task": "Feladat megszakítása",
     "Connecting to server...": "Csatlakozás a szerverhez...",
 
-    // ------------------------------------------------------------- chat/commands
     "Unknown command! Type \"/help\" for help.": "Ismeretlen parancs! Írd be: \"/help\" a segítséghez.",
     "No player available": "Nincs elérhető játékos",
     "Inventory full!": "A leltár megtelt!",
@@ -307,7 +298,6 @@ const translations = {
     "/offgridrenderer is a client-side rendering command.": "/offgridrenderer egy kliensoldali renderelési parancs.",
     "/ofr is a client-side rendering command.": "/ofr egy kliensoldali renderelési parancs.",
 
-    // --------------------------------------------------------------- debug HUD
     "Facing:": "Nézési irány:",
     "Facing": "Nézési irány",
     "Towards": "Felé:",
@@ -341,14 +331,12 @@ const translations = {
     "Chunk:": "Chunk:",
     "Chunk": "Chunk",
 
-    // ------------------------------------------------------------ death messages
     "hit the ground too hard": "túl nagyot esett",
     "tried to swim in lava": "megpróbált lávában úszni",
     "died": "meghalt",
     "blew up": "felrobbant",
     "wiped off the face of the Earth": "eltűnt a Föld színéről",
 
-    // ---------------------------------------------------------- creative tabs
     "Building Blocks": "Építőblokkok",
     "Decoration": "Dekoráció",
     "Utilities": "Segédeszközök",
@@ -358,7 +346,6 @@ const translations = {
     "Materials / Misc": "Anyagok / Egyéb",
     "Not Listed": "Nincs listázva",
 
-    // --------------------------------------------------------------- block names
     "Acacia": "Akácia",
     "Adjustable Bluestone Lamp": "Állítható Bluestone lámpa",
     "Allium": "Hagymavirág",
@@ -470,7 +457,6 @@ const translations = {
     "Mossy Cobblestone Stairs": "Mohás zúzottkő lépcső",
     "Brick Stairs": "Tégla lépcső",
 
-    // ---------------------------------------------------------- Bluestone parts
     "Bluestone Block": "Bluestone blokk",
     "Bluestone Bulb": "Bluestone izzó",
     "Bluestone Dust": "Bluestone por",
@@ -485,8 +471,8 @@ const translations = {
     "Bluestone Rod": "Bluestone rúd"
 };
 
-// Color and wood block names are regular, so build them instead of listing
-// every combination by hand.
+
+
 const COLORS = {
     "White": "Fehér",
     "Orange": "Narancssárga",

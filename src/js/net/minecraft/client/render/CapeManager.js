@@ -2,34 +2,22 @@ import * as THREE from "../../../../../../libraries/three.module.js";
 import * as AuthLib from "../network/AuthLib.js";
 import PlayerRenderer from "./entity/entity/PlayerRenderer.js";
 
-// Mirrors the game server's cape:update validation.
+
 const MAX_CAPE_DATA_URL_LENGTH = 512 * 1024;
 
-// `choice` value meaning "wear no cape at all". null means the server default.
+
 const NO_CAPE = '';
 
-/**
- * Owns the capes the server advertises for players, plus the signed-in
- * account's cape catalog and selection.
- *
- * Capes are managed through the API: an admin uploads named capes and assigns
- * them to accounts, and a player picks one from that assigned list. The choice
- * is stored server-side (so /cape/<username> serves it) and mirrored locally so
- * the selection and the own player model update immediately.
- */
 export default class CapeManager {
 
     constructor(minecraft) {
         this.minecraft = minecraft;
 
-        this.capes = new Map();     // lower-case username -> cape data URL
-        this.textures = new Map();  // lower-case username -> THREE.Texture
+        this.capes = new Map();     
+        this.textures = new Map();  
         this.networkManager = null;
         this.ownCapePublished = false;
 
-        // Assigned cape catalog for the signed-in account. `choice` stays
-        // undefined until the catalog has loaded, then null (default cape),
-        // '' (no cape) or a cape id from the catalog.
         this.catalog = [];
         this.choice = undefined;
         this.selectedTexture = null;
@@ -47,7 +35,7 @@ export default class CapeManager {
             && dataUrl.length <= MAX_CAPE_DATA_URL_LENGTH;
     }
 
-    /* ------------------------------ catalog --------------------------- */
+    
 
     getChoice() {
         return this.choice;
@@ -65,10 +53,7 @@ export default class CapeManager {
         return this.choice === NO_CAPE ? null : this.selectedTexture;
     }
 
-    /**
-     * Fetch the capes assigned to this account and its saved selection.
-     * Cached until the picker forces a refresh.
-     */
+    
     async loadCatalog(force = false) {
         if (!this.minecraft?.settings?.loggedIn) return this.getCatalog();
         if (!force && this.choice !== undefined) return this.getCatalog();
@@ -98,7 +83,6 @@ export default class CapeManager {
                 this.selectedTexture = this.catalog.find((cape) => cape.id === this.choice)?.texture || null;
                 this.catalogError = null;
 
-                // Show the saved pick on our own model right away.
                 const username = this.getOwnUsername();
                 if (username) {
                     if (this.choice === NO_CAPE) this.setCape(username, null);
@@ -117,11 +101,7 @@ export default class CapeManager {
         return this.catalogPromise;
     }
 
-    /**
-     * Wear a cape from the catalog.
-     *
-     * @param {string|null} capeId cape id, '' for no cape, null for the default
-     */
+    
     async selectCape(capeId) {
         let choice;
         let texture = null;
@@ -157,7 +137,6 @@ export default class CapeManager {
         if (!username) return;
 
         if (choice === null) {
-            // The server resolves the account's default cape for us.
             this.ownCapePublished = false;
             this.publishOwnCape();
             return;
@@ -168,7 +147,7 @@ export default class CapeManager {
         this.sendCape(username, dataUrl);
     }
 
-    /* ------------------------------ textures ------------------------- */
+    
 
     getOwnUsername() {
         const username = this.minecraft?.getSession?.()?.getProfile?.()?.getUsername?.();
@@ -189,9 +168,7 @@ export default class CapeManager {
         this.ownCapePublished = false;
     }
 
-    /**
-     * A player's cape arrived (or was cleared) from the server.
-     */
+    
     handleState(username, dataUrl) {
         if (!username) return;
         this.setCape(username, dataUrl);
@@ -223,7 +200,6 @@ export default class CapeManager {
     loadTexture(key, dataUrl) {
         const image = new Image();
         image.onload = () => {
-            // A newer cape replaced this one while the image was decoding.
             if (this.capes.get(key) !== dataUrl) return;
 
             const texture = new THREE.Texture(image);
@@ -248,10 +224,7 @@ export default class CapeManager {
         image.src = dataUrl;
     }
 
-    /**
-     * Rebuild every player renderer showing this username so the new cape
-     * appears immediately instead of on the next brightness change.
-     */
+    
     refresh(key) {
         for (const renderer of PlayerRenderer.instances) {
             const entity = renderer.lastEntity;
@@ -262,10 +235,7 @@ export default class CapeManager {
         }
     }
 
-    /**
-     * A world/server session just started: ask for everyone's capes and make
-     * the account's own cape visible to the server.
-     */
+    
     onJoin(networkManager) {
         this.networkManager = networkManager || null;
         this.ownCapePublished = false;
@@ -293,9 +263,6 @@ export default class CapeManager {
         }
 
         try {
-            // The API resolves the saved choice for <username>, so an
-            // unassigned or deleted cape is never worn from a stale cache;
-            // 404 means no cape (either "none" or a missing default).
             const response = await fetch(AuthLib.getCapeUrl(username), { cache: 'no-store' });
             if (networkManager !== this.networkManager) return;
 
@@ -322,10 +289,7 @@ export default class CapeManager {
         }
     }
 
-    /**
-     * The account changed (sign-in through the account screen): drop the old
-     * account's catalog and publish the new account's cape.
-     */
+    
     refreshOwnCape() {
         this.catalog = [];
         this.choice = undefined;
@@ -335,10 +299,7 @@ export default class CapeManager {
         this.publishOwnCape();
     }
 
-    /**
-     * Signing out removes the account cape, so stop showing it and clear it on
-     * the server for everyone else too.
-     */
+    
     clearOwnCape() {
         const username = this.getOwnUsername();
         if (username) {

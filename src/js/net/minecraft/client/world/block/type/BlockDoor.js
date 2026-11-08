@@ -2,18 +2,12 @@ import Block from "../Block.js";
 import BoundingBox from "../../../../util/BoundingBox.js";
 import EnumCreativeInventoryTab from "../../../gui/EnumCreativeInventoryTab.js";
 
-const DOOR_THICKNESS = 3 / 16;
-
-const DOOR_BOTTOM = 160;
-const DOOR_TOP = 161;
-
-/**
- * Oak door. The bottom half (id 160) places a linked top half (id 161) above
- * itself; both share the same data format - rotation in bits 0-2
- * (2=N, 3=S, 4=W, 5=E, matching chests/furnaces), open state in bit 3.
- */
 export default class BlockDoor extends Block {
 
+    static DOOR_THICKNESS = 3 / 16;
+
+    static DOOR_BOTTOM = 160;
+    static DOOR_TOP = 161;
     
     constructor(id, textureSlotId) {
         super(id, textureSlotId);
@@ -52,7 +46,7 @@ export default class BlockDoor extends Block {
     }
 
     getDoorBoundingBox(data) {
-        const t = DOOR_THICKNESS;
+        const t = BlockDoor.DOOR_THICKNESS;
         const open = (data & 8) !== 0;
 
         let facing = data & 7;
@@ -86,15 +80,13 @@ export default class BlockDoor extends Block {
     shouldRenderFace(world, x, y, z, face) {
         const data = world ? world.getBlockDataAt(x, y, z) : 0;
         
-        // Bottom half doors cull top face when not open
-        if (this.id === DOOR_BOTTOM && (data & 8) === 0) {
+        if (this.id === BlockDoor.DOOR_BOTTOM && (data & 8) === 0) {
             if (face === EnumBlockFace.TOP) {
                 return false;
             }
         }
         
-        // Top half doors cull bottom face when not open
-        if (this.id === DOOR_TOP && (data & 8) === 0) {
+        if (this.id === BlockDoor.DOOR_TOP && (data & 8) === 0) {
             if (face === EnumBlockFace.BOTTOM) {
                 return false;
             }
@@ -119,7 +111,7 @@ export default class BlockDoor extends Block {
     }
 
     getDrop(world, x, y, z) {
-        return this.id === DOOR_TOP ? [DOOR_BOTTOM, 1] : [this.id, 1];
+        return this.id === BlockDoor.DOOR_TOP ? [BlockDoor.DOOR_BOTTOM, 1] : [this.id, 1];
     }
 
     getPlacementMetadata(world, x, y, z, face, yaw = 0) {
@@ -138,11 +130,11 @@ export default class BlockDoor extends Block {
 
         world.setBlockDataAt(x, y, z, facing);
         
-        if (this.id === DOOR_BOTTOM) {
+        if (this.id === BlockDoor.DOOR_BOTTOM) {
             const aboveY = y + 1;
             const aboveBlock = world.getBlockAt(x, aboveY, z);
-            if (aboveBlock !== DOOR_TOP) {
-                world.setBlockAt(x, aboveY, z, DOOR_TOP, facing);
+            if (aboveBlock !== BlockDoor.DOOR_TOP) {
+                world.setBlockAt(x, aboveY, z, BlockDoor.DOOR_TOP, facing);
             }
         }
 
@@ -177,11 +169,10 @@ export default class BlockDoor extends Block {
     }
 
     updateState(world, x, y, z) {
-        // Resolve to the bottom half so both halves stay in sync.
-        if (this.id === DOOR_TOP && world.getBlockAt(x, y - 1, z) === DOOR_BOTTOM) {
+        if (this.id === BlockDoor.DOOR_TOP && world.getBlockAt(x, y - 1, z) === BlockDoor.DOOR_BOTTOM) {
             y = y - 1;
         }
-        if (this.id !== DOOR_BOTTOM || world.getBlockAt(x, y, z) !== DOOR_BOTTOM) return;
+        if (this.id !== BlockDoor.DOOR_BOTTOM || world.getBlockAt(x, y, z) !== BlockDoor.DOOR_BOTTOM) return;
 
         const powered = this.isPowered(world, x, y, z) || this.isPowered(world, x, y + 1, z);
         const data = world.getBlockDataAt(x, y, z);
@@ -191,7 +182,7 @@ export default class BlockDoor extends Block {
 
         world.setBlockDataAt(x, y, z, powered ? (data | 8) : (data & ~8));
 
-        if (world.getBlockAt(x, y + 1, z) === DOOR_TOP) {
+        if (world.getBlockAt(x, y + 1, z) === BlockDoor.DOOR_TOP) {
             const aboveData = world.getBlockDataAt(x, y + 1, z);
             world.setBlockDataAt(x, y + 1, z, powered ? (aboveData | 8) : (aboveData & ~8));
         }
@@ -206,19 +197,12 @@ export default class BlockDoor extends Block {
     }
 
     onBlockAdded(world, x, y, z) {
-        // Intentionally a no-op (base class). Do NOT schedule a self-tick here:
-        // setBlockDataAt() routes through Chunk.setBlockAt(), which fires
-        // onBlockAdded on every data change - including the manual toggle in
-        // onMouseButton(). A self-tick would re-run updateState() and
-        // immediately close an unpowered door that was just opened by hand.
-        // Initial power checks on placement and power-source changes are
-        // handled via onNeighborBlockChange().
     }
 
     onNeighborBlockChange(world, x, y, z) {
-        if (this.id === DOOR_BOTTOM) {
+        if (this.id === BlockDoor.DOOR_BOTTOM) {
             world.scheduleBlockTick(x, y, z, 1);
-        } else if (world.getBlockAt(x, y - 1, z) === DOOR_BOTTOM) {
+        } else if (world.getBlockAt(x, y - 1, z) === BlockDoor.DOOR_BOTTOM) {
             world.scheduleBlockTick(x, y - 1, z, 1);
         }
     }
@@ -228,11 +212,11 @@ export default class BlockDoor extends Block {
     }
 
     onBlockRemoved(world, x, y, z) {
-        if (this.id === DOOR_BOTTOM) {
-            if (world.getBlockAt(x, y + 1, z) === DOOR_TOP) {
+        if (this.id === BlockDoor.DOOR_BOTTOM) {
+            if (world.getBlockAt(x, y + 1, z) === BlockDoor.DOOR_TOP) {
                 world.setBlockAt(x, y + 1, z, 0);
             }
-        } else if (world.getBlockAt(x, y - 1, z) === DOOR_BOTTOM) {
+        } else if (world.getBlockAt(x, y - 1, z) === BlockDoor.DOOR_BOTTOM) {
             world.setBlockAt(x, y - 1, z, 0);
         }
     }
@@ -240,7 +224,7 @@ export default class BlockDoor extends Block {
     onMouseButton(world, x, y, z, button) {
         if (button === 2) {
             let bottomY = y;
-            if (world.getBlockAt(x, y - 1, z) === DOOR_BOTTOM) {
+            if (world.getBlockAt(x, y - 1, z) === BlockDoor.DOOR_BOTTOM) {
                 bottomY = y - 1;
             }
 
@@ -251,7 +235,7 @@ export default class BlockDoor extends Block {
             world.setBlockDataAt(x, bottomY, z, newData);
 
             const aboveId = world.getBlockAt(x, bottomY + 1, z);
-            if (aboveId === DOOR_BOTTOM || aboveId === DOOR_TOP) {
+            if (aboveId === BlockDoor.DOOR_BOTTOM || aboveId === BlockDoor.DOOR_TOP) {
                 const aboveData = world.getBlockDataAt(x, bottomY + 1, z);
                 world.setBlockDataAt(x, bottomY + 1, z, isOpen ? (aboveData & ~8) : (aboveData | 8));
             }

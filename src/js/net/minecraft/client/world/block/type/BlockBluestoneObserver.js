@@ -76,7 +76,6 @@ export default class BlockBluestoneObserver extends Block {
         const isPowered = (data & 1) === 1;
         if (!isPowered) return 0;
 
-        // Strictly output power through the back side (output) ONLY
         if (face !== undefined && face !== null) {
             const { backFace } = this._getDirectionFaces(data);
             return face === backFace ? 15 : 0;
@@ -124,7 +123,6 @@ export default class BlockBluestoneObserver extends Block {
             world.onBlockChanged(x, y, z);
             this._notifyNeighbors(world, x, y, z);
         } else if (isCurrentlyPowered) {
-            // Re-notify neighbors to ensure newly placed bluestone blocks sync with existing power state
             this._notifyNeighbors(world, x, y, z);
         }
     }

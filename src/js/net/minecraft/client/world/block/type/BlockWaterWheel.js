@@ -4,34 +4,21 @@ import BlockShaftPart from "./BlockShaftPart.js";
 import ShaftRenderer from "../../../render/ShaftRenderer.js";
 import ShaftDrive from "../ShaftDrive.js";
 
-/*
- * The wheel model.
- *
- * The shape comes from a Blockbench model: a vertical axle, eight spokes in a
- * cross, inner planks bridging the axle to the rim, and four braced
- * connectors. The model is authored lying flat, so every box is stood up here:
- * a quarter turn about X around the middle of the cell puts the wheel in the
- * vertical plane and its axle on Z, which is how a water wheel hangs.
- *
- * Spokes and braces are one box copied round at -22.5, 0, 22.5 and 45 degrees.
- * In the flat model those are turns about Y; after standing the wheel up the
- * same turns are about the axle, Z.
- */
 
 const P = (pixels) => pixels / 16;
 
-// The wheel turns about the middle of its cell, which is also its axle.
+
 const PIVOT = Object.freeze({x: 0.5, y: 0.5, z: 0.5});
 
 const LOG_TEXTURE = 'spruce_log';
-// The hub is the same stone rod a shaft block is made of.
+
 const SHAFT_TEXTURE = 'stone';
 const PLANK_TEXTURE = 'spruce_planks';
 
-// Icon, break particles and any non-part rendering use the plank texture.
+
 const TEXTURE = PLANK_TEXTURE;
 
-// One spoke of each pair of opposite arms, plus the yaws that copy it round.
+
 const SPOKES = [
     [13, -1, -8, 14, 17, 0],
     [2, -1, 16, 3, 17, 24],
@@ -39,7 +26,7 @@ const SPOKES = [
     [16, -1, 13, 24, 17, 14]
 ];
 
-// Inner planks: two per quarter on the x sides, two on the z sides.
+
 const INNER_PLANKS = [
     {box: [-2, -0.6, 4, 0, 16.6, 12], yaw: 45},
     {box: [-2, -0.6, 4, 0, 16.6, 12], yaw: 0},
@@ -60,11 +47,6 @@ const CONNECTORS = [
 
 const YAW_STEPS = Object.freeze([-22.5, 0, 22.5, 45]);
 
-/**
- * Stand a pixel box up: a quarter turn about X around the middle of the cell,
- * which sends (x, y, z) to (x, 1 - z, y). A quarter turn keeps boxes axis
- * aligned, so the two corners can be swapped directly.
- */
 function toBox(box) {
     const [x0, y0, z0, x1, y1, z1] = box;
 
@@ -78,7 +60,6 @@ function toBox(box) {
     };
 }
 
-/** One multipart entry, turned about the axle when `yaw` is not zero. */
 function part(box, texture, yaw = 0) {
     const data = {
         texture: texture,
@@ -93,10 +74,8 @@ function part(box, texture, yaw = 0) {
     return ['texture', texture, data];
 }
 
-/** The full wheel: shaft, spokes, planks and braces. */
 function getParts() {
     const parts = [
-        // A real shaft through the hub, on the wheel's own axle.
         ...ShaftRenderer.getParts(ShaftRenderer.PART.SHAFT, ShaftRenderer.AXIS.Z, {
             texture: SHAFT_TEXTURE
         })
@@ -119,17 +98,9 @@ function getParts() {
     return parts;
 }
 
-/**
- * The large spruce water wheel: an upright two-block wheel on a horizontal
- * axle, driven by water.
- *
- * Water touching the wheel turns it, and the wheel turns whatever shares its
- * axle, so it is a power source as well as a part (see ShaftDrive.findDriver).
- * A motor or a shaft run can also turn it when it stands in no water.
- */
 export default class BlockWaterWheel extends BlockShaftPart {
 
-    /** Revolutions per minute water turns the wheel at. */
+    
     static RPM = 8;
 
     constructor(id, textureSlotId) {
@@ -141,14 +112,12 @@ export default class BlockWaterWheel extends BlockShaftPart {
         this.sound = Block.sounds.wood;
         this.inventoryTab = EnumCreativeInventoryTab.FACTORIO;
 
-        // The wheel overhangs its cell into the neighbours' space.
         this.noFaceCull = true;
 
-        // Read by ShaftDrive: this block can supply power on its own.
         this.isWaterWheel = true;
     }
 
-    /** The whole shape is the wheel model; there are no plain shaft parts. */
+    
     getShaftParts() {
         return [];
     }
@@ -157,7 +126,7 @@ export default class BlockWaterWheel extends BlockShaftPart {
         return TEXTURE;
     }
 
-    /** Icon, break particles and any non-part rendering use the plank texture. */
+    
     getTextureForFace(face) {
         return TEXTURE;
     }
@@ -166,10 +135,7 @@ export default class BlockWaterWheel extends BlockShaftPart {
         return getParts();
     }
 
-    /**
-     * The wheel always stands upright with its axle running north to south,
-     * whichever face it was placed against and whichever way the player looked.
-     */
+    
     getPlacementMetadata() {
         return ShaftRenderer.AXIS.Z;
     }
@@ -178,7 +144,7 @@ export default class BlockWaterWheel extends BlockShaftPart {
         return ShaftRenderer.AXIS.Z;
     }
 
-    /** True for the water block, without importing the registry (cycles). */
+    
     static isWaterBlock(block) {
         if (!block) {
             return false;
@@ -187,12 +153,11 @@ export default class BlockWaterWheel extends BlockShaftPart {
             return true;
         }
 
-        // BlockWater identifies itself as 'water' once registered.
         const name = `${block.identifier || ''} ${block.name || ''} ${block.description || ''}`;
         return /\bwater\b/i.test(name) && block.isShaftPart !== true;
     }
 
-    /** True when water touches the wheel on any side. */
+    
     hasWater(world, x, y, z) {
         if (!world || typeof world.getBlockAt !== 'function') {
             return false;
@@ -215,7 +180,7 @@ export default class BlockWaterWheel extends BlockShaftPart {
         return false;
     }
 
-    /** What the water turns the wheel at, or null when it is dry. */
+    
     getWaterDrive(world, x, y, z) {
         if (!this.hasWater(world, x, y, z)) {
             return null;

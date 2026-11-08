@@ -26,13 +26,11 @@ function defaultServerUrl() {
     return normalizeServerUrl(typeof location !== 'undefined' ? location.hostname : 'localhost');
 }
 
-/** Normalize a tunnel server URL/hostname into an absolute WebSocket URL. */
 function normalizeServerUrl(serverUrl) {
     if (typeof serverUrl !== 'string' || serverUrl.trim() === '') return serverUrl;
 
     let url = serverUrl.trim();
 
-    // Prepend scheme if missing (e.g. "tunnel.breakmine.com" -> "wss://tunnel.breakmine.com")
     if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(url)) {
         const proto = isNode ? 'ws' : (typeof location !== 'undefined' && location.protocol === 'https:' ? 'wss' : 'ws');
         url = `${proto}://${url}`;
@@ -52,41 +50,30 @@ function isControlFrame(data) {
 }
 
 class TunnelLib {
-    /** Global default tunnel server URL. Overrides auto-detection. */
+    
     static defaultServerUrl = null;
 
-    /** @param {string} [serverUrl] Falls back to static default, then auto-detect. */
+    
     constructor(serverUrl) {
         this.serverUrl = normalizeServerUrl(serverUrl || TunnelLib.defaultServerUrl || defaultServerUrl());
 
-        /** @private */ this._ws       = null;
-        /** @private */ this._targetWs  = null;
-        /** @private */ this._code      = null;
-        /** @private */ this._targetUrl = null;
-        /** @private */ this._lazy      = true;
-        /** @private */ this._closingTarget = false;
-        /** @private */ this._onPeerJoin   = null;
-        /** @private */ this._onPeerLeave  = null;
-        /** @private */ this._pendingToTarget = [];
-        /** @private */ this._pendingToTargetBytes = 0;
+         this._ws       = null;
+         this._targetWs  = null;
+         this._code      = null;
+         this._targetUrl = null;
+         this._lazy      = true;
+         this._closingTarget = false;
+         this._onPeerJoin   = null;
+         this._onPeerLeave  = null;
+         this._pendingToTarget = [];
+         this._pendingToTargetBytes = 0;
     }
 
-    /**
-     * Create a tunnel that forwards to `targetUrl`.
-     *
-     * @param {string} targetUrl  The loopback / local WebSocket to expose
-     *                             (e.g. `ws://localhost:25565`, `ws://loopback`).
-     * @param {object} [opts]
-     * @param {boolean} [opts.lazy=true]       Connect to target only when a peer
-     *                                         joins.  Set `false` to connect eagerly.
-     * @param {number}  [opts.maxJoiners=5]    Max simultaneous joiners (0 = unlimited).
-     * @returns {Promise<string>}  The short join code (e.g. `"AB3X9Z"`).
-     */
+    
     createTunnel(targetUrl, { lazy = true, maxJoiners = 5 } = {}) {
         this._targetUrl = targetUrl;
         this._lazy      = lazy;
 
-        // Always try wss:// first, then fall back to ws://
         const fallbacks = [];
         if (this.serverUrl.startsWith('wss://')) {
             fallbacks.push(this.serverUrl, this.serverUrl.replace('wss://', 'ws://'));
@@ -103,17 +90,16 @@ class TunnelLib {
             const handleMessage = (event) => {
                 const raw = event.data;
 
-                /* ---- Handshake response ---- */
+                
                 if (this._code === null) {
                     let msg;
                     try { msg = JSON.parse(typeof raw === 'string' ? raw : new TextDecoder().decode(raw)); }
-                    catch { return; } // ignore non-JSON before handshake
+                    catch { return; } 
 
                     if (msg.type === 'created') {
                         clearTimeout(timer);
                         this._code = msg.code;
 
-                        // Eagerly connect the target if not lazy
                         if (!this._lazy) this._connectTarget();
 
                         resolve(msg.code);
@@ -127,7 +113,7 @@ class TunnelLib {
                     return;
                 }
 
-                /* ---- Post-handshake: control or relay ---- */
+                
                 if (isControlFrame(raw)) {
                     try {
                         const ctrl = JSON.parse(raw);
@@ -137,17 +123,16 @@ class TunnelLib {
                             return;
                         }
                         if (ctrl.type === 'peer_disconnected') {
-                            // Optionally close target when last peer leaves
                             if (ctrl.remaining === 0 && this._lazy) {
                                 this._closeTarget();
                             }
                             this._onPeerLeave?.(ctrl.remaining);
                             return;
                         }
-                    } catch { /* fall through to relay */ }
+                    } catch {  }
                 }
 
-                /* ---- Relay: joiner data -> target ---- */
+                
                 this._forwardToTarget(raw);
             };
 
@@ -175,14 +160,13 @@ class TunnelLib {
                 ws.binaryType = 'arraybuffer';
 
                 ws.onopen = () => {
-                    // Send create handshake with options
                     ws.send(JSON.stringify({
                         type: 'create',
                         maxJoiners: maxJoiners > 0 ? maxJoiners : 0,
                     }));
                 };
                 ws.onmessage = handleMessage;
-                ws.onerror = () => { /* 'close' will follow */ };
+                ws.onerror = () => {  };
                 ws.onclose = () => {
                     if (this._ws !== ws) return;
                     if (this._code === null && fallbacks.length > 0) {
@@ -199,25 +183,19 @@ class TunnelLib {
         });
     }
 
-    /**
-     * Register a callback invoked when a peer joins the tunnel.
-     * @param {(peerCount: number) => void} cb
-     */
+    
     onPeerJoin(cb) { this._onPeerJoin = cb; }
 
-    /**
-     * Register a callback invoked when a peer leaves the tunnel.
-     * @param {(remaining: number) => void} cb
-     */
+    
     onPeerLeave(cb) { this._onPeerLeave = cb; }
 
-    /** The assigned tunnel code, or `null` if not yet created. */
+    
     get code() { return this._code; }
 
-    /** Whether the tunnel is currently active (provider connected to server). */
+    
     get isActive() { return this._ws !== null && this._ws.readyState === 1; }
 
-    /** Close the tunnel and all underlying connections. */
+    
     close() {
         this._closeTarget();
         if (this._ws) {
@@ -227,9 +205,9 @@ class TunnelLib {
         this._code = null;
     }
 
-    /** Open a WebSocket to the target and wire up bidirectional relay. */
+    
     _connectTarget() {
-        if (this._targetWs) return; // already connected
+        if (this._targetWs) return; 
         this._closingTarget = false;
 
         try {
@@ -251,9 +229,6 @@ class TunnelLib {
             this._targetWs = null;
             this._pendingToTarget = [];
             this._pendingToTargetBytes = 0;
-            // If we closed the target ourselves (e.g. the last peer left while
-            // lazy), keep the tunnel alive so the join slot stays open. Only a
-            // genuine target failure tears the tunnel down.
             if (this._closingTarget) return;
             if (this._ws && this._ws.readyState !== 3) {
                 this._ws.close(1000, 'Target closed');
@@ -261,20 +236,16 @@ class TunnelLib {
         };
 
         this._targetWs.onerror = () => {
-            // 'close' will follow
         };
     }
 
-    /** Forward a frame from the tunnel server (joiner data) -> target. */
+    
     _forwardToTarget(data) {
         if (this._targetWs && this._targetWs.readyState === 1) {
             this._targetWs.send(data);
             return;
         }
 
-        // The target is opened lazily on peer_connected. The joiner sends its
-        // handshake/login immediately, which can arrive first; queue those
-        // frames instead of silently dropping them.
         const size = typeof data === 'string' ? data.length : (data?.byteLength || 0);
         if (this._pendingToTargetBytes + size > 1_048_576) {
             console.warn('[TunnelLib] Dropping frame: loopback target is not ready');
@@ -284,7 +255,7 @@ class TunnelLib {
         this._pendingToTargetBytes += size;
     }
 
-    /** Send queued joiner frames once the loopback target opens. */
+    
     _flushPendingToTarget() {
         if (!this._targetWs || this._targetWs.readyState !== 1) return;
 
@@ -304,7 +275,7 @@ class TunnelLib {
         }
     }
 
-    /** Forward a frame from the target -> tunnel server (-> joiners). */
+    
     _forwardToTunnel(data) {
         if (this._ws && this._ws.readyState === 1) {
             this._ws.send(data);
@@ -329,9 +300,9 @@ class TunnelLib {
     }
 }
 
-// CommonJS
+
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { TunnelLib };
 }
-// ES module default export (also available as named)
+
 export { TunnelLib };

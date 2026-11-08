@@ -13,10 +13,8 @@ export default class BlockTorch extends Block {
 
         this.boundingBox = new BoundingBox(0.4, 0.0, 0.4, 0.6, 0.6, 0.6);
 
-        // Sound
         this.sound = Block.sounds.wood;
 
-        // Create data faces
         this.dataFaces = [
             EnumBlockFace.WEST,
             EnumBlockFace.EAST,
@@ -53,7 +51,6 @@ export default class BlockTorch extends Block {
             if (world.isSolidBlockAt(x + dataFace.x, y + dataFace.y, z + dataFace.z)) {
                 let data = i + 1;
 
-                // Update block data in world
                 world.setBlockDataAt(x, y, z, data);
                 break;
             }
@@ -61,7 +58,6 @@ export default class BlockTorch extends Block {
     }
 
     getPlacementMetadata(world, x, y, z, face, yaw = 0) {
-        // Mirrors the old server-side face->data table (0-5, 0 = bottom)
         return { 1: 5, 2: 4, 3: 3, 4: 2, 5: 1 }[face] ?? 5;
     }
 
@@ -77,7 +73,6 @@ export default class BlockTorch extends Block {
             }
         }
 
-        // Update block data in chunk section directly to avoid notify
         world.getChunkSectionAt(x >> 4, y >> 4, z >> 4).setBlockDataAt(x & 15, y & 15, z & 15, data);
     }
 
@@ -123,9 +118,7 @@ export default class BlockTorch extends Block {
         if (data >= 1 && data <= 5) {
             let dataFace = this.dataFaces[data - 1];
 
-            // Check if supporting block is still solid
             if (!world.isSolidBlockAt(x + dataFace.x, y + dataFace.y, z + dataFace.z)) {
-                // Break the torch
                 world.setBlockAt(x, y, z, 0);
             }
         }

@@ -15,10 +15,7 @@ export default class Tag {
 
     }
 
-    /**
-     * Convert this tag to a plain-JS value (numbers/strings/arrays/objects)
-     * so it survives JSON / structured-clone serialization.
-     */
+    
     toObject() {
         return this.getValue();
     }

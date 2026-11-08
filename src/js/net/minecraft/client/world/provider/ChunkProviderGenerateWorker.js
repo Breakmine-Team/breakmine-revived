@@ -14,16 +14,8 @@ export default class ChunkProviderGenerateWorker extends ChunkProvider {
         this.pendingChunks = new Map();
         this.pendingBatchProgress = new Map();
         this._nextBatchId = 0;
-        // Keep terrain streaming to one gameplay batch at a time. Without
-        // this, the provider can post several 32-chunk batches while the
-        // worker is still busy, producing a large result burst and a long
-        // main-thread deserialization spike.
         this._gameplayBatchInFlight = false;
 
-        // Keep this spelled as `new Worker(new URL(...))`. Assigning the URL to
-        // a variable first makes the bundler treat the file as a plain asset and
-        // copy the source verbatim, so the worker shipped with bare `import`
-        // statements and could never load. This form is bundled instead.
         this.worker = new Worker(new URL("../worker/worldgen.worker.js", import.meta.url), { type: "module" });
 
         this.worker.onmessage = (e) => this._onWorkerMessage(e.data);
@@ -155,8 +147,6 @@ export default class ChunkProviderGenerateWorker extends ChunkProvider {
 
         needed.sort((a, b) => a[2] - b[2]);
 
-        // Smaller batches keep the worker message (and the synchronous
-        // deserialization it triggers) from blocking a whole frame.
         const BATCH = 8;
         const batch = needed.slice(0, BATCH);
 

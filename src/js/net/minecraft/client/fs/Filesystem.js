@@ -1,7 +1,7 @@
 import { deflate, inflate } from "../../lib/pako.js";
 
-// `window` does not exist in a Web Worker; both IndexedDB and localStorage are
-// available as globals there instead. These helpers work everywhere.
+
+
 function getIndexedDB() {
     return (typeof indexedDB !== 'undefined' && indexedDB) ? indexedDB : null;
 }
@@ -165,7 +165,6 @@ export default class FileSystem {
 
         const store = await this._getTransactionStore('readwrite');
         if (store) {
-            // Primary: save to IndexedDB
             return new Promise((resolve, reject) => {
                 const fileRecord = {
                     fileName: filename,
@@ -185,7 +184,6 @@ export default class FileSystem {
             });
         }
 
-        // Fallback: save to LocalStorage
         const ls = getLocalStorage();
         try {
             if (!ls) throw new Error('localStorage unavailable');
@@ -220,11 +218,9 @@ export default class FileSystem {
     }
 
     async saveBinaryFile(data, filename) {
-        // data can be Uint8Array, ArrayBuffer, or base64 string
         let base64Data;
         
         if (typeof data === 'string') {
-            // Assume it's already base64
             base64Data = data;
         } else if (data instanceof Uint8Array) {
             base64Data = toBase64(data);
@@ -238,7 +234,6 @@ export default class FileSystem {
 
         const store = await this._getTransactionStore('readwrite');
         if (store) {
-            // Primary: save to IndexedDB
             return new Promise((resolve, reject) => {
                 const fileRecord = {
                     fileName: filename,
@@ -258,7 +253,6 @@ export default class FileSystem {
             });
         }
 
-        // Fallback: save to LocalStorage
         const ls = getLocalStorage();
         try {
             if (!ls) throw new Error('localStorage unavailable');
@@ -357,7 +351,6 @@ export default class FileSystem {
             return null; 
         }
 
-        // Return as Uint8Array
         return fromBase64(fileData);
     }
 

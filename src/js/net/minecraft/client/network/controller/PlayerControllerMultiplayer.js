@@ -72,11 +72,6 @@ export default class PlayerControllerMultiplayer extends PlayerController {
     }
 
     sendChatMessage(message) {
-        // Commands explicitly marked clientOnly (typically mod debug helpers)
-        // affect local rendering only and have no server-side equivalent, so
-        // run them here instead of forwarding a chat packet the server would
-        // answer with "unknown command". The off-grid commands deliberately do
-        // NOT set this: their state is shared and the server owns it.
         if (message.startsWith("/")) {
             const handler = this.minecraft && this.minecraft.commandHandler;
             if (handler) {
@@ -95,11 +90,7 @@ export default class PlayerControllerMultiplayer extends PlayerController {
         return this.networkHandler;
     }
 
-    /**
-     * Send a raw JSON message on the same channel capes, pings and mod
-     * messages use. Returns false when the socket is gone, so callers can fall
-     * back to acting locally.
-     */
+    
     sendJson(payload) {
         const networkManager = this.networkHandler?.getNetworkManager?.();
         if (!networkManager || typeof networkManager.sendJson !== "function") {

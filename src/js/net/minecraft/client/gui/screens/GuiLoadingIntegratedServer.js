@@ -25,10 +25,8 @@ export default class GuiLoadingIntegratedServer extends GuiScreen {
     }
 
     drawScreen(stack, mouseX, mouseY, partialTicks) {
-        // Render dirt background
         this.drawBackground(stack, this.textureBackground, this.width, this.height);
 
-        // Render title/status message
         this.drawCenteredString(stack, this.status, this.width / 2, this.height / 2 - 20);
 
         super.drawScreen(stack, mouseX, mouseY, partialTicks);

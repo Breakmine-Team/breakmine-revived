@@ -35,8 +35,6 @@ export default class GameModeCommand extends Command {
         }
 
         const gamemode = (mode === "creative" || mode === "1") ? 1 : (mode === "spectator" || mode === "3") ? 3 : 0;
-        // Client-only: send gamemode update to the multiplayer server.
-        // On the dedicated server, syncCommandState() handles broadcasting instead.
         const nm = minecraft.playerController?.getNetworkHandler?.()?.getNetworkManager?.();
         if (nm?.sendJson) {
             nm.sendJson({ type: 'gamemode', gamemode, flying: minecraft.player.flying });

@@ -31,17 +31,11 @@ export default class NetworkPlayHandler extends PacketHandler {
         this.minecraft.playerController = new PlayerControllerMultiplayer(this.minecraft, this, packet.entityId);
         let world = new WorldClient(this.minecraft);
         world.setWorldType(packet.worldType);
-        // Server mods arrive right after this packet; they wait for the world
-        // (and any texture-atlas rebuild) before registering their content.
         this.minecraft.worldLoadPromise = this.minecraft.loadWorld(world);
         this.minecraft.ingameOverlay.chatOverlay.clearChat();
 
-        // Ask for the authoritative off-grid state now that the client has a
-        // world to bind the field to. The server answers with a snapshot.
         this.networkManager.sendPacket(new ClientOffGridRequestPacket());
 
-        // Capes travel over the JSON channel rather than the binary protocol:
-        // fetch everyone's and publish the account's own cape for this session.
         this.minecraft.capeManager?.onJoin(this.networkManager);
     }
 
@@ -57,16 +51,12 @@ export default class NetworkPlayHandler extends PacketHandler {
         world.spawnY = packet.getSpawnY();
         world.spawnZ = packet.getSpawnZ();
 
-        // Keep the spawn vector in sync as well: PlayerEntity.respawn() prefers
-        // world.spawn, which otherwise keeps its default (0, 0) — the middle of
-        // an ocean on many seeds — and drops respawning players into the water.
         if (world.spawn) {
             world.spawn.x = world.spawnX;
             world.spawn.y = world.spawnY;
             world.spawn.z = world.spawnZ;
         }
 
-        // Set player position to spawn position
         if (this.minecraft.player) {
             this.minecraft.player.setPosition(world.spawnX, world.spawnY, world.spawnZ);
         }
@@ -78,27 +68,27 @@ export default class NetworkPlayHandler extends PacketHandler {
             
             let uuid = entry.profile.getId().toString();
 
-            if (packet.getAction() === 4) { // REMOVE_PLAYER
+            if (packet.getAction() === 4) { 
                 this.playerInfoMap.delete(uuid);
             } else {
-                if (packet.getAction() === 0) { // ADD_PLAYER
+                if (packet.getAction() === 0) { 
                     this.playerInfoMap.set(uuid, entry);
                 }
 
                 let playerInfo = this.playerInfoMap.get(uuid);
                 if (playerInfo !== null && typeof playerInfo !== "undefined") {
                     switch (packet.getAction()) {
-                        case 0: // ADD_PLAYER
+                        case 0: 
                             playerInfo.gameType = entry.gameType;
                             playerInfo.ping = entry.ping;
                             break;
-                        case 1: // UPDATE_GAMEMODE
+                        case 1: 
                             playerInfo.gameType = entry.gameType;
                             break;
-                        case 2: // UPDATE_LATENCY
+                        case 2: 
                             playerInfo.ping = entry.ping;
                             break;
-                        case 3: // UPDATE_DISPLAY_NAME
+                        case 3: 
                             playerInfo.displayName = entry.displayName;
                             break;
                     }
@@ -127,17 +117,12 @@ export default class NetworkPlayHandler extends PacketHandler {
     }
 
     handleResetWorld(packet) {
-        // Clear all chunks from the world
         this.minecraft.world.clearChunks();
 
-        // The server switches worlds by resetting the chunks rather than
-        // recreating the World object, so the off-grid field must be replaced
-        // with the new world's state explicitly.
         this.networkManager.sendPacket(new ClientOffGridRequestPacket());
     }
 
     handleTimeUpdate(packet) {
-        // Update world time from server
         this.minecraft.world.time = packet.getWorldTime();
     }
 
@@ -205,19 +190,16 @@ export default class NetworkPlayHandler extends PacketHandler {
         let uuid = packet.getUUID().toString();
         entity.uuid = uuid;
 
-        // Set username from metadata (index 2 is custom name)
         let metaData = packet.getMetaData();
         if (metaData && metaData[2] && metaData[2].value) {
             entity.username = metaData[2].value;
         } else {
-            // Fallback to player info map
             let playerInfo = this.playerInfoMap.get(uuid);
             if (playerInfo && playerInfo.profile && playerInfo.profile.getUsername()) {
                 entity.username = playerInfo.profile.getUsername();
             }
         }
 
-        // Set creative/spectator flags from player info
         let playerInfo = this.playerInfoMap.get(uuid);
         if (playerInfo) {
             entity.creative = (playerInfo.gameType === 1);
@@ -277,7 +259,6 @@ export default class NetworkPlayHandler extends PacketHandler {
         if (entity !== null) {
             entity.updateMetaData(packet.getMetaData());
 
-            // Update username from metadata if present (index 2 is custom name)
             let metaData = packet.getMetaData();
             if (metaData && metaData[2] && metaData[2].value) {
                 entity.username = metaData[2].value;
@@ -312,7 +293,6 @@ export default class NetworkPlayHandler extends PacketHandler {
     handleServerSpawnObject(packet) {
         let world = this.minecraft.world;
 
-        // Type 1 = Item
         if (packet.getType() === 1) {
             let x = packet.getX() / 32;
             let y = packet.getY() / 32;
@@ -368,7 +348,6 @@ export default class NetworkPlayHandler extends PacketHandler {
         let typeId = blockState >> 4;
         let blockData = blockState & 0xF;
 
-        // Check if block change is within 4 blocks of player
         let playerX = Math.floor(this.minecraft.player.x);
         let playerY = Math.floor(this.minecraft.player.y);
         let playerZ = Math.floor(this.minecraft.player.z);
@@ -379,11 +358,6 @@ export default class NetworkPlayHandler extends PacketHandler {
 
         let withinRange = dx <= 4 && dy <= 4 && dz <= 4;
 
-        // The server is authoritative in multiplayer: apply the received state
-        // without running block placement callbacks (which would recompute e.g.
-        // door facing from the local player and desync from the server).
-        // If the full chunk is still being decoded, defer the edit so the
-        // worker's block array cannot overwrite it when it arrives.
         const provider = this.minecraft.world.getChunkProvider();
         if (provider && typeof provider.deferBlockChange === "function"
             && provider.deferBlockChange(position.getX(), position.getY(), position.getZ(), typeId, blockData)) {
@@ -401,7 +375,6 @@ export default class NetworkPlayHandler extends PacketHandler {
             const key = `${position.getX()},${position.getY()},${position.getZ()}`;
             this.minecraft.world.blockInventories.set(key, { text: text });
 
-            // Update sign text rendering
             if (this.minecraft.worldRenderer && this.minecraft.worldRenderer.signTextRenderer) {
                 this.minecraft.worldRenderer.signTextRenderer.updateSign(
                     this.minecraft.world,
@@ -427,25 +400,17 @@ export default class NetworkPlayHandler extends PacketHandler {
     }
 
     onDisconnect() {
-        // A close the client started itself is a quit to the title screen;
-        // loadWorld(null) already navigates there.
         if (this.networkManager && this.networkManager.closedIntentionally) {
             return;
         }
         this.showDisconnectScreen();
     }
 
-    /**
-     * Show the disconnect screen immediately, then tear the world down behind
-     * it. loadWorld(null) ends by displaying the main menu, so showing the
-     * screen first and putting it back afterwards is what stops a kicked or
-     * banned player from landing on the title screen.
-     */
+    
     showDisconnectScreen() {
         const screen = new GuiDisconnected(this.disconnectReason || "Disconnected from server");
         this.minecraft.displayScreen(screen);
 
-        // The 0x00 packet and the socket close both arrive here; tear down once.
         if (this.disconnectTeardownStarted) {
             return;
         }

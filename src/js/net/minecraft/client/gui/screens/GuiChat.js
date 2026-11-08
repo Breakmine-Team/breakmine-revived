@@ -45,7 +45,6 @@ export default class GuiChat extends GuiScreen {
     }
 
     keyTyped(key, character) {
-        // Let tab scroll handle navigation / confirm first
         if (this.tabScroll.handleKey(key, character)) {
             return true;
         }

@@ -24,9 +24,6 @@ export default class ClientPlayerBlockPlacementPacket extends Packet {
         buffer.writeByte(0);
         buffer.writeByte(0);
 
-        // Optional placement metadata for blocks whose state cannot be
-        // derived from the face/yaw (road builder slope layers). Vanilla
-        // clients omit this byte; 255 means "ask the block for metadata".
         buffer.writeByte(this.metadata >= 0 ? (this.metadata & 0xF) : 255);
     }
 }

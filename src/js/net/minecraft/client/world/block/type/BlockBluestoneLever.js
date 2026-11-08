@@ -20,7 +20,6 @@ export default class BlockBluestoneLever extends Block {
     }
 
     getDrop(world, x, y, z) {
-        // Breaking a lever yields the placeable lever item, not the lever block.
         return [BlockRegistry.ITEM_BLUESTONE_LEVER_PLACER.getId(), 1];
     }
 
@@ -37,12 +36,12 @@ export default class BlockBluestoneLever extends Block {
     }
 
     static getMountedFaceFromClickedFace(face) {
-        if (face.y === -1) return 1; // clicked bottom -> ceiling mount
-        if (face.y === 1) return 0;  // clicked top -> floor mount
-        if (face.z === -1) return 3; // clicked north -> south wall
-        if (face.z === 1) return 2;  // clicked south -> north wall
-        if (face.x === -1) return 5; // clicked west -> east wall
-        if (face.x === 1) return 4;  // clicked east -> west wall
+        if (face.y === -1) return 1; 
+        if (face.y === 1) return 0;  
+        if (face.z === -1) return 3; 
+        if (face.z === 1) return 2;  
+        if (face.x === -1) return 5; 
+        if (face.x === 1) return 4;  
         return 0;
     }
 
@@ -113,17 +112,17 @@ export default class BlockBluestoneLever extends Block {
     getBoundingBox(world, x, y, z) {
         const faceIndex = world ? BlockBluestoneLever.getMountedFace(world.getBlockDataAt(x, y, z)) : 0;
         switch (faceIndex) {
-            case 1: // ceiling
+            case 1: 
                 return new BoundingBox(0.25, 0.375, 0.3125, 0.75, 1, 0.6875);
-            case 2: // north wall
+            case 2: 
                 return new BoundingBox(0.25, 0.3125, 0, 0.75, 0.6875, 0.625);
-            case 3: // south wall
+            case 3: 
                 return new BoundingBox(0.25, 0.3125, 0.375, 0.75, 0.6875, 1);
-            case 4: // west wall
+            case 4: 
                 return new BoundingBox(0, 0.25, 0.3125, 0.625, 0.75, 0.6875);
-            case 5: // east wall
+            case 5: 
                 return new BoundingBox(0.375, 0.25, 0.3125, 1, 0.75, 0.6875);
-            default: // floor
+            default: 
                 return new BoundingBox(0.25, 0, 0.3125, 0.75, 0.625, 0.6875);
         }
     }

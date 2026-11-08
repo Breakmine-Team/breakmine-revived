@@ -21,8 +21,6 @@ export default class TranslucentMeshBatcher {
         this.geometry.setAttribute('position', new THREE.BufferAttribute(this.positions, 3).setUsage(THREE.DynamicDrawUsage));
         this.geometry.setAttribute('color', new THREE.BufferAttribute(this.colors, 4).setUsage(THREE.DynamicDrawUsage));
         this.geometry.setAttribute('uv', new THREE.BufferAttribute(this.uvs, 2).setUsage(THREE.DynamicDrawUsage));
-        // The lit material (MeshLambertMaterial) needs normals; the unlit one
-        // ignores them, so they stay zeroed until a lit mesh is batched.
         this.geometry.setAttribute('normal', new THREE.BufferAttribute(this.normals, 3).setUsage(THREE.DynamicDrawUsage));
 
         this.indexAttribute = new THREE.BufferAttribute(this.indices, 1).setUsage(THREE.DynamicDrawUsage);
@@ -31,10 +29,6 @@ export default class TranslucentMeshBatcher {
         this.mesh = new THREE.Mesh(this.geometry, material);
         this.mesh.frustumCulled = false;
         this.mesh.renderOrder = 9999;
-        // Translucent faces must not cast shadows: the shadow pass renders
-        // them as fully opaque geometry, so the water/leaf plane would hide
-        // its surroundings behind a solid shadow. applyShadowsToObject()
-        // skips objects tagged like this too.
         this.mesh.userData.isTranslucent = true;
         this.mesh.castShadow = false;
         this.mesh.receiveShadow = true;
@@ -43,8 +37,6 @@ export default class TranslucentMeshBatcher {
         this.currentVertex = 0;
         this.currentIndex = 0;
 
-        // Source meshes recorded for this frame, and the ones that produced
-        // the buffer currently uploaded to the GPU (see isCached()).
         this.sources = [];
         this.sourceCount = 0;
         this.cachedSources = [];
@@ -56,10 +48,7 @@ export default class TranslucentMeshBatcher {
         this.cacheValid = false;
     }
 
-    /**
-     * Raw backing array of an attribute, or null when three.js only exposes
-     * accessors for it (interleaved attributes).
-     */
+    
     static rawArray(attribute) {
         return attribute && !attribute.isInterleavedBufferAttribute && attribute.array
             ? attribute.array
@@ -72,21 +61,13 @@ export default class TranslucentMeshBatcher {
         this.sourceCount = 0;
     }
 
-    /**
-     * Record a source mesh for this frame. The actual copy happens in
-     * finalize(), which can skip it entirely when nothing moved.
-     *
-     * Geometry is baked into these meshes when a section is meshed, so a
-     * changed vertex means a new Mesh instance. Identity therefore is a sound
-     * dirty check, and a frame that adds the same meshes at the same camera
-     * position would rebuild a byte-identical buffer.
-     */
+    
     addMesh(chunkMesh) {
         this.sources[this.sourceCount] = chunkMesh;
         this.sourceCount++;
     }
 
-    /** Drop the cached build, e.g. when the world that produced it is gone. */
+    
     invalidate() {
         this.cacheValid = false;
     }
@@ -111,7 +92,6 @@ export default class TranslucentMeshBatcher {
 
         if (!posAttr || !idxAttr) return;
 
-        // Copy texture map from source mesh material if not set yet
         if (!this.mesh.material.map && chunkMesh.material && chunkMesh.material.map) {
             this.mesh.material.map = chunkMesh.material.map;
             this.mesh.material.needsUpdate = true;
@@ -126,19 +106,10 @@ export default class TranslucentMeshBatcher {
             return;
         }
 
-        // Ensure world matrix is up-to-date (newly rebuilt meshes have identity matrixWorld)
         chunkMesh.updateWorldMatrix(true, false);
 
-        // Keep the transform matrix around: chunk section meshes carry a pure
-        // translation (so the rotation columns are identity and the math
-        // below equals the old +m path), but posed off-grid field meshes carry
-        // a rotation that must rotate the vertices (and normals) into world
-        // space instead of just being added.
         const m = chunkMesh.matrixWorld.elements;
 
-        // Section meshes, which are nearly all of the world's translucent
-        // geometry, only carry a translation. Detecting that lets the copy
-        // loops below drop nine multiplies and a normalise per vertex.
         const pureTranslation = m[0] === 1 && m[5] === 1 && m[10] === 1
             && m[1] === 0 && m[2] === 0 && m[4] === 0
             && m[6] === 0 && m[8] === 0 && m[9] === 0;
@@ -146,10 +117,6 @@ export default class TranslucentMeshBatcher {
         let vOffset = this.currentVertex;
         let iOffset = this.currentIndex;
 
-        // 1. Copy positions into WORLD space (through the full pose matrix).
-        // The raw attribute arrays are read directly instead of through the
-        // getX/getY/getZ accessors: this runs over every translucent vertex of
-        // the world, so the accessor call overhead dominates otherwise.
         const posArray = TranslucentMeshBatcher.rawArray(posAttr);
         const tx = m[12];
         const ty = m[13];
@@ -182,7 +149,6 @@ export default class TranslucentMeshBatcher {
             }
         }
 
-        // 2. Copy colors (RGBA)
         let colAttr = geo.getAttribute('color');
         if (colAttr) {
             const colArray = TranslucentMeshBatcher.rawArray(colAttr);
@@ -206,7 +172,6 @@ export default class TranslucentMeshBatcher {
             }
         }
 
-        // 3. Copy UVs
         let uvAttr = geo.getAttribute('uv');
         if (uvAttr) {
             const uvArray = TranslucentMeshBatcher.rawArray(uvAttr);
@@ -222,7 +187,6 @@ export default class TranslucentMeshBatcher {
                 }
             }
         } else {
-            // Default UVs for untextured geometry
             for (let i = 0; i < vertexCount; i++) {
                 let dstIdx = (vOffset + i) * 2;
                 this.uvs[dstIdx]     = 0;
@@ -230,15 +194,10 @@ export default class TranslucentMeshBatcher {
             }
         }
 
-        // 4. Copy normals. The tessellator only computes them for the lit
-        // material, so a missing attribute means flat-shaded geometry that
-        // needs its face normal derived from the winding instead.
         let nrmAttr = geo.getAttribute('normal');
         const nrmArray = nrmAttr ? TranslucentMeshBatcher.rawArray(nrmAttr) : null;
 
         if (nrmAttr && pureTranslation) {
-            // Normals are already unit length and a translation leaves them
-            // alone, so this is a plain copy - no rotate, no sqrt per vertex.
             for (let i = 0; i < vertexCount; i++) {
                 const dstIdx = (vOffset + i) * 3;
                 if (nrmArray) {
@@ -253,9 +212,6 @@ export default class TranslucentMeshBatcher {
                 }
             }
         } else if (nrmAttr) {
-            // Rotate normals through the pose matrix too: chunk meshes have an
-            // identity rotation (so this is a copy, same as before), posed
-            // field meshes rotate the normals into world space.
             for (let i = 0; i < vertexCount; i++) {
                 const dstIdx = (vOffset + i) * 3;
                 const lx = nrmArray ? nrmArray[i * 3]     : nrmAttr.getX(i);
@@ -291,7 +247,6 @@ export default class TranslucentMeshBatcher {
                 let acy = this.positions[ic * 3 + 1] - this.positions[ia * 3 + 1];
                 let acz = this.positions[ic * 3 + 2] - this.positions[ia * 3 + 2];
 
-                // cross(ab, ac)
                 let nx = aby * acz - abz * acy;
                 let ny = abz * acx - abx * acz;
                 let nz = abx * acy - aby * acx;
@@ -307,7 +262,6 @@ export default class TranslucentMeshBatcher {
             }
         }
 
-        // 5. Copy indices, offsetting them
         const idxArray = TranslucentMeshBatcher.rawArray(idxAttr);
         if (idxArray) {
             for (let i = 0; i < indexCount; i++) {
@@ -328,9 +282,6 @@ export default class TranslucentMeshBatcher {
         const cameraY = cameraPos.y;
         const cameraZ = cameraPos.z;
 
-        // Same source meshes at the same camera position: the buffer uploaded
-        // last frame is still exactly what this frame needs, so skip the copy,
-        // the sort and the re-upload.
         if (this.isCached(cameraX, cameraY, cameraZ)) {
             this.mesh.visible = this.cachedVisible;
             return;
@@ -343,7 +294,6 @@ export default class TranslucentMeshBatcher {
             this.copyMesh(this.sources[i]);
         }
 
-        // Remember what produced the buffer that is about to be uploaded.
         this.cachedSourceCount = this.sourceCount;
         this.cachedSources.length = this.sourceCount;
         for (let i = 0; i < this.sourceCount; i++) {

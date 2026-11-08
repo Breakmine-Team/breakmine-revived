@@ -1,7 +1,7 @@
 import * as THREE from '../../../../../../libraries/three.module.js';
 
-// Shared extrusion for atlas items and entity equipment; coordinates are
-// centered in block units with image-top UVs (texture.flipY = false).
+
+
 export function createSpriteItemGeometry(pixels, width, height) {
     const opaque = (x, y) => x >= 0 && x < width && y >= 0 && y < height && pixels[(y * width + x) * 4 + 3] > 128;
     const positions = [];

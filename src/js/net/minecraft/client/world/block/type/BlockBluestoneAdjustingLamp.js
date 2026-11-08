@@ -29,13 +29,6 @@ export default class BlockBluestoneAdjustingLamp extends Block {
     }
 
     calculatePower(world, x, y, z) {
-        // Corrected neighborFace values:
-        // +X (East block) -> Facing Lamp via WEST face
-        // -X (West block) -> Facing Lamp via EAST face
-        // +Z (South block) -> Facing Lamp via NORTH face
-        // -Z (North block) -> Facing Lamp via SOUTH face
-        // -Y (Bottom block) -> Facing Lamp via TOP face
-        // +Y (Top block) -> Facing Lamp via BOTTOM face
         const neighbors = [
             [x + 1, y, z, EnumBlockFace.WEST],
             [x - 1, y, z, EnumBlockFace.EAST],
@@ -97,7 +90,6 @@ export default class BlockBluestoneAdjustingLamp extends Block {
 
         const t = power / MAX_POWER;
 
-        // Warm glow that dims toward dark as the power level drops.
         const min = { r: 0x3a, g: 0x2e, b: 0x22 };
         const max = { r: 0xff, g: 0xf4, b: 0xdd };
 

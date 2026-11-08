@@ -18,8 +18,6 @@ export default class BlockBluestoneRod extends BlockBluestoneDust {
     }
 
     getOpacity() {
-        // The rod is a thin wire/post; 0 keeps it from dimming any light, so
-        // the flood treats the cell exactly like the air it displaces.
         return 0;
     }
 
@@ -35,8 +33,6 @@ export default class BlockBluestoneRod extends BlockBluestoneDust {
         return true;
     }
 
-    // The rod conducts bluestone power in every direction, including up and
-    // down (unlike dust, which stays horizontal).
     canConductTo(world, x, y, z, dx, dy, dz) {
         return this._isBluestoneWire(Block.getById(world.getBlockAt(x + dx, y + dy, z + dz)));
     }
@@ -47,10 +43,7 @@ export default class BlockBluestoneRod extends BlockBluestoneDust {
 
     getMultipart(world, x, y, z) {
         return [
-            // Flat dust layer on top of the block, like bluestone dust
             ["block", this.id, new BoundingBox(0, 0, 0, 1, 0.0625, 1)],
-            // Vertical rod: 4px x 16px x 4px, centered on the block, using
-            // the Bluestone Block texture with bluestone color fading
             ["block", BlockRegistry.BLUESTONE_ROD_PILLAR.id, new BoundingBox(0.375, 0, 0.375, 0.625, 1, 0.625)]
         ];
     }

@@ -5,16 +5,6 @@ import Block from "../Block.js";
 import EnumCreativeInventoryTab from "../../../gui/EnumCreativeInventoryTab.js";
 import ItemEntity from "../../../entity/ItemEntity.js";
 
-/**
- * A framed picture hanging on a wall.
- *
- * Paintings are ordinary blocks, so they need no entity or renderer of their
- * own: the block occupies the cell in front of the wall and its bounding box is
- * a 1/16 thick plate pressed against that wall, which makes the painting face
- * the room. `getBlockDataAt` stores the wall direction exactly like ladders do
- * (2 = -z, 3 = +z, 4 = -x, 5 = +x), so a painting follows the face it was
- * placed on and pops off when its supporting wall is removed.
- */
 export default class BlockPainting extends Block {
 
     static FACE_OFFSETS = [
@@ -36,8 +26,6 @@ export default class BlockPainting extends Block {
     }
 
     getRenderType() {
-        // ITEM draws the flat texture as a billboard in the inventory and as
-        // the thin bounding box in the world, which is what a painting wants.
         return BlockRenderType.ITEM;
     }
 
@@ -50,9 +38,6 @@ export default class BlockPainting extends Block {
             return true;
         }
 
-        // The back of the plate lies exactly on the wall's surface, so drawing
-        // it would z-fight with the wall texture. The other five faces form the
-        // thin edge of the frame and the picture itself.
         const direction = world.getBlockDataAt(x, y, z);
         if (direction === 2 && face === EnumBlockFace.SOUTH) return false;
         if (direction === 3 && face === EnumBlockFace.NORTH) return false;
@@ -128,13 +113,10 @@ export default class BlockPainting extends Block {
         world.setBlockAt(x, y, z, 0);
         const [itemId, count] = this.getDrop(world, x, y, z);
         if (typeof world.dropItem === "function") {
-            // Authoritative server: spawn the item and broadcast it to clients.
             world.dropItem(itemId, x, y, z);
         } else if (world.minecraft?.worldRenderer
             && typeof world.addEntity === "function"
             && (typeof world.minecraft.isSingleplayer !== "function" || world.minecraft.isSingleplayer())) {
-            // Only predict the drop in a purely local world, so a supported
-            // break in multiplayer does not spawn a second copy.
             for (let i = 0; i < count; i++) {
                 world.addEntity(new ItemEntity(world.minecraft, world, itemId, x, y, z));
             }

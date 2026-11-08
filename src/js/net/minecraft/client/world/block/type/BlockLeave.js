@@ -10,7 +10,6 @@ export default class BlockLeave extends Block {
         this.woodType = woodType;
         this.hardness = 0.2;
 
-        // Sound
         this.sound = Block.sounds.leaves;
         this.inventoryTab = EnumCreativeInventoryTab.DECORATION;
     }

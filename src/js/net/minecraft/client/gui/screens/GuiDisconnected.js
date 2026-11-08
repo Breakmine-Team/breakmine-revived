@@ -8,9 +8,6 @@ export default class GuiDisconnected extends GuiScreen {
     constructor(message) {
         super();
 
-        // The server cannot know the player's time zone, so ban expiry lines
-        // arrive as {{until:<epoch ms>}} markers and are turned into a local
-        // date and time here.
         this.message = resolveTimeMarkers(this.normalizeMessage(message));
     }
 
@@ -43,9 +40,6 @@ export default class GuiDisconnected extends GuiScreen {
     init() {
         super.init();
 
-        // Split on explicit newlines first, then wrap each line, so a ban or
-        // kick keeps its reason on its own line instead of running the whole
-        // message together.
         this.multilineMessage = this.message
             .split("\n")
             .flatMap((line) => line.length
@@ -59,14 +53,10 @@ export default class GuiDisconnected extends GuiScreen {
     }
 
     drawScreen(stack, mouseX, mouseY, partialTicks) {
-        // Render dirt background
         this.drawBackground(stack, this.textureBackground, this.width, this.height);
 
-        // Render title
         this.drawCenteredString(stack, "Disconnected from server:", this.width / 2, this.height / 2 - 20, 0x80FFFFFF);
 
-        // One extra pixel between rows so a three-line kick or ban screen reads
-        // as separate lines instead of a block.
         const lineHeight = FontRenderer.FONT_HEIGHT + 2;
 
         for(let i = 0; i < this.multilineMessage.length; i++) {

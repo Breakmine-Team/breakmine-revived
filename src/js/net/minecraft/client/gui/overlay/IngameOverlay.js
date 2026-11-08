@@ -28,7 +28,6 @@ export default class IngameOverlay extends Gui {
 
         this.ticksRendered = 0;
 
-        // Selected-item name shown above the hotbar after switching slots.
         this.lastSelectedSlot = -1;
         this.lastSelectedTypeId = 0;
         this.selectedItemName = "";
@@ -36,7 +35,6 @@ export default class IngameOverlay extends Gui {
     }
 
     render(stack, mouseX, mouseY, partialTicks) {
-        // Hide all GUI elements when F1 toggle is active
         if (GuiFunctions.isGuiHidden()) {
             if (this.minecraft.settings.debugOverlay) {
                 stack.drawImage(this.window.canvasDebug, 0, 0);
@@ -44,12 +42,10 @@ export default class IngameOverlay extends Gui {
             return;
         }
 
-        // Destroy hotbar items in spectator so they don't linger in the 3D scene
         if (this.minecraft.player.spectator) {
             this.minecraft.itemRenderer.destroy("hotbar");
         }
 
-        // Render crosshair
         if (this.minecraft.hasInGameFocus()) {
             this.renderCrosshair(stack, this.window.width / 2, this.window.height / 2)
             this.renderShaftRpm(stack, partialTicks);
@@ -67,40 +63,32 @@ export default class IngameOverlay extends Gui {
             }
         }
 
-        // Render hotbar (hidden in spectator)
         if (!this.minecraft.player.spectator) {
             this.renderHotbar(stack, this.window.width / 2 - 91, this.window.height - 22);
             this.updateSelectedItemName();
             this.renderSelectedItemName(stack);
         }
 
-        // Render health bar (hidden in creative and spectator)
         if (!this.minecraft.player.creative && !this.minecraft.player.spectator) {
             this.renderHealth(stack, this.window.width / 2 - 91, this.window.height - 22 - 11)
         }
 
-        // Render voice chat talking indicator (above hotbar/armor)
         this.renderVoiceIndicator(stack);
 
-        // Render chat canvas
         stack.drawImage(this.window.canvasChat, 0, 0);
 
-        // Render debug canvas on stack
         if (this.minecraft.settings.debugOverlay) {
             stack.drawImage(this.window.canvasDebug, 0, 0);
         }
 
-        // Render player list
         if (Keyboard.isKeyDown(this.minecraft.settings.keyPlayerList) && !this.minecraft.isSingleplayer()) {
             this.playerListOverlay.renderPlayerList(stack, this.window.width);
         }
 
-        // Mod-provided HUD text draws above the built-in overlay so a mod can
-        // place information anywhere without fighting the hotbar or chat.
         this.minecraft.modLoader?.emitOverlayText(this, stack);
     }
 
-    /** Small banner above the hotbar listing everyone currently talking. */
+    
     renderVoiceIndicator(stack) {
         const voiceChat = this.minecraft.voiceChat;
         if (!voiceChat) return;
@@ -121,7 +109,6 @@ export default class IngameOverlay extends Gui {
             const y = this.window.height - 44 - i * lineheight;
 
             this.drawRect(stack, centerX - boxWidth / 2, y, centerX + boxWidth / 2, y + 10, '#000000', 0.5);
-            // Blinking green "mic" dot next to the name
             this.drawRect(stack, centerX - boxWidth / 2 + 3, y + 2, centerX - boxWidth / 2 + 8, y + 8, '#00ff00', 0.5 + 0.5 * Math.abs(Math.sin(Date.now() / 100)));
             this.drawString(stack, text, centerX - boxWidth / 2 + 10, y + 1, 0xffffffff, true, false);
         }
@@ -130,27 +117,21 @@ export default class IngameOverlay extends Gui {
     onTick() {
         this.chatOverlay.onTick();
 
-        // Render debug overlay on tick
         if (this.minecraft.settings.debugOverlay) {
             let stack = this.window.canvasDebug.getContext('2d');
 
-            // Render debug overlay each tick if the player is moving
             if (this.ticksRendered % 10 === 0) {
-                // Clear debug canvas
                 stack.clearRect(0, 0, this.window.width, this.window.height);
 
-                // Render debug information
                 this.renderLeftDebugOverlay(stack);
                 this.renderRightDebugOverlay(stack);
             } else if (this.minecraft.player.isMoving()) {
-                // Render debug information
                 this.renderLeftDebugOverlay(stack, [5, 6, 7, 8]);
             }
 
             this.ticksRendered++;
         }
 
-        // Render chat on tick if dirty
         if (this.chatOverlay.isDirty()) {
             let stack = this.window.canvasChat.getContext('2d');
             stack.clearRect(0, 0, this.window.width, this.window.height);
@@ -163,11 +144,7 @@ export default class IngameOverlay extends Gui {
         this.drawSprite(stack, this.textureCrosshair, 0, 0, 15, 15, x - size / 2, y - size / 2, size, size, 0.6);
     }
 
-    /**
-     * Speed of the machine part under the crosshair, as a tooltip beside it.
-     * A motor reports the speed it turns its output at; a shaft, cog or gearbox
-     * reports whatever its assembly is driven at, which is 0 with no motor.
-     */
+    
     renderShaftRpm(stack, partialTicks) {
         const world = this.minecraft.world;
         const player = this.minecraft.player;
@@ -176,7 +153,6 @@ export default class IngameOverlay extends Gui {
         const hit = player.rayTrace(5, partialTicks);
         if (!hit) return;
 
-        // Summoned structures are addressed in their own local space.
         const field = (hit.fieldCell && world.offGridField) ? world.offGridField : null;
         const typeId = field ? field.getBlockAt(hit.x, hit.y, hit.z) : world.getBlockAt(hit.x, hit.y, hit.z);
         if (!typeId) return;
@@ -196,14 +172,12 @@ export default class IngameOverlay extends Gui {
         this.renderRpmTooltip(stack, `${Math.round(Number(rpm))} RPM`);
     }
 
-    /** One line of text in the game's usual tooltip box. */
+    
     renderRpmTooltip(stack, text) {
         const padding = 2;
-        // Same single-line height GuiTooltip uses.
         const k = 8;
         const textWidth = this.getStringWidth(stack, text, true);
 
-        // To the right of the crosshair, and on screen like any other tooltip.
         const maxLeft = Math.max(2, this.window.width - (textWidth + padding * 2 + 6));
         const maxTop = Math.max(2, this.window.height - (k + padding * 2 + 6));
         const l1 = Math.max(2, Math.min(Math.floor(this.window.width / 2) + 12, maxLeft));
@@ -218,20 +192,17 @@ export default class IngameOverlay extends Gui {
         const x2 = l1 + textWidth + padding;
         const y2 = i2 + k + padding;
 
-        // 1. Outer 1px dark frame, with 1px notched corners
         this.drawRect(stack, x1 - 1, y1 - 2, x2 + 1, y1 - 1, bgColor);
         this.drawRect(stack, x1 - 1, y2 + 1, x2 + 1, y2 + 2, bgColor);
         this.drawRect(stack, x1 - 1, y1 - 1, x2 + 1, y2 + 1, bgColor);
         this.drawRect(stack, x1 - 2, y1 - 1, x1 - 1, y2 + 1, bgColor);
         this.drawRect(stack, x2 + 1, y1 - 1, x2 + 2, y2 + 1, bgColor);
 
-        // 2. Inner gradient border, also with notched corners
         this.drawGradientRect(stack, x1 - 1, y1, x1, y2, borderStart, borderEnd);
         this.drawGradientRect(stack, x2, y1, x2 + 1, y2, borderStart, borderEnd);
         this.drawGradientRect(stack, x1, y1 - 1, x2, y1, borderStart, borderStart);
         this.drawGradientRect(stack, x1, y2, x2, y2 + 1, borderEnd, borderEnd);
 
-        // 3. The text
         this.drawString(stack, text, l1, i2, 0xFFFFFFFF, true, false);
     }
 
@@ -278,7 +249,6 @@ export default class IngameOverlay extends Gui {
             return;
         }
 
-        // Don't pop the label for whatever happens to be held on join.
         const firstUpdate = this.lastSelectedSlot === -1;
         this.lastSelectedSlot = slot;
         this.lastSelectedTypeId = typeId;
@@ -309,7 +279,6 @@ export default class IngameOverlay extends Gui {
 
         const nameWidth = this.getStringWidth(stack, this.selectedItemName, true);
         const x = Math.floor(this.window.width / 2 - nameWidth / 2);
-        // Sit just above the hotbar, or above the health bar when it is shown.
         const healthVisible = !this.minecraft.player.creative && !this.minecraft.player.spectator;
         const y = this.window.height - (healthVisible ? 44 : 44);
 
@@ -317,7 +286,6 @@ export default class IngameOverlay extends Gui {
     }
 
     renderHotbar(stack, x, y) {
-        // Render background
         this.drawSprite(stack, this.textureHotbar, 0, 0, 200, 22, x, y, 200, 22)
         this.drawSprite(
             stack,
@@ -328,12 +296,10 @@ export default class IngameOverlay extends Gui {
             24, 24
         )
 
-        // To make the items darker
-        let brightness = this.minecraft.isPaused() ? 0.5 : 1; // TODO find a better solution
+        let brightness = this.minecraft.isPaused() ? 0.5 : 1; 
 
         this.minecraft.itemRenderer.prepareRender("hotbar");
 
-        // Render items
         for (let i = 0; i < 9; i++) {
             let itemStack = this.minecraft.player.inventory.getItemInSlot(i);
             if (!itemStack.isEmpty()) {
@@ -357,10 +323,6 @@ export default class IngameOverlay extends Gui {
         const canvas = this.window.canvasGuiItemCount;
         const countContext = canvas.getContext('2d');
 
-        // This layer is window-sized and is composited over the world every
-        // frame. Rebuilding it unconditionally meant a full-screen clear and a
-        // full-screen blit per frame for numbers that almost never change - in
-        // Creative every stack has count 1, so nothing was drawn at all.
         const counts = this.itemCounts || (this.itemCounts = new Int32Array(9));
         let changed = this.itemCountsFresh !== true
             || canvas.width !== this.itemCountsWidth
@@ -585,7 +547,6 @@ export default class IngameOverlay extends Gui {
             "Chunk: " + chunkX + " " + chunkY + " " + chunkZ + " in " + inChunkX + " " + inChunkY + " " + inChunkZ,
             "Facing: " + facing.getName() + " (" + towards + ") (" + yaw.toFixed(1) + " / " + pitch.toFixed(1) + ")",
             "Light: " + lightLevel + " (" + skyLight + " sky, " + blockLight + " block)",
-            // "Biome: " + biome,
             "",
             "Sounds: " + soundsPlaying + "/" + soundsLoaded,
             "Time: " + world.time % 24000 + " (Day " + Math.floor(world.time / 24000) + ")",
@@ -596,7 +557,6 @@ export default class IngameOverlay extends Gui {
 
         lines.push(...midLines, ...afterLines);
 
-        // Hit result
         let hit = worldRenderer.lastHitResult;
         if (hit !== null && hit.type !== 0) {
             lines.push("Looking at: " + hit.x + " " + hit.y + " " + hit.z);
@@ -604,13 +564,11 @@ export default class IngameOverlay extends Gui {
 
         const lineHeight = FontRenderer.FONT_HEIGHT + 1;
 
-        // Draw lines
         for (let i = 0; i < lines.length; i++) {
             if (lines[i].length === 0 || filters.length !== 0 && !filters.includes(i)) {
                 continue;
             }
 
-            // Clear the line
             if (filters.length !== 0) {
                 stack.clearRect(
                     1,
@@ -620,7 +578,6 @@ export default class IngameOverlay extends Gui {
                 );
             }
 
-            // Draw background
             this.drawRect(stack,
                 1,
                 1 + lineHeight * i,
@@ -629,7 +586,6 @@ export default class IngameOverlay extends Gui {
                 '#50505090'
             );
 
-            // Draw line
             this.drawString(stack, lines[i], 2, 2 + lineHeight * i, 0xffe0e0e0, false);
         }
 
@@ -656,13 +612,11 @@ export default class IngameOverlay extends Gui {
 
         const lineHeight = FontRenderer.FONT_HEIGHT + 1;
 
-        // Draw lines
         for (let i = 0; i < lines.length; i++) {
             if (lines[i].length === 0) {
                 continue;
             }
 
-            // Draw background
             this.drawRect(stack,
                 this.window.width - this.getStringWidth(stack, lines[i]) - 3,
                 1 + lineHeight * i,
@@ -671,7 +625,6 @@ export default class IngameOverlay extends Gui {
                 '#50505090'
             );
 
-            // Draw line
             this.drawRightString(stack, lines[i], this.window.width - 2, 2 + lineHeight * i, 0xffe0e0e0, false);
         }
     }

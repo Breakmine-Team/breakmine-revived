@@ -2,9 +2,9 @@ import fs from '../client/fs/ServerFs.js';
 import path from '../util/path.js';
 
 const MODULE_DIR = path.moduleDir();
-// process / env only exist under Node (electron, standalone server). Running
-// as an integrated server inside a browser worker there is no process, so
-// read the env through this guard instead of bare process.env.
+
+
+
 const ENV = (typeof process !== 'undefined' && process.env) || {};
 const PROJECT_ROOT = ENV.DATA_DIR || path.join(MODULE_DIR, '..', '..', '..', '..', '..');
 const WORLDS_DIR = path.join(PROJECT_ROOT, 'worlds');
@@ -17,26 +17,17 @@ const defaults = {
     default_gamemode: 'creative',
     default_op: true,
     op_player_list: [],
-    // Names an operator removed with /deop. Checked before default_op so a
-    // server that opens op to everyone can still demote a single player.
     deop_player_list: [],
-    // Operators that may also kick, ban and unban. A super op is an op too.
     super_op_player_list: [],
     motd: 'Brand new server',
     allowMods: false,
-    // Server-side mods are sent to every client on join. The folder is
-    // relative to the active server's directory (PROJECT_ROOT for "main",
-    // worlds/<name>/ otherwise).
     serverMods: true,
     serverModsDir: 'servermods',
     worldType: 'flat',
     seed: 0,
-    // Destructive gameplay rules. Environment switches can turn these off
-    // for a server; clients receive the same values on login so their local
-    // prediction does not fight the authoritative server.
     allowTNT: true,
     allowLiquidFlow: true,
-    icon: null // Server icon (base64 data URL or path to icon file)
+    icon: null 
 };
 
 function isEnvEnabled(name) {
@@ -45,7 +36,7 @@ function isEnvEnabled(name) {
         && ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
 }
 
-// Comma separated names, for variables like SUPER_OPS="alice, bob".
+
 function parseNameList(value) {
     if (typeof value !== 'string') {
         return [];
@@ -57,9 +48,9 @@ function parseNameList(value) {
         .filter(name => name.length > 0);
 }
 
-// Super ops named by the environment. They are additive and are deliberately
-// kept out of super_op_player_list so they never get written back into
-// serverconfig.conf, and so /unsop cannot quietly revoke them.
+
+
+
 const envSuperOps = parseNameList(ENV.SUPER_OPS);
 
 function isEnvSuperOp(name) {
@@ -67,8 +58,8 @@ function isEnvSuperOp(name) {
     return wanted.length > 0 && envSuperOps.some(entry => entry.toLowerCase() === wanted);
 }
 
-// These are intentionally one-way: setting the variable turns the behavior
-// off, while leaving it unset keeps the normal serverconfig value.
+
+
 function applyEnvOverrides(config) {
     if (isEnvEnabled('SERVER_DISABLE_TNT')) {
         config.allowTNT = false;
@@ -79,16 +70,16 @@ function applyEnvOverrides(config) {
     return config;
 }
 
-// World types supported by the server generator.
+
 const WORLD_TYPES = ['flat', 'normal', 'amplified', 'hellish'];
 
 function sanitizeServerName(name) {
     return String(name || 'main').toLowerCase().replace(/[^a-z0-9_]/g, '') || 'main';
 }
 
-// A "server" is a self-contained directory that owns its own world data and
-// its own serverconfig.conf. The main server lives in the project root,
-// additional servers live in worlds/<name>/.
+
+
+
 function getServerDir(serverName) {
     const name = sanitizeServerName(serverName);
     return name === 'main' ? PROJECT_ROOT : path.join(WORLDS_DIR, name);
@@ -101,21 +92,17 @@ function getConfigPath(serverName) {
 function parseValue(value) {
     value = value.trim();
 
-    // Arrays: [item1, item2, ...]
     if (value.startsWith('[') && value.endsWith(']')) {
         const inner = value.slice(1, -1).trim();
         if (!inner) return [];
         return inner.split(',').map(s => s.trim().replace(/^["']|["']$/g, ''));
     }
 
-    // Booleans
     if (value.toLowerCase() === 'true') return true;
     if (value.toLowerCase() === 'false') return false;
 
-    // Numbers
     if (/^\d+(\.\d+)?$/.test(value)) return Number(value);
 
-    // Strings (strip quotes if present)
     return value.replace(/^["']|["']$/g, '');
 }
 
@@ -150,10 +137,10 @@ function loadConfig(serverName = 'main') {
     return applyEnvOverrides(config);
 }
 
-// Pick the startup server from the command line (--server <name>). The
-// in-game /server command and last-used server (current_world.txt) can still
-// override this at runtime, but the port/host from the selected server's
-// serverconfig.conf are what the listener binds to.
+
+
+
+
 function getRequestedServer() {
     if (typeof process === 'undefined' || !Array.isArray(process.argv)) {
         return null;
@@ -167,14 +154,14 @@ function getRequestedServer() {
 
 const requestedServer = getRequestedServer();
 
-// Initial load uses the CLI-requested server if any, otherwise 'main'. The
-// active server may later change at runtime via config.reload().
+
+
 const config = loadConfig(requestedServer || 'main');
 
-// Reload the config from the given server's directory, mutating this object
-// in place so every module holding a reference sees the new values. If the
-// server directory has no serverconfig.conf the current values are left
-// untouched (a server without its own config inherits the active one).
+
+
+
+
 function reloadConfig(serverName) {
     const target = sanitizeServerName(serverName);
 
@@ -191,12 +178,11 @@ function reloadConfig(serverName) {
     }
     config.server = target;
 
-    // Clear icon cache when switching servers
     cachedIcon = null;
 }
 
-// List available servers: the explicit `servers` config wins when set,
-// otherwise servers are auto-detected from worlds/ directories.
+
+
 function listServers() {
     if (Array.isArray(config.servers) && config.servers.length > 0) {
         const servers = config.servers.map(sanitizeServerName);
@@ -226,9 +212,9 @@ config.requestedServer = requestedServer;
 config.listServers = listServers;
 config.getServerDir = getServerDir;
 
-// Load server icon from file or config
+
 let cachedIcon = null;
-const MAX_ICON_SIZE = 64 * 1024; // 64KB max for server icon
+const MAX_ICON_SIZE = 64 * 1024; 
 
 async function fetchIconFromUrl(url) {
     try {
@@ -261,29 +247,25 @@ function loadServerIcon() {
 
     console.log(`[Icon] Loading icon for server: ${config.server}`);
 
-    // Check environment variable first (highest priority)
     const envIcon = ENV.SERVER_ICON;
     if (envIcon && typeof envIcon === 'string') {
         console.log('[Icon] Checking SERVER_ICON environment variable');
-        // If it's a data URL, use it directly
         if (envIcon.startsWith('data:image')) {
             console.log('[Icon] Using data URL from environment variable');
             cachedIcon = envIcon;
             return cachedIcon;
         }
-        // If it's a URL, fetch it
         if (envIcon.startsWith('http://') || envIcon.startsWith('https://')) {
             fetchIconFromUrl(envIcon).then(icon => {
                 if (icon) {
                     cachedIcon = icon;
                 }
             });
-            return null; // Return null for now, will be cached when fetch completes
+            return null; 
         }
-        // Otherwise treat it as a file path
         const pathsToTry = [
-            path.join(PROJECT_ROOT, envIcon),  // Project root
-            path.join(getServerDir(config.server), envIcon)  // Server directory
+            path.join(PROJECT_ROOT, envIcon),  
+            path.join(getServerDir(config.server), envIcon)  
         ];
 
         for (const iconPath of pathsToTry) {
@@ -308,28 +290,25 @@ function loadServerIcon() {
         console.log('[Icon] Icon from env does not exist in any location');
     }
 
-    // If icon is already a data URL in config, use it
     if (config.icon && config.icon.startsWith('data:image')) {
         console.log('[Icon] Using data URL from config');
         cachedIcon = config.icon;
         return cachedIcon;
     }
 
-    // If icon is a URL, fetch it
     if (config.icon && (config.icon.startsWith('http://') || config.icon.startsWith('https://'))) {
         fetchIconFromUrl(config.icon).then(icon => {
             if (icon) {
                 cachedIcon = icon;
             }
         });
-        return null; // Return null for now, will be cached when fetch completes
+        return null; 
     }
 
-    // If icon is a file path, try to load it (relative to project root first, then server dir)
     if (config.icon && typeof config.icon === 'string') {
         const pathsToTry = [
-            path.join(PROJECT_ROOT, config.icon),  // Project root
-            path.join(getServerDir(config.server), config.icon)  // Server directory
+            path.join(PROJECT_ROOT, config.icon),  
+            path.join(getServerDir(config.server), config.icon)  
         ];
 
         for (const iconPath of pathsToTry) {
@@ -354,7 +333,6 @@ function loadServerIcon() {
         console.log('[Icon] Icon file does not exist in any location');
     }
 
-    // Try to load server_icon.png from project root first, then server directory
     const defaultPaths = [
         path.join(PROJECT_ROOT, 'server_icon.png'),
         path.join(getServerDir(config.server), 'server_icon.png')
@@ -396,8 +374,8 @@ function serializeNameList(list) {
     return '[' + names.map(name => `"${String(name).replace(/["\[\],]/g, '')}"`).join(', ') + ']';
 }
 
-// Persist the op/deop lists back into the active server's config file. Only
-// those two lines are touched, so comments and hand-edited keys survive.
+
+
 function writePlayerLists() {
     const configPath = getConfigPath(config.server);
     const dir = getServerDir(config.server);

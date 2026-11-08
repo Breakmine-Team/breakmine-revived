@@ -27,14 +27,10 @@ export default class PlayerEntityMultiplayer extends PlayerEntity {
     }
 
     onUpdate() {
-        // Freeze the player until world loading completes so it can't fall
-        // through unloaded chunks or report junk positions to the server
-        // before the server has finished sending the join state.
         if (this.minecraft.loadingScreen !== null) {
             return;
         }
         super.onUpdate();
-        // Rate limit network updates to every 5 ticks to reduce main thread blocking
         if (this.ticksExisted % 5 === 0) {
             this.onUpdateWalkingPlayer();
         }
@@ -46,7 +42,6 @@ export default class PlayerEntityMultiplayer extends PlayerEntity {
     }
 
     onUpdateWalkingPlayer() {
-        // Send sprinting to server
         let isSprinting = this.isSprinting();
         if (isSprinting !== this.serverSprintState) {
             let state = isSprinting ? ClientPlayerStatePacket.START_SPRINTING : ClientPlayerStatePacket.STOP_SPRINTING;
@@ -54,7 +49,6 @@ export default class PlayerEntityMultiplayer extends PlayerEntity {
             this.serverSprintState = isSprinting;
         }
 
-        // Send sneaking to server
         let isSneaking = this.isSneaking();
         if (isSneaking !== this.serverSneakState) {
             let state = isSneaking ? ClientPlayerStatePacket.START_SNEAKING : ClientPlayerStatePacket.STOP_SNEAKING;
@@ -72,7 +66,6 @@ export default class PlayerEntityMultiplayer extends PlayerEntity {
         let reportPosition = movementX * movementX + movementY * movementY + movementZ * movementZ > 9.0E-4 || this.positionUpdateTicks >= 20;
         let reportRotation = movementYaw !== 0.0 || movementPitch !== 0.0;
 
-        // Send position and rotation to server
         if (reportPosition && reportRotation) {
             this.networkHandler.sendPacket(new ClientPlayerPositionRotationPacket(this.onGround, this.x, this.y, this.z, this.rotationYaw, this.rotationPitch));
         } else if (reportPosition) {
@@ -103,10 +96,6 @@ export default class PlayerEntityMultiplayer extends PlayerEntity {
     }
 
     requestRespawn() {
-        // Ask the server to reset position to spawn and push fresh chunks.
-        // The server replies with a respawn message that re-arms the loading
-        // gate, so the player stays frozen until terrain around the new spawn
-        // has loaded (instead of falling into an underground air pocket).
         const nm = this.networkHandler?.getNetworkManager?.();
         if (nm) {
             nm.sendJson({ type: 'respawn' });

@@ -8,7 +8,6 @@ export default class BlockLogBark extends Block {
         this.woodType = woodType;
         this.hardness = 2.0;
 
-        // Sound
         this.sound = Block.sounds.wood;
     }
     
@@ -17,7 +16,6 @@ export default class BlockLogBark extends Block {
     }
 
     getTextureForFace(face, data = 0) {
-        // Bark texture on all 6 sides
         return `${this.woodType}_log`;
     }
 }

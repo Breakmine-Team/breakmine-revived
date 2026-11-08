@@ -14,9 +14,6 @@ export default class ItemRoadBuilder extends ItemGeneric {
             return;
         }
 
-        // The generic item path hands us the cell in front of the clicked
-        // face. The road builder works into the selected surface instead, so
-        // undo that offset and use the block that was actually clicked.
         if (x !== undefined && y !== undefined && z !== undefined && hitFace) {
             x -= hitFace.x || 0;
             y -= hitFace.y || 0;

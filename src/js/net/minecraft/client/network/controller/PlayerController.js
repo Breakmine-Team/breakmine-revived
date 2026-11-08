@@ -13,7 +13,6 @@ export default class PlayerController {
     }
 
     sendChatMessage(message) {
-        // Handle message
         if (message.startsWith("/")) {
             this.minecraft.commandHandler.handleMessage(message.substring(1));
         } else {

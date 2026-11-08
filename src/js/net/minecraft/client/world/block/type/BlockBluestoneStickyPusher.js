@@ -40,7 +40,6 @@ export default class BlockBluestoneStickyPusher extends BlockBluestonePusher {
         const currentState = this.getState(world, x, y, z);
 
         if (isNowPowered && currentState === 0) {
-            // Extend: push the column of blocks up, then place the head.
             const pushed = this.pushBlockOnTop(world, x, y, z);
             if (pushed) {
                 world.setBlockDataAt(x, y, z, 1);
@@ -49,7 +48,6 @@ export default class BlockBluestoneStickyPusher extends BlockBluestonePusher {
                 world.onBlockChanged(x, y + 1, z);
             }
         } else if (!isNowPowered && currentState === 1) {
-            // Retract: pull the head (and the block stuck to it) back down.
             world.setBlockDataAt(x, y, z, 0);
 
             const headPresent = world.getBlockAt(x, y + 1, z) === this.headBlockId;
@@ -58,7 +56,6 @@ export default class BlockBluestoneStickyPusher extends BlockBluestonePusher {
                 world.onBlockChanged(x, y + 1, z);
             }
 
-            // Only pull when the head is still in place (the block stuck to it).
             if (headPresent) {
                 const attachedId = world.getBlockAt(x, y + 2, z);
                 if (attachedId !== undefined && attachedId !== null && attachedId !== 0 && attachedId !== -1) {

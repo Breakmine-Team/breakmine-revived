@@ -9,7 +9,6 @@ export default class BlockBush extends Block {
         this.description = "Flower Bush";
         this.hardness = 0.0;
 
-        // Sound
         this.sound = Block.sounds.grass;
         this.inventoryTab = EnumCreativeInventoryTab.DECORATION;
     }

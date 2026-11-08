@@ -17,7 +17,6 @@ export default class BlockBookshelf extends Block {
     }
 
     getTextureForFace(face) {
-        // Book spines on the four sides, plain planks on the top and bottom.
         return face === EnumBlockFace.TOP || face === EnumBlockFace.BOTTOM
             ? 'oak_planks'
             : 'bookshelf';

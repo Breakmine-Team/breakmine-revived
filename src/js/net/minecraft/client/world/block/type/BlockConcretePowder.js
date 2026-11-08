@@ -10,8 +10,6 @@ export default class BlockConcretePowder extends BlockSand {
         this.textureName = textureName;
         this.concreteId = concreteId;
         this.hardness = 0.4;
-        // Follows its hardened block into Building Blocks rather than staying
-        // behind with the decorative sand family.
         this.inventoryTab = EnumCreativeInventoryTab.BUILDING_BLOCKS;
     }
 
@@ -35,7 +33,6 @@ export default class BlockConcretePowder extends BlockSand {
 
         let below = world.getBlockAt(x, y - 1, z);
         if (below === BlockRegistry.WATER.id) {
-            // Fall into the water and harden there
             world.setBlockAt(x, y, z, 0, 0);
             this.harden(world, x, y - 1, z);
             return;

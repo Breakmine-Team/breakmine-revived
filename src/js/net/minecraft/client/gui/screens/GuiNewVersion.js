@@ -2,13 +2,6 @@ import GuiScreen from "../GuiScreen.js";
 import GuiButton from "../widgets/GuiButton.js";
 import { stripGitHash, isPackagedApp, isElectronApp } from "../../VersionChecker.js";
 
-/**
- * Shown when the main menu's update check finds a newer build.
- *
- * The version data is passed in by the caller rather than fetched here. This
- * screen used to `import` version.js straight from a remote URL, which meant
- * the screen could not even load if that host was down, unreachable or slow.
- */
 export default class GuiVersion extends GuiScreen {
 
     constructor(updateInfo = {}, parentScreen = null) {
@@ -16,7 +9,6 @@ export default class GuiVersion extends GuiScreen {
 
         this.parentScreen = parentScreen;
 
-        // Show "4.8.5a", never the "-1109693" build hash.
         this.latest = stripGitHash(updateInfo.latest || "");
         this.current = stripGitHash(updateInfo.current || "");
 
@@ -43,13 +35,10 @@ export default class GuiVersion extends GuiScreen {
         super.init();
 
         this.buttonList.push(new GuiButton(this.minecraft, "Back", this.width / 2 - 155, this.height - 28, 150, 20, () => {
-            // Do not let the user walk away from an install in progress.
             if (this.updating) return;
             this.minecraft.displayScreen(this.parentScreen);
         }));
 
-        // A file:// page has no installer and cannot reload into a new build;
-        // the New Update prompt in index.html handles that case.
         if (!this.isFile) {
             this.updateButton = new GuiButton(
                 this.minecraft,
@@ -70,7 +59,6 @@ export default class GuiVersion extends GuiScreen {
     onUpdateStatus(status) {
         if (!status || !status.message) return;
 
-        // The installer is chatty; keep the tail so the box cannot overflow.
         this.statusLines.push(status.message);
         if (this.statusLines.length > 12) this.statusLines.shift();
 
@@ -111,7 +99,6 @@ export default class GuiVersion extends GuiScreen {
         let fontRenderer = this.minecraft.fontRenderer || this.minecraft.getFontRenderer?.();
         if (fontRenderer) {
             let lines = (this.templateText || '').split('\n');
-            // Live installer output, while an update is running.
             if (this.updating && this.statusLines.length) {
                 lines = lines.concat(['']).concat(this.statusLines);
             }
@@ -130,7 +117,6 @@ export default class GuiVersion extends GuiScreen {
             let textX = boxLeft + paddingLeftRight;
             let startY = boxTop + paddingTopBottom;
 
-            // Only draw lines that fit, so the status tail stays visible.
             let maxLines = Math.max(
                 0,
                 Math.floor((boxBottom - paddingTopBottom - startY) / lineHeight)

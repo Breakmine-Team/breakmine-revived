@@ -9,7 +9,6 @@ export default class BlockDirt extends Block {
         this.description = "Dirt";
         this.hardness = 0.5;
 
-        // Sound
         this.sound = Block.sounds.gravel;
         this.inventoryTab = EnumCreativeInventoryTab.DECORATION;
     }

@@ -1,22 +1,22 @@
-// Connection hardening for the standalone multiplayer server.
-//
-// Two independent layers live here:
-//
-//   1. Anti-DDoS: refuse floods of new sockets from one address, cap the
-//      number of sockets an address may hold open, and rate-limit the messages
-//      an established socket can send. Repeat offenders are blocked for a
-//      while instead of being hammered on individually.
-//
-//   2. Anti-VPN: ask an IP-reputation service whether an address belongs to a
-//      VPN, proxy or hosting provider and refuse the login when it does.
-//      Results are cached (reputation changes slowly), lookups never block the
-//      event loop, and a service outage falls back to the configured
-//      fail-open/fail-closed behaviour.
-//
-// Everything in here is inert unless the server is running under Node and a
-// real socket request is available, so the singleplayer integrated server
-// (which runs inside a browser worker and is reached through a loopback
-// adapter) is never affected.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import { createDisconnectPacket } from './packets.js';
 import Logger from './logger.js';
 
@@ -40,9 +40,9 @@ function envInt(name, fallback, min, max) {
     return Math.max(min, Math.min(max, parsed));
 }
 
-// ---------------------------------------------------------------------------
-// Settings
-// ---------------------------------------------------------------------------
+
+
+
 
 const trustProxyMode = parseTrustProxyMode();
 
@@ -57,27 +57,17 @@ function parseTrustedProxies(mode) {
 export const settings = {
     antiDdos: envFlag('SERVER_ANTIDDOS', true),
     antiVpn: envFlag('SERVER_ANTIVPN', true),
-    // "ipapi" needs no account (free, non-commercial, HTTP only). "proxycheck"
-    // is more accurate and adds datacenter detection, but needs a key.
     vpnProvider: String(ENV.SERVER_ANTIVPN_PROVIDER || 'ipapi').trim().toLowerCase(),
     vpnKey: String(ENV.SERVER_ANTIVPN_KEY || '').trim(),
-    // Datacenter/hosting ranges are blocked by default: a server owner who only
-    // wants to stop VPNs (and not, say, cloud-hosted friends) can turn this off.
     blockHosting: envFlag('SERVER_ANTIVPN_BLOCK_HOSTING', true),
-    // Fail open keeps the server playable when the reputation service is down.
     vpnFailOpen: envFlag('SERVER_ANTIVPN_FAIL_OPEN', true),
     vpnTimeoutMs: envInt('SERVER_ANTIVPN_TIMEOUT_MS', 3000, 250, 15000),
-    // Which peers may tell us who the real client is (see getClientIp).
-    //   unset            -> only loopback/LAN peers, i.e. a proxy on this host
-    //   true             -> any peer (only safe when this port is not public)
-    //   false            -> never trust forwarded headers
-    //   <ip>,<ip>,...    -> those peers only
     trustProxyMode,
     trustedProxies: parseTrustedProxies(trustProxyMode)
 };
 
-// Flood limits. Generous enough for normal play (a client sends ~20 position
-// updates a second) but orders of magnitude below what a spray attack needs.
+
+
 const CONNECTION_WINDOW_MS = 10 * 1000;
 const MAX_CONNECTIONS_PER_WINDOW = 12;
 const MAX_CONCURRENT_PER_IP = 5;
@@ -93,31 +83,30 @@ const BAN_MS = 10 * 60 * 1000;
 
 const VPN_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const VPN_CACHE_MAX_ENTRIES = 5000;
-// How many login/movement messages are replayed once a pending VPN verdict
-// arrives. A client only sends a handful before it is in game.
+
+
 const MAX_HELD_MESSAGES = 32;
 
-// ---------------------------------------------------------------------------
-// State
-// ---------------------------------------------------------------------------
 
-const bans = new Map(); // ip -> expiresAt
-const connectionHistory = new Map(); // ip -> { count, windowStart }
-const activeConnections = new Map(); // ip -> open socket count
-const violations = new Map(); // ip -> { score, since }
-const vpnCache = new Map(); // ip -> { blocked, reason, expires }
+
+
+
+const bans = new Map(); 
+const connectionHistory = new Map(); 
+const activeConnections = new Map(); 
+const violations = new Map(); 
+const vpnCache = new Map(); 
 let totalConnections = 0;
 let warnedNoKey = false;
 
-// ---------------------------------------------------------------------------
-// Addressing helpers
-// ---------------------------------------------------------------------------
+
+
+
 
 function normalizeAddress(ip) {
     if (!ip) return null;
     let address = String(ip).trim();
     if (!address) return null;
-    // IPv4-mapped IPv6 (::ffff:1.2.3.4) and zone ids must not split the cache.
     if (address.startsWith('::ffff:') && address.includes('.')) {
         address = address.slice(7);
     }
@@ -134,10 +123,10 @@ function parseTrustProxyMode() {
     return 'list';
 }
 
-// A machine that can only be reached by something on this box or this network:
-// loopback, RFC1918, link-local, IPv6 ULA. This is the set of peers trusted by
-// default, because a public client can never make its source look like one.
-// CGNAT (100.64/10) is deliberately not included: those are real clients.
+
+
+
+
 function isPrivatePeer(ip) {
     if (!ip) return false;
     if (ip === '::1') return true;
@@ -160,16 +149,6 @@ function isTrustedPeer(ip) {
     return settings.trustProxyMode === 'local' && isPrivatePeer(ip);
 }
 
-/**
- * Address the game should treat as the player's.
- *
- * Behind the play.breakmine.com reverse proxy every socket comes from the
- * proxy, so the per-IP flood limits and the VPN verdict would otherwise all be
- * shared by every player. When the peer is a trusted proxy the real address is
- * taken from the headers it sets: CF-Connecting-IP first (Cloudflare always
- * overwrites it), then the last X-Forwarded-For entry, which is the address the
- * proxy itself saw rather than anything the client typed.
- */
 export function getClientIp(req) {
     if (!req) return null;
 
@@ -196,8 +175,8 @@ export function getClientIp(req) {
     return peer;
 }
 
-// Loopback, LAN and CGNAT addresses are never looked up: they are not public
-// VPN endpoints, and looking them up only burns the provider's rate limit.
+
+
 function isLocalAddress(ip) {
     if (!ip) return true;
     if (ip === '::1' || ip === '0.0.0.0' || ip === '::') return true;
@@ -208,8 +187,8 @@ function isLocalAddress(ip) {
     if (/^169\.254\./.test(ip)) return true;
     if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(ip)) return true;
     const lower = ip.toLowerCase();
-    if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // IPv6 ULA
-    if (lower.startsWith('fe80:')) return true; // IPv6 link-local
+    if (lower.startsWith('fc') || lower.startsWith('fd')) return true; 
+    if (lower.startsWith('fe80:')) return true; 
     return false;
 }
 
@@ -249,16 +228,11 @@ function releaseConnection(ip) {
     totalConnections = Math.max(0, totalConnections - 1);
 }
 
-// ---------------------------------------------------------------------------
-// Admission control (ws `verifyClient`): runs before the HTTP upgrade
-// completes, so refused clients never get a WebSocket.
-// ---------------------------------------------------------------------------
 
-/**
- * Decide whether a new upgrade may open a socket.
- *
- * @returns {{accepted: boolean, ip?: string, code?: number, message?: string, reason?: string}}
- */
+
+
+
+
 export function verifyConnection(info) {
     if (!IS_NODE || !settings.antiDdos) {
         return { accepted: true };
@@ -326,8 +300,6 @@ export function verifyConnection(info) {
     activeConnections.set(ip, open + 1);
     totalConnections += 1;
 
-    // The socket may close before (or without) the WebSocket handshake
-    // finishing, so release the slot from the socket itself.
     const socket = req && (req.socket || req.connection);
     if (socket && typeof socket.once === 'function') {
         socket.once('close', () => releaseConnection(ip));
@@ -336,9 +308,9 @@ export function verifyConnection(info) {
     return { accepted: true, ip };
 }
 
-// ---------------------------------------------------------------------------
-// Anti-VPN lookups
-// ---------------------------------------------------------------------------
+
+
+
 
 function readVpnCache(ip, now) {
     const entry = vpnCache.get(ip);
@@ -352,7 +324,6 @@ function readVpnCache(ip, now) {
 
 function writeVpnCache(ip, blocked, reason) {
     if (vpnCache.size >= VPN_CACHE_MAX_ENTRIES) {
-        // Map keeps insertion order: drop the oldest verdict.
         const oldest = vpnCache.keys().next();
         if (!oldest.done) vpnCache.delete(oldest.value);
     }
@@ -424,10 +395,6 @@ async function lookupVpn(ip) {
     return lookupIpApi(ip);
 }
 
-/**
- * Resolve whether an address may join. Never throws: a failed lookup resolves
- * to the configured fail-open/fail-closed verdict.
- */
 export function checkAddress(ip) {
     const address = normalizeAddress(ip);
     if (!address || !settings.antiVpn || isLocalAddress(address)) {
@@ -454,9 +421,9 @@ export function checkAddress(ip) {
         });
 }
 
-// ---------------------------------------------------------------------------
-// Per-connection gate
-// ---------------------------------------------------------------------------
+
+
+
 
 function messageSize(message) {
     if (typeof message === 'string') return message.length;
@@ -465,10 +432,6 @@ function messageSize(message) {
     return 0;
 }
 
-/**
- * Build the per-socket gate. Returns null when there is no real socket (the
- * integrated singleplayer server) or when both protections are disabled.
- */
 export function createConnectionGate(req, ws) {
     if (!IS_NODE || !req || (!settings.antiDdos && !settings.antiVpn)) {
         return null;
@@ -479,8 +442,6 @@ export function createConnectionGate(req, ws) {
 
     const gate = {
         ip,
-        // Called by the caller for each message released after a pending VPN
-        // verdict, so buffered messages re-enter the normal handler.
         onFlush: null,
         held: [],
         tokens: MESSAGE_BURST,
@@ -498,7 +459,6 @@ export function createConnectionGate(req, ws) {
         try {
             if (ws && ws.readyState === 1) ws.close();
         } catch (e) {
-            // Closing an already-broken socket is not an error.
         }
     }
 
@@ -510,7 +470,6 @@ export function createConnectionGate(req, ws) {
                 ws.send(createDisconnectPacket(`§c${reason}`));
             }
         } catch (e) {
-            // Fall through to the close below.
         }
         log.info('Security', `Refused ${ip}: ${reason}`);
         closeSocket();
@@ -531,8 +490,6 @@ export function createConnectionGate(req, ws) {
         if (gate.closed) return 'drop';
 
         if (settings.antiDdos) {
-            // A socket opened before its address was blocked must not keep
-            // talking after the block went in.
             if (isBanned(ip, Date.now())) {
                 closeSocket();
                 return 'drop';
@@ -606,9 +563,9 @@ export function createConnectionGate(req, ws) {
     return gate;
 }
 
-// ---------------------------------------------------------------------------
-// Maintenance + startup summary
-// ---------------------------------------------------------------------------
+
+
+
 
 function sweep() {
     const now = Date.now();
@@ -634,7 +591,6 @@ if (IS_NODE) {
     if (typeof timer.unref === 'function') timer.unref();
 }
 
-/** One-line summary for the startup log. */
 export function describeSettings() {
     const parts = [];
 

@@ -16,10 +16,8 @@ export default class Block {
         this.id = id;
         this.textureSlotId = textureSlotId;
 
-        // Bounding box
         this.boundingBox = new BoundingBox(0.0, 0.0, 0.0, 1.0, 1.0, 1.0);
 
-        // Default sound
         this.sound = Block.sounds.stone;
 
         this.description = null;
@@ -27,7 +25,6 @@ export default class Block {
 
         this.hardness = 1.0;
 
-        // Register block
         Block.blocks.set(id, this);
 
         this.path = false;
@@ -52,7 +49,6 @@ export default class Block {
     }
 
     onBlockEntityLoaded(world, x, y, z, entity) {
-        // override
     }
 
     onBlockEntityChanged(world, x, y, z, entity) {
@@ -194,7 +190,6 @@ export default class Block {
     }
     
     onUse(world, x, y, z, itemstack, hitFace) {
-        //
     }
 
     shouldRenderFace(world, x, y, z, face, prefetchedTypeId) {
@@ -324,7 +319,6 @@ export default class Block {
             return null;
         }
 
-        // Wrapped form: { block, bbox } / { texture, bbox }
         if (typeof data.minX === "undefined" && typeof data.bbox !== "undefined") {
             data = data.bbox;
         }
@@ -371,9 +365,7 @@ export default class Block {
         return new MovingObjectPosition(vec36.addVector(x, y, z), face, x, y, z);
     }
 
-    /**
-     * Checks if a vector is within the Y and Z bounds of the block.
-     */
+    
     isVecInsideYZBounds(point, bbox = null) {
         let bounds = bbox || this.boundingBox;
         return point == null ? false : point.y >= bounds.minY
@@ -382,9 +374,7 @@ export default class Block {
             && point.z <= bounds.maxZ;
     }
 
-    /**
-     * Checks if a vector is within the X and Z bounds of the block.
-     */
+    
     isVecInsideXZBounds(point, bbox = null) {
         let bounds = bbox || this.boundingBox;
         return point == null ? false : point.x >= bounds.minX
@@ -393,9 +383,7 @@ export default class Block {
             && point.z <= bounds.maxZ;
     }
 
-    /**
-     * Checks if a vector is within the X and Y bounds of the block.
-     */
+    
     isVecInsideXYBounds(point, bbox = null) {
         let bounds = bbox || this.boundingBox;
         return point == null ? false : point.x >= bounds.minX

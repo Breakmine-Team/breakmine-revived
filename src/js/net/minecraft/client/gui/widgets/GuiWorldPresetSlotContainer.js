@@ -67,7 +67,6 @@ export default class GuiWorldPresetSlotContainer {
                 slot.y = slotTop;
                 slot.width = slotWidth;
                 slot.height = slotHeight;
-                // Ensure minecraft instance is set for rendering
                 if (!slot.minecraft && this.parentGui.minecraft) {
                     slot.minecraft = this.parentGui.minecraft;
                 }

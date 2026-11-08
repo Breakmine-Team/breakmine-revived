@@ -3,9 +3,9 @@ const SECTION_SIZE = 16;
 const SECTION_VOLUME = SECTION_SIZE * SECTION_SIZE * SECTION_SIZE;
 const TOTAL_HEIGHT = 256;
 
-// The client sends the block table once per registry change. Defaults keep the
-// worker usable if a fill arrives before the config message (which should not
-// happen because messages are ordered, but makes the worker robust).
+
+
+
 let validBlocks = new Uint8Array(4096);
 validBlocks.fill(1);
 validBlocks[0] = 0;
@@ -40,9 +40,6 @@ function processChunk(message) {
     const sections = new Array(SECTION_COUNT).fill(null);
     const skyLights = new Array(SECTION_COUNT);
     for (let layer = 0; layer < SECTION_COUNT; layer++) {
-        // Even an empty section can sit below a floating platform, where the
-        // sky light is darker than the empty-section default of 15. Always
-        // return a fully populated array so the main thread never has to guess.
         skyLights[layer] = new Uint8Array(SECTION_VOLUME);
     }
     const unknownCells = [];
@@ -70,17 +67,11 @@ function processChunk(message) {
                 nonEmpty = true;
 
                 if (!validBlocks[typeId]) {
-                    // Leave the id intact. The main thread knows about mod
-                    // blocks the worker may not, and can replace only ids that
-                    // are actually unknown there.
                     unknownCells.push(layer, i, typeId);
                     needsMainLight = true;
                 }
 
                 if (dynamicOpacityById[typeId]) {
-                    // A block whose opacity depends on world data cannot be
-                    // evaluated in the worker. The main thread will recompute
-                    // this chunk's light with the real world.
                     needsMainLight = true;
                 }
             }
@@ -88,10 +79,6 @@ function processChunk(message) {
             offset += 2;
         }
 
-        // Block light and sky light are both 2048-byte nibble arrays. The old
-        // fill path discarded the server's placeholder values immediately:
-        // block light was zeroed and sky light was recomputed column-by-column.
-        // Both are produced below, so only advance past the input.
         offset += SECTION_VOLUME / 2 * 2;
 
         if (nonEmpty) {
@@ -109,9 +96,6 @@ function processChunk(message) {
         }
     }
 
-    // Same column pass as World.updateChunkSkyLight(): start at full daylight
-    // above the heightmap and attenuate through each block below it. The
-    // cross-chunk flood still runs on the main thread so borders stay correct.
     for (let lx = 0; lx < SECTION_SIZE; lx++) {
         for (let lz = 0; lz < SECTION_SIZE; lz++) {
             const height = heightMap[lz << 4 | lx];

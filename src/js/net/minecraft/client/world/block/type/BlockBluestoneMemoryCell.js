@@ -11,7 +11,7 @@ export default class BlockBluestoneMemoryCell extends Block {
         this.description = "Bluestone Memory Cell";
         this.hardness = 0.2;
         this.isBluestoneConsumer = true;
-        this.isPowerSource = false; // Kept false so instance logic checks specific face power
+        this.isPowerSource = false; 
         this.inventoryTab = EnumCreativeInventoryTab.MACHINES;
         this.noFaceCull = true;
     }
@@ -48,7 +48,6 @@ export default class BlockBluestoneMemoryCell extends Block {
     onBlockPlaced(world, x, y, z, face) {
         const player = world.minecraft?.player;
 
-        // Direction mapping: 0: SOUTH, 1: WEST, 2: NORTH, 3: EAST
         if (player) {
             const dirIndex = Math.floor((player.rotationYaw * 4 / 360) + 0.5) & 3;
             const currentPower = world.getBlockDataAt(x, y, z) & 1;
@@ -60,47 +59,46 @@ export default class BlockBluestoneMemoryCell extends Block {
     }
 
     onMouseButton(world, x, y, z, button) {
-        // Memory cell doesn't have any right-click interaction
         return false;
     }
 
     _getDirectionFaces(data) {
-        const direction = (data >> 1) & 3; // 0: SOUTH, 1: WEST, 2: NORTH, 3: EAST
+        const direction = (data >> 1) & 3; 
 
         switch (direction) {
-            case 1: // WEST
+            case 1: 
                 return {
-                    front: [ -1, 0, 0 ],    // Output: WEST
-                    back: [ 1, 0, 0 ],     // RESET: EAST
-                    right: [ 0, 0, -1 ],   // SET: NORTH
+                    front: [ -1, 0, 0 ],    
+                    back: [ 1, 0, 0 ],     
+                    right: [ 0, 0, -1 ],   
                     frontFace: EnumBlockFace.WEST,
                     backFace: EnumBlockFace.EAST,
                     rightFace: EnumBlockFace.NORTH
                 };
-            case 2: // NORTH
+            case 2: 
                 return {
-                    front: [ 0, 0, -1 ],    // Output: NORTH
-                    back: [ 0, 0, 1 ],     // RESET: SOUTH
-                    right: [ 1, 0, 0 ],    // SET: EAST
+                    front: [ 0, 0, -1 ],    
+                    back: [ 0, 0, 1 ],     
+                    right: [ 1, 0, 0 ],    
                     frontFace: EnumBlockFace.NORTH,
                     backFace: EnumBlockFace.SOUTH,
                     rightFace: EnumBlockFace.EAST
                 };
-            case 3: // EAST
+            case 3: 
                 return {
-                    front: [ 1, 0, 0 ],     // Output: EAST
-                    back: [ -1, 0, 0 ],    // RESET: WEST
-                    right: [ 0, 0, 1 ],    // SET: SOUTH
+                    front: [ 1, 0, 0 ],     
+                    back: [ -1, 0, 0 ],    
+                    right: [ 0, 0, 1 ],    
                     frontFace: EnumBlockFace.EAST,
                     backFace: EnumBlockFace.WEST,
                     rightFace: EnumBlockFace.SOUTH
                 };
-            case 0: // SOUTH
+            case 0: 
             default:
                 return {
-                    front: [ 0, 0, 1 ],     // Output: SOUTH
-                    back: [ 0, 0, -1 ],    // RESET: NORTH
-                    right: [ -1, 0, 0 ],   // SET: WEST
+                    front: [ 0, 0, 1 ],     
+                    back: [ 0, 0, -1 ],    
+                    right: [ -1, 0, 0 ],   
                     frontFace: EnumBlockFace.SOUTH,
                     backFace: EnumBlockFace.NORTH,
                     rightFace: EnumBlockFace.WEST
@@ -129,10 +127,6 @@ export default class BlockBluestoneMemoryCell extends Block {
         const { back, right, backFace, rightFace } = this._getDirectionFaces(data);
         const currentPowerState = (data & 1) === 1;
 
-        // Latch logic:
-        // - SET (right) powered: turn ON
-        // - RESET (back) powered: turn OFF
-        // - Neither: maintain current state
         const setPowered = this._isPoweredAt(world, x, y, z, right[0], right[1], right[2], rightFace);
         const resetPowered = this._isPoweredAt(world, x, y, z, back[0], back[1], back[2], backFace);
 
@@ -156,7 +150,6 @@ export default class BlockBluestoneMemoryCell extends Block {
         const isPowered = (data & 1) === 1;
         if (!isPowered) return 0;
 
-        // If a query face is specified, only output power through the front face
         if (face !== undefined && face !== null) {
             const { frontFace } = this._getDirectionFaces(data);
             return face === frontFace ? 15 : 0;
@@ -188,32 +181,26 @@ export default class BlockBluestoneMemoryCell extends Block {
         }
 
         if (face === EnumBlockFace.TOP) {
-            // In GUI rendering, world is null - use default powered texture
             if (!world) {
                 return isPowered ? 'bluestoneMemoryTopOn' : 'bluestoneMemoryTopOff';
             }
 
-            // Check input states
             const { back, right, backFace, rightFace } = this._getDirectionFaces(data);
             const setPowered = this._isPoweredAt(world, x, y, z, right[0], right[1], right[2], rightFace);
             const resetPowered = this._isPoweredAt(world, x, y, z, back[0], back[1], back[2], backFace);
 
             if (!isPowered) {
                 if (setPowered && resetPowered) {
-                    // Both inputs on, output off
                     return 'bluestoneMemoryTopSetOnResetOnOff';
                 }
                 return 'bluestoneMemoryTopOff';
             }
 
             if (!setPowered && !resetPowered) {
-                // Memory state: both inputs off, output on
                 return 'bluestoneMemoryTopSetOffResetOffOn';
             } else if (setPowered && !resetPowered) {
-                // Set active, output on
                 return 'bluestoneMemoryTopSetOnResetOff';
             } else if (!setPowered && resetPowered) {
-                // Reset active, output on
                 return 'bluestoneMemoryTopSetOffResetOn';
             }
 

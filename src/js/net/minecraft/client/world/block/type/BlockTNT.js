@@ -1,6 +1,7 @@
 import Block from "../Block.js";
 import EnumBlockFace from "../../../../util/EnumBlockFace.js";
 import EnumCreativeInventoryTab from "../../../gui/EnumCreativeInventoryTab.js";
+import { BlockRegistry } from "../BlockRegistry.js";
 
 export default class BlockTNT extends Block {
 
@@ -43,7 +44,6 @@ export default class BlockTNT extends Block {
         }
         visited.add(key);
 
-        // Remove the TNT block itself so it doesn't remain in place
         world.setBlockAt(x, y, z, 0);
 
         const radius = this.explosionRadius;
@@ -73,7 +73,6 @@ export default class BlockTNT extends Block {
                         continue;
                     }
 
-                    // If this is another TNT block then trigger it instead of destroying it
                     if (typeId === this.id) {
                         this.explode(world, targetX, targetY, targetZ, visited);
                         continue;
@@ -88,18 +87,98 @@ export default class BlockTNT extends Block {
         }
     }
 
-    onMouseButton(world, x, y, z, button) {
+    /** Detonate. Used by the flint and steel path, which never reaches onMouseButton. */
+    ignite(world, x, y, z) {
+        if (!this.isExplosionEnabled(world)) {
+            return false;
+        }
+
+        this.explode(world, x, y, z);
+        return true;
+    }
+
+    /** Held item id, read from the client player when the caller does not pass one. */
+    getHeldItemId(world) {
+        const stack = world?.minecraft?.player?.inventory?.getItemInSelectedSlot?.();
+        return stack && typeof stack.getType === "function" ? (stack.getType() || 0) : 0;
+    }
+
+    isIgnitionItem(heldItemId) {
+        return heldItemId > 0 && heldItemId === BlockRegistry.FLINT_AND_STEEL?.id;
+    }
+
+    /** Any adjacent bluestone carrying signal, or a constant power source. */
+    isBluestonePowered(world, x, y, z) {
+        if (!world || typeof world.getBlockAt !== "function") {
+            return false;
+        }
+
+        const neighbors = [
+            [1, 0, 0], [-1, 0, 0],
+            [0, 0, 1], [0, 0, -1],
+            [0, -1, 0], [0, 1, 0],
+        ];
+
+        for (const [dx, dy, dz] of neighbors) {
+            const nx = x + dx;
+            const ny = y + dy;
+            const nz = z + dz;
+            const block = Block.getById(world.getBlockAt(nx, ny, nz));
+            if (!block) {
+                continue;
+            }
+
+            // getPower first: a lever, torch or repeater only counts while it
+            // is actually on, whereas isPowerSource is a static flag.
+            if (typeof block.getPower === "function") {
+                if (block.getPower(world, nx, ny, nz) > 0) {
+                    return true;
+                }
+            } else if (block.isPowerSource) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    onBlockAdded(world, x, y, z) {
+        if (this.isBluestonePowered(world, x, y, z)) {
+            this.ignite(world, x, y, z);
+        }
+    }
+
+    onNeighborBlockChange(world, x, y, z) {
+        if (world && typeof world.scheduleBlockTick === "function") {
+            world.scheduleBlockTick(x, y, z, 1);
+        }
+    }
+
+    onBlockTick(world, x, y, z) {
+        if (!world || world.getBlockAt(x, y, z) !== this.id) {
+            return;
+        }
+        if (this.isBluestonePowered(world, x, y, z)) {
+            this.ignite(world, x, y, z);
+        }
+    }
+
+    onMouseButton(world, x, y, z, button, heldItemId) {
         if (button !== 2) {
             return false;
         }
 
-        // Still consume the click when TNT is disabled so the held item is
-        // not placed against the block by the fallback placement path.
-        if (!this.isExplosionEnabled(world)) {
-            return true;
+        const item = heldItemId === undefined || heldItemId === null
+            ? this.getHeldItemId(world)
+            : heldItemId;
+
+        // Only flint and steel ignites TNT on a click. Returning false keeps
+        // ordinary use going, so a block can still be placed against the TNT.
+        if (!this.isIgnitionItem(item)) {
+            return false;
         }
 
-        this.explode(world, x, y, z);
+        this.ignite(world, x, y, z);
         return true;
     }
 

@@ -1,10 +1,10 @@
-// Server-side World emulation for block ticking using game code BlockRegistry.
-// This implements the subset of the client World API that the game's block
-// classes touch (getBlockAt / getBlockDataAt / setBlockAt / setBlockDataAt /
-// onBlockChanged / scheduleBlockTick) so the *same* bluestone logic that runs
-// in single-player (dust propagation, lamps, repeaters, observers, pushers,
-// bulbs, doors) runs authoritatively on the server in multiplayer. Every
-// state change is persisted and broadcast to all connected players.
+
+
+
+
+
+
+
 import { getBlockAt, getBlockMetadata, addWorldChange, getActiveDimension } from './world.js';
 import { getPlayers } from './players.js';
 import { addItemEntity } from './entities.js';
@@ -12,12 +12,12 @@ import { createSpawnObjectPacket, sendBlockChange } from './packets.js';
 import Block from '../client/world/block/Block.js';
 import config from './config.js';
 
-const TICK_MS = 50; // 20 game ticks per second
+const TICK_MS = 50; 
 
-// Blocks touch `world.minecraft` to play sounds / open GUIs / read the local
-// player. On the server those become harmless no-ops (player stays undefined
-// so player-rotation code in onBlockPlaced early-returns and trusts the
-// metadata sent by the placing client).
+
+
+
+
 const MINECRAFT_STUB = {
     displayScreen: () => {},
     soundManager: { playSoundMono: () => {} },
@@ -31,14 +31,9 @@ class ServerWorld {
         this.blockTickQueue = [];
         this.minecraft = MINECRAFT_STUB;
 
-        // Re-entrancy guard for notifyNeighborBlockChange: nested notifications
-        // (a repeater's output feeding back into an oscillator/combinational
-        // loop) are queued and drained iteratively instead of recursing.
         this.neighborUpdateQueue = [];
         this.processingNeighborUpdates = false;
 
-        // Read the live config instead of copying it, so a /server switch and
-        // its config.reload() apply the new rules without a restart.
     }
 
     get allowTNT() {
@@ -74,13 +69,7 @@ class ServerWorld {
         this._set(x, y, z, getBlockAt(x, y, z), data);
     }
 
-    // Kept deliberately narrow: waking the neighbours when a block disappears.
-// Without it a wire that loses a block (or a door whose other half was
-    // removed) keeps its old state until something else happens to tick it.
-    // Block placement/removal callbacks are NOT fired here -- onBlockRemoved
-    // can cascade (the pusher head tears down its own base), and running
-    // placement logic from the simulation made networks unstable instead of
-    // settling. Placements are seeded by the placement handler's onBlockAdded.
+
     setBlockAt(x, y, z, type, data) {
         this._set(x, y, z, type, data === undefined ? 0 : data);
 
@@ -96,8 +85,6 @@ class ServerWorld {
         this.broadcastBlockChange(x, y, z, type, metadata);
     }
 
-    // Blocks call this to request a visual refresh; on the server that means
-    // re-broadcasting the current state so every client re-renders it.
     onBlockChanged(x, y, z) {
         this.broadcastBlockChange(x, y, z, getBlockAt(x, y, z), getBlockMetadata(x, y, z));
     }
@@ -129,8 +116,6 @@ class ServerWorld {
 
     broadcastBlockChange(x, y, z, blockId, blockData) {
         const blockState = (blockId << 4) | (blockData & 0xF);
-        // Only players in the dimension that produced the change see it;
-        // identical coordinates exist in every dimension.
         const dimension = getActiveDimension();
         const players = getPlayers();
         for (const p of players.values()) {
@@ -140,7 +125,6 @@ class ServerWorld {
         }
     }
 
-    // Schedule ticks for all adjacent blocks that have an onBlockTick.
     scheduleNeighborTicks(x, y, z) {
         const faces = [
             { x: 1, y: 0, z: 0 },
@@ -166,13 +150,6 @@ class ServerWorld {
         }
     }
 
-    // Notify adjacent blocks that the block at (x, y, z) changed type.
-    // Propagation is synchronous but loop-safe: nested notifications are
-    // queued and drained iteratively instead of recursing, so a redstone cycle
-    // (oscillator / feedback circuit) can never overflow the call stack. The
-    // cap keeps a genuine oscillator (which has no stable fixpoint) bounded
-    // for each synchronous pass; the scheduled-tick system continues driving
-    // it at normal tick cadence.
     notifyNeighborBlockChange(x, y, z) {
         this.neighborUpdateQueue.push([x, y, z]);
         if (this.processingNeighborUpdates) return;
@@ -207,12 +184,6 @@ class ServerWorld {
                     if (typeof block.onNeighborBlockChange === 'function') {
                         block.onNeighborBlockChange(this, checkX, checkY, checkZ);
                     } else if (typeof block.onBlockTick === 'function') {
-                        // Plenty of bluestone blocks (pusher, pusher head, sticky
-                        // pusher, rod pillar, ...) have no onNeighborBlockChange hook.
-                        // Calling only the hook meant those blocks were skipped
-                        // entirely and silently kept their old state. Anything that
-                        // ticks gets scheduled instead, so a neighbour change can
-                        // never be dropped on the floor.
                         this.scheduleBlockTick(checkX, checkY, checkZ, 1);
                     }
                 }
@@ -227,9 +198,6 @@ class ServerWorld {
         }
     }
 
-    // After a world load, queue ticks for every saved block that participates
-    // in block ticking so saved bluestone networks settle to their correct
-    // state again.
     seedScheduledTicks(subChunks) {
         subChunks.forEachModifiedBlock((x, y, z, blockState) => {
             const block = Block.getById(blockState >> 4);
@@ -239,7 +207,6 @@ class ServerWorld {
         });
     }
 
-    // Process block ticks (called from the server tick loop).
     onTick() {
         const now = Date.now();
 

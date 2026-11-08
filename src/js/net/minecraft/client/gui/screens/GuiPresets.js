@@ -78,7 +78,6 @@ export default class GuiPresets extends GuiScreen {
         super.mouseClicked(mouseX, mouseY, mouseButton);
     }
 
-    // Forward drag/release so the scrollbar thumb can be dragged.
     mouseDragged(mouseX, mouseY, mouseButton) {
         this.worldSlotContainer.mouseDragged(mouseX, mouseY, mouseButton);
         super.mouseDragged(mouseX, mouseY, mouseButton);
@@ -89,7 +88,6 @@ export default class GuiPresets extends GuiScreen {
         super.mouseReleased(mouseX, mouseY, mouseButton);
     }
 
-    // Forward mouse wheel events to the list (handled by the container).
     mouseScrolled(mouseX, mouseY, amount) {
         this.worldSlotContainer.mouseScrolled(mouseX, mouseY, amount);
         super.mouseScrolled(mouseX, mouseY, amount);

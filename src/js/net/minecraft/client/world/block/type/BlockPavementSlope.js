@@ -4,11 +4,6 @@ import EnumCreativeInventoryTab from "../../../gui/EnumCreativeInventoryTab.js";
 
 const MAX_LAYERS = 8;
 
-/**
- * A pavement layer block in the style of snow layers. The low three metadata
- * bits store layers - 1, so data 0 is one 1/8 block layer and data 7 is a
- * full-height pavement block.
- */
 export default class BlockPavementSlope extends Block {
 
     constructor(id, textureSlotId, textureName, name) {
@@ -52,9 +47,6 @@ export default class BlockPavementSlope extends Block {
         return 0;
     }
 
-    // Layers are thin: a side face of a taller layer next to a shorter one is
-    // visible, so let the mesher decide per face instead of culling the whole
-    // block against a solid neighbour.
     shouldRenderFace(world, x, y, z, face) {
         return true;
     }

@@ -16,8 +16,7 @@ export default class GuiCreateWorld extends GuiScreen {
         super();
         this.previousScreen = previousScreen;
         
-        // Settings State
-        this.gameMode = "survival"; // survival, --hardcore--, creative, spectator
+        this.gameMode = "survival"; 
         this.generateStructures = true;
         this.hardcoreMode = false;
         this.isMoreOptionsMode = false;
@@ -35,7 +34,6 @@ export default class GuiCreateWorld extends GuiScreen {
 
         let y = this.height / 2 - 50;
 
-        // Text Fields
         this.textboxWorldName = new GuiTextField(this.width / 2 - 100, y + 10, 200, 20);
         this.textboxWorldName.setText(this.worldNameText);
         this.textboxWorldName.maxLength = 32;
@@ -45,7 +43,6 @@ export default class GuiCreateWorld extends GuiScreen {
         this.textboxSeed.setText(this.seedText);
         this.textboxSeed.maxLength = 30;
 
-        // Static action buttons (Bottom)
         this.btnCreateWorld = new GuiButton(this.minecraft, "Create New World", this.width / 2 - 155, this.height - 28, 150, 20, () => {
             this.handleCreateWorld();
         });
@@ -55,7 +52,6 @@ export default class GuiCreateWorld extends GuiScreen {
             this.minecraft.displayScreen(this.previousScreen);
         }));
 
-        // Contextual layout buttons
         this.btnGameMode = new GuiButton(this.minecraft, "Game Mode: Survival", this.width / 2 - 75, y + 50, 150, 20, () => {
             this.cycleGameMode();
         });
@@ -69,7 +65,6 @@ export default class GuiCreateWorld extends GuiScreen {
             this.cycleWorldType();
         });
 
-        // Open Preset button (Positioned below the World Type button)
         this.btnOpenPreset = new GuiButton(this.minecraft, "Open Preset", this.width / 2 + 5, y + 75, 150, 20, () => {
             this.minecraft.displayScreen(new GuiPresets(this));
         });
@@ -127,7 +122,6 @@ export default class GuiCreateWorld extends GuiScreen {
             this.btnMapType.string = "World Type: Normal";
             this.worldType = "normal";
         }
-        // Refresh visibility immediately when world type changes
         this.updateButtonVisibility();
     }
 
@@ -138,7 +132,6 @@ export default class GuiCreateWorld extends GuiScreen {
     }
 
     updateButtonVisibility() {
-        // Clear dynamically managed items
         this.buttonList = this.buttonList.filter(b => b === this.btnCreateWorld || b.string === "Cancel");
 
         if (!this.isMoreOptionsMode) {
@@ -149,7 +142,6 @@ export default class GuiCreateWorld extends GuiScreen {
             this.buttonList.push(this.btnMapFeatures);
             this.buttonList.push(this.btnMapType);
             
-            // Only show Open Preset if more options is open AND world type is preset
             if (this.worldType === "preset") {
                 this.buttonList.push(this.btnOpenPreset);
             }
@@ -194,8 +186,6 @@ export default class GuiCreateWorld extends GuiScreen {
         }
 
         const worldName = this.textboxWorldName.getText().trim() || "New World";
-        // The integrated server owns the world now; the game mode is applied
-        // server-side and streamed back to the client on login.
         this.minecraft.createNewWorld(worldName, seedLong, this.worldType, this.gameMode);
     }
 
@@ -227,7 +217,6 @@ export default class GuiCreateWorld extends GuiScreen {
             this.drawString(stack, "Seed for the World Generator", this.width / 2 - 100, y - 3, -6250336);
             this.drawString(stack, "Leave blank for a random seed", this.width / 2 - 100, y + 35, -6250336);
         }
-        //this.drawCenteredString(stack, "World saving is still in development, don't rely on it!", this.width / 2, 5, 0xFF6363);
 
         super.drawScreen(stack, mouseX, mouseY, partialTicks);
     }

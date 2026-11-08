@@ -34,7 +34,6 @@ export default class GuiContainerCraftingTable extends GuiContainer {
     }
 
     drawTitle(stack) {
-        //
     }
 
     drawInventoryBackground(stack) {

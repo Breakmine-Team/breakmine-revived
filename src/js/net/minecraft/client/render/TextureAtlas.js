@@ -4,8 +4,6 @@ import { atlasBlockTextures, atlasItemTextures, atlasPaintingTextures } from "..
 
 export default class TextureAtlas {
 
-    // Milliseconds each frame of an animated texture is shown. Minecraft's
-    // water strip uses frametime 2, i.e. two 20 Hz ticks.
     static ANIMATION_FRAME_MS = 100;
 
     constructor(minecraft, texturePath = "terrain/pack/minecraft/textures/blocks/") {
@@ -18,8 +16,6 @@ export default class TextureAtlas {
         this.textureMap = new Map();
         this.reverseTextureMap = new Map();
         this.textureNameToSlotId = new Map();
-        // Animated tiles (water, lava...) stay a single atlas cell; the cell is
-        // redrawn from the source strip as the animation advances.
         this.animatedTextures = new Map();
         this.canvas = null;
         this.texture = null;
@@ -91,10 +87,6 @@ export default class TextureAtlas {
                     : textureEntry.name;
                 const image = await this.loadImage(textureFile);
 
-                // Textures bigger than a cell (the 64x64 clock face) keep their
-                // resolution: they are packed at their native size over a square
-                // block of cells. Move to the start of the next row when the
-                // square would run off the edge.
                 const span = this.getTextureSpan(image);
                 if (span > 1) {
                     const column = index % this.texturesPerRow;
@@ -114,9 +106,6 @@ export default class TextureAtlas {
 
                 const frameCount = this.getAnimationFrameCount(image);
                 if (frameCount > 1) {
-                    // Animated strip (water_still.png holds 32 frames stacked
-                    // vertically): only frame 0 goes into the atlas cell, the
-                    // rest are drawn over it by updateAnimations().
                     ctx.drawImage(image, 0, 0, this.textureSize, this.textureSize, x, y, this.textureSize, this.textureSize);
                     this.animatedTextures.set(textureName, {
                         image,
@@ -139,8 +128,6 @@ export default class TextureAtlas {
                 }
                 this.reverseTextureMap.set(index, textureName);
                 
-                // A bigger texture owns its whole square of cells, so the next
-                // one starts on the row below it.
                 index = span > 1 ? (row + span) * this.texturesPerRow : index + 1;
             } catch (error) {
                 console.error(`Failed to load texture: ${textureFile}`, error);
@@ -162,10 +149,7 @@ export default class TextureAtlas {
         return this.texture;
     }
 
-    /**
-     * Animated block textures are a single 16px-wide image with one 16x16 frame
-     * per 16px of height. Anything else is a regular texture.
-     */
+    
     getAnimationFrameCount(image) {
         const width = image.naturalWidth || image.width;
         const height = image.naturalHeight || image.height;
@@ -174,11 +158,7 @@ export default class TextureAtlas {
         return height / this.textureSize;
     }
 
-    /**
-     * How many atlas cells a texture covers on each side. Ordinary block
-     * textures are one cell; a square texture larger than a cell (a 64x64 clock
-     * face) gets its own square block of cells so it keeps its resolution.
-     */
+    
     getTextureSpan(image) {
         const width = image.naturalWidth || image.width;
         const height = image.naturalHeight || image.height;
@@ -189,11 +169,7 @@ export default class TextureAtlas {
         return span <= this.texturesPerRow ? span : 1;
     }
 
-    /**
-     * Advance every animated tile by deltaMs and redraw its atlas cell in place.
-     * The atlas is uploaded to the GPU again only when a frame actually changes,
-     * so water ripples without rebuilding meshes; there is no per-face cost.
-     */
+    
     updateAnimations(deltaMs) {
         if (!this.texture || !this.canvas || this.animatedTextures.size === 0) return;
 
@@ -259,10 +235,7 @@ export default class TextureAtlas {
         return coords;
     }
 
-    /**
-     * Remove a mod texture and return its slot to the free list. Called when a
-     * server-supplied mod is unloaded after leaving the server.
-     */
+    
     unregisterModTexture(namespacedKey) {
         const coords = this.textureMap.get(namespacedKey);
         if (!coords) return false;
@@ -388,7 +361,6 @@ export default class TextureAtlas {
             defaultPath = path.replace(/^texture_packs\/[^\/]+\//, 'terrain/pack/minecraft/textures/blocks/');
         }
 
-        // 1. Try Base64 map first (for singlefile/standalone bundle execution)
         const base64Data = typeof base64Assets !== 'undefined' ? base64Assets[defaultPath] : null;
 
         if (base64Data) {
@@ -398,7 +370,6 @@ export default class TextureAtlas {
             return;
         }
 
-        // 2. Fall back to standard relative URL loading (for dev server / non-bundled environments)
         const assetUrl = `src/resources/${defaultPath}`;
         image.onload = () => resolve(image);
         image.onerror = () => reject(new Error(`Failed to load image URL: ${assetUrl}`));
@@ -447,9 +418,6 @@ export default class TextureAtlas {
 
     getUVs(textureName) {
         const coords = this.getTextureCoords(textureName);
-        // Meshing asks for the same handful of tiles once per face. The coords
-        // object is replaced whenever the atlas is rebuilt, so caching on it
-        // stays correct across texture-pack and mod reloads.
         if (coords.uvs !== undefined) {
             return coords.uvs;
         }

@@ -9,9 +9,9 @@ import { SubChunkStore, SECTION_DATA_BYTES } from './SubChunkStore.js';
 const log = Logger;
 
 const MODULE_DIR = path.moduleDir();
-// Respect DATA_DIR (Docker persistence) the same way config.js does, so world
-// data and config always live in the same place. Guarded: there is no
-// `process` in a browser worker (integrated server).
+
+
+
 const PROJECT_ROOT = ((typeof process !== 'undefined' && process.env) || {}).DATA_DIR
     || path.join(MODULE_DIR, '..', '..', '..', '..', '..');
 const WORLDS_DIR = path.join(PROJECT_ROOT, 'worlds');
@@ -19,26 +19,26 @@ const DEFAULT_WORLD_DIR = PROJECT_ROOT;
 const DEFAULT_WORLD_FILE = path.join(PROJECT_ROOT, 'world_data.bin');
 const CURRENT_WORLD_FILE = path.join(PROJECT_ROOT, 'current_world.txt');
 
-// World file magic + version. v3 stores whole modified subchunks, DEFLATE
-// compressed. Files without the magic are the legacy per-block "change list"
-// layout, which is still read and transparently upgraded on the next save.
+
+
+
 const WORLD_MAGIC = 'BMW3';
 const WORLD_VERSION = 3;
 
 const subChunks = new SubChunkStore();
 const blockInventories = new Map();
 let currentWorldName = 'main';
-let worldTime = 0; // In-game time (0-24000 ticks)
+let worldTime = 0; 
 
-// Nether dimension (dimension 1). It has its own block store, clock and save
-// file, so players in different dimensions never read each other's terrain.
+
+
 const NETHER_DIMENSION = 1;
 const netherChunks = new SubChunkStore('hellish');
 let netherTime = 6000;
 
-// Block reads/writes without an explicit dimension follow the player whose
-// packet is being handled; the server is single-threaded, so this scopes every
-// block interaction to that player's dimension.
+
+
+
 let activeDimension = 0;
 
 function setActiveDimension(dimension = 0) {
@@ -57,10 +57,10 @@ function getDimensionStore(dimension = 0) {
     return dimension === NETHER_DIMENSION ? netherChunks : subChunks;
 }
 
-// World-scoped modules (currently the off-grid state) register here instead
-// of world.js importing them: that keeps the world storage module free of
-// feature-specific code and lets those modules load/save next to the world
-// file, including on a /server switch.
+
+
+
+
 const worldLoadHooks = [];
 const worldSaveHooks = [];
 
@@ -93,14 +93,14 @@ function runWorldSaveHooks(worldName, worldDir) {
     }
 }
 
-// Ensure worlds directory exists
+
 if (!fs.existsSync(WORLDS_DIR)) {
     fs.mkdirSync(WORLDS_DIR, { recursive: true });
 }
 
-// Every server owns a self-contained directory. The main server lives in the
-// project root (world_data.bin), additional servers live in worlds/<name>/
-// and each holds its own world_data.bin plus an optional serverconfig.conf.
+
+
+
 function getWorldDir(worldName) {
     if (worldName === 'main') {
         return DEFAULT_WORLD_DIR;
@@ -117,8 +117,6 @@ function migrateOldWorld(worldName) {
     const worldFile = getWorldFile(worldName);
     if (fs.existsSync(worldFile)) return false;
 
-    // Old flat-file layout: worlds/<name>.bin or worlds/<name>_data.bin. Both
-    // are folded into worlds/<name>/world_data.bin so existing worlds survive.
     let oldBin = worldName === 'main'
         ? path.join(PROJECT_ROOT, 'world.bin')
         : path.join(WORLDS_DIR, `${worldName}.bin`);
@@ -155,20 +153,18 @@ function migrateOldWorld(worldName) {
     return false;
 }
 
-// ---------------------------------------------------------------------------
-//  Legacy format support
-//
-//  v1/v2 stored a flat list of individual block changes:
-//     old: numChanges(4) + changes*11 + numInventories(4) + inventories
-//     new: worldTime(8) + numChanges(4) + changes*11 + numInventories(4) + inventories
-//  Each change is x(int32) + y(uint8) + z(int32) + blockState(uint16).
-//  These are read once and folded into subchunks so the rest of the server only
-//  ever deals with one representation.
-// ---------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
 
 function readLayout(data, hasWorldTime) {
-    // The change count sits before the records, so the records begin at
-    // offset 4 (old) or 12 (new).
     let offset = hasWorldTime ? 8 : 0;
     if (offset + 4 > data.length) return null;
 
@@ -236,12 +232,6 @@ function readInventories(data, offset) {
     return cursor;
 }
 
-/**
- * Loads a legacy change list into the subchunk store. Pick the interpretation
- * that consumes the file cleanly, preferring whichever recovers more records,
- * so a partially written old save still yields the changes it did contain
- * instead of being read as an empty world.
- */
 function loadLegacyWorld(data) {
     const asNew = readLayout(data, true);
     const asOld = readLayout(data, false);
@@ -285,7 +275,6 @@ function loadLegacyWorld(data) {
             const z = data.readInt32BE(offset + 5);
             let blockState = data.readUInt16BE(offset + 9);
 
-            // The oldest format stored just blockId, not a blockState.
             if (!hasWorldTime) {
                 blockState = (blockState & 0xFF) << 4;
             }
@@ -299,9 +288,9 @@ function loadLegacyWorld(data) {
     readInventories(data, offset);
 }
 
-// ---------------------------------------------------------------------------
-//  v3 format
-// ---------------------------------------------------------------------------
+
+
+
 
 function loadV3World(data) {
     let offset = 0;
@@ -341,7 +330,6 @@ function loadV3World(data) {
         if (subChunks.loadSection(cx, cz, sy, payload)) {
             loaded++;
         } else {
-            // One corrupt entry must not cost the player the rest of the world.
             skipped++;
         }
         offset += dataLength;
@@ -356,14 +344,14 @@ function loadV3World(data) {
 }
 
 const NETHER_SAVE_MAGIC = 'BMWN';
-// Bumped from 1: v1 nether saves were written by a build whose store filled
-// freshly materialised sections with overworld terrain, so they are discarded
-// instead of streaming corrupt 16x16x16 overworld cubes into the nether.
+
+
+
 const NETHER_SAVE_VERSION = 2;
 
-// The nether keeps its own save file next to the overworld one: same section
-// layout, own clock. Only modified subchunks are written, exactly like the
-// overworld store.
+
+
+
 function saveDimensionFile(store, file, time) {
     const sections = store.serializeSections();
     let totalSize = 4 + 1 + 8 + 4;
@@ -422,7 +410,6 @@ function initWorld(worldName = 'main') {
     blockInventories.clear();
     currentWorldName = worldName;
 
-    // Save current world name to file
     fs.writeFileSync(CURRENT_WORLD_FILE, worldName);
 
     const worldDir = getWorldDir(worldName);
@@ -456,9 +443,6 @@ function initWorld(worldName = 'main') {
             loadLegacyWorld(data);
         }
     } catch (e) {
-        // A world that cannot be read must not be silently treated as empty:
-        // the next save would then overwrite it with a blank one. Report loudly
-        // and leave whatever was recovered in place.
         log.error('World', `Failed to load world (${worldName}): ${e.message}`);
     }
 
@@ -489,7 +473,6 @@ function saveWorld() {
 
     saveDimensionFile(netherChunks, path.join(worldDir, 'world_nether.bin'), netherTime);
 
-    // Serialize block inventories
     const inventoryEntries = [];
     for (const [key, state] of blockInventories.entries()) {
         const stateBuffer = Buffer.from(JSON.stringify(state), 'utf8');
@@ -497,18 +480,13 @@ function saveWorld() {
         inventoryEntries.push({ keyBuffer, stateBuffer });
     }
 
-    // Every modified subchunk, DEFLATE compressed. Compressing the section
-    // itself (rather than a list of edits) is what keeps this cheap: terrain is
-    // extremely repetitive, so a section with a handful of edited blocks
-    // compresses to a fraction of its 8 KB raw size.
     const sections = subChunks.serializeSections();
 
-    // magic + version + worldTime + numSubChunks
     let totalSize = 4 + 1 + 8 + 4;
     for (const section of sections) {
         totalSize += 14 + section.data.length;
     }
-    totalSize += 4; // numInventories
+    totalSize += 4; 
     for (const entry of inventoryEntries) {
         totalSize += 2 + entry.keyBuffer.length + 4 + entry.stateBuffer.length;
     }
@@ -531,14 +509,13 @@ function saveWorld() {
         buffer.writeInt32BE(section.cx, offset);
         buffer.writeInt32BE(section.cz, offset + 4);
         buffer.writeUInt8(section.sy, offset + 8);
-        buffer.writeUInt8(0, offset + 9); // reserved / flags
+        buffer.writeUInt8(0, offset + 9); 
         buffer.writeUInt32BE(section.data.length, offset + 10);
         offset += 14;
         buffer.set(section.data, offset);
         offset += section.data.length;
     }
 
-    // Write block inventories
     buffer.writeUInt32BE(inventoryEntries.length, offset);
     offset += 4;
 
@@ -553,11 +530,6 @@ function saveWorld() {
         offset += entry.stateBuffer.length;
     }
 
-    // Write to a sibling temp file and rename it into place. A rename within
-    // the same directory is atomic, so an interrupted save (tab closed, disk
-    // full, browser tab killed) can only ever leave the previous world intact
-    // -- writing straight to world_data.bin could truncate a good world to a
-    // partial file, which is exactly how a save becomes unrecoverable.
     const tempFile = worldFile + '.tmp';
     try {
         fs.writeFileSync(tempFile, buffer);
@@ -566,22 +538,14 @@ function saveWorld() {
         try {
             if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
         } catch (cleanupError) {
-            // Nothing more we can do; the original world is still intact.
         }
         throw e;
     }
 
-    // World-scoped sidecars (off-grid state) save alongside the world file.
-    // The hooks catch their own errors, so a sidecar failure cannot make a
-    // successful world write look failed to the caller.
     runWorldSaveHooks(currentWorldName, worldDir);
-    //log.info('World', `World saved (${currentWorldName})`);
 }
 
 function addWorldChange(x, y, z, blockId, metadata = 0, dimension = activeDimension) {
-    // The world only stores y 0-255. Clamp so a block placed/teleported outside
-    // that range can never throw. X/Z become int32 chunk coordinates, so clamp
-    // those too to survive super-far /tp coordinates.
     const clampedY = Math.max(0, Math.min(255, y));
     const clampedX = Math.max(-2147483648, Math.min(2147483647, x));
     const clampedZ = Math.max(-2147483648, Math.min(2147483647, z));
@@ -639,10 +603,9 @@ function getCurrentWorldName() {
 }
 
 function listWorlds() {
-    const worlds = ['main']; // Always include main
+    const worlds = ['main']; 
 
     if (fs.existsSync(WORLDS_DIR)) {
-        // New layout: worlds/<name>/ holding world_data.bin and/or serverconfig.conf
         const entries = fs.readdirSync(WORLDS_DIR, { withFileTypes: true });
         for (const entry of entries) {
             if (!entry.isDirectory() || !/^[a-z0-9_]+$/.test(entry.name)) continue;
@@ -652,8 +615,6 @@ function listWorlds() {
             }
         }
 
-        // Legacy layout: worlds/<name>_data.bin flat files, listed so they can
-        // still be entered (which migrates them into the new layout).
         const files = fs.readdirSync(WORLDS_DIR);
         files.forEach(file => {
             if (file.endsWith('_data.bin')) {
@@ -684,8 +645,8 @@ function deleteBlockInventory(key) {
     blockInventories.delete(key);
 }
 
-// The hellish world has no day/night cycle: its clock is pinned so the sky,
-// fog and light never cycle. Other worlds tick normally.
+
+
 const HELLISH_TIME = 6000;
 
 function tickWorldTime() {
@@ -695,8 +656,6 @@ function tickWorldTime() {
         worldTime = (worldTime + 1) % 24000;
     }
 
-    // The nether clock is pinned like the standalone hellish world: its sky
-    // never cycles.
     netherTime = HELLISH_TIME;
 }
 
@@ -704,13 +663,13 @@ function generateFlatChunkColumn(chunkX, chunkZ, dimension = activeDimension) {
     return worldGen.generateChunkColumn(chunkX, chunkZ, getDimensionStore(dimension), getDimensionType(dimension));
 }
 
-// The configured world type ('flat', 'normal' or 'amplified').
+
 function getWorldType() {
     return worldGen.getWorldType();
 }
 
-// Safe spawn position for the configured world type (on the surface, never
-// inside a cave opening).
+
+
 function getSpawnPosition(dimension = 0) {
     return worldGen.getSpawnPosition(getDimensionType(dimension));
 }

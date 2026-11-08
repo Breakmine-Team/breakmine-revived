@@ -20,20 +20,9 @@ import { findPlayerByUsername, getPlayers, isOp, isSuperOp } from './players.js'
 
 const log = Logger;
 
-/**
- * Blocks/items shipped by server-side mods also have to exist in the
- * dedicated server's own registry: it validates placement, runs block ticks
- * and stores hash ids in the world. The client receives the same source and
- * registers its own copy after joining.
- *
- * This loader evaluates content classes and commands, and runs ModLoad.js
- * with a server-safe ModAPI so mods can register authoritative block-action
- * hooks. Client-only setup in onLoad may throw without a renderer; that is
- * reported and the already-registered hooks stay active.
- */
 let loadedMods = [];
 const blockActions = new BlockActionRegistry('ServerMods');
-const modMessageHandlers = new Map(); // modId -> Set(handler)
+const modMessageHandlers = new Map(); 
 
 function stripImports(source) {
     return source
@@ -249,7 +238,6 @@ async function saveModJson(modId, key, value) {
     try {
         fs.mkdirSync(`mod_data/${modId}`, { recursive: true });
     } catch (error) {
-        // The directory may already exist, or the backend creates parents.
     }
     await fs.writeFile(path, JSON.stringify(value, null, 2));
     return value;
@@ -296,8 +284,6 @@ function createModApi(modId) {
         isServer: true,
         get minecraft() { return undefined; },
         get world() { return undefined; },
-        // Operator checks for mods that hand out extra rights, so a mod never
-        // has to keep its own copy of the server's op lists.
         isOp: (username) => !!isOp({username: String(username ?? '')}),
         isSuperOp: (username) => !!isSuperOp({username: String(username ?? '')}),
         registerCommand: (name, usage, description, execute, options = {}) => {
@@ -346,7 +332,6 @@ function createModApi(modId) {
     };
 }
 
-/** Route a client `modMessage` JSON payload to that mod's server handlers. */
 export function handleModMessage(player, modId, payload) {
     const handlers = modMessageHandlers.get(modId);
     if (!handlers || handlers.size === 0) return;
@@ -455,9 +440,6 @@ function loadMod(mod) {
         }
     }
 
-    // ModLoad.js is where most mods register hooks. Run the server-safe
-    // subset with no client renderer; anything client-only throws and is
-    // reported without discarding the block-action hooks registered before it.
     const modLoadSource = files.get('ModLoad.js');
     if (modLoadSource) {
         try {
@@ -489,7 +471,6 @@ function loadMod(mod) {
     }
 }
 
-/** Server-side mods use this to veto an authoritative player block action. */
 export function emitBlockAction(action, data) {
     return blockActions.emit(action, data);
 }
@@ -498,7 +479,6 @@ export function hasBlockAction(action) {
     return blockActions.has(action);
 }
 
-/** Register every server-side mod for the active server. */
 export function loadServerSideMods() {
     unloadServerSideMods();
     for (const mod of readServerMods()) {
@@ -513,7 +493,6 @@ export function loadServerSideMods() {
     return loadedMods.map((mod) => mod.id);
 }
 
-/** Remove server-side mod content from the server block registry. */
 export function unloadServerSideMods() {
     for (const mod of loadedMods) {
         for (const id of mod.blockIds) BlockRegistry.unregister(id);
@@ -525,7 +504,6 @@ export function unloadServerSideMods() {
     loadedMods = [];
 }
 
-/** Reload mods after `/server` switches to a different server directory. */
 export function reloadServerSideMods() {
     return loadServerSideMods();
 }

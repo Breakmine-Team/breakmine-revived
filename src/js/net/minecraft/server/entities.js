@@ -5,7 +5,7 @@ function addItemEntity(blockId, x, y, z, motionX, motionY, motionZ, droppedBy, h
     const id = nextItemId++;
     const entity = {
         id,
-        type: 1, // Object type 1 = Item
+        type: 1, 
         blockId,
         x,
         y,
@@ -42,7 +42,6 @@ function updateItemPositions() {
         entity.motionX *= 0.98;
         entity.motionZ *= 0.98;
 
-        // Simple ground collision
         if (entity.y < 1) {
             entity.y = 1;
             entity.motionY = 0;

@@ -13,11 +13,6 @@ function decodeDataUri(dataUri) {
     return atob(dataUri.slice(comma + 1));
 }
 
-/**
- * Build a flat triangle list from Three.js's parsed OBJ geometry. The block
- * Tessellator consumes one quad per face, so the renderer pads each triangle
- * when it emits it.
- */
 function buildFaces(group) {
     const faces = [];
 
@@ -71,10 +66,6 @@ function buildFaces(group) {
     return { faces };
 }
 
-/**
- * Parse a model embedded by scripts/build-assets.js. The result is cached per
- * asset path so a renderer can own several custom models at once.
- */
 export function loadModelAsset(asset) {
     if (modelCache.has(asset)) {
         return modelCache.get(asset);
@@ -92,10 +83,6 @@ export function loadModelAsset(asset) {
     return model;
 }
 
-/**
- * Load a model texture as its own Three.js texture. Custom models keep their
- * full resolution and exact UVs instead of being packed into the block atlas.
- */
 export function loadTextureAsset(asset) {
     if (textureCache.has(asset)) {
         return textureCache.get(asset);

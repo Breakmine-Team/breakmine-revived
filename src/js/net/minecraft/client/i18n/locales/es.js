@@ -1,6 +1,5 @@
 const translations = {
 
-    // ---------------------------------------------------------------- general
     "Settings": "Configuración",
     "Options": "Opciones",
     "Done": "Hecho",
@@ -28,7 +27,6 @@ const translations = {
     "Amplified": "Amplificado",
     "Preset": "Predeterminado",
 
-    // -------------------------------------------------------------- main menu
     "Singleplayer": "Un jugador",
     "Multiplayer": "Multijugador",
     "Mods": "Mods",
@@ -66,7 +64,6 @@ const translations = {
     "The update failed.": "La actualización falló.",
     "Could not start the update.": "No se pudo iniciar la actualización.",
 
-    // ---------------------------------------------------------------- options
     "Ambient Occlusion": "Oclusión ambiental",
     "Shades the edges where blocks meet": "Sombrea los bordes donde se encuentran los bloques",
     "View Bobbing": "Movimiento de visión",
@@ -110,7 +107,6 @@ const translations = {
     "Red: Break | Green: Place": "Rojo: romper | Verde: colocar",
     "Yellow: Open inventory | Blue: Cycle hotbar": "Amarillo: inventario | Azul: cambiar barra rápida",
 
-    // ------------------------------------------------------------ world screens
     "Select World": "Seleccionar mundo",
     "Play Selected World": "Jugar en el mundo seleccionado",
     "Create New World": "Crear nuevo mundo",
@@ -154,7 +150,6 @@ const translations = {
     "Mountains of Oz": "Montañas de Oz",
     "Montañas realmente geniales.": "Montañas realmente geniales.",
 
-    // -------------------------------------------------------------- multiplayer
     "Play Multiplayer": "Jugar en multijugador",
     "Join Server": "Unirse al servidor",
     "Join Player": "Unirse al jugador",
@@ -183,7 +178,6 @@ const translations = {
     "Are you sure you want to remove this server?": "¿Estás seguro de que quieres eliminar este servidor?",
     "Multiplayer is still in development, expect bugs and breaking changes.": "El multijugador está en desarrollo, espera errores y cambios incompatibles.",
 
-    // ----------------------------------------------------------------- account
     "Log Out": "Cerrar sesión",
     "Login or Register": "Iniciar sesión o registrarse",
     "Upload Skin": "Subir skin",
@@ -207,7 +201,6 @@ const translations = {
     "'s skin": " skin de ",
     "Authenticating user": "Autenticando usuario",
 
-    // -------------------------------------------------------------- in-game UI
     "Game menu": "Menú del juego",
     "Back to game": "Volver al juego",
     "Share World": "Compartir mundo",
@@ -233,7 +226,6 @@ const translations = {
     "Fruit": "Fruta",
     "Stem": "Tallo",
 
-    // ------------------------------------------------------------------ loading
     "Loading terrain...": "Cargando terreno...",
     "Building terrain...": "Construyendo terreno...",
     "Importing mods...": "Importando mods...",
@@ -251,7 +243,6 @@ const translations = {
     "Cancel Task": "Cancelar tarea",
     "Connecting to server...": "Conectando al servidor...",
 
-    // ------------------------------------------------------------- chat/commands
     "Unknown command! Type \"/help\" for help.": "¡Comando desconocido! Escribe \"/help\" para obtener ayuda.",
     "No player available": "Ningún jugador disponible",
     "Inventory full!": "¡Inventario lleno!",
@@ -307,7 +298,6 @@ const translations = {
     "/offgridrenderer is a client-side rendering command.": "/offgridrenderer es un comando de renderizado del lado del cliente.",
     "/ofr is a client-side rendering command.": "/ofr es un comando de renderizado del lado del cliente.",
 
-    // --------------------------------------------------------------- debug HUD
     "Facing:": "Orientación:",
     "Facing": "Orientación",
     "Towards": "Hacia:",
@@ -341,14 +331,12 @@ const translations = {
     "Chunk:": "Chunk:",
     "Chunk": "Chunk",
 
-    // ------------------------------------------------------------ death messages
     "hit the ground too hard": "cayó desde muy alto",
     "tried to swim in lava": "intentó nadar en lava",
     "died": "murió",
     "blew up": "saltó por los aires",
     "wiped off the face of the Earth": "fue borrado de la faz de la Tierra",
 
-    // ---------------------------------------------------------- creative tabs
     "Building Blocks": "Bloques de construcción",
     "Decoration": "Decoración",
     "Utilities": "Utensilios",
@@ -358,7 +346,6 @@ const translations = {
     "Materials / Misc": "Materiales / Varios",
     "Not Listed": "Sin listar",
 
-    // --------------------------------------------------------------- block names
     "Acacia": "Acacia",
     "Adjustable Bluestone Lamp": "Lámpara de Piedra Azul ajustable",
     "Allium": "Allium",
@@ -470,7 +457,6 @@ const translations = {
     "Mossy Cobblestone Stairs": "Escaleras de adoquín musgoso",
     "Brick Stairs": "Escaleras de ladrillo",
 
-    // ---------------------------------------------------------- Bluestone parts
     "Bluestone Block": "Bloque de Piedra Azul",
     "Bluestone Bulb": "Bombilla de Piedra Azul",
     "Bluestone Dust": "Polvo de Piedra Azul",
@@ -513,19 +499,17 @@ const COLOR_SUFFIXES = {
     "Dye": "tinte"
 };
 
-// Helper for Spanish gender agreement on color suffixes (e.g., Blanco lana -> Lana blanca)
+
 const COLOR_AGREEMENT = {
     "lana": "blanca", "hormigón": "blanco", "polvo de hormigón": "blanco", "terracota": "blanca", "tinte": "blanco"
 };
 
 for (const [color, colorEs] of Object.entries(COLORS)) {
     for (const [suffix, suffixEs] of Object.entries(COLOR_SUFFIXES)) {
-        // Simple heuristic for Spanish adjective matching
         let adj = colorEs.toLowerCase();
         if (suffixEs === "lana" || suffixEs === "terracota") {
             if (adj.endsWith("o")) adj = adj.slice(0, -1) + "a";
             else if (adj === "gris" || adj === "azul" || adj === "verde" || adj === "marrón") {
-                // Keep invariant or add 'a' where appropriate
             }
         }
         translations[`${color} ${suffix}`] = `${suffixEs.charAt(0).toUpperCase() + suffixEs.slice(1)} ${adj}`;

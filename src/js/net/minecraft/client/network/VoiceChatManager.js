@@ -1,38 +1,18 @@
 import { Peer } from "../../../../../../libraries/peerjs.js";
 
-/**
- * P2P voice chat (push-to-talk).
- *
- * - Uses peerjs (WebRTC) for the actual audio connections, so voice traffic
- *   goes peer-to-peer and never through the game server.
- * - Peer discovery uses the game server's JSON relay channel: every client
- *   with voice enabled periodically announces its peerjs ID via
- *   NetworkManager.sendJson({ type: 'voice', ... }); the server broadcasts
- *   that to all other players. Peers then dial each other directly.
- * - Mesh call model: incoming calls are answered with a silent placeholder
- *   stream (so the SDP negotiation is always valid) and each client only ever
- *   transmits on its own outgoing calls. Every peer pair therefore ends up
- *   with two strictly one-way audio links, which cannot echo or double up.
- * - Push-to-talk: holding the "voice chat" key enables the local mic track.
- *   Audio connections stay open in the background; between presses the mic
- *   track is disabled, which surfaces as a 'mute' event on remote tracks.
- * - Opt-in: a client only starts dialing/listening after the user pressed the
- *   push-to-talk key at least once this session.
- * - Status: type "/voice" in chat to dump the current session state.
- */
 
-const ANNOUNCE_INTERVAL = 3000;   // ms between peer ID announcements
-const PEER_TIMEOUT = 12000;       // ms without an announce before a peer is dropped
-const HEARING_RANGE = 40;         // distance (blocks) at which voices fade out entirely
-const LINK_RETRY_DELAY = 8000;    // ms before re-dialing an outgoing link that has no audio yet
-const LINK_MAX_RETRIES = 6;       // how many times a dead link may be re-dialed
+const ANNOUNCE_INTERVAL = 3000;   
+const PEER_TIMEOUT = 12000;       
+const HEARING_RANGE = 40;         
+const LINK_RETRY_DELAY = 8000;    
+const LINK_MAX_RETRIES = 6;       
 
-// STUN servers map public IPs/ports to let peers route UDP traffic directly.
-// TURN servers relay the media stream when a direct peer-to-peer connection
-// cannot be established (symmetric NATs, guest Wi-Fi, some carrier networks).
-// Default TURN: the free public relay at openrelay.metered.ca. Self-hosting a
-// coturn instance is strongly recommended for heavy use; point the game
-// settings at it via voiceTurnUrls / voiceTurnUsername / voiceTurnPassword.
+
+
+
+
+
+
 const DEFAULT_ICE_SERVERS = [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
@@ -40,7 +20,7 @@ const DEFAULT_ICE_SERVERS = [
     { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" }
 ];
 
-// Fast, dependency-free string hash used to derive a stable peerjs ID.
+
 function cyrb53(str, seed = 0) {
     let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
     for (let i = 0; i < str.length; i++) {
@@ -58,23 +38,23 @@ export default class VoiceChatManager {
     constructor(minecraft) {
         this.minecraft = minecraft;
 
-        this.enabled = false;        // opt-in via first push-to-talk press
-        this.talking = false;        // currently holding push-to-talk
+        this.enabled = false;        
+        this.talking = false;        
 
         this.peer = null;
-        this.peerSuffix = "";        // bumped if our preferred peer ID is taken
+        this.peerSuffix = "";        
         this.ensuringPeer = false;
 
         this.localStream = null;
         this.micTrack = null;
 
-        this.silentStream = null;    // placeholder stream for receive-only answers
+        this.silentStream = null;    
         this.silentContext = null;
 
-        this.remoteInfo = new Map(); // peerId -> { username, lastSeen }
-        this.byUsername = new Map(); // username -> peerId
-        this.dialed = new Map();     // peerId -> connectionId (own outgoing calls)
-        this.calls = new Map();      // connectionId -> { call, peerId, username, audio, talking, outgoing, createdAt, retries }
+        this.remoteInfo = new Map(); 
+        this.byUsername = new Map(); 
+        this.dialed = new Map();     
+        this.calls = new Map();      
 
         this.announceTimer = null;
         this.tickCounter = 0;
@@ -82,24 +62,21 @@ export default class VoiceChatManager {
         this.warnedUnavailable = false;
         this.warnedNoMic = false;
 
-        // Peerjs internals + negotiation flow are logged here to make it easy
-        // to check on the console whether calls connect and streams flow.
         console.log("[Voice] Voice chat manager initialized");
     }
 
-    /** Local player's username. */
+    
     getUsername() {
         const session = this.minecraft.getSession();
         return session ? session.getProfile().getUsername() : "";
     }
 
-    /** Stable peerjs ID derived from the username (a reconnect keeps its ID). */
+    
     getPeerId() {
         return "bmvc-" + cyrb53(this.getUsername() + "|" + this.peerSuffix);
     }
 
-    /** ICE servers for WebRTC: STUN for discovery + a TURN relay fallback.
-     *  The settings allow pointing at a self-hosted coturn instance. */
+    
     getIceServers() {
         const settings = this.minecraft.settings;
         const customUrls = (settings.voiceTurnUrls || "").trim();
@@ -109,7 +86,6 @@ export default class VoiceChatManager {
             const username = (settings.voiceTurnUsername || "").trim();
             const credential = (settings.voiceTurnPassword || "").trim();
             if (urls.length) {
-                // STUN is still useful alongside a custom TURN server.
                 return [
                     { urls: "stun:stun.l.google.com:19302" },
                     username && credential
@@ -122,7 +98,7 @@ export default class VoiceChatManager {
         return DEFAULT_ICE_SERVERS;
     }
 
-    /** True when connected to a (real or integrated) multiplayer server. */
+    
     isAvailable() {
         return this.minecraft.isInGame() && !this.minecraft.isSingleplayer();
     }
@@ -133,11 +109,8 @@ export default class VoiceChatManager {
         return controller.getNetworkHandler().getNetworkManager();
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-    // Push-to-talk handling
-    ///////////////////////////////////////////////////////////////////////////
 
-    /** Called when the voice chat key is pressed down. */
+    
     onKeyPressed() {
         if (!this.isAvailable()) {
             if (!this.warnedUnavailable) {
@@ -147,7 +120,6 @@ export default class VoiceChatManager {
             return;
         }
 
-        // First press opts the player into voice chat: announce and start listening.
         if (!this.enabled) {
             this.enabled = true;
             this.ensurePeer();
@@ -159,7 +131,7 @@ export default class VoiceChatManager {
         this.startTalking();
     }
 
-    /** Called when the voice chat key is released (even with a screen open). */
+    
     onKeyReleased() {
         if (!this.talking) return;
         this.talking = false;
@@ -197,7 +169,7 @@ export default class VoiceChatManager {
             });
             this.localStream = stream;
             this.micTrack = stream.getAudioTracks()[0] || null;
-            if (this.micTrack) this.micTrack.enabled = false; // muted until push-to-talk
+            if (this.micTrack) this.micTrack.enabled = false; 
             console.log("[Voice] Microphone stream acquired (track=" + (this.micTrack ? this.micTrack.id.slice(0, 8) : "none") + ")");
             return true;
         } catch (err) {
@@ -210,18 +182,13 @@ export default class VoiceChatManager {
         }
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-    // Peerjs session
-    ///////////////////////////////////////////////////////////////////////////
 
     ensurePeer() {
         if (this.peer || this.ensuringPeer) return;
         this.ensuringPeer = true;
 
         const peer = new Peer(this.getPeerId(), {
-            // Log peerjs negotiation internals to the browser console.
             debug: 2,
-            // WebRTC connection candidates: STUN + TURN relay fallback.
             config: { iceServers: this.getIceServers() }
         });
         this.peer = peer;
@@ -237,15 +204,13 @@ export default class VoiceChatManager {
 
         peer.on("error", err => {
             if (err.type === "unavailable-id") {
-                // Someone else took our ID (username collision) - retry with a suffix.
                 this.ensuringPeer = false;
                 console.warn("[Voice] Peer ID taken, retrying with a random suffix");
-                try { this.peer.destroy(); } catch (e) { /* ignore */ }
+                try { this.peer.destroy(); } catch (e) {  }
                 this.peer = null;
                 this.peerSuffix = Date.now().toString(36);
                 this.ensurePeer();
             } else if (err.type === "peer-unavailable") {
-                // A dialed peer is not (yet) online; announcements retry later.
                 console.warn("[Voice] Dialed peer is not online yet");
             } else {
                 console.error("[Voice] Peer error:", err.type, err);
@@ -262,14 +227,14 @@ export default class VoiceChatManager {
         });
     }
 
-    /** Silent audio stream used to answer calls we only listen on. */
+    
     getSilentStream() {
         if (!this.silentStream) {
             this.silentContext = new AudioContext();
             const destination = this.silentContext.createMediaStreamDestination();
             const oscillator = this.silentContext.createOscillator();
             const gain = this.silentContext.createGain();
-            gain.gain.value = 0; // true silence
+            gain.gain.value = 0; 
             oscillator.connect(gain);
             gain.connect(destination);
             oscillator.start();
@@ -279,7 +244,7 @@ export default class VoiceChatManager {
         return this.silentStream;
     }
 
-    /** Register an outgoing or answered call and its audio plumbing. */
+    
     registerCall(call, { peerId, username, outgoing }) {
         const connectionId = call.connectionId;
         if (this.calls.has(connectionId)) return;
@@ -322,15 +287,10 @@ export default class VoiceChatManager {
 
     answerCall(call) {
         if (!this.enabled) {
-            // Player has not opted in yet - the call stays unanswered and the
-            // other side's dead-link retry will try again once we enabled.
             console.log("[Voice] Incoming call ignored (voice chat not enabled yet, peer=" + call.peer + ")");
             return;
         }
 
-        // Answer with a silent placeholder: the connection stays valid SDP-wise
-        // but this link stays receive-only. Our own audio goes out via our
-        // outgoing dial to the same peer, so no link is ever both ways.
         call.answer(this.getSilentStream());
         this.registerCall(call, {
             peerId: call.peer,
@@ -340,8 +300,6 @@ export default class VoiceChatManager {
     }
 
     attachAudio(connectionId, stream, record) {
-        // The remote end of an outgoing call only ever sends the other side's
-        // silent placeholder (they transmit via their own dial), so ignore it.
         if (record.outgoing) return;
 
         const audio = document.createElement("audio");
@@ -353,17 +311,12 @@ export default class VoiceChatManager {
             console.log("[Voice] Remote audio playing (from " + (record.username || record.peerId) + ")");
         }).catch(err => {
             console.error("[Voice] Audio play() rejected (autoplay blocked?):", err);
-            // Autoplay blocked - retry on the next push-to-talk gesture and
-            // periodically from onTick (once the user has interacted, play() is
-            // usually allowed).
             record.pendingPlay = true;
         });
         record.audio = audio;
 
         const track = stream.getAudioTracks()[0];
         if (track) {
-            // The sender toggles track.enabled for push-to-talk, which fires
-            // these events on the receiving side.
             track.onmute = () => { record.talking = false; };
             track.onunmute = () => { record.talking = true; };
         }
@@ -385,7 +338,7 @@ export default class VoiceChatManager {
     closeCall(connectionId) {
         const record = this.calls.get(connectionId);
         if (!record) return;
-        try { record.call.close(); } catch (e) { /* ignore */ }
+        try { record.call.close(); } catch (e) {  }
         if (record.audio) {
             record.audio.srcObject = null;
             record.audio.remove();
@@ -397,9 +350,6 @@ export default class VoiceChatManager {
         console.log("[Voice] Call closed (connectionId=" + connectionId + ")");
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-    // Discovery via the game server JSON relay
-    ///////////////////////////////////////////////////////////////////////////
 
     startAnnouncements() {
         if (this.announceTimer) return;
@@ -407,7 +357,6 @@ export default class VoiceChatManager {
             if (!this.enabled) return;
             this.sendAnnounce();
             if (!this.peer) this.ensurePeer();
-            // Re-check peers that came online since our last dial attempt.
             this.dialKnownPeers();
         }, ANNOUNCE_INTERVAL);
     }
@@ -424,13 +373,13 @@ export default class VoiceChatManager {
         });
     }
 
-    /** Incoming relay message forwarded by NetworkManager. */
+    
     handleRelayMessage(payload) {
         if (payload.action !== "announce") return;
         const username = String(payload.username || "").slice(0, 32);
         const peerId = String(payload.peerId || "");
         if (!username || !peerId || !/^[a-zA-Z0-9_-]{1,64}$/.test(peerId)) return;
-        if (peerId === (this.peer && this.peer.id)) return; // echo of ourselves
+        if (peerId === (this.peer && this.peer.id)) return; 
 
         console.log("[Voice] Announce received: " + username + " -> " + peerId);
 
@@ -441,7 +390,6 @@ export default class VoiceChatManager {
             this.remoteInfo.set(peerId, { username, lastSeen: Date.now() });
         }
 
-        // A peer may have re-announced with a new ID after an ID collision.
         const previousId = this.byUsername.get(username);
         if (previousId && previousId !== peerId) {
             const oldConnectionId = this.dialed.get(previousId);
@@ -459,9 +407,6 @@ export default class VoiceChatManager {
         this.dial(peerId, username);
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-    // Periodic upkeep (called on every game tick while in game)
-    ///////////////////////////////////////////////////////////////////////////
 
     onTick() {
         if (!this.enabled) return;
@@ -469,13 +414,10 @@ export default class VoiceChatManager {
 
         const now = Date.now();
 
-        // Retry audio playback blocked by autoplay policies; once the user has
-        // interacted with the page this is normally allowed.
         if (this.tickCounter % 40 === 0) {
             this.retryPendingAudio();
         }
 
-        // Drop peers that stopped announcing (left the server or exited voice chat).
         for (const [peerId, info] of this.remoteInfo) {
             if (now - info.lastSeen > PEER_TIMEOUT) {
                 console.log("[Voice] Peer timed out: " + (info.username || peerId));
@@ -494,8 +436,6 @@ export default class VoiceChatManager {
             }
         }
 
-        // Re-dial outgoing links that never received remote audio (the other
-        // side probably enabled voice chat after we first dialed them).
         for (const [connectionId, record] of Array.from(this.calls)) {
             if (record.outgoing && !record.audio
                 && now - record.createdAt > LINK_RETRY_DELAY
@@ -506,7 +446,6 @@ export default class VoiceChatManager {
             }
         }
 
-        // Distance-based volume for every established call.
         for (const record of this.calls.values()) {
             if (!record.audio) continue;
             record.audio.volume = this.getVolumeForUsername(record.username);
@@ -525,7 +464,7 @@ export default class VoiceChatManager {
                 break;
             }
         }
-        if (!entity) return 1.0; // out of render distance / unknown - play at full volume
+        if (!entity) return 1.0; 
 
         const dx = entity.x - player.x;
         const dy = entity.y - player.y;
@@ -536,7 +475,7 @@ export default class VoiceChatManager {
         return Math.min(1.0, 0.15 + 0.85 * factor * factor);
     }
 
-    /** Names of everyone currently talking (including the local player). */
+    
     getTalkers() {
         const names = [];
         if (this.talking) {
@@ -550,7 +489,7 @@ export default class VoiceChatManager {
         return names;
     }
 
-    /** Human-readable session dump used by the "/voice" command. */
+    
     getStatusLines() {
         const lines = [];
         lines.push("voice: " + (this.enabled ? "on" : "off") + " | talking: " + (this.talking ? "yes" : "no"));
@@ -571,11 +510,8 @@ export default class VoiceChatManager {
         return lines;
     }
 
-    ///////////////////////////////////////////////////////////////////////////
-    // Teardown
-    ///////////////////////////////////////////////////////////////////////////
 
-    /** Called when the connection to the server drops or the world is left. */
+    
     reset() {
         console.log("[Voice] Resetting voice chat session");
         this.talking = false;
@@ -590,7 +526,7 @@ export default class VoiceChatManager {
         this.dialed.clear();
 
         if (this.peer) {
-            try { this.peer.destroy(); } catch (e) { /* ignore */ }
+            try { this.peer.destroy(); } catch (e) {  }
             this.peer = null;
         }
         this.ensuringPeer = false;
@@ -604,7 +540,7 @@ export default class VoiceChatManager {
         }
 
         if (this.silentContext) {
-            try { this.silentContext.close(); } catch (e) { /* ignore */ }
+            try { this.silentContext.close(); } catch (e) {  }
             this.silentContext = null;
             this.silentStream = null;
         }

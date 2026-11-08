@@ -8,7 +8,6 @@ export default class Authentication {
     }
 
     joinServer(profile, accessToken, serverId) {
-        // Only send proxy packet if using proxy
         if (this.networkManager.useProxy) {
             this.networkManager.sendProxyPacket(1, {
                 "accessToken": accessToken,
@@ -19,18 +18,15 @@ export default class Authentication {
     }
 
     createServerHash(serverId, secretKey, publicKey) {
-        // Create hash
         let bytes = require("sha1").create()
             .update(new TextEncoder().encode(serverId))
             .update(secretKey)
             .update(new Uint8Array(publicKey))
             .digest()
 
-        // Convert to hex string
         let buffer = new ByteBuf(new Int8Array(bytes));
         let sign = '';
 
-        // Handle negative hashes
         if (buffer.readByte() < 0) {
             let carry = true
             for (let pos = buffer.length() - 1; pos >= 0; --pos) {
@@ -47,7 +43,6 @@ export default class Authentication {
             sign = '-';
         }
 
-        // Convert to hex string
         return sign + buffer.toString().replace(/^0+/g, '');
     }
 }

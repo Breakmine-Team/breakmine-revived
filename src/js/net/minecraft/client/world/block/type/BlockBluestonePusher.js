@@ -12,7 +12,7 @@ export default class BlockBluestonePusher extends Block {
         this.isBluestoneConsumer = true;
         this.isPusher = true;
         this.inventoryTab = EnumCreativeInventoryTab.MACHINES;
-        this.headBlockId = headBlockId; // Pass registered head block ID or reference
+        this.headBlockId = headBlockId; 
     }
 
     pickedItem() { return 166; }
@@ -160,10 +160,6 @@ export default class BlockBluestonePusher extends Block {
         }
     }
 
-    // Both notifyNeighborBlockChange implementations (client World and
-    // ServerWorld) only invoke this hook when a block actually defines it, so
-    // a pusher without it was skipped whenever the wire beside it changed and
-    // never extended or retracted.
     onNeighborBlockChange(world, x, y, z) {
         world.scheduleBlockTick(x, y, z, 1);
     }

@@ -1,12 +1,12 @@
-// Pure helpers shared by the integrated-server controller (main thread) and
-// the integrated server worker (integrated.worker.js).
+
+
 
 export function serverNameForKey(worldKey) {
     return String(worldKey || 'main').toLowerCase().replace(/[^a-z0-9_]/g, '') || 'main';
 }
 
-// Parse the simple `key=value` serverconfig.conf format (mirrors the fields
-// the server's own config loader understands, plus `name` metadata).
+
+
 export function parseServerConfig(content) {
     const conf = {};
     for (const line of String(content || '').split('\n')) {

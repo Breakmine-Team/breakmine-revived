@@ -4,9 +4,7 @@ import * as THREE from "../../../../../../../../libraries/three.module.js";
 
 export default class ModelRenderer {
 
-    /**
-     * Create cube object
-     */
+    
     constructor(name, textureWidth, textureHeight) {
         this.name = name;
 
@@ -34,36 +32,21 @@ export default class ModelRenderer {
         this.bone = new THREE.Object3D();
     }
 
-    /**
-     * Set the texture offset position of the cube
-     *
-     * @param textureOffsetX Offset position x
-     * @param textureOffsetY Offset position y
-     */
+    
     setTextureOffset(textureOffsetX, textureOffsetY) {
         this.textureOffsetX = textureOffsetX;
         this.textureOffsetY = textureOffsetY;
         return this;
     }
 
-    /**
-     * Set texture size
-     * @param width Texture width
-     * @param height Texture height
-     */
+    
     setTextureSize(width, height) {
         this.textureWidth = width;
         this.textureHeight = height;
         return this;
     }
 
-    /**
-     * Set the absolute position of the cube
-     *
-     * @param x Absolute x position of cube
-     * @param y Absolute y position of cube
-     * @param z Absolute z position of cube
-     */
+    
     setRotationPoint(x, y, z) {
         this.rotationPointX = x;
         this.rotationPointY = y;
@@ -71,12 +54,7 @@ export default class ModelRenderer {
         return this;
     }
 
-    /**
-     * Set the rotation of the cube
-     * @param x Rotation x
-     * @param y Rotation y
-     * @param z Rotation z
-     */
+    
     setRotationAngle(x, y, z) {
         this.rotateAngleX = x;
         this.rotateAngleY = y;
@@ -84,12 +62,7 @@ export default class ModelRenderer {
         return this;
     }
 
-    /**
-     * Set the rotation of the cube
-     * @param x Rotation x
-     * @param y Rotation y
-     * @param z Rotation z
-     */
+    
     setScale(x, y, z) {
         this.scaleX = x;
         this.scaleY = y;
@@ -97,18 +70,7 @@ export default class ModelRenderer {
         return this;
     }
 
-    /**
-     * Create box using offset position and width, height and depth
-     *
-     * @param offsetX X offset of the render position
-     * @param offsetY Y offset of the render position
-     * @param offsetZ Z offset of the render position
-     * @param width   Cube width
-     * @param height  Cube height
-     * @param depth   Cube depth
-     * @param inflate Inflate the cube
-     * @param mirror  Mirror the cube
-     */
+    
     addBox(offsetX, offsetY, offsetZ, width, height, depth, inflate = 0, mirror = false) {
         let polygons = [];
 
@@ -116,13 +78,11 @@ export default class ModelRenderer {
         let y = offsetY + height;
         let z = offsetZ + depth;
 
-        // Create bottom vertex points of cube
         let vertexBottom1 = new Vertex(offsetX, offsetY, offsetZ);
         let vertexBottom2 = new Vertex(x, offsetY, offsetZ);
         let vertexBottom3 = new Vertex(offsetX, offsetY, z);
         let vertexBottom4 = new Vertex(x, offsetY, z);
 
-        // Create top vertex points of cube
         let vertexTop1 = new Vertex(x, y, z);
         let vertexTop2 = new Vertex(offsetX, y, z);
         let vertexTop3 = new Vertex(x, y, offsetZ);
@@ -134,7 +94,6 @@ export default class ModelRenderer {
             return new Polygon(vertices, uStart, minV, uEnd, maxV, this.textureWidth, this.textureHeight);
         };
 
-        // Create polygons for each cube side
         polygons[0] = createPolygon(
             [vertexBottom4, vertexBottom2, vertexTop3, vertexTop1],
             this.textureOffsetX + depth + width,
@@ -183,15 +142,12 @@ export default class ModelRenderer {
             this.textureOffsetY + depth + height
         );
 
-        // Directional face shading (classic voxel model lighting).
-        // The model is built head-down and rendered with a negative Y scale,
-        // so the box's y-min face (polygons[2]) displays as the TOP.
-        polygons[0].shading = 0.6; // east
-        polygons[1].shading = 0.6; // west
-        polygons[2].shading = 1.0; // top (displays as top)
-        polygons[3].shading = 0.5; // bottom (displays as bottom)
-        polygons[4].shading = 0.8; // north
-        polygons[5].shading = 0.8; // south
+        polygons[0].shading = 0.6; 
+        polygons[1].shading = 0.6; 
+        polygons[2].shading = 1.0; 
+        polygons[3].shading = 0.5; 
+        polygons[4].shading = 0.8; 
+        polygons[5].shading = 0.8; 
 
         this.cubes.push(polygons);
 
@@ -225,15 +181,12 @@ export default class ModelRenderer {
     }
 
     rebuild(tessellator, group) {
-        // Clear meshes
         this.bone.clear();
 
-        // Draw cubes
         tessellator.startDrawing();
         for (let i = 0; i < this.cubes.length; i++) {
             let polygons = this.cubes[i];
 
-            // Render polygons
             for (let face = 0; face < 6; face++) {
                 let polygon = polygons[face];
                 polygon.render(tessellator);
@@ -241,13 +194,11 @@ export default class ModelRenderer {
         }
         tessellator.draw(this.bone);
 
-        // Draw children
         for (let i = 0; i < this.children.length; i++) {
             let child = this.children[i];
             child.rebuild(tessellator, this.bone);
         }
 
-        // Add to group
         group.add(this.bone);
     }
 

@@ -1,14 +1,14 @@
-// Integrated server controller (main thread). The singleplayer server itself
-// runs in a Web Worker (integrated.worker.js) so world ticking, chunk
-// generation and save I/O never block the render thread. This module owns the
-// worker lifecycle, RPC (start/stop/listWorlds/deleteWorld) and routes
-// loopback socket traffic to the worker through LoopbackServer.
+
+
+
+
+
 import { globalLoopbackServer } from '../../util/IsomorphicWebSocket.js';
 import { serverNameForKey } from './shared.js';
 
 export { serverNameForKey };
 
-// worldKey is always 'w_<timestamp>_<random>'
+
 
 export const integrated = {
     running: false,
@@ -33,7 +33,7 @@ function ensureWorker() {
     return worker;
 }
 
-// Fire a message at the worker and resolve with its ack/result.
+
 function post(message, transfer) {
     const w = ensureWorker();
     return new Promise((resolve, reject) => {
@@ -68,17 +68,14 @@ function handleWorkerMessage(msg) {
         return;
     }
 
-    // Socket traffic relayed from the integrated server worker.
     globalLoopbackServer.handleWorkerMessage(msg);
 }
 
 export async function startIntegratedServer(options) {
-    // Wait for an in-flight stop so the worker processes start after stop.
     if (stopPromise) {
         try {
             await stopPromise;
         } catch (e) {
-            // Ignore stop failures; proceed with the start.
         }
     }
 
@@ -116,18 +113,18 @@ export function getIntegratedServerName() {
     return integrated.serverName;
 }
 
-// World listing and deletion live in the worker (the owner of the world
-// files), so the main thread never does synchronous reads over the world
-// directory.
+
+
+
 
 export async function listServerWorlds() {
     return await post({ type: 'listWorlds' });
 }
 
-// Store a 256x256 PNG preview in the world's own directory, so it travels
-// with the save (export/import) and is listed alongside the rest of the world
-// metadata. The worker owns the world files, so the icon goes through it
-// instead of touching the filesystem from the render thread.
+
+
+
+
 export async function saveWorldIcon(worldKey, pngBytes) {
     const data = pngBytes instanceof Uint8Array ? pngBytes : new Uint8Array(pngBytes);
     const payload = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
@@ -135,13 +132,10 @@ export async function saveWorldIcon(worldKey, pngBytes) {
 }
 
 export async function deleteServerWorld(worldKey) {
-    // Wait for an in-flight stop (which saves the world) before removing its
-    // files, otherwise the server's final save can recreate them.
     if (stopPromise) {
         try {
             await stopPromise;
         } catch (e) {
-            // Ignore stop failures; proceed with the delete.
         }
     }
     await post({ type: 'deleteWorld', worldKey });

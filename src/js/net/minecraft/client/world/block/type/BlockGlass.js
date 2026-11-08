@@ -8,7 +8,6 @@ export default class BlockGlass extends Block {
         this.description = "Glass";
         this.hardness = 0.3;
 
-        // Sound
         this.sound = Block.sounds.glass;
         this.inventoryTab = EnumCreativeInventoryTab.DECORATION;
     }

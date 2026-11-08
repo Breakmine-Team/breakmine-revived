@@ -20,7 +20,7 @@ export default class ServerPlayerListEntryPacket extends Packet {
             let displayName = null;
 
             switch (this.action) {
-                case 0: // ADD_PLAYER
+                case 0: 
                     profile = new GameProfile(buffer.readUUID(), buffer.readString(16));
 
                     let propertiesCount = buffer.readVarInt();
@@ -30,9 +30,7 @@ export default class ServerPlayerListEntryPacket extends Packet {
 
                         if (buffer.readBoolean()) {
                             let signature = buffer.readString(32767);
-                            // TODO implement properties
                         } else {
-                            // TODO implement properties
                         }
                     }
 
@@ -43,22 +41,22 @@ export default class ServerPlayerListEntryPacket extends Packet {
                         displayName = buffer.readTextComponent();
                     }
                     break;
-                case 1: // UPDATE_GAME_MODE
+                case 1: 
                     profile = new GameProfile(buffer.readUUID(), null);
                     gameType = buffer.readVarInt();
                     break;
-                case 2: // UPDATE_LATENCY
+                case 2: 
                     profile = new GameProfile(buffer.readUUID(), null);
                     ping = buffer.readVarInt();
                     break;
-                case 3: // UPDATE_DISPLAY_NAME
+                case 3: 
                     profile = new GameProfile(buffer.readUUID(), null);
 
                     if (buffer.readBoolean()) {
                         displayName = buffer.readTextComponent();
                     }
                     break;
-                case 4: // REMOVE_PLAYER
+                case 4: 
                     profile = new GameProfile(buffer.readUUID(), null);
                     break;
             }

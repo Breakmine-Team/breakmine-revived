@@ -69,7 +69,6 @@ export default class BigTreeGenerator extends Generator {
         let dimension = [0, 0, 0]
         let index = 0;
 
-        // Find target index for dimension
         let targetIndex = 0;
         for (; index < 3; index++) {
             dimension[index] = maxCoords[index] - minCoords[index];
@@ -78,16 +77,13 @@ export default class BigTreeGenerator extends Generator {
             }
         }
 
-        // Invalid dimension
         if (dimension[targetIndex] === 0) {
             return -1;
         }
 
-        // Get dimension index by target index
         let widthIndex = this.types[targetIndex];
         let heightIndex = this.types[targetIndex + 3];
 
-        // Determine offset
         let offset;
         if (dimension[targetIndex] > 0) {
             offset = 1;
@@ -95,7 +91,6 @@ export default class BigTreeGenerator extends Generator {
             offset = -1;
         }
 
-        // Get width and height
         let width = dimension[widthIndex] / dimension[targetIndex];
         let height = dimension[heightIndex] / dimension[targetIndex];
 
@@ -112,7 +107,6 @@ export default class BigTreeGenerator extends Generator {
             coords[widthIndex] = Math.floor(minCoords[widthIndex] + indexBlock * width);
             coords[heightIndex] = Math.floor(minCoords[heightIndex] + indexBlock * height);
 
-            // Check for collision with objects except leaves
             let typeId = this.world.getBlockAt(coords[0], coords[1], coords[2]);
             if (typeId !== 0 && typeId !== BlockRegistry.LEAVE.getId()) {
                 break;
@@ -139,7 +133,6 @@ export default class BigTreeGenerator extends Generator {
             spheres = 1;
         }
 
-        // Create 2D array with max possible nodes
         let array = [];
         for (let i = 0; i < spheres * this.heightLimit; i++) {
             array[i] = [];
@@ -148,16 +141,13 @@ export default class BigTreeGenerator extends Generator {
         let minY = (this.coords[1] + this.heightLimit) - this.offsetY;
         let maxY = this.coords[1] + this.height;
 
-        // Start point
         let y = minY - this.coords[1];
 
-        // Fill array
-        array[0][0] = this.coords[0]; // x
+        array[0][0] = this.coords[0]; 
         array[0][1] = minY;
-        array[0][2] = this.coords[2]; // z
+        array[0][2] = this.coords[2]; 
         array[0][3] = maxY;
 
-        // Shift
         minY--;
 
         let nodeIndex = 1;
@@ -171,7 +161,6 @@ export default class BigTreeGenerator extends Generator {
             } else {
                 let offsetXZ = 0.5;
 
-                // Create multiple spheres (nodes)
                 for (; sphereIndex < spheres; sphereIndex++) {
                     let finalSize = this.scaleWidth * (size * (this.random.nextFloat() + 0.328));
                     let rotation = this.random.nextFloat() * 2 * Math.PI;
@@ -182,7 +171,6 @@ export default class BigTreeGenerator extends Generator {
                     let from = [x, minY, z];
                     let to = [x, minY + this.offsetY, z];
 
-                    // Check if node is in a valid spot
                     if (this.checkBlockLine(from, to) !== -1) {
                         continue;
                     }
@@ -197,7 +185,6 @@ export default class BigTreeGenerator extends Generator {
                         coords[1] = Math.floor(from[1] - slope);
                     }
 
-                    // Fill nodes
                     if (this.checkBlockLine(coords, from) === -1) {
                         array[nodeIndex][0] = x;
                         array[nodeIndex][1] = minY;
@@ -212,7 +199,6 @@ export default class BigTreeGenerator extends Generator {
             }
         }
 
-        // Store nodes
         this.nodes = [];
         for (let i = 0; i < nodeIndex; i++) {
             this.nodes[i] = array[i];
@@ -305,11 +291,9 @@ export default class BigTreeGenerator extends Generator {
         let coordsMin = [x, minY, z];
         let coordsMax = [x, maxY, z];
 
-        // Place normal trunk blocks
         let logTypeId = BlockRegistry.LOG.getId();
         this.setBlocks(coordsMin, coordsMax, logTypeId);
 
-        // Increase trunk size
         if (this.trunkSize === 2) {
             coordsMin[0]++;
             coordsMax[0]++;
@@ -327,7 +311,6 @@ export default class BigTreeGenerator extends Generator {
         let coords = [0, 0, 0];
         let index = 0;
 
-        // Find target index for dimension
         let targetIndex = 0;
         for (; index < 3; index++) {
             coords[index] = maxCoords[index] - minCoords[index];
@@ -336,12 +319,10 @@ export default class BigTreeGenerator extends Generator {
             }
         }
 
-        // Invalid dimension
         if (coords[targetIndex] === 0) {
             return;
         }
 
-        // Get dimension index by target index
         let widthIndex = this.types[targetIndex];
         let heightIndex = this.types[targetIndex + 3];
 
@@ -355,7 +336,6 @@ export default class BigTreeGenerator extends Generator {
         let width = coords[widthIndex] / coords[targetIndex];
         let height = coords[heightIndex] / coords[targetIndex];
 
-        // Fill area with blocks
         for (let indexBlock = 0; indexBlock !== coords[targetIndex] + offset; indexBlock += offset) {
             let coords2 = [0, 0, 0];
             coords2[targetIndex] = Math.floor((minCoords[targetIndex] + indexBlock) + 0.5);
@@ -373,10 +353,8 @@ export default class BigTreeGenerator extends Generator {
             let node = this.nodes[i];
             let maxCoords = [node[0], node[1], node[2]];
 
-            // Override y coordinate
             minCoords[1] = node[3];
 
-            // Set log in middle of sphere
             let y = minCoords[1] - this.coords[1];
             if (this.leafNodeNeedsBase(y)) {
                 this.setBlocks(minCoords, maxCoords, BlockRegistry.LOG.getId());

@@ -15,9 +15,6 @@ export default class ChunkProviderClient extends ChunkProvider {
         this.emptyChunk.generateSkylightMap();
         this.emptyChunk.generateBlockLightMap();
 
-        // Full chunks are decoded and lit by a worker, then installed here.
-        // Partial chunk updates stay synchronous: they are small and need the
-        // chunk's existing sections.
         this.pendingChunks = new Map();
         this.pendingBlockChanges = new Map();
         this.nextJobId = 1;
@@ -50,17 +47,12 @@ export default class ChunkProviderClient extends ChunkProvider {
         let index = x + (z << 16);
         let chunk = this.chunks.get(index);
 
-        // A full chunk can arrive while the previous one is still being used.
-        // Keep the old data visible until the worker result is ready rather
-        // than removing the chunk and leaving a hole under the player.
         if (typeof chunk !== 'undefined') {
             chunk.isTerrainPopulated = false;
             return chunk;
         }
 
         chunk = new Chunk(this.world, x, z);
-        // An empty chunk reads height 0 and sky light 15. The worker replaces
-        // both once it has decoded the packet.
         chunk.heightMap = new Uint16Array(256);
         chunk.loaded = true;
         chunk.isTerrainPopulated = false;
@@ -70,11 +62,7 @@ export default class ChunkProviderClient extends ChunkProvider {
         return chunk;
     }
 
-    /**
-     * Install a full chunk packet. The worker decodes the block arrays and
-     * prepares the heightmap and sky-light column values; the main thread only
-     * copies the result into the chunk and queues the cross-chunk light flood.
-     */
+    
     fillChunkFromPacket(x, z, data, mask) {
         const key = x + (z << 16);
         const chunk = this.loadChunk(x, z);
@@ -93,8 +81,6 @@ export default class ChunkProviderClient extends ChunkProvider {
         }
 
         this.syncBlockTable();
-        // Do not transfer `data`: the main thread keeps it so a worker failure
-        // can fall back to the original synchronous path.
         this.worker.postMessage({
             type: "fill",
             id: jobId,
@@ -138,16 +124,10 @@ export default class ChunkProviderClient extends ChunkProvider {
                     }
                 }
             } catch (error) {
-                // A block that cannot answer without a world is conservatively
-                // opaque. If it is present in a chunk, the worker asks the
-                // main thread to recompute the light there.
                 opacity = 1;
             }
             opacityById[id] = opacity;
 
-            // Static opacity overrides take no arguments. Anything that takes
-            // the world can depend on metadata or position, so leave the light
-            // pass to the main thread when such a block is present.
             if (block.getOpacity !== Block.prototype.getOpacity && block.getOpacity.length >= 4) {
                 dynamicOpacityById[id] = 1;
             }
@@ -198,12 +178,10 @@ export default class ChunkProviderClient extends ChunkProvider {
             try {
                 this.worker.terminate();
             } catch (error) {
-                // Ignore termination errors; the fallback below is what matters.
             }
             this.worker = null;
         }
 
-        // Recover every in-flight chunk with the original synchronous path.
         for (const key of Array.from(this.pendingChunks.keys())) {
             this.fillPendingOnMain(key);
         }
@@ -227,9 +205,6 @@ export default class ChunkProviderClient extends ChunkProvider {
                 section.empty = false;
             }
 
-            // Empty sections below floating terrain need their computed
-            // darker sky light too; the default path would otherwise return
-            // 15 for the whole section.
             section.blockLight = [];
             section.skyLight = skyLight;
 
@@ -257,9 +232,6 @@ export default class ChunkProviderClient extends ChunkProvider {
         }
 
         if (result.needsMainLight) {
-            // The worker could not evaluate opacity for every block (unknown
-            // mod block or a world-dependent opacity). Recompute with the
-            // authoritative block table and metadata on the main thread.
             for (let x = 0; x < 16; x++) {
                 for (let z = 0; z < 16; z++) {
                     chunk.updateHeightMapAt(x, z);
@@ -267,9 +239,6 @@ export default class ChunkProviderClient extends ChunkProvider {
             }
             this.world.updateChunkLight(chunk);
         } else {
-            // The worker already produced the per-column sky light and zeroed
-            // block light; only the flood that fixes chunk borders (and lights
-            // up emitters) remains.
             this.world.queueChunkLight(chunk);
         }
     }
@@ -284,8 +253,6 @@ export default class ChunkProviderClient extends ChunkProvider {
         const chunk = pending.chunk;
         chunk.loaded = true;
 
-        // A full chunk replaces every section, including sections that were
-        // present in an older version of this chunk.
         for (const section of chunk.sections) {
             section.blocks = new Uint16Array(SECTION_VOLUME);
             section.blocksData = new Uint8Array(SECTION_VOLUME);

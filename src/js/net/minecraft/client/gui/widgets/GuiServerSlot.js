@@ -14,34 +14,29 @@ export default class GuiServerSlot extends GuiButton {
     static ICON_Y_OFFSET = -1;
     static JOIN_SIZE = 32;
 
-    // Alpha mask per join texture. The button image is a small arrow on an
-    // otherwise transparent 32x32 tile, so the highlight has to follow the
-    // drawn pixels instead of the tile bounds.
     static joinMaskCache = new WeakMap();
 
     constructor(worldData, x, y, width, height, callback, minecraft, joinCallback = null) {
         super(minecraft, worldData.name, x, y, width, height, callback);
 
-        // Clicking the server icon jumps straight into the server
         this.joinCallback = joinCallback;
 
         this.worldName = worldData.name ?? "Unknown Server";
         this.worldDate = worldData.date ?? "";
         this.worldDetails = worldData.details ?? "";
         this.worldMotd = worldData.motd ?? "";
-        this.serverIcon = worldData.icon ?? null; // Custom server icon (base64 or URL)
+        this.serverIcon = worldData.icon ?? null; 
 
         this.drawButton = () => {};
 
-        // Ensure renderE is set to true
         this.renderE = true;
-        this.pingMs = null; // measured ping in ms, null = not yet measured
-        this.pingIcon = 5; // 0..5, 5 = unknown/unreachable by default (bottom/no ping)
-        this.isPinging = false; // true while a measurement is in flight
-        this.pingingStartedAt = 0; // drives the pinging_*.png animation
+        this.pingMs = null; 
+        this.pingIcon = 5; 
+        this.isPinging = false; 
+        this.pingingStartedAt = 0; 
         this.playerCount = null;
         this.maxPlayers = null;
-        this.iconImage = null; // Loaded Image object for custom icon
+        this.iconImage = null; 
 
         if (typeof worldData.playerCount === 'number') {
             this.playerCount = worldData.playerCount;
@@ -61,16 +56,13 @@ export default class GuiServerSlot extends GuiButton {
             this.maxPlayers = parsedPlayers.max;
         }
 
-        // Load custom server icon if provided
         if (this.serverIcon) {
             this.loadServerIcon();
         }
 
-        // Start an initial ping attempt
         try {
             this.startPing();
         } catch (e) {
-            // ignore
         }
     }
 
@@ -81,30 +73,24 @@ export default class GuiServerSlot extends GuiButton {
         this.iconImage = img;
 
         if (this.serverIcon.startsWith('data:image')) {
-            // Base64 data URL
             img.src = this.serverIcon;
         } else if (this.serverIcon.startsWith('http')) {
-            // URL
             img.src = this.serverIcon;
         } else {
-            // Assume it's a path to load from resources
             try {
                 const iconTexture = this.getTexture(this.serverIcon);
                 if (iconTexture) {
                     this.iconImage = iconTexture;
                 }
             } catch (e) {
-                // Fall back to default
             }
             return;
         }
 
         img.onload = () => {
-            // Icon loaded successfully
         };
 
         img.onerror = () => {
-            // Failed to load, will use default
             this.iconImage = null;
         };
     }
@@ -118,7 +104,6 @@ export default class GuiServerSlot extends GuiButton {
         const WHITE = 16777215;
         const GRAY = 8421504;
 
-        // Draw icon on the left side (centered in 36px area)
         try {
             let iconTexture = this.iconImage;
             if (!iconTexture) {
@@ -131,16 +116,12 @@ export default class GuiServerSlot extends GuiButton {
 
             if (iconTexture) {
                 if (this.iconImage && this.iconImage instanceof Image) {
-                    // Draw custom image directly
                     stack.drawImage(iconTexture, iconX, iconY, iconSize, iconSize);
                 } else {
-                    // Draw as sprite from texture atlas
                     this.drawSprite(stack, iconTexture, 0, 0, 256, 256, iconX, iconY, iconSize, iconSize);
                 }
             }
 
-            // Hovering the row turns the icon into a join button, and hovering
-            // the arrow itself highlights it
             if (this.isMouseOver(mouseX, mouseY)) {
                 const highlighted = this.isMouseOverJoinButton(mouseX, mouseY);
                 const joinTexture = this.getTexture(highlighted ? "gui/join_highlighted.png" : "gui/join.png");
@@ -150,15 +131,12 @@ export default class GuiServerSlot extends GuiButton {
                 }
             }
         } catch (e) {
-            // continue silently if no texture
         }
 
-        // Match GuiWorldSlot's drawString calls exactly
         this.drawString(stack, this.worldName, slotX + 38, slotY + 1, WHITE, true, false);
         this.drawString(stack, '§7' + this.worldMotd, slotX + 38, slotY + 12, GRAY, true, false);
         this.drawString(stack, '§8' + this.worldDetails, slotX + 38, slotY + 22, GRAY, true, false);
 
-        // Draw ping icon on the right side of the slot if texture available
         let pingIconBounds = null;
         try {
             const iconW = 10;
@@ -170,10 +148,6 @@ export default class GuiServerSlot extends GuiButton {
             pingIconBounds = { x: drawX - padding, y: drawY - padding, width: iconW + padding * 2, height: iconH + padding * 2 };
 
             if (this.isPinging) {
-                // Animate the 10x8 pinging frames while the measurement runs.
-                // The frames bounce (1-2-3-4-5-4-3-2) rather than wrapping from
-                // 5 straight back to 1, so the sequence reads as one sweep out
-                // and back instead of an endless uphill loop.
                 const step = Math.floor((performance.now() - this.pingingStartedAt) / 100) % 8;
                 const frame = step < 5 ? step + 1 : 9 - step;
                 const pingingTexture = this.getTexture(`gui/pinging_${frame}.png`);
@@ -189,12 +163,10 @@ export default class GuiServerSlot extends GuiButton {
                     const spriteX = 0;
                     const spriteY = index * (iconH + gap);
 
-                    // Draw at native size (do not scale)
                     this.drawSprite(stack, pingTexture, spriteX, spriteY, iconW, iconH, drawX, drawY, iconW, iconH);
                 }
             }
         } catch (e) {
-            // continue silently if no texture or draw fails
         }
 
         if (pingIconBounds && this.isMouseOverPingIcon(mouseX, mouseY, pingIconBounds)) {
@@ -211,8 +183,6 @@ export default class GuiServerSlot extends GuiButton {
     mouseClicked(mouseX, mouseY, mouseButton) {
         if (!this.isMouseOver(mouseX, mouseY)) return;
 
-        // Select first so the button states and highlight agree with what the
-        // click did, then join when the icon itself was hit
         this.callback();
 
         if (this.joinCallback && this.isMouseOverIcon(mouseX, mouseY)) {
@@ -229,7 +199,7 @@ export default class GuiServerSlot extends GuiButton {
             mouseY >= iconY && mouseY < iconY + iconSize;
     }
 
-    /** Area the join arrow is drawn into, centred on the server icon. */
+    
     getJoinBounds() {
         const size = GuiServerSlot.JOIN_SIZE;
         const offset = Math.floor((GuiServerSlot.ICON_SIZE - size) / 2);
@@ -241,10 +211,7 @@ export default class GuiServerSlot extends GuiButton {
         };
     }
 
-    /**
-     * Alpha mask of a join texture, built once and cached. The textures are
-     * same-origin (embedded base64), so reading them back is allowed.
-     */
+    
     getJoinMask(texture) {
         if (!texture || !texture.width || !texture.height) return null;
 
@@ -273,12 +240,11 @@ export default class GuiServerSlot extends GuiButton {
             GuiServerSlot.joinMaskCache.set(texture, mask);
             return mask;
         } catch (e) {
-            // Unreadable canvas: callers fall back to the plain button bounds
             return null;
         }
     }
 
-    /** True only while the cursor is over the drawn arrow, not the tile. */
+    
     isMouseOverJoinButton(mouseX, mouseY) {
         const bounds = this.getJoinBounds();
 
@@ -305,13 +271,11 @@ export default class GuiServerSlot extends GuiButton {
         if (rawAddress.startsWith('ws://') || rawAddress.startsWith('wss://')) {
             addresses.push(rawAddress);
         } else {
-            // Try wss first (public servers), then plain ws (e.g. local servers)
             addresses.push('wss://' + rawAddress);
             addresses.push('ws://' + rawAddress);
         }
 
         const tryPing = (url) => {
-            // Each attempt restarts the pinging animation
             this.isPinging = true;
             this.pingingStartedAt = performance.now();
 
@@ -345,7 +309,6 @@ export default class GuiServerSlot extends GuiButton {
                         if (typeof payload.players === 'number') this.playerCount = payload.players;
                         if (typeof payload.maxPlayers === 'number') this.maxPlayers = payload.maxPlayers;
                         if (payload.icon && !this.serverIcon) {
-                            // Server sent icon in ping response
                             this.serverIcon = payload.icon;
                             this.loadServerIcon();
                         }
@@ -400,7 +363,6 @@ export default class GuiServerSlot extends GuiButton {
     }
 
     computeIconIndex(pingMs) {
-        // Map ping ms to icon index (0 = best/full, 5 = worst/unreachable)
         if (pingMs === null) return 5;
         if (pingMs < 0) return 5;
         if (pingMs <= 50) return 0;

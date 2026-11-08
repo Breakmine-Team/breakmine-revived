@@ -1,14 +1,14 @@
-// Glyph cells taken from src/resources/gui/accented.png.
-//
-// accented.png is laid out as 16 columns x 75 rows of 9x12 cells. The glyph
-// body sits on rows 3..10 of its cell (so text is drawn 3 pixels above the
-// baseline) and the accent mark occupies the rows above it. Every entry maps
-// a character code point to [cellX, cellY, advance] - the cell origin in the
-// atlas and how far the pen moves after drawing it.
-//
-// The table was generated from the atlas itself: each glyph's base letter was
-// matched against font.png and its accent mark classified, then composed back
-// into its Unicode character.
+
+
+
+
+
+
+
+
+
+
+
 export const ACCENTED_CELL_WIDTH = 9;
 export const ACCENTED_CELL_HEIGHT = 12;
 export const ACCENTED_ASCENT = 3;

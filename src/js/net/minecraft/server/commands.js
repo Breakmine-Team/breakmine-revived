@@ -14,22 +14,22 @@ import config from './config.js';
 
 const log = Logger;
 
-// All command registration/dispatch comes from the client command system:
-// CommandHandler wires up the same Command classes the singleplayer client
-// uses (help, time, tp, gamemode, setblock, place, heal, give, util). Each
-// command runs against a per-player CommandContext adapter that maps the
-// client-facing `minecraft` interface onto the server's world/player state.
+
+
+
+
+
 const commandHandler = new CommandHandler(null);
 
-// Commands that mutate shared state or affect other players. Non-ops get a
-// permission error instead of the command executing.
+
+
 const OP_ONLY_COMMANDS = new Set([
     'tp', 'gamemode', 'heal', 'give', 'setblock', 'place', 'summon', 'util',
     'offgridrenderer', 'ofr', 'ofrclear'
 ]);
 
-// Moderation commands act on other players' sessions and on the ban/op lists,
-// so they are handled here rather than by the client command classes.
+
+
 const MODERATION_COMMANDS = new Set(['kick', 'ban', 'tempban', 'unban', 'op', 'deop', 'sop', 'unsop']);
 
 const MODERATION_USAGE = {
@@ -45,10 +45,10 @@ const MODERATION_USAGE = {
 
 const VALID_USERNAME = /^[A-Za-z0-9_]{1,32}$/;
 
-// Mods register their commands into CommandRegistry, the same registry the
-// client reads. A mod marks a command op-only by setting `opOnly` when it
-// registers it, and everything else stays open to any player, like the
-// built-in read-only commands.
+
+
+
+
 function isOpOnlyCommand(name) {
     return OP_ONLY_COMMANDS.has(name) || CommandRegistry.isOpOnly(name);
 }
@@ -61,8 +61,8 @@ function requireOp(player) {
     return false;
 }
 
-// Moderation (kick/ban/unban, and handing out super op) is reserved for super
-// ops, so an ordinary operator cannot ban people or promote themselves.
+
+
 function requireSuperOp(player) {
     if (isSuperOp(player)) {
         return true;
@@ -85,21 +85,16 @@ function handleCommand(player, command) {
         return;
     }
 
-    // Server-specific commands that have no client-side equivalent.
     if (cmd === 'server' || cmd === 'world') {
         handleServer(player, args);
         return;
     }
 
-    // Off-grid state is shared and owned by the server, so these commands must
-    // run here even though the client also registers command classes for
-    // offline/local use.
     if (cmd === 'offgridrenderer' || cmd === 'ofr' || cmd === 'ofrclear') {
         handleOffGridCommand(player, cmd, args);
         return;
     }
 
-    // /time (no args) only shows the time; setting/adding needs op.
     if (cmd === 'time' && (args[0] === 'set' || args[0] === 'add') && !requireOp(player)) {
         return;
     }
@@ -107,8 +102,6 @@ function handleCommand(player, command) {
         return;
     }
 
-    // A mod command only works if the mod is installed here too. Say so
-    // instead of the bare "unknown command" a player would get otherwise.
     if (!commandHandler.hasCommand(cmd)) {
         if (player.mods && player.mods.length > 0) {
             const names = player.mods.map(mod => mod.name).join(', ');
@@ -137,8 +130,8 @@ function readReason(args) {
     return args.join(' ').trim().replace(/^["']|["']$/g, '').slice(0, 256);
 }
 
-// Send the disconnect reason, then drop the socket. The socket's own close
-// handler saves the player's data and takes them out of the player list.
+
+
 function disconnectPlayer(target, message) {
     if (!target || !target.ws) {
         return false;
@@ -157,8 +150,6 @@ function disconnectPlayer(target, message) {
 }
 
 function handleModerationCommand(player, cmd, args) {
-    // /op and /deop need operator rights; everything else that acts on other
-    // players' sessions needs a super op.
     if (cmd === 'op' || cmd === 'deop') {
         if (!requireOp(player)) {
             return;
@@ -198,8 +189,6 @@ function handleKick(player, name, reasonArgs) {
         return;
     }
 
-    // The kicked player gets the same three-line screen a ban shows, with the
-    // reason on its own line.
     const reason = readReason(reasonArgs) || 'No reason given';
     const message = [
         '§cYou have been kicked from this server!',
@@ -213,8 +202,6 @@ function handleKick(player, name, reasonArgs) {
 }
 
 function handleBan(player, cmd, name, rest) {
-    // A super op should not be able to remove themselves - with /ban, the only
-    // way back in is editing the ban file by hand. Someone else has to do it.
     if (String(player.username || '').toLowerCase() === name.toLowerCase()) {
         sendChatMessageToPlayer(player, '§cYou cannot ban yourself.');
         return;
@@ -245,8 +232,6 @@ function handleBan(player, cmd, name, rest) {
         return;
     }
 
-    // Someone can be banned while online: drop them with the ban reason so
-    // they see why, instead of just losing the connection.
     const target = findPlayerByUsername(name);
     if (target) {
         disconnectPlayer(target, describeBan(entry));
@@ -270,7 +255,7 @@ function handleUnban(player, name) {
     sendChatMessageToPlayer(player, `§eUnbanned §o${removed.name || name}§e.`);
 }
 
-// Replace any casing-insensitive match of `name` in `list`.
+
 function withoutName(list, name) {
     const matches = (entry) => String(entry).toLowerCase() === name.toLowerCase();
     return list.filter((entry) => !matches(entry));
@@ -325,7 +310,6 @@ function handleOp(player, cmd, name) {
     const deopList = Array.isArray(config.deop_player_list) ? [...config.deop_player_list] : [];
     const matches = (entry) => String(entry).toLowerCase() === name.toLowerCase();
 
-    // A super op outranks /deop; demote them with /unsop first.
     const superOps = Array.isArray(config.super_op_player_list) ? config.super_op_player_list : [];
     if (cmd === 'deop' && (superOps.some(matches) || config.isEnvSuperOp(name))) {
         sendChatMessageToPlayer(player, `§c${name} is a super operator - use /unsop first.`);
@@ -350,8 +334,6 @@ function handleOp(player, cmd, name) {
                 opList.splice(i, 1);
             }
         }
-        // The deop list is what makes /deop stick on a server whose
-        // serverconfig has default_op=true.
         if (!deopList.some(matches)) {
             deopList.push(name);
         }
@@ -413,8 +395,6 @@ function handleServer(player, args) {
         return;
     }
 
-    // Persist each player's state on the server they are leaving before
-    // switching, so their position/inventory stay intact per server.
     const players = getPlayers();
     for (const p of players.values()) {
         if (p.username) {
@@ -422,25 +402,17 @@ function handleServer(player, args) {
         }
     }
 
-    // Save current server
     saveWorld();
 
-    // Load the target server's own config (world type, seed, gamemode, ...).
-    // If it has no serverconfig.conf the current settings are kept.
     config.reload(serverName);
 
-    // Swap the server-side mod set before the new world is read, so block ids
-    // from the target server's mods resolve while its chunks are loaded.
     reloadServerSideMods();
 
-    // Load new server
     initWorld(serverName);
 
     const spawn = getSpawnPosition();
 
     for (const p of players.values()) {
-        // Apply the player's saved state for the new server, or fall back to
-        // the spawn point if they have never been there.
         const playerData = loadPlayerData(p.username);
         if (playerData) {
             p.x = typeof playerData.x === 'number' ? playerData.x : spawn.x;
@@ -463,22 +435,15 @@ function handleServer(player, args) {
             p.inventory = normalizeInventoryState([]);
         }
 
-        // Forget which chunks were already sent so every chunk around the
-        // player's (possibly far away) saved position is streamed fresh.
         cleanupPlayerChunks(p.eid);
 
-        // Send reset world packet to clear all chunks
         sendResetWorldPacket(p);
 
-        // Send respawn packet (dimension 0 = overworld)
         sendRespawn(p, 0);
 
-        // The target server may have different gameplay rules and mods.
         sendServerRules(p);
         sendServerMods(p);
 
-        // Authoritative restore so the client targets the saved position while
-        // it streams in the new server's terrain.
         if (p.ws.readyState === 1) {
             p.ws.send(JSON.stringify({
                 type: 'playerState',
@@ -496,16 +461,12 @@ function handleServer(player, args) {
             p.ws.send(JSON.stringify({ type: 'gamemode', gamemode: p.gamemode, flying: !!p.isFlying }));
         }
 
-        // Send chunks from the new server
         sendChunks(p);
 
-        // Send spawn position
         sendSpawnPosition(p);
 
-        // Send position update
         sendPlayerPositionLook(p);
 
-        // The new world has its own off-grid state (loaded by initWorld).
         sendOffGridState(p);
     }
 }

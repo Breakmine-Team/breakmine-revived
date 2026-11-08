@@ -60,7 +60,6 @@ export default class GuiTexturePacks extends GuiScreen {
         this.selectedPack = index;
         const bool = (index >= 0 && index < this.texturePacks.length);
         this.buttonSelect.enabled = bool;
-        // Disable delete for default pack
         const isDefault = this.texturePacks[index]?.id === 'default';
         this.buttonDelete.enabled = bool && !isDefault;
     }
@@ -68,14 +67,11 @@ export default class GuiTexturePacks extends GuiScreen {
     async init() {
         super.init();
 
-        // Initialize container with empty list first
         this.texturePackSlotContainer = new GuiTexturePackSlotContainer(this, this.texturePacks);
         this.isInitialized = true;
 
-        // Load existing texture packs
         await this.loadTexturePacks();
 
-        // Update container with loaded packs
         this.texturePackSlotContainer = new GuiTexturePackSlotContainer(this, this.texturePacks);
 
         this.buttonSelect = new GuiButton(this.minecraft, "Select Pack", this.width / 2 - 155, this.height - 28, 150, 20, async () => {
@@ -117,7 +113,6 @@ export default class GuiTexturePacks extends GuiScreen {
     async loadTexturePacks() {
         this.texturePacks = [];
         
-        // Add default preset pack
         this.texturePacks.push({
             id: 'default',
             name: 'Simplistic',
@@ -128,7 +123,6 @@ export default class GuiTexturePacks extends GuiScreen {
         
         const packFiles = await this.filesystem.listDir('texture_packs/');
         
-        // Get all subdirectories in texture_packs/
         for (const fileName of packFiles) {
             if (fileName.endsWith('/meta.json') || fileName.endsWith('/meta.toml')) {
                 const metadata = await this.filesystem.loadFile(fileName);
@@ -171,7 +165,6 @@ export default class GuiTexturePacks extends GuiScreen {
         try {
             const zip = await JSZip.loadAsync(file);
             
-            // Look for pack.mcmeta or pack.json
             let metadata = null;
             let packId = 'pack_' + Date.now();
             
@@ -183,7 +176,6 @@ export default class GuiTexturePacks extends GuiScreen {
                 }
             }
             
-            // If no metadata found, create default
             if (!metadata) {
                 metadata = {
                     pack: {
@@ -204,22 +196,18 @@ export default class GuiTexturePacks extends GuiScreen {
             const metadataFilePath = `texture_packs/${packId}/meta.json`;
             await this.filesystem.saveFile(JSON.stringify(packData), metadataFilePath);
             
-            // Extract and save textures
             for (const [path, zipEntry] of Object.entries(zip.files)) {
                 if (!zipEntry.dir) {
                     const content = await zipEntry.async('base64');
                     
-                    // Handle simplified structure: /blocks and /items at root
                     if (path.startsWith('blocks/') || path.startsWith('items/')) {
                         const relativePath = path;
                         await this.filesystem.saveBinaryFile(content, `texture_packs/${packId}/${relativePath}.b64`);
                     }
-                    // Also support standard Minecraft structure for compatibility
                     else if (path.startsWith('assets/minecraft/textures/')) {
                         const relativePath = path.replace('assets/minecraft/textures/', '');
                         await this.filesystem.saveBinaryFile(content, `texture_packs/${packId}/${relativePath}.b64`);
                     }
-                    // Support old textures/ prefix
                     else if (path.startsWith('textures/')) {
                         const relativePath = path.replace('textures/', '');
                         await this.filesystem.saveBinaryFile(content, `texture_packs/${packId}/${relativePath}.b64`);
@@ -227,7 +215,6 @@ export default class GuiTexturePacks extends GuiScreen {
                 }
             }
             
-            // Reload the list
             await this.loadTexturePacks();
             this.texturePackSlotContainer = new GuiTexturePackSlotContainer(this, this.texturePacks);
             
@@ -238,7 +225,6 @@ export default class GuiTexturePacks extends GuiScreen {
     }
 
     async applyTexturePack(pack) {
-        // Store the selected pack ID in settings
         if (pack.id === 'default') {
             this.minecraft.settings.selectedTexturePack = null;
         } else {
@@ -246,7 +232,6 @@ export default class GuiTexturePacks extends GuiScreen {
         }
         this.minecraft.settings.save();
         
-        // Reload the texture atlas with the new pack
         if (this.minecraft.worldRenderer && this.minecraft.worldRenderer.textureAtlas) {
             if (pack.id === 'default') {
                 this.minecraft.worldRenderer.textureAtlas.texturePath = "terrain/pack/minecraft/textures/blocks/";
@@ -255,18 +240,15 @@ export default class GuiTexturePacks extends GuiScreen {
             }
             await this.minecraft.worldRenderer.textureAtlas.loadTextures();
             
-            // Rebind renderers to new texture
             if (this.minecraft.worldRenderer.blockRenderer) {
                 this.minecraft.worldRenderer.blockRenderer.tessellator.bindTexture(this.minecraft.worldRenderer.textureAtlas.getTexture());
             }
             
-            // Update translucent batcher material
             if (this.minecraft.worldRenderer.translucentBatcher) {
                 this.minecraft.worldRenderer.translucentBatcher.mesh.material.map = this.minecraft.worldRenderer.textureAtlas.getTexture();
                 this.minecraft.worldRenderer.translucentBatcher.mesh.material.needsUpdate = true;
             }
             
-            // Update block break material
             if (this.minecraft.worldRenderer.blockBreakMaterial) {
                 this.minecraft.worldRenderer.blockBreakMaterial.map = this.minecraft.worldRenderer.textureAtlas.getTexture().clone();
                 this.minecraft.worldRenderer.blockBreakMaterial.map.offset.set(0, 0);
@@ -275,7 +257,6 @@ export default class GuiTexturePacks extends GuiScreen {
                 this.minecraft.worldRenderer.blockBreakMaterial.map.wrapT = THREE.RepeatWrapping;
             }
             
-            // Rebuild all chunks to apply new textures
             if (this.minecraft.world) {
                 const chunks = this.minecraft.world.getChunkProvider().getChunks();
                 for (const [key, chunk] of chunks) {
@@ -286,37 +267,30 @@ export default class GuiTexturePacks extends GuiScreen {
     }
 
     async deleteTexturePack(packId) {
-        // Delete metadata
         await this.filesystem.deleteFile(`texture_packs/${packId}/meta.json`);
         
-        // Delete all texture files for this pack
         const packFiles = await this.filesystem.listDir(`texture_packs/${packId}/`);
         for (const file of packFiles) {
             await this.filesystem.deleteFile(`texture_packs/${packId}/${file}`);
         }
         
-        // If this was the selected pack, clear it
         if (this.minecraft.settings.selectedTexturePack === packId) {
             this.minecraft.settings.selectedTexturePack = null;
             this.minecraft.settings.save();
             
-            // Reload default textures
             if (this.minecraft.worldRenderer && this.minecraft.worldRenderer.textureAtlas) {
                 this.minecraft.worldRenderer.textureAtlas.texturePath = "terrain/pack/minecraft/textures/blocks/";
                 await this.minecraft.worldRenderer.textureAtlas.loadTextures();
                 
-                // Rebind renderers to new texture
                 if (this.minecraft.worldRenderer.blockRenderer) {
                     this.minecraft.worldRenderer.blockRenderer.tessellator.bindTexture(this.minecraft.worldRenderer.textureAtlas.getTexture());
                 }
                 
-                // Update translucent batcher material
                 if (this.minecraft.worldRenderer.translucentBatcher) {
                     this.minecraft.worldRenderer.translucentBatcher.mesh.material.map = this.minecraft.worldRenderer.textureAtlas.getTexture();
                     this.minecraft.worldRenderer.translucentBatcher.mesh.material.needsUpdate = true;
                 }
                 
-                // Update block break material
                 if (this.minecraft.worldRenderer.blockBreakMaterial) {
                     this.minecraft.worldRenderer.blockBreakMaterial.map = this.minecraft.worldRenderer.textureAtlas.getTexture().clone();
                     this.minecraft.worldRenderer.blockBreakMaterial.map.offset.set(0, 0);
@@ -325,7 +299,6 @@ export default class GuiTexturePacks extends GuiScreen {
                     this.minecraft.worldRenderer.blockBreakMaterial.map.wrapT = THREE.RepeatWrapping;
                 }
                 
-                // Rebuild all chunks to apply new textures
                 if (this.minecraft.world) {
                     const chunks = this.minecraft.world.getChunkProvider().getChunks();
                     for (const [key, chunk] of chunks) {
@@ -352,7 +325,6 @@ export default class GuiTexturePacks extends GuiScreen {
         super.mouseClicked(mouseX, mouseY, mouseButton);
     }
 
-    // Forward drag/release so the scrollbar thumb can be dragged.
     mouseDragged(mouseX, mouseY, mouseButton) {
         if (this.texturePackSlotContainer) {
             this.texturePackSlotContainer.mouseDragged(mouseX, mouseY, mouseButton);

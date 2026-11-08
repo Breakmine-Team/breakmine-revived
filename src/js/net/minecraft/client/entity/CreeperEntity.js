@@ -6,9 +6,6 @@ import { BlockRegistry } from '../world/block/BlockRegistry.js'
 import BoundingBox from '../../util/BoundingBox.js'
 import explodeCraterAt from '../world/block/functions/Explosion.js';
 
-/**
- * Simple implementation of a Creeper entity.
- */
 export default class CreeperEntity extends EntityLiving {
     static name = 'CreeperEntity';
 
@@ -22,7 +19,6 @@ export default class CreeperEntity extends EntityLiving {
         this.width = 0.6;
         this.height = 1.8;
 
-        // Update bounding box
         let width = this.width / 2;
         this.boundingBox = new BoundingBox(
             x - width,
@@ -64,7 +60,6 @@ export default class CreeperEntity extends EntityLiving {
         this.prevRenderArmPitch = 0
         this.prevRenderArmYaw = 0
 
-        // For first person bobbing
         this.cameraYaw = 0
         this.cameraPitch = 0
         this.prevCameraYaw = 0
@@ -72,7 +67,6 @@ export default class CreeperEntity extends EntityLiving {
 
         this.health = 20.0;
 
-        // AI State Variables
         this.aiTimer = 0;
         this.moveForward = 0.0;
         this.moveStrafing = 0.0;
@@ -99,43 +93,36 @@ export default class CreeperEntity extends EntityLiving {
         this.kill();
     }
 
-    /**
-     * Aggressive AI logic: track player or wander
-     */
+    
     updateAI() {
         const player = this.minecraft.player;
         
-        // Don't attack creative players
         if (player && !player.creative) {
             let dx = player.x - this.x;
             let dy = player.y - this.y;
             let dz = player.z - this.z;
             let distanceSq = dx * dx + dy * dy + dz * dz;
 
-            // Tracking Range (approx 16 blocks)
             if (distanceSq < 256) {
-                // Face the player
                 this.rotationYaw = MathHelper.toDegrees(Math.atan2(-dx, dz));
                 this.moveForward = 0.5;
 
-                // Explosion Range (approx 3 blocks)
                 if (distanceSq < 9) {
-                    this.setCreeperState(1); // Start swelling
+                    this.setCreeperState(1); 
                     this.currentFuse++;
                     if (this.currentFuse >= this.fuseTime) {
                         this.explode();
                     }
                 } else {
-                    this.setCreeperState(-1); // Stop swelling
+                    this.setCreeperState(-1); 
                     if (this.currentFuse > 0) this.currentFuse--;
                 }
                 
-                // Jump if blocked while chasing
                 if (this.onGround && this.collision) {
                     this.jumping = true;
                 }
                 
-                return; // Skip random wander logic
+                return; 
             }
         }
 
@@ -153,7 +140,6 @@ export default class CreeperEntity extends EntityLiving {
             }
         }
         
-        // Reset fuse if player is lost
         this.setCreeperState(-1);
         if (this.currentFuse > 0) this.currentFuse--;
     }
@@ -162,7 +148,6 @@ export default class CreeperEntity extends EntityLiving {
         this.prevCameraYaw = this.cameraYaw
         this.prevCameraPitch = this.cameraPitch
 
-        // Run the AI Logic before physics update
         this.updateAI();
 
         if (this.sprintToggleTimer > 0) {
@@ -179,7 +164,6 @@ export default class CreeperEntity extends EntityLiving {
         let prevMoveForward = this.moveForward
         let prevJumping = this.jumping
 
-        // Toggle jumping
         if (this.creative && !prevJumping && this.jumping) {
             if (this.flyToggleTimer === 0) {
                 this.flyToggleTimer = 7
@@ -189,7 +173,6 @@ export default class CreeperEntity extends EntityLiving {
             }
         }
 
-        // Toggle sprint
         if (prevMoveForward === 0 && this.moveForward > 0) {
             if (this.sprintToggleTimer === 0) {
                 this.sprintToggleTimer = 7
@@ -261,18 +244,14 @@ export default class CreeperEntity extends EntityLiving {
 
         this.moveRelative(forward, vertical, strafe, friction)
 
-        // Get new speed
         let slipperiness = this.getBlockSlipperiness() * 0.91
 
-        // Move
         this.collision = this.moveCollide(-this.motionX, this.motionY, -this.motionZ)
 
-        // Gravity
         if (!this.flying) {
             this.motionY -= 0.08
         }
 
-        // Decrease motion
         this.motionX *= slipperiness
         this.motionY *= 0.98
         this.motionZ *= slipperiness
@@ -286,7 +265,6 @@ export default class CreeperEntity extends EntityLiving {
         const isLandingInLiquid = landingBlock?.isLiquid() ?? false;
 
 
-        // Fall Damage Logic
         if (this.onGround && !prevOnGround && !this.flying && !this.creative && !isLandingInLiquid) {
             if (this.fallDistance > 3) {
                 let damage = this.fallDistance - 3
@@ -300,12 +278,10 @@ export default class CreeperEntity extends EntityLiving {
             this.fallDistance = 0
         }
 
-        // Reset fall distance on flying
         if (this.flying) {
             this.fallDistance = 0
         }
 
-        // Step sound
         if (!isSlow) {
             let blockX = MathHelper.floor(this.x)
             let blockY = MathHelper.floor(this.y - 0.2)
@@ -323,7 +299,6 @@ export default class CreeperEntity extends EntityLiving {
                 if (block !== null) {
                     let sound = block.getSound()
 
-                    // Play sound
                     if (!block.isLiquid()) {
                         this.minecraft.soundManager.playSound(sound.getStepSound(), this.x, this.y, this.z, 0.25, sound.getPitch())
                     }
@@ -337,7 +312,6 @@ export default class CreeperEntity extends EntityLiving {
     }
 
     updateFOVModifier() {
-        //
     }
 
     isSprinting() {
@@ -367,17 +341,12 @@ export default class CreeperEntity extends EntityLiving {
         }
     }
 
-    /**
-         * interpolated look vector
-         */
+    
     getLook(partialTicks) {
-        // TODO interpolation
         return this.getVectorForRotation(this.rotationPitch, this.rotationYaw)
     }
 
-    /**
-         * Creates a Vec3 using the pitch and yaw of the entities rotation.
-         */
+    
     getVectorForRotation(pitch, yaw) {
         let z = Math.cos(-yaw * 0.017453292 - Math.PI)
         let x = Math.sin(-yaw * 0.017453292 - Math.PI)
@@ -435,11 +404,9 @@ export default class CreeperEntity extends EntityLiving {
 
 
     travelInWater() {
-        //
     }
 
     setCreeperState(state) {
-        // state 1 = swelling/igniting, state -1 = idle
         this.setFlag(16, state === 1); 
     }
 

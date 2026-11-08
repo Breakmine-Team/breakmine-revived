@@ -17,7 +17,7 @@ export default class GameWindow {
 
         this.mouseMotionX = 0;
         this.mouseMotionY = 0;
-        this.remoteMotionX = 0;   // gamepad / TV remote look (own sensitivity)
+        this.remoteMotionX = 0;   
         this.remoteMotionY = 0;
 
         this.mouseInsideWindow = false;
@@ -33,20 +33,16 @@ export default class GameWindow {
 
         this.mobileDevice = this.detectTouchDevice();
 
-        // Initialize canvas elements
         this.initializeElements(canvasWrapperId);
 
-        // Register listeners
         if (this.mobileDevice) {
             this.registerMobileListeners();
         } else {
             this.registerDesktopListeners();
         }
 
-        // Create keyboard
         Keyboard.create();
 
-        // TV mode: auto-lock focus and enable keyboard immediately
         if (this.minecraft.settings.tvmode) {
             this.mouseInsideWindow = true;
             Keyboard.setEnabled(true);
@@ -55,15 +51,12 @@ export default class GameWindow {
     }
 
     initializeElements(canvasWrapperId) {
-        // Get canvas wrapper
         this.wrapper = document.getElementById(canvasWrapperId);
 
-        // Remove all children of wrapper
         while (this.wrapper.firstChild) {
             this.wrapper.removeChild(this.wrapper.firstChild);
         }
 
-        // Create render layers
         this.canvasWorld = document.createElement('canvas');
         this.canvasDebug = document.createElement('canvas');
         this.canvasChat = document.createElement('canvas');
@@ -71,7 +64,6 @@ export default class GameWindow {
         this.canvasItems = document.createElement('canvas');
         this.canvasGuiItemCount = document.createElement('canvas');
 
-        // Create canvas renderer
         this.canvas = document.createElement('canvas');
         this.wrapper.appendChild(this.canvas);
     }
@@ -81,7 +73,6 @@ export default class GameWindow {
             this.updateWindowSize();
         });
         this.registerListener(document, 'mousedown', event => {
-            // Handle mouse click on screen first
             let currentScreen = this.minecraft.currentScreen;
             if (currentScreen !== null) {
                 currentScreen.mouseClicked(
@@ -90,22 +81,18 @@ export default class GameWindow {
                     event.button
                 );
             } else {
-                // In-Game mouse click (only when no GUI is open)
                 this.minecraft.onMouseClicked(event.button);
 
                 this.mouseButtons[event.button] = true;
 
-                // Start interval to repeat the mouse event
                 if (this.mouseDownInterval !== null) {
                     clearInterval(this.mouseDownInterval);
                 }
                 this.mouseDownInterval = setInterval(_ => this.minecraft.onMouseClicked(event.button), 250);
             }
 
-            // Fix cursor lock state
             this.requestCursorUpdate();
 
-            // Request lock on click
             if (this.minecraft.currentScreen === null && this.focusState === FocusStateType.EXITED) {
                 this.updateFocusState(FocusStateType.REQUEST_LOCK);
             }
@@ -119,7 +106,6 @@ export default class GameWindow {
             this.mouseMotionX += event.movementX;
             this.mouseMotionY += -event.movementY;
 
-            // Handle mouse move on screen
             let currentScreen = this.minecraft.currentScreen;
             if (currentScreen !== null) {
                 currentScreen.mouseDragged(event.x / this.scaleFactor, event.y / this.scaleFactor, event.button);
@@ -128,7 +114,6 @@ export default class GameWindow {
             this.requestCursorUpdate();
         });
         this.registerListener(document, 'mouseup', event => {
-            // Handle mouse release on screen
             let currentScreen = this.minecraft.currentScreen;
             if (currentScreen !== null) {
                 currentScreen.mouseReleased(
@@ -145,7 +130,6 @@ export default class GameWindow {
             }
         });
         this.registerListener(document, 'pointerlockchange', event => {
-            // Skip pointer lock handling in TV mode or on touch devices
             if (this.minecraft.settings.tvmode || this.mobileDevice) {
                 return;
             }
@@ -222,8 +206,6 @@ export default class GameWindow {
                 currentScreen.keyReleased(event.code);
             }
 
-            // Always notify the game about key releases, even while a screen is
-            // open, so held actions like push-to-talk don't get stuck.
             if (!payload.cancelled) {
                 this.minecraft.onKeyReleased?.(event.code);
             }
@@ -233,7 +215,6 @@ export default class GameWindow {
             event.stopPropagation();
             let delta = Math.sign(event.deltaY);
             
-            // Handle scroll on current screen if open
             let currentScreen = this.minecraft.currentScreen;
             if (currentScreen !== null) {
                 currentScreen.onScroll(event.x / this.scaleFactor, event.y / this.scaleFactor, delta);
@@ -251,7 +232,6 @@ export default class GameWindow {
             this.updateWindowSize();
         });
 
-        // 1. Inject Styles
         if (!document.getElementById('mobile-controls-styles')) {
             const style = document.createElement('style');
             style.id = 'mobile-controls-styles';
@@ -373,7 +353,6 @@ export default class GameWindow {
             document.head.appendChild(style);
         }
 
-        // 2. Inject Fullscreen Button
         let fsBtn = document.getElementById('mobile-fullscreen');
         if (!fsBtn) {
             fsBtn = document.createElement('button');
@@ -385,7 +364,6 @@ export default class GameWindow {
             document.body.appendChild(fsBtn);
         }
 
-        // 3. Inject Overlay & GUI Close Elements with SVG Icons
         let overlay = document.getElementById('mobile-controls-overlay');
         if (!overlay) {
             overlay = document.createElement('div');
@@ -421,7 +399,6 @@ export default class GameWindow {
         this.mobileOverlay = overlay;
         this.guiCloseBtn = guiCloseBtn;
 
-        // Fullscreen Button Handler
         fsBtn.addEventListener('touchstart', e => {
             e.preventDefault();
             if (!document.fullscreenElement) {
@@ -432,7 +409,6 @@ export default class GameWindow {
             this.updateWindowSize();
         }, { passive: false });
 
-        // Close GUI Button Handler
         guiCloseBtn.addEventListener('touchstart', e => {
             e.preventDefault();
             let currentScreen = this.minecraft.currentScreen;
@@ -441,7 +417,6 @@ export default class GameWindow {
             }
         }, { passive: false });
 
-        // Texture Buttons Setup
         const textureBtns = [
             { id: 'mbtn-shift', normal: 'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAA4UlEQVR4AeyUSw6EIBBEe+Z2bj2CW+/kEdhyC8KeY7BgOZMiwTAGQsMoxgST0rb51LNMeNPN1w4wz/Onp8J3ewAYL8tCvbSuK8ETEB4AhVKKjDFd5JyDpdcO4N9uuD0XQEpJQf8E15QAjGPT43s8VqqrAXJmuf6pACWT0ngKhp0Ad3PuvADDAqjdtGY+CyDQXvFkAUzTRLFSIPE46tScVI8FkFp4Vm8AjARGAiOBkUBTAjjrj2o9mpsAWs1S6wbATwLWWuqh+Fd4ACHES2tNupO2bSN4AsQDoEDjCuX2hCf0BQAA//9rZTcnAAAABklEQVQDALBXlVClvjJqAAAAAElFTkSuQmCC', hover: 'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAA80lEQVR4AeyUMQoCMRBFR69l5QFsFhsvoEewtPYInsBGcgStrKxsxMpCBCu1sBEb5Q9k0bBxJwNmCWThL5tsZv7L3yVtavgqAYqieMWU3TcDwLgzGFMs9YYTgicgGAAP++2GnrdTFF3vD1iySgAeNXBLE2C1mJErbXhpJqDdbVVdTiAnkBPICaSRgOTcl6xJ9yTs9kdV8N65kPXif0DaVLrO0osBUFDXvO49ergKAkCxz8Q3j5pfCgZAM9fMHWONVCoANIepFcZaqQG0hm5dBvhK4HA8Uwx9fgYGMMa0LrslxdJ6PiV4AoQB8ICJf8jXE57QGwAA//9zXGhDAAAABklEQVQDAEcglVDvsWKhAAAAAElFTkSuQmCC' },
             { id: 'mbtn-space', normal: 'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAA4UlEQVR4AeyUSw6EIBBEe+Z2bj2CW+/kEdhyC8KeY7BgOZMiwTAGQsMoxgST0rb51LNMeNPN1w4wz/Onp8J3ewAYL8tCvbSuK8ETEB4AhVKKjDFd5JyDpdcO4N9uuD0XQEpJQf8E15QAjGPT43s8VqqrAXJmuf6pACWT0ngKhp0Ad3PuvADDAqjdtGY+CyDQXvFkAUzTRLFSIPE46tScVI8FkFp4Vm8AjARGAiOBkUBTAjjrj2o9mpsAWs1S6wbATwLWWuqh+Fd4ACHES2tNupO2bSN4AsQDoEDjCuX2hCf0BQAA//9rZTcnAAAABklEQVQDALBXlVClvjJqAAAAAElFTkSuQmCC', hover: 'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAA90lEQVR4AeyUPwrCMBTGn17LyQO4BBcvoEdwdPYInsBFcgSdnJxcxMlBBCd1cBEX5QukxJKQl9imFFL42teXP9+vXyFdavgqAIQQn5TS360AYNwbTSmVBuMZwRMQCgDFcb+j9+OSRPfnC5ZKBYB6a+DWXoDNakFa/wQXlQCMTdPyuznmq4MBXGaufqUAPhPfuA2GnQB3c+48DcMCCN00ZD4LQNPW8WQB9IcTMmUDMcdR2+bYeiwA28KqehkgJ5ATyAnkBKISwFlfVuzRHAUQa2ZblwF+Ejidr5RC5q9QAFLKzu2wplTaLucET4AoABRo1CHXnvCEvgAAAP//+LFDzgAAAAZJREFUAwAS/JVQl/FRZQAAAABJRU5ErkJggg==' },
@@ -467,7 +442,6 @@ export default class GameWindow {
             el.addEventListener('mouseleave', setNormal, { passive: true });
         }
 
-        // 3. Setup Joysticks Logic
         const setupJoystick = (zoneId, knobId, onMove, onRelease) => {
             const zone = document.getElementById(zoneId);
             const knob = document.getElementById(knobId);
@@ -527,7 +501,6 @@ export default class GameWindow {
             }, { passive: false });
         };
 
-        // Left Joystick -> Movement (uses the player's movement bindings)
         setupJoystick('joystick-move-zone', 'joystick-move-knob', (normX, normY) => {
             const threshold = 0.3;
             Keyboard.setState(this.mobileKey('keyForward', 'KeyW'), normY < -threshold);
@@ -541,12 +514,10 @@ export default class GameWindow {
             Keyboard.setState(this.mobileKey('keyRight', 'KeyD'), false);
         });
 
-        // Mobile State Update Loop
         setInterval(() => {
             this.updateMobileUIState();
         }, 16);
 
-        // 4. Camera Drag + Place/Break System + GUI Pass-Through
         let activeTouch = null;
         let breakTimeout = null;
 
@@ -562,8 +533,6 @@ export default class GameWindow {
                     this.mouseX = touch.clientX / this.scaleFactor;
                     this.mouseY = touch.clientY / this.scaleFactor;
 
-                    // Drop focus from all text widgets first; the tapped widget
-                    // (if any) will re-focus via mouseClicked below
                     const buttons = this.minecraft.currentScreen.buttonList;
                     for (let b = 0; b < buttons.length; b++) {
                         const btn = buttons[b];
@@ -598,7 +567,6 @@ export default class GameWindow {
                         isDragging: false
                     };
 
-                    // Single break action after holding still for a moment (no repeat)
                     breakTimeout = setTimeout(() => {
                         if (activeTouch && !activeTouch.isDragging) {
                             activeTouch.isBreaking = true;
@@ -672,7 +640,6 @@ export default class GameWindow {
             }
         }, false);
 
-        // 5. Action Buttons & Arrow Hotbar Handlers + Double-Tap Fly
         const bindKeyButton = (elementId, keyCode) => {
             const btn = document.getElementById(elementId);
             if (!btn) return;
@@ -695,7 +662,6 @@ export default class GameWindow {
         bindKeyButton('mbtn-shift', this.mobileKey('keyCrouching', 'ShiftLeft'));
         bindKeyButton('mbtn-e', this.mobileKey('keyOpenInventory', 'KeyE'));
 
-        // Jump button with double-tap detector for flight (KeyF)
         let lastSpaceTap = 0;
         const spaceBtn = document.getElementById('mbtn-space');
         if (spaceBtn) {
@@ -735,7 +701,6 @@ export default class GameWindow {
         this.registerListener(document, 'contextmenu');
     }
 
-    // Resolve a rebindable key for the on-screen mobile controls.
     mobileKey(name, fallback) {
         const settings = this.minecraft.settings;
         return (settings && settings[name]) || fallback;
@@ -773,7 +738,6 @@ export default class GameWindow {
             }
         }
 
-        // Release the previously bound widget so it can track focus again
         if (this.mobileTextWidget && this.mobileTextWidget !== widget) {
             if (typeof this.mobileTextWidget.enableS === 'boolean') {
                 this.mobileTextWidget.enableS = true;
@@ -789,15 +753,12 @@ export default class GameWindow {
             return;
         }
 
-        // Pin the widget's focus while the native keyboard is open so render()
-        // doesn't drop it based on stale mouse/touch coordinates
         if (typeof widget.enableS === 'boolean') {
             widget.enableS = false;
         }
 
         const input = this.getMobileTextInput();
 
-        // Keep the native input value in sync with the widget on every frame
         if (input.value !== widget.getText()) {
             input.value = widget.getText();
         }
@@ -805,7 +766,6 @@ export default class GameWindow {
             input.maxLength = widget.maxLength || 32767;
         }
 
-        // Re-focus only when the focused widget changes or the user taps a field
         const shouldFocus = widget !== this.mobileTextWidget || this.mobileTextSuppressed === false;
         this.mobileTextWidget = widget;
 
@@ -838,7 +798,6 @@ export default class GameWindow {
         });
 
         input.addEventListener('keydown', e => {
-            // Forward keys the game handles itself (native input handles text editing)
             if (e.key !== 'Enter' && e.key !== 'Tab' && e.key !== 'Escape') return;
             e.preventDefault();
             const screen = this.minecraft.currentScreen;
@@ -851,7 +810,6 @@ export default class GameWindow {
         });
 
         input.addEventListener('blur', () => {
-            // Remember that the user dismissed the keyboard so we don't fight it
             this.mobileTextSuppressed = true;
         });
 
@@ -920,11 +878,7 @@ export default class GameWindow {
         }
     }
 
-    /**
-     * Size the 3D render target by the Resolution setting: the world is drawn
-     * at a fraction of the window's pixels and stretched back up by the screen
-     * canvas, so the GUI stays crisp whatever resolution is picked.
-     */
+    
     applyWorldResolution() {
         const renderer = this.minecraft.worldRenderer?.webRenderer;
         if (!renderer) return;
@@ -935,9 +889,6 @@ export default class GameWindow {
         const width = Math.max(1, Math.round(fullWidth * resolution));
         const height = Math.max(1, Math.round(fullHeight * resolution));
 
-        // Only the drawing buffer shrinks; the element keeps filling the
-        // window. The main menu shows this canvas directly behind the screen
-        // canvas for its panorama, so it cannot be left at its intrinsic size.
         renderer.setSize(width, height, false);
         renderer.domElement.style.width = fullWidth + "px";
         renderer.domElement.style.height = fullHeight + "px";
@@ -947,13 +898,11 @@ export default class GameWindow {
         let wrapperWidth = this.wrapper.offsetWidth;
         let wrapperHeight = this.wrapper.offsetHeight;
 
-        // On mobile, prefer the largest GUI scale so touch targets stay big
         let minWidth = this.mobileDevice ? 240 : 320;
         let minHeight = this.mobileDevice ? 160 : 240;
 
         let scale;
         for (scale = 1; wrapperWidth / (scale + 1) >= minWidth && wrapperHeight / (scale + 1) >= minHeight; scale++) {
-            // Empty
         }
 
         this.scaleFactor = scale;
@@ -1089,13 +1038,7 @@ export default class GameWindow {
         return value;
     }
 
-    /**
-     * Look input from a remote (gamepad right stick, TV remote). It is kept
-     * apart from mouse motion on purpose: remotes get their own sensitivity
-     * (settings.remoteSensitivity) while a mouse keeps settings.sensitivity.
-     * Synthetic mouse events always report movementX/movementY of 0, so a
-     * remote has to feed this accumulator instead.
-     */
+    
     addRemoteMotion(deltaX, deltaY) {
         this.remoteMotionX += deltaX;
         this.remoteMotionY += -deltaY;

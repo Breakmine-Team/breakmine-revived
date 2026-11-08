@@ -26,9 +26,7 @@ export default class BlockBluestonePusherHead extends Block {
 
     getMultipart(world, x, y, z) {
         return [
-            // Head Plate: {-0.5, 0.25, -0.5, 0.5, 0.5, 0.5} -> (0, 0.75, 0, 1, 1, 1)
             ["block", BlockRegistry.WOOD.id, new BoundingBox(0, 0.75, 0, 1, 1, 1)],
-            // Shaft / Arm: {-0.125, -0.5, -0.125, 0.125, 0.25, 0.125} -> (0.375, 0, 0.375, 0.625, 0.75, 0.625)
             ["block", BlockRegistry.COBBLE_STONE.id, new BoundingBox(0.375, 0, 0.375, 0.625, 0.75, 0.625)]
         ];
     }
@@ -38,10 +36,6 @@ export default class BlockBluestonePusherHead extends Block {
         if (baseId) {
             const baseBlock = Block.getById(baseId);
             if (baseBlock && baseBlock.isPusher) {
-                // The base clears its own extended bit (data & 1) *before*
-                // removing the head during a normal retract, so an extended
-                // base below us means the head was broken by hand - destroy
-                // the whole pusher. Otherwise just let the base retract.
                 if ((world.getBlockDataAt(x, y - 1, z) & 1) === 1) {
                     world.setBlockAt(x, y - 1, z, 0);
                 } else {

@@ -1,8 +1,8 @@
 import { Buffer } from '../../../../../libraries/buffer.js';
 
-// Thrown when a packet is malformed or shorter than the protocol requires.
-// Callers catch this to reject the connection instead of letting the process
-// crash with an ERR_OUT_OF_RANGE / ERR_BUFFER_OUT_OF_BOUNDS.
+
+
+
 class MalformedPacketError extends Error {
     constructor(message) {
         super(message);
@@ -10,10 +10,10 @@ class MalformedPacketError extends Error {
     }
 }
 
-// Max string length allowed by the protocol (1.8 / Protocol 47).
+
 const MAX_STRING_LENGTH = 32767;
 
-// Number of bytes writeVarInt would use to encode `value`.
+
 function varIntSize(value) {
     let size = 1;
     while ((value & ~0x7F) !== 0) {
@@ -24,8 +24,8 @@ function varIntSize(value) {
     return size;
 }
 
-// Throws MalformedPacketError unless `buffer` has at least `size` readable
-// bytes starting at `offset`. Prevents out-of-bounds buffer reads.
+
+
 function ensureReadable(buffer, offset, size) {
     if (!Buffer.isBuffer(buffer)) {
         throw new MalformedPacketError('Packet is not a buffer');
@@ -102,7 +102,7 @@ function makePacket(packetId, dataBuffer) {
 
 function broadcast(packetBuffer, players) {
     for (const player of players.values()) {
-        if (player.ws.readyState === 1) { // WebSocket.OPEN
+        if (player.ws.readyState === 1) { 
             player.ws.send(packetBuffer);
         }
     }

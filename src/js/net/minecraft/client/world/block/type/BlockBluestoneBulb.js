@@ -62,12 +62,10 @@ export default class BlockBluestoneBulb extends Block {
 
         let newData = data;
 
-        // Rising edge of power toggles the bulb.
         if (powered === 1 && !wasPowered) {
             newData = isOn ? (newData & ~1) : (newData | 1);
         }
 
-        // Track the last seen power state (bit 1) to detect edges.
         newData = powered === 1 ? (newData | 2) : (newData & ~2);
 
         if (newData !== data) {

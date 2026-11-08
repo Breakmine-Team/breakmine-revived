@@ -27,7 +27,6 @@ export default class PlayerEntity extends EntityLiving {
 
         this.typeOfDeath = 'hit the ground too hard';
 
-        // Fall damage tracking
         this.fallDistance = 0;
         this.wasOnGround = false;
 
@@ -54,7 +53,6 @@ export default class PlayerEntity extends EntityLiving {
         this.prevRenderArmPitch = 0;
         this.prevRenderArmYaw = 0;
 
-        // For first person bobbing
         this.cameraYaw = 0;
         this.cameraPitch = 0;
         this.prevCameraYaw = 0;
@@ -115,10 +113,7 @@ export default class PlayerEntity extends EntityLiving {
         this.setPosition(spawn.x, spawn.y, spawn.z);
     }
 
-    /**
-     * @param {number} sensitivityPercent look sensitivity; defaults to the mouse
-     *        setting, remotes pass settings.getRemoteSensitivity() instead.
-     */
+    
     turn(motionX, motionY, sensitivityPercent = this.minecraft.settings.getMouseSensitivity()) {
         let sensitivity = sensitivityPercent / 500;
         this.rotationYaw = this.rotationYaw + motionX * sensitivity;
@@ -134,8 +129,6 @@ export default class PlayerEntity extends EntityLiving {
     }
 
     onUpdate() {
-        // Freeze the player while the world is still loading so it can't fall
-        // through unloaded terrain before the world is ready.
         if (this.minecraft.loadingScreen !== null) {
             return;
         }
@@ -160,12 +153,10 @@ export default class PlayerEntity extends EntityLiving {
             this.updateKeyboardInput();
         }
 
-        // Toggle jumping
         if (!prevJumping && this.jumping) {
             if (this.flyToggleTimer === 0) {
                 this.flyToggleTimer = 7;
             } else {
-                // Only allow flying in creative or spectator mode
                 if (this.creative || this.spectator) {
                     this.flying = this.spectator || !this.flying;
                     this.flyToggleTimer = 0;
@@ -174,7 +165,6 @@ export default class PlayerEntity extends EntityLiving {
             }
         }
 
-        // Toggle sprint
         if (prevMoveForward === 0 && this.moveForward > 0) {
             if (this.sprintToggleTimer === 0) {
                 this.sprintToggleTimer = 7;
@@ -192,14 +182,9 @@ export default class PlayerEntity extends EntityLiving {
             this.updateFOVModifier();
         }
 
-        // A turntable under the local player carries them round at its speed.
         if (this === this.minecraft.player) {
             const turntableSpin = this.getTurntableSpin();
             if (turntableSpin !== 0) {
-                // The spin is the table's own angle, and a positive rotation
-                // about Y runs counter-clockwise seen from above. Yaw grows
-                // the other way, so the rider follows the plate only when it
-                // is subtracted.
                 this.rotationYaw -= turntableSpin;
             }
         }
@@ -287,7 +272,6 @@ export default class PlayerEntity extends EntityLiving {
     }
 
     travelFlying(forward, vertical, strafe) {
-        // Fly move up and down
         if (this.isSneaking()) {
             this.moveStrafing = strafe / 0.3;
             this.moveForward = forward / 0.3;
@@ -318,15 +302,11 @@ export default class PlayerEntity extends EntityLiving {
         this.moveRelative(forward, vertical, strafe, friction);
         this.collision = this.moveCollide(-this.motionX, this.motionY, -this.motionZ);
 
-        // Lava is thicker than water: stronger drag on every axis, so the body
-        // sinks slowly and horizontal swimming is slower. The swim-up stroke
-        // lives in EntityLiving.onLivingUpdate().
         this.motionX *= 0.5;
         this.motionY *= 0.5;
         this.motionZ *= 0.5;
         this.motionY -= 0.02;
 
-        // Reset fall distance while in lava
         this.fallDistance = 0;
         this.wasOnGround = false;
     }
@@ -343,7 +323,6 @@ export default class PlayerEntity extends EntityLiving {
         this.motionZ *= slipperiness;
         this.motionY -= 0.02;
 
-        // Reset fall distance while in water
         this.fallDistance = 0;
         this.wasOnGround = false;
     }
@@ -372,12 +351,9 @@ export default class PlayerEntity extends EntityLiving {
                 this.motionY = this.jumping ? 0.15 : this.isSneaking() ? -0.15 : 0;
             }
 
-            // Get new speed
             let slipperiness = this.getBlockSlipperiness() * 0.91;
 
-            // Move
             if (this.spectator) {
-                // Spectator noclip: same movement, no collision
                 this.boundingBox.move(-this.motionX, this.motionY, -this.motionZ);
                 this.x = (this.boundingBox.minX + this.boundingBox.maxX) / 2.0;
                 this.y = this.boundingBox.minY;
@@ -388,17 +364,14 @@ export default class PlayerEntity extends EntityLiving {
                 this.collision = this.moveCollide(-this.motionX, this.motionY, -this.motionZ);
             }
 
-            // Gravity
             if (!this.flying && !isOnLadder) {
                 this.motionY -= 0.08;
             }
 
-            // Decrease motion
             this.motionX *= slipperiness;
             this.motionY *= 0.98;
             this.motionZ *= slipperiness;
 
-            // Fall damage tracking
             if (isOnLadder) {
                 this.fallDistance = 0;
             }
@@ -406,20 +379,16 @@ export default class PlayerEntity extends EntityLiving {
                 if (isOnLadder) {
                     this.wasOnGround = this.onGround;
                 } else if (!this.onGround) {
-                    // Accumulate fall distance while in air
                     if (this.motionY < 0) {
                         this.fallDistance -= this.motionY;
                     }
                 } else if (this.wasOnGround !== this.onGround && !this.wasOnGround) {
-                    // Just landed
                     if (this.fallDistance > 3) {
                         let damage = this.fallDistance - 3;
                         this.damageEntitySimple(Math.abs(damage));
 
-                        // Play hurt sound
                         this.minecraft.soundManager.playSoundMono('random.hit', 1.0, 1.0);
 
-                        // Play fall sound based on distance
                         if (this.fallDistance > 5) {
                             this.minecraft.soundManager.playSoundMono('random.fallbig', 1.0, 1.0);
                         } else {
@@ -433,14 +402,12 @@ export default class PlayerEntity extends EntityLiving {
                 this.wasOnGround = this.onGround;
             }
 
-            // Lava damage
             if (!this.creative && !this.spectator && this.isInLava() && this.hurtTime === 0 && !this.isDead) {
                 this.damageEntitySimple(2);
                 this.minecraft.soundManager.playSoundMono('random.fire_hurt', 1.0, 1.0);
                 this.typeOfDeath = 'tried to swim in lava';
             }
 
-            // General health check - die if health reaches 0
             if (this.health <= 0 && !this.isDead) {
                 this.health = 0;
                 this.isDead = true;
@@ -448,7 +415,6 @@ export default class PlayerEntity extends EntityLiving {
             }
         }
 
-        // Step sound
         if (!isSlow) {
             let blockX = MathHelper.floor(this.x);
             let blockY = MathHelper.floor(this.y - 0.2);
@@ -466,7 +432,6 @@ export default class PlayerEntity extends EntityLiving {
                 if (block !== null) {
                     let sound = block.getSound();
 
-                    // Play sound
                     if (!block.isLiquid()) {
                         this.minecraft.soundManager.playSound(sound.getStepSound(), this.x, this.y, this.z, 0.15, sound.getPitch());
                     }
@@ -530,12 +495,10 @@ export default class PlayerEntity extends EntityLiving {
         let sneaking = false;
 
         if (this.minecraft.hasInGameFocus()) {
-            // TV mode: Arrow keys for movement, Enter+Arrow for camera look
             if (this.minecraft.settings.tvmode) {
                 let looking = Keyboard.isKeyDown("Enter");
 
                 if (looking) {
-                    // Camera look mode: Enter + Arrow keys rotate the camera
                     let yawDelta = 0;
                     let pitchDelta = 0;
                     if (Keyboard.isKeyDown("ArrowLeft")) yawDelta -= 4.0;
@@ -546,20 +509,16 @@ export default class PlayerEntity extends EntityLiving {
                         this.turn(yawDelta, pitchDelta);
                     }
                 } else {
-                    // Movement mode: Arrow keys for WASD-like movement
                     if (Keyboard.isKeyDown("ArrowUp")) moveForward++;
                     if (Keyboard.isKeyDown("ArrowDown")) moveForward--;
                     if (Keyboard.isKeyDown("ArrowLeft")) moveStrafe++;
                     if (Keyboard.isKeyDown("ArrowRight")) moveStrafe--;
                 }
 
-                // TV remote colored buttons (if available)
                 if (Keyboard.isKeyDown(this.minecraft.settings.keyJump)) jumping = true;
                 if (Keyboard.isKeyDown(this.minecraft.settings.keyCrouching)) sneaking = true;
             } else {
-                // Desktop mode: movement keys are rebindable in Options > Controls
                 if (Keyboard.isKeyDown("KeyR")) {
-                    // this.respawn();
                 }
                 if (Keyboard.isKeyDown(this.minecraft.settings.keyForward)) {
                     moveForward++;
@@ -670,44 +629,32 @@ export default class PlayerEntity extends EntityLiving {
     }
 
     respawn() {
-        // Reset health
         this.health = 20;
         this.isDead = false;
         this.sendHealthUpdate();
 
-        // Reset fall distance
         this.fallDistance = 0;
         this.wasOnGround = false;
 
-        // Reset position to spawn
         if (this.world.spawn && this.world.spawn.x !== undefined) {
-            // Singleplayer: use world.spawn
             this.setPosition(this.world.spawn.x, this.world.spawn.y, this.world.spawn.z);
         } else if (this.world.spawnX !== undefined) {
-            // Multiplayer: use world.spawnX/Y/Z
             this.setPosition(this.world.spawnX, this.world.spawnY, this.world.spawnZ);
         } else {
-            // Fallback
             this.setPosition(0, 64, 0);
         }
 
-        // Reset motion
         this.motionX = 0;
         this.motionY = 0;
         this.motionZ = 0;
     }
 
-    /**
-     * interpolated look vector
-     */
+    
     getLook(partialTicks) {
-        // TODO interpolation
         return this.getVectorForRotation(this.rotationPitch, this.rotationYaw);
     }
 
-    /**
-     * Creates a Vec3 using the pitch and yaw of the entities rotation.
-     */
+    
     getVectorForRotation(pitch, yaw) {
         let z = Math.cos(-yaw * 0.017453292 - Math.PI);
         let x = Math.sin(-yaw * 0.017453292 - Math.PI);
@@ -724,8 +671,6 @@ export default class PlayerEntity extends EntityLiving {
         let to = from.addVector(direction.x * blockReachDistance, direction.y * blockReachDistance, direction.z * blockReachDistance);
 
         let blockHit = this.world.rayTraceBlocks(from, to);
-        // Summoned field hits carry LOCAL coordinates (the structure may be
-        // posed); measure reach against the world-space hit point for those.
         let reachPoint = null;
         if (blockHit) {
             reachPoint = blockHit.fieldCell
@@ -734,18 +679,11 @@ export default class PlayerEntity extends EntityLiving {
         }
         let currentReach = reachPoint ? from.distanceTo(reachPoint) : blockReachDistance;
 
-        //let entityHit = this.world.rayTraceEntities(from, to, currentReach);
 
-        //if (entityHit) {
-        //    return { type: 'entity', entity: entityHit };
-        //}
         return blockHit;
     }
 
-    /**
-     * Degrees a turntable under this player's feet turns them this tick, or 0
-     * when there is no driven turntable there.
-     */
+    
     getTurntableSpin() {
         const world = this.world;
         if (!world || typeof world.getBlockAt !== 'function') {
@@ -753,7 +691,6 @@ export default class PlayerEntity extends EntityLiving {
         }
 
         const x = Math.floor(this.x);
-        // Feet sit just above the block, so look at the cell they rest on.
         const y = Math.floor(this.y - 0.1);
         const z = Math.floor(this.z);
 

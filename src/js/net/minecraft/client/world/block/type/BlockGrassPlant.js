@@ -9,8 +9,6 @@ export default class BlockGrassPlant extends BlockFlower {
     }
 
     getDrop(world, x, y, z) {
-        // Grass is the natural source of wheat seeds. Sometimes it gives the
-        // plant itself instead (green dye), so the drop is not guaranteed.
         if (Math.random() < 0.35) {
             return [BlockRegistry.ITEM_WHEAT_SEEDS.getId(), 1];
         }
@@ -26,7 +24,6 @@ export default class BlockGrassPlant extends BlockFlower {
         let humidity = world.getHumidity(x, y, z);
         let color = world.minecraft.grassColorizer.getColor(temperature, humidity);
 
-        // Match the grass block: blue the closer to a Snowy biome
         const snowDist = BlockGrass.getDistanceToSnowBiome(world, x, z);
         if (snowDist < 5) {
             color = BlockGrass.blendTowardBlue(color, (5 - snowDist) / 5);

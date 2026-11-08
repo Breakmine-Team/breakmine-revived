@@ -14,12 +14,7 @@ class DraggableWindow {
 
     static maxZIndex = 1000;
 
-    /**
-         * @param {HTMLElement} windowElement - The main window element to make draggable.
-         * @param {HTMLElement} dragHandleElement - The element used as the drag handle.
-         * @param {number} startX - Initial X position.
-         * @param {number} startY - Initial Y position.
-         */
+    
     constructor(windowElement, dragHandleElement, startX, startY) {
         this.windowEl = windowElement;
         this.dragHandleEl = dragHandleElement;
@@ -84,7 +79,6 @@ class DraggableWindow {
 
         this.activateWindow();
 
-        // Calculate the offset from the mouse pointer to the top-left corner of the window
         const rect = this.windowEl.getBoundingClientRect();
         const containerRect = this.windowEl.parentElement.getBoundingClientRect();
 
@@ -112,7 +106,6 @@ class DraggableWindow {
         let newX = coords.clientX - this.offsetX - containerRect.left;
         let newY = coords.clientY - this.offsetY - containerRect.top;
 
-        // Store the position while moving
         this.lastX = newX = Math.max(0, newX); 
         this.lastY = newY = Math.max(0, newY); 
 
@@ -133,14 +126,11 @@ class DraggableWindow {
     minimizeWindow() {
         if (this.isMinimized) return;
 
-        // 1. Store the active position before minimizing
         this.lastX = parseInt(this.windowEl.style.left, 10);
         this.lastY = parseInt(this.windowEl.style.top, 10);
 
-        // 2. Add to shelf array
         minimizedWindows.push(this);
 
-        // 3. Update all shelf positions and set state
         minimizedWindows.forEach(w => w.updateShelfPosition());
 
         this.windowEl.classList.add('minimized');
@@ -151,20 +141,17 @@ class DraggableWindow {
     restoreWindow() {
         if (!this.isMinimized) return;
 
-        // 1. Remove from shelf array and update others
         const index = minimizedWindows.indexOf(this);
         if (index > -1) {
             minimizedWindows.splice(index, 1);
         }
         minimizedWindows.forEach(w => w.updateShelfPosition());
 
-        // 2. Restore class and position
         this.windowEl.classList.remove('minimized');
         this.windowEl.style.left = `${this.lastX}px`;
         this.windowEl.style.top = `${this.lastY}px`;
         this.isMinimized = false;
 
-        // 3. Bring to front
         this.activateWindow(); 
     }
 
@@ -173,12 +160,10 @@ class DraggableWindow {
         const index = minimizedWindows.indexOf(this);
         if (index === -1) return;
 
-        // Position relative to the screen (fixed)
         const newX = 10 + index * (SHELF_ITEM_WIDTH + SHELF_PADDING); 
 
         this.windowEl.style.width = `${SHELF_ITEM_WIDTH}px`;
         this.windowEl.style.left = `${newX}px`;
-        // The bottom property is set in the CSS .window.minimized style
     }
 
     closeWindow() {
@@ -192,7 +177,6 @@ class DraggableWindow {
         this.windowEl.remove();
     }
 
-    // Global listeners bound to 'this'
     dragMoveGlobal = this.dragMove.bind(this);
     dragEndGlobal = this.dragEnd.bind(this);
 
@@ -230,7 +214,6 @@ class DraggableWindow {
 
         const instance = new DraggableWindow(windowEl, dragHandleEl, startX, startY);
 
-        // Add scrollwheel support
         if (onScroll && typeof onScroll === 'function') {
             windowEl.addEventListener('wheel', (event) => {
                 event.preventDefault();
@@ -258,7 +241,7 @@ class DraggableWindow {
 }
 
 
-// Logger
+
 
 export function createWindow(name, content2, style = "padding: 4px;", allowClose = false, onScroll = null) {
     const content = `
@@ -282,4 +265,3 @@ export function createErrorWindow(errorshort, msg, allowClose = false, onScroll 
     createWindow(`${errorshort}`, `<span style="color: black; font-family: sans-serif; max-width: 500px;">${msg}</span>`, "padding: 0px;", allowClose, onScroll);
 }
 
-//createErrorWindow("SyntaxError", "");

@@ -1,6 +1,6 @@
 import NoiseGenerator from "../NoiseGenerator.js";
 
-// Fast file-scoped helpers to avoid method lookup overhead inside hot loops
+
 function fade(t) {
     return t * t * t * (t * (t * 6 - 15) + 10);
 }
@@ -25,7 +25,6 @@ export default class NoiseGeneratorPerlin extends NoiseGenerator {
         this.offsetY = random.nextDouble() * 256;
         this.offsetZ = random.nextDouble() * 256;
 
-        // Use typed Int32Array for optimal memory access
         this.permutations = new Int32Array(512);
         for (let i = 0; i < 256; i++) {
             this.permutations[i] = i;

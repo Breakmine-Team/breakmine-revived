@@ -1,13 +1,5 @@
-/**
- * Local date/time formatting for server-supplied text.
- *
- * The server has no idea what time zone a player is in, so a ban expiry line
- * carries a {{until:<epoch ms>}} marker instead of a formatted date. The client
- * resolves it with its own clock and locale, so everyone sees the moment their
- * own watch will show.
- */
 
-/** Short zone name for a date: "EDT", "CET", or "UTC+5:30" as a fallback. */
+
 function timeZoneName(date) {
     try {
         const parts = new Intl.DateTimeFormat(undefined, { timeZoneName: "short" }).formatToParts(date);
@@ -16,7 +8,6 @@ function timeZoneName(date) {
             return match.value;
         }
     } catch (e) {
-        // Intl without timeZoneName support: fall through to the offset.
     }
 
     const offset = -date.getTimezoneOffset();
@@ -27,7 +18,6 @@ function timeZoneName(date) {
     return "UTC" + sign + hours + (minutes ? ":" + String(minutes).padStart(2, "0") : "");
 }
 
-/** "2026-4-5 at 5:43pm EDT", in the player's own zone. */
 function formatDateTime(ms) {
     const date = new Date(ms);
     if (Number.isNaN(date.getTime())) {
@@ -47,7 +37,6 @@ function formatDateTime(ms) {
 
 const MARKER = /\{\{until:(\d+)\}\}/g;
 
-/** Replace every {{until:<ms>}} marker with the player's local date and time. */
 function resolveTimeMarkers(text) {
     if (typeof text !== "string") {
         return text;

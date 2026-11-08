@@ -29,21 +29,15 @@ export default class GuiPasswordField extends GuiButton {
         let cursorVisible = this.isFocused && Math.floor(this.cursorCounter / 6) % 2 === 0;
         let textColor = this.enabled ? 0xffffff : 0x707070ff;
 
-        // Draw background
         if (this.renderBackground) {
             this.drawRect(stack, this.x - 1, this.y - 1, this.x + this.width + 1, this.y + this.height + 1, '#5f5f60');
             this.drawRect(stack, this.x, this.y, this.x + this.width, this.y + this.height, 'black');
         }
 
-        // Draw text
         this.drawString(stack, "*".repeat(this.text.length), this.x + 2, this.y + this.height / 2 - 4, textColor, true, false);
 
-        // TODO: Draw suggestions
-        // this.drawString(stack, suggestion[0], this.x + 2 + this.getStringWidth(stack, this.text), this.y + this.height / 2 - 14, textColor);
         
-        // Draw cursor
         if (cursorVisible) {
-            // Calculate width of text segment BEFORE the cursor
             let textBeforeCursor = ("*".repeat(this.text.length)).substring(0, this.cursorPosition);
             let cursorOffset = this.getStringWidth(stack, textBeforeCursor, true);
             
@@ -95,27 +89,24 @@ export default class GuiPasswordField extends GuiButton {
             return;
         }
 
-        // Move Cursor Left
         if (key === "ArrowLeft") {
             if (this.cursorPosition > 0) {
                 this.cursorPosition--;
-                this.cursorCounter = 0; // Reset blink
+                this.cursorCounter = 0; 
             }
             return;
         }
 
-        // Move Cursor Right
         if (key === "ArrowRight") {
             if (this.cursorPosition < this.text.length) {
                 this.cursorPosition++;
-                this.cursorCounter = 0; // Reset blink
+                this.cursorCounter = 0; 
             }
             return;
         }
 
         if (key === "Backspace") {
             if (this.text.length > 0 && this.cursorPosition > 0) {
-                // Remove character behind cursor
                 this.text = this.text.substring(0, this.cursorPosition - 1) + 
                             this.text.substring(this.cursorPosition);
                 this.cursorPosition--;
@@ -142,7 +133,7 @@ export default class GuiPasswordField extends GuiButton {
         }
 
         if (key === "KeyA" && this.controlPressed) {
-            this.text = ""; // TODO: Select all
+            this.text = ""; 
             return;
         }
 
@@ -151,7 +142,6 @@ export default class GuiPasswordField extends GuiButton {
         }
 
         if (this.text.length < this.maxLength) {
-            // Insert character at cursor position
             this.text = this.text.substring(0, this.cursorPosition) + 
                         character + 
                         this.text.substring(this.cursorPosition);

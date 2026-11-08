@@ -57,8 +57,6 @@ export default class GuiPlayerInventory extends GuiContainerSurvival {
                 this.model.rebuild(t, this.modelGroup);
                 this.modelGroup.traverse(child => {
                     if (child.isMesh) {
-                        // This scene has no lights, so the preview always renders
-                        // with the unlit material the baked vertex colors suffice for
                         child.material = t.unlitMaterial.clone();
                         this.playerMeshes.push(child);
                     }
@@ -156,10 +154,6 @@ export default class GuiPlayerInventory extends GuiContainerSurvival {
                     for (let child of this.itemGroup.children) {
                         if (child.isMesh) {
                             child.material = child.material.clone();
-                            // clone() drops onBeforeCompile (see Tessellator):
-                            // re-apply the tile wrap or oversized multipart
-                            // bboxes bleed into neighbouring atlas tiles
-                            // in the inventory preview.
                             if (child.geometry?.getAttribute('aTileRect')) {
                                 Tessellator.applyTileWrap(child.material);
                             }

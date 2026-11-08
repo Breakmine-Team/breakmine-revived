@@ -16,20 +16,20 @@ import TranslucentMeshBatcher from "./TranslucentMeshBatcher.js";
 import GuiFunctions from "../gui/screens/GuiFunctions.js";
 import SignTextRenderer from "./SignTextRenderer.js";
 
-// The old per-box outline inflated every box by 0.005 on each side to keep
-// the line off the block surface. That makes the shared edges of two parts
-// sit ~0.01 apart. Treat lines that close as the same edge; real block
-// features are at least 1/16 (0.0625) apart even after that inflation.
+
+
+
+
 const OUTLINE_MERGE_EPSILON = 0.011;
 const BLOCK_OUTLINE_EXPANSION = 0.005;
 
-// The hellish dimension's bedrock ceiling ends at y=127. Above it the red
-// dimension haze and sky no longer apply, so the renderer falls back to grey.
+
+
 const NETHER_ROOF_Y = 128;
 
-// Target cell and its six neighbours: the blocks a placement ghost's shape can
-// depend on (stairs, fences, panes, torches). Stored in the preview key so the
-// ghost is rebuilt when the terrain around the target changes.
+
+
+
 const PREVIEW_NEIGHBOUR_OFFSETS = [
     [0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]
 ];
@@ -48,7 +48,6 @@ function addOutlineSegment(segments, axis, fixedA, fixedB, start, end) {
         return;
     }
 
-    // Coalesce touching collinear pieces so the outline is drawn as one line.
     for (let segment of segments) {
         if (segment.axis !== axis || !isNear(segment.fixedA, fixedA) || !isNear(segment.fixedB, fixedB)) {
             continue;
@@ -64,26 +63,9 @@ function addOutlineSegment(segments, axis, fixedA, fixedB, start, end) {
     segments.push({ axis, fixedA, fixedB, start, end });
 }
 
-/**
- * Turn the boxes of one block's shape into outline line segments.
- *
- * Parts of a multipart block share edges where their boxes meet (both halves
- * of a stair, for example). Drawing every box independently leaves those
- * internal seams visible and makes the shape look like two stacked boxes.
- * Any pair of collinear edges that overlap is removed from both boxes,
- * leaving only the outside edges of the combined shape. Identical duplicate
- * boxes are collapsed first so a shape that lists the same part twice still
- * gets an outline.
- *
- * @param {BoundingBox[]} boxes Block-local to world-space bounding boxes
- * @param {number} expansion How far to push the outline off the shape surface
- * @returns {{axis: number, fixedA: number, fixedB: number, start: number, end: number}[]}
- */
 export function mergeBlockOutlineEdges(boxes, expansion = 0) {
     const uniqueBoxes = [];
     for (let box of boxes) {
-        // A malformed part would put NaN into the line geometry, which makes
-        // three.js reject the whole outline; skip it instead of poisoning it.
         if (!box || !Number.isFinite(box.minX) || !Number.isFinite(box.minY) || !Number.isFinite(box.minZ)
             || !Number.isFinite(box.maxX) || !Number.isFinite(box.maxY) || !Number.isFinite(box.maxZ)) {
             continue;
@@ -93,8 +75,6 @@ export function mergeBlockOutlineEdges(boxes, expansion = 0) {
         }
     }
 
-    // axis 0 = along X, 1 = along Y, 2 = along Z. fixedA/fixedB are the two
-    // perpendicular coordinates that identify the line in space.
     const edges = [];
     for (let box of uniqueBoxes) {
         let minX = Math.min(box.minX, box.maxX) - expansion;
@@ -161,8 +141,6 @@ export function mergeBlockOutlineEdges(boxes, expansion = 0) {
             }
         }
 
-        // Remove the shared portions; both boxes contribute the same internal
-        // seam, and only the exposed remainder is part of the outer shape.
         let cursor = edge.start;
         for (let overlap of mergedOverlaps) {
             let start = Math.max(edge.start, overlap.start);
@@ -187,51 +165,34 @@ export default class WorldRenderer {
         this.minecraft = minecraft;
         this.window = window;
         this.chunkSectionUpdateQueue = [];
-        // Milliseconds spent rebuilding queued section meshes per rendered
-        // frame. A section cannot be interrupted once started, so this is a
-        // soft budget; it still prevents a whole batch from landing in one
-        // frame when the queue is large.
         this.chunkMeshBudgetMs = 4;
 
-        // Shadows are a global graphics option (Options -> Shadows, off by
-        // default). Dynamic lights are a separate option that also forces lit
-        // materials, since MeshBasicMaterial ignores scene lights. Publish both
-        // values before any tessellator is created so every mesh picks up the
-        // right material and shadow flag on its first draw.
         this.shadowsEnabled = !!minecraft.settings.shadows;
         this.dynamicLightsEnabled = !!minecraft.settings.dynamicLights;
         this.applyTessellatorSettings();
 
         this.tessellator = new Tessellator();
 
-        // Create world camera first (needed for window size update)
         this.camera = new THREE.PerspectiveCamera(0, 1, 0.001, 1000);
         this.camera.rotation.order = 'ZYX';
         this.camera.up = new THREE.Vector3(0, 0, 1);
 
-        // Frustum
         this.frustum = new THREE.Frustum();
 
-        // Create background scene
         this.background = new THREE.Scene();
         this.background.matrixAutoUpdate = false;
 
-        // Create world scene
         this.scene = new THREE.Scene();
         this.scene.matrixAutoUpdate = false;
 
-        // Shadows
-        // Ambient light ensures shadowed areas aren't pitch black and keep their baked vertex colors
         this.ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
         this.scene.add(this.ambientLight);
 
-        // Directional light acts as the sun, casting shadows
         this.sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
         this.sunLight.castShadow = this.shadowsEnabled;
         this.sunLight.shadow.mapSize.width = 2048;
         this.sunLight.shadow.mapSize.height = 2048;
 
-        // Orthographic shadow camera bounds (covers area around player)
         const shadowCamSize = 48;
         this.sunLight.shadow.camera.left = -shadowCamSize;
         this.sunLight.shadow.camera.right = shadowCamSize;
@@ -239,20 +200,14 @@ export default class WorldRenderer {
         this.sunLight.shadow.camera.bottom = -shadowCamSize;
         this.sunLight.shadow.camera.near = 0.5;
         this.sunLight.shadow.camera.far = 200;
-        // This has to be explicit: unlike SpotLightShadow/PointLightShadow,
-        // DirectionalLightShadow in this three.js build has no updateMatrices
-        // override, and LightShadow.updateMatrices() never refreshes the
-        // projection matrix. Without it the bounds above are dead code and the
-        // shadow map keeps the constructor default of -5..5/0.5..500, which
-        // covers a 10x10 block box with a 499.5 block depth range.
         this.sunLight.shadow.camera.updateProjectionMatrix();
         this.updateShadowBias(1);
 
         this.scene.add(this.sunLight);
-        this.scene.add(this.sunLight.target); // Target follows player
+        this.scene.add(this.sunLight.target); 
 
         this.dynamicLights = [];
-        this.maxDynamicLights = 12; // Keep performance high by limiting active lights
+        this.maxDynamicLights = 12; 
         for (let i = 0; i < this.maxDynamicLights; i++) {
             let light = new THREE.PointLight(0xffaa55, 0, 15, 2);
             light.visible = false;
@@ -261,62 +216,50 @@ export default class WorldRenderer {
         }
         this.dynamicLightUpdateTimer = 0;
 
-        // Create overlay for first person model rendering
         this.overlay = new THREE.Scene();
         this.overlay.matrixAutoUpdate = false;
 
-        // Create web renderer
         this.webRenderer = new THREE.WebGLRenderer({
             canvas: this.window.canvasWorld,
             antialias: false,
             alpha: true
         });
 
-        // Settings
         this.webRenderer.setSize(this.window.width, this.window.height);
         this.webRenderer.shadowMap.enabled = this.shadowsEnabled;
         this.webRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
         this.webRenderer.autoClear = false;
-        this.webRenderer.sortObjects = false; // change if buggy!!
+        this.webRenderer.sortObjects = false; 
         this.webRenderer.setClearColor(0x000000, 0);
         this.webRenderer.clear();
 
-        // Create texture atlas for dynamic block textures
         this.textureAtlas = new TextureAtlas(minecraft);
         
-        // Load selected texture pack if set in settings
         if (minecraft.settings.selectedTexturePack) {
             this.textureAtlas.texturePath = `texture_packs/${minecraft.settings.selectedTexturePack}/`;
         }
         
-        // Load terrain texture (fallback for now)
         this.textureTerrain = minecraft.getThreeTexture('terrain/terrain.png');
         this.textureTerrain.magFilter = THREE.NearestFilter;
         this.textureTerrain.minFilter = THREE.NearestFilter;
 
-        // Load sun texture
         this.textureSun = minecraft.getThreeTexture('terrain/sun.png');
         this.textureSun.magFilter = THREE.NearestFilter;
         this.textureSun.minFilter = THREE.NearestFilter;
 
-        // Load moon texture
         this.textureMoon = minecraft.getThreeTexture('terrain/moon.png');
         this.textureMoon.magFilter = THREE.NearestFilter;
         this.textureMoon.minFilter = THREE.NearestFilter;
 
-        // Block Renderer
         this.blockRenderer = new BlockRenderer(this);
         
-        // Expose texture atlas for external use
         this.getTextureAtlas = () => this.textureAtlas;
         this.getTextureCoords = (textureName) => this.textureAtlas.getTextureCoords(textureName);
         this.getTextureIndex = (textureName) => this.textureAtlas.getTextureIndex(textureName);
         this.getTextureUVs = (textureName) => this.textureAtlas.getUVs(textureName);
 
-        // Entity render manager
         this.entityRenderManager = new EntityRenderManager(this);
 
-        // Sign text renderer
         this.signTextRenderer = new SignTextRenderer(this);
 
         this.equippedProgress = 0;
@@ -327,11 +270,6 @@ export default class WorldRenderer {
         this.prevFogBrightness = 0;
         this.fogBrightness = 0;
 
-        // Reused fog and colour objects. three.js compares the scene's fog by
-        // identity (materialProperties.fog !== fog) to decide whether a
-        // material needs a new shader program, so handing it a freshly built
-        // THREE.Fog every frame sends every chunk material through
-        // getProgram() again - per material, per frame. Mutate these instead.
         this.fogLinear = new THREE.Fog(0x000000, 0.0025, 1000);
         this.fogExp2 = new THREE.FogExp2(0x000000, 0.01);
         this.backgroundColor = new THREE.Color(0, 0, 0);
@@ -340,31 +278,24 @@ export default class WorldRenderer {
 
         this.lastHitResult = null;
 
-        // Create sky
         this.generateSky();
 
-        // Create block hit box (will be updated dynamically based on block bounding boxes)
         this.blockHitBox = new THREE.Group();
         this.blockHitBoxMaterial = new THREE.LineBasicMaterial({
             color: 0x000000
         });
         
-        // Add block hit box to scene
         this.scene.add(this.blockHitBox);
 
-        // Create block placement preview (ghost of the block about to be placed)
         this.blockPreviewGroup = new THREE.Group();
         this.blockPreviewGroup.visible = false;
         this.scene.add(this.blockPreviewGroup);
 
-        // Meshes and key of the ghost that is currently built; see
-        // updateBlockPlacePreview().
         this.blockPreviewMeshes = [];
         this.previewKey = null;
         this.previewKeyValid = false;
         this.previewWorld = null;
 
-        // Create chunk boundary helper
         this.chunkBoundaryMaterial = new THREE.LineBasicMaterial({
             color: 0x00ff00,
             linewidth: 3,
@@ -389,8 +320,6 @@ export default class WorldRenderer {
         this.chunkSectionLines.renderOrder = 9999;
         this.overlay.add(this.chunkSectionLines);
 
-        // Structure selection box (/st). The geometry is rewritten only when a
-        // corner moves, so a still selection costs one comparison per frame.
         this.structureSelectionMaterial = new THREE.LineBasicMaterial({
             color: 0x00ffff,
             linewidth: 2,
@@ -405,7 +334,6 @@ export default class WorldRenderer {
         this.overlay.add(this.structureSelectionLines);
         this.structureSelectionKey = null;
 
-        // Create entity bounding box helper
         this.entityBBoxMaterial = new THREE.LineBasicMaterial({
             color: 0x00ffff,
             depthTest: false,
@@ -418,7 +346,6 @@ export default class WorldRenderer {
         this.entityBBoxGroup.visible = false;
         this.overlay.add(this.entityBBoxGroup);
 
-        // Create break overlay mesh for survival block damage
         this.blockBreakGeometry = new THREE.BoxGeometry(1, 1, 1);
         this.blockBreakMaterial = new THREE.MeshBasicMaterial({
             color: 0xffffff,
@@ -445,10 +372,6 @@ export default class WorldRenderer {
             side: THREE.FrontSide
         });
 
-        // Water, leaves and glass all end up in the batcher, which draws them
-        // with one shared material, so it needs a lit counterpart too -
-        // otherwise those faces ignore both the sun's shadows and torches
-        // while everything around them reacts.
         this.translucentLitMaterial = new THREE.MeshLambertMaterial({
             vertexColors: true,
             transparent: true,
@@ -458,25 +381,19 @@ export default class WorldRenderer {
             side: THREE.FrontSide
         });
 
-        // Initialize the batcher, passing the scene and the material
         this.translucentBatcher = new TranslucentMeshBatcher(this.scene, this.getTranslucentMaterial());
 
-        // Initialize texture atlas asynchronously
         this.initialize().catch(error => {
             console.error("Failed to initialize WorldRenderer:", error);
         });
     }
 
     async initialize() {
-        // Load texture atlas asynchronously
         await this.textureAtlas.loadTextures();
 
-        // Load all enabled mods (registers blocks + textures into the atlas)
         if (this.minecraft.modLoader) {
             await this.minecraft.modLoader.loadAllMods();
 
-            // Temporary dev mod from URL (?dev-mod=http://localhost:8080/mod.zip),
-            // held in memory only - never stored.
             const devModUrl = new URLSearchParams(window.location.search).get('dev-mod');
             if (devModUrl) {
                 try {
@@ -486,15 +403,11 @@ export default class WorldRenderer {
                 }
             }
 
-            // The title screen is created before async mod loading finishes.
-            // Rebuild it once so mod-provided menu actions become available
-            // without requiring a second navigation round-trip.
             const currentScreen = this.minecraft.currentScreen;
             if (currentScreen?.constructor?.name === 'GuiMainMenu') {
                 currentScreen.setup(this.minecraft, this.window.width, this.window.height);
             }
             
-            // Rebind renderers so the GPU sees new mod textures
             if (this.blockRenderer) {
                 this.blockRenderer.tessellator.bindTexture(
                     this.textureAtlas.getTexture()
@@ -505,17 +418,14 @@ export default class WorldRenderer {
             }
         }
         
-        // Rebind block renderer to texture atlas after it's loaded
         if (this.blockRenderer && this.textureAtlas.isLoaded()) {
             this.blockRenderer.tessellator.bindTexture(this.textureAtlas.getTexture());
         }
         
-        // Set texture on translucent batcher material
         if (this.translucentBatcher && this.textureAtlas.isLoaded()) {
             this.setTranslucentTexture(this.textureAtlas.getTexture());
         }
 
-        // Use a cloned atlas texture for block damage overlay so the material can use offset/repeat
         if (this.blockBreakMaterial && this.textureAtlas.isLoaded()) {
             this.blockBreakMaterial.map = this.textureAtlas.getTexture().clone();
             this.blockBreakMaterial.map.offset.set(0, 0);
@@ -526,15 +436,10 @@ export default class WorldRenderer {
             this.blockBreakMaterial.needsUpdate = true;
         }
         
-        // Rebuild all chunks after texture atlas is loaded to fix purple textures
         this.rebuildAll();
     }
 
-    /**
-     * Fire a mod render hook ('beforeRender', 'renderChunks', 'renderSky',
-     * 'renderBlockHitBox', 'afterRender', 'onTick'). A no-op unless a mod
-     * registered a handler, so unloaded mods cost nothing per frame.
-     */
+    
     emitRenderHook(hook, payload = {}) {
         const modLoader = this.minecraft?.modLoader;
         if (!modLoader || !modLoader.renderHooks?.has(hook)) return;
@@ -544,55 +449,37 @@ export default class WorldRenderer {
     render(partialTicks) {
         this.emitRenderHook('beforeRender', { partialTicks });
 
-        // Setup camera
         this.orientCamera(partialTicks);
 
-        // Render chunks
         let player = this.minecraft.player;
         let cameraChunkX = Math.floor(player.x) >> 4;
         let cameraChunkZ = Math.floor(player.z) >> 4;
         this.emitRenderHook('renderChunks', { partialTicks, cameraChunkX, cameraChunkZ, player });
 
-        // Rebuild a small slice of the section queue before drawing. This has
-        // to stay on the render loop rather than onTick(): when a frame is
-        // slow the timer runs several catch-up ticks, and meshing the full
-        // 16-section tick budget on each one turns a hitch into a feedback
-        // loop. Sections queued by renderChunks() this frame wait for the
-        // next frame, which also gives updateRotatingBlocks() a chance to
-        // orient any meshes that were just created.
         this.updateChunkMeshing();
         this.renderChunks(cameraChunkX, cameraChunkZ);
         this.updateChunkBoundaryLines(cameraChunkX, cameraChunkZ);
 
-        // Render sky
         this.emitRenderHook('renderSky', { partialTicks });
         this.renderSky(partialTicks);
 
-        // Render target block
         this.emitRenderHook('renderBlockHitBox', { partialTicks, player });
         this.renderBlockHitBox(player, partialTicks);
 
-        // Render the /st structure selection box
         this.updateStructureSelectionOutline();
 
-        // Render placement preview ghost block
         this.updateBlockPlacePreview(partialTicks);
 
-        // Render the road builder's selection preview
         if (this.minecraft.roadBuilder) {
             this.minecraft.roadBuilder.updatePreview(this, player);
         }
 
-        // Render entity bounding boxes
         this.updateEntityBoundingBoxes(partialTicks);
 
-        // Render survival block damage overlay
         this.updateBlockBreakOverlay(partialTicks);
 
-        // Render particles
         this.minecraft.particleRenderer.renderParticles(player, partialTicks);
 
-        // Hide all entities and make them visible during rendering
         for (let entity of this.minecraft.world.entities) {
             if (entity && entity.renderer && entity.renderer.group) {
                 entity.renderer.group.visible = false;
@@ -605,7 +492,6 @@ export default class WorldRenderer {
             }
         }
 
-        // Render entities
         for (let entity of this.minecraft.world.entities) {
             if (!entity || !entity.renderer) continue;
             
@@ -613,12 +499,10 @@ export default class WorldRenderer {
                 continue;
             }
 
-            // Don't render spectator entities to non-spectator local player
             if (entity.spectator && !player.spectator) {
                 continue;
             }
 
-            // Check if entity's chunk is loaded
             let entityChunkX = Math.floor(entity.x / 16);
             let entityChunkZ = Math.floor(entity.z / 16);
             let chunk = this.minecraft.world.getChunkProvider().getChunkAt(entityChunkX, entityChunkZ);
@@ -627,17 +511,14 @@ export default class WorldRenderer {
                 continue;
             }
 
-            // Render entity
             entity.renderer.render(entity, partialTicks);
             if (entity.renderer.group) {
                 entity.renderer.group.visible = true;
             }
         }
 
-        // Render hand
         this.renderHand(partialTicks);
 
-        // Smoothly interpolate dynamic light positions to prevent flickering/stutter
         if (this.dynamicLights) {
             for (let light of this.dynamicLights) {
                 if (!light.userData) light.userData = {};
@@ -646,11 +527,9 @@ export default class WorldRenderer {
                     if (!light.userData.currentPos) light.userData.currentPos = new THREE.Vector3();
                     if (!light.userData.targetPos) light.userData.targetPos = new THREE.Vector3();
                     
-                    // Lerp the current position toward the target position
                     light.userData.currentPos.lerp(light.userData.targetPos, 0.2);
                     light.position.copy(light.userData.currentPos);
                 } else if (light.userData.targetPos) {
-                    // If hidden, snap current to target so it's ready for next use
                     if (!light.userData.currentPos) light.userData.currentPos = new THREE.Vector3();
                     light.userData.currentPos.copy(light.userData.targetPos);
                 }
@@ -659,7 +538,6 @@ export default class WorldRenderer {
         
         this.webRenderer.clearDepth();
 
-        // Render background scene
         this.webRenderer.render(this.background, this.camera);
 
         let cameraPos = {
@@ -668,10 +546,8 @@ export default class WorldRenderer {
             z: player.z
         };
 
-        // 1. Clear the batcher
         this.translucentBatcher.clear();
 
-        // 2. Steal geometry from all visible chunks and hide per-section translucent meshes
         for (let [index, chunk] of this.minecraft.world.getChunkProvider().getChunks()) {
             if (!chunk.group.visible) continue;
             
@@ -682,17 +558,12 @@ export default class WorldRenderer {
                 for (let child of section.group.children) {
                     if (child.isMesh && child.userData.isTranslucent) {
                         this.translucentBatcher.addMesh(child);
-                        child.visible = false; // Hide per-section mesh, batcher replaces it
+                        child.visible = false; 
                     }
                 }
             }
         }
 
-        // 2b. The summoned field's translucent meshes (bluestone dust, water,
-        // glass...) go through the same batcher, or they would draw wherever
-        // in the scene traversal order they happen to sit - visually "out of
-        // order" versus everything else. The field's meshes may carry the
-        // field pose (rotation/offset), which addMesh() now transforms.
         const field = this.minecraft.world && this.minecraft.world.offGridField;
         if (field && field.regions) {
             for (const region of field.regions.values()) {
@@ -705,37 +576,27 @@ export default class WorldRenderer {
             }
         }
 
-        // 3. Sort the entire world's translucent faces perfectly and upload to GPU
         this.translucentBatcher.finalize(cameraPos);
 
-        // Move batcher mesh to end of scene children so it renders LAST
-        // (sortObjects=false means Three.js uses scene traversal order, not renderOrder)
         this.scene.remove(this.translucentBatcher.mesh);
         this.scene.add(this.translucentBatcher.mesh);
 
-        // Move placement preview to the end too so it renders on top of the world
         if (this.blockPreviewGroup.visible) {
             this.scene.remove(this.blockPreviewGroup);
             this.scene.add(this.blockPreviewGroup);
         }
 
-        // Road preview uses translucent pavement meshes, so keep it after the
-        // chunk and batcher meshes as well.
         const roadPreviewGroup = this.minecraft.roadBuilder?.previewGroup;
         if (roadPreviewGroup && roadPreviewGroup.visible) {
             this.scene.remove(roadPreviewGroup);
             this.scene.add(roadPreviewGroup);
         }
 
-        // Render actual scene (batcher mesh draws last, on top of entities/chunks)
         this.webRenderer.render(this.scene, this.camera);
 
-        // Render overlay with the same FOV as the world
         this.overlay.updateMatrixWorld(true);
         this.webRenderer.render(this.overlay, this.camera);
 
-        // First person item last: it is drawn with its own camera over the
-        // finished world and overlay.
         this.firstPersonItemRenderer.render(this.webRenderer);
 
         this.emitRenderHook('afterRender', { partialTicks });
@@ -758,7 +619,6 @@ export default class WorldRenderer {
         const player = this.minecraft.player;
         const y = player ? player.y + 0.2 : 0.5;
 
-        // Show the current chunk plus the 8 adjacent chunks in a 3x3 grid.
         const chunkRadius = 1;
         const startX = (cameraChunkX - chunkRadius) * 16;
         const endX = (cameraChunkX + chunkRadius + 1) * 16;
@@ -781,7 +641,6 @@ export default class WorldRenderer {
         }
         this.chunkBoundaryLines.geometry = boundaryGeometry;
 
-        // Show chunk section borders for the current chunk in yellow.
         const chunkBaseX = cameraChunkX * 16;
         const chunkBaseZ = cameraChunkZ * 16;
         const sectionHeight = ChunkSection.SIZE;
@@ -811,12 +670,7 @@ export default class WorldRenderer {
         this.chunkSectionLines.geometry = sectionGeometry;
     }
 
-    /**
-     * Rebuild a bounded slice of the queued section meshes once per frame.
-     * At least one section is attempted when the queue is non-empty; the
-     * deadline stops the rest so a large stream of new chunks cannot consume
-     * the whole frame.
-     */
+    
     updateChunkMeshing(budgetMs = this.chunkMeshBudgetMs) {
         if (this.chunkSectionUpdateQueue.length === 0) return;
 
@@ -832,7 +686,6 @@ export default class WorldRenderer {
     onTick() {
         this.emitRenderHook('onTick');
 
-        // Animated block textures (water) run at the fixed 20 Hz tick rate.
         if (this.textureAtlas) {
             this.textureAtlas.updateAnimations(50);
         }
@@ -857,14 +710,12 @@ export default class WorldRenderer {
             showHand = true;
         }
 
-        // Update equip progress
         this.equippedProgress += MathHelper.clamp((showHand ? 0.0 : 1.0) - this.equippedProgress, -0.4, 0.4);
 
         if (this.equippedProgress < 0.1) {
             this.itemToRender = itemStack.copy();
         }
 
-        // Update fog brightness
         let brightnessAtPosition = this.minecraft.world.getLightBrightnessForEntity(player);
         let renderDistance = this.minecraft.settings.viewDistance / 32.0;
         let fogBrightness = brightnessAtPosition * (1.0 - renderDistance) + renderDistance;
@@ -876,8 +727,6 @@ export default class WorldRenderer {
         let world = this.minecraft.world;
         if (!player || !world) return;
 
-        // The option owns the point lights, so they stay off even though this
-        // runs on a timer
         if (!this.dynamicLightsEnabled) {
             this.hideDynamicLights();
             return;
@@ -889,11 +738,6 @@ export default class WorldRenderer {
         let radius = 12; 
         let candidates = [];
 
-        // Scan exact blocks to find all light sources. Chunks are resolved
-        // once per (chunkX, chunkZ) with a cheap Map-existence probe so the
-        // scan can never ask the provider to synchronously generate whole
-        // chunks - that was blocking the main thread for seconds per scan
-        // while moving around.
         const chunkAvailable = new Map();
         for (let x = px - radius; x <= px + radius; x++) {
             const chunkX = x >> 4;
@@ -941,23 +785,18 @@ export default class WorldRenderer {
             }
         }
 
-        // Sort by closest to player
         candidates.sort((a, b) => a.distSq - b.distSq);
 
-        // Mark all lights as not updated this frame
         for (let light of this.dynamicLights) {
             if (!light.userData) light.userData = {};
             light.userData.updated = false;
         }
 
-        // Assign candidates to the light pool STABLY
         for (let i = 0; i < Math.min(candidates.length, this.dynamicLights.length); i++) {
             let c = candidates[i];
             
-            // Try to find a light that is ALREADY tracking this specific block
             let light = this.dynamicLights.find(l => l.userData.blockKey === c.key);
             
-            // If not, find an unused light to assign it to
             if (!light) {
                 light = this.dynamicLights.find(l => !l.userData.updated);
             }
@@ -975,7 +814,6 @@ export default class WorldRenderer {
             }
         }
 
-        // Hide any lights that weren't updated
         for (let light of this.dynamicLights) {
             if (!light.userData.updated) {
                 light.visible = false;
@@ -987,105 +825,83 @@ export default class WorldRenderer {
     orientCamera(partialTicks) {
         let player = this.minecraft.player;
 
-        // Reset rotation stack
         let stack = this.camera;
 
-        // Position
         let x = player.prevX + (player.x - player.prevX) * partialTicks;
         let y = player.prevY + (player.y - player.prevY) * partialTicks + player.getEyeHeight();
         let z = player.prevZ + (player.z - player.prevZ) * partialTicks;
 
-        // Rotation
         let yaw = player.prevRotationYaw + (player.rotationYaw - player.prevRotationYaw) * partialTicks;
         let pitch = player.prevRotationPitch + (player.rotationPitch - player.prevRotationPitch) * partialTicks;
 
-        // Add camera offset
         let mode = this.minecraft.settings.thirdPersonView;
         if (mode !== 0) {
             let distance = WorldRenderer.THIRD_PERSON_DISTANCE;
             let frontView = mode === 2;
 
-            // Calculate vector of yaw and pitch
             let vector = player.getVectorForRotation(pitch, yaw);
 
-            // Calculate max possible position of the third person camera
             let maxX = x - vector.x * distance * (frontView ? -1 : 1);
             let maxY = y - vector.y * distance * (frontView ? -1 : 1);
             let maxZ = z - vector.z * distance * (frontView ? -1 : 1);
 
-            // Make 8 different ray traces to make sure we don't get stuck in walls
             for (let i = 0; i < 8; i++) {
-                // Calculate all possible offset variations (Basically a binary counter)
                 let offsetX = ((i & 1) * 2 - 1) * 0.1;
                 let offsetY = ((i >> 1 & 1) * 2 - 1) * 0.1;
                 let offsetZ = ((i >> 2 & 1) * 2 - 1) * 0.1;
 
-                // Calculate ray trace from and to position
                 let from = new Vector3(x, y, z);
                 let to = new Vector3(maxX, maxY, maxZ);
 
-                // Add offset of this variation
                 from = from.addVector(offsetX, offsetY, offsetZ);
                 to = to.addVector(offsetX, offsetY, offsetZ);
 
-                // Make ray trace
                 let target = this.minecraft.world.rayTraceBlocks(from, to);
                 if (target === null) {
                     continue;
                 }
 
-                // Calculate distance to collision
                 let distanceToCollision = target.vector.distanceTo(new Vector3(x, y, z));
                 if (distanceToCollision < distance) {
                     distance = distanceToCollision;
                 }
             }
 
-            // Move camera to third person sphere
             x -= vector.x * distance * (frontView ? -1 : 1);
             y -= vector.y * distance * (frontView ? -1 : 1);
             z -= vector.z * distance * (frontView ? -1 : 1);
 
-            // Flip camera around if front view is enabled
             if (frontView) {
                 pitch *= -1;
                 yaw += 180;
             }
         }
 
-        // Update camera rotation
         stack.rotation.x = -MathHelper.toRadians(pitch);
         stack.rotation.y = -MathHelper.toRadians(yaw + 180);
         stack.rotation.z = 0;
 
-        // Update camera position
         stack.position.set(x, y, z);
 
-        // Apply bobbing animation
         if (mode === 0 && this.minecraft.settings.viewBobbing) {
             this.bobbingAnimation(player, stack, partialTicks);
         }
 
-        // Update FOV
         this.camera.fov = this.minecraft.settings.fov + player.getFOVModifier();
         this.camera.updateProjectionMatrix();
 
-        // Update frustum
         this.frustum.setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse));
 
-        // Setup fog
         this.setupFog(x, z, player.isHeadInWater(), partialTicks, player.isHeadInLava());
     }
 
     generateSky() {
-        // Create background center group
         this.backgroundCenter = new THREE.Object3D();
         this.background.add(this.backgroundCenter);
 
         let size = 64;
         let scale = 256 / size + 2;
 
-        // Generate sky color
         {
             let y = 16;
             this.listSky = new THREE.Object3D();
@@ -1105,7 +921,6 @@ export default class WorldRenderer {
             this.backgroundCenter.add(this.listSky);
         }
 
-        // Generate sunrise/sunset color
         {
             this.listSunset = new THREE.Object3D();
             this.tessellator.startDrawing();
@@ -1137,75 +952,59 @@ export default class WorldRenderer {
             this.backgroundCenter.add(this.listSunset);
         }
 
-        // Create cycle group
         this.cycleGroup = new THREE.Object3D();
 
-        // Generate stars
         {
             this.listStars = new THREE.Object3D();
             this.tessellator.startDrawing();
             this.tessellator.setColor(1, 1, 1);
 
-            // Generate 1500 stars
             let random = new Random(10842);
             for (let i = 0; i < 1500; i++) {
-                // Random vector
                 let vectorX = random.nextFloat() * 2.0 - 1.0;
                 let vectorY = random.nextFloat() * 2.0 - 1.0;
                 let vectorZ = random.nextFloat() * 2.0 - 1.0;
 
-                // Skip invalid vectors
                 let distance = vectorX * vectorX + vectorY * vectorY + vectorZ * vectorZ;
                 if (distance >= 1.0 || distance <= 0.01) {
                     continue;
                 }
 
-                // Create sphere
                 distance = 1.0 / Math.sqrt(distance);
                 vectorX *= distance;
                 vectorY *= distance;
                 vectorZ *= distance;
 
-                // Increase sphere size
                 let x = vectorX * 100;
                 let y = vectorY * 100;
                 let z = vectorZ * 100;
 
-                // Rotate the stars on the sphere
                 let rotationX = Math.atan2(vectorX, vectorZ);
                 let sinX = Math.sin(rotationX);
                 let cosX = Math.cos(rotationX);
 
-                // Face the stars to the middle of the sphere
                 let rotationY = Math.atan2(Math.sqrt(vectorX * vectorX + vectorZ * vectorZ), vectorY);
                 let sinY = Math.sin(rotationY);
                 let cosY = Math.cos(rotationY);
 
-                // Tilt the stars randomly
                 let rotationZ = random.nextFloat() * Math.PI * 2;
                 let sinZ = Math.sin(rotationZ);
                 let cosZ = Math.cos(rotationZ);
 
-                // Random size of the star
                 let size = 0.25 + random.nextFloat() * 0.25;
 
-                // Add vertices for each edge of the star
                 for (let edge = 0; edge < 4; edge++) {
-                    // Calculate the position of the edge on a 2D plane
                     let tileX = ((edge & 2) - 1) * size;
                     let tileZ = ((edge + 1 & 2) - 1) * size;
 
-                    // Project tile position onto the sphere
                     let sphereX = tileX * cosZ - tileZ * sinZ;
                     let sphereY = tileZ * cosZ + tileX * sinZ;
                     let sphereZ = -sphereX * cosY;
 
-                    // Calculate offset of the edge on the sphere
                     let offsetX = sphereZ * sinX - sphereY * cosX;
                     let offsetY = sphereX * sinY;
                     let offsetZ = sphereY * sinX + sphereZ * cosX;
 
-                    // Add vertex for the edge of the star
                     this.tessellator.addVertex(x + offsetX, y + offsetY, z + offsetZ);
                 }
             }
@@ -1216,7 +1015,6 @@ export default class WorldRenderer {
             this.cycleGroup.add(this.listStars);
         }
 
-        // Create sun
         let geometry = new THREE.PlaneGeometry(1, 1);
         let materialSun = new THREE.MeshBasicMaterial({
             side: THREE.FrontSide,
@@ -1233,7 +1031,6 @@ export default class WorldRenderer {
         this.sun.renderOrder = 2;
         this.cycleGroup.add(this.sun);
 
-        // Create moon
         let materialMoon = new THREE.MeshBasicMaterial({
             side: THREE.BackSide,
             map: this.textureMoon,
@@ -1249,10 +1046,8 @@ export default class WorldRenderer {
         this.moon.renderOrder = 2;
         this.cycleGroup.add(this.moon);
 
-        // Add cycle group before the void to hide the cycling elements behind the void
         this.backgroundCenter.add(this.cycleGroup);
 
-        // Generate void color
         {
             let y = -16;
             this.listVoid = new THREE.Object3D();
@@ -1274,57 +1069,40 @@ export default class WorldRenderer {
     }
 
     renderSky(partialTicks) {
-        // Center sky
         this.backgroundCenter.position.copy(this.camera.position);
 
-        // Rotate sky cycle
         let angle = this.minecraft.world.getCelestialAngle(partialTicks);
         this.cycleGroup.rotation.set(angle * Math.PI * 2 + Math.PI / 2, 0, 0);
         
-        // Force matrix update so we can read the sun's exact world position
         this.backgroundCenter.updateMatrixWorld(true);
 
-        // Update Shadows
         if (this.sunLight && this.minecraft.player) {
             let player = this.minecraft.player;
             let px = player.prevX + (player.x - player.prevX) * partialTicks;
             let py = player.prevY + (player.y - player.prevY) * partialTicks;
             let pz = player.prevZ + (player.z - player.prevZ) * partialTicks;
 
-            // Get the actual world position of the sky's sun mesh
             let sunWorldPos = new THREE.Vector3();
             this.sun.getWorldPosition(sunWorldPos);
 
-            // Calculate direction from the camera to the sun
             let dir = new THREE.Vector3().subVectors(sunWorldPos, this.camera.position).normalize();
 
-            // Place the shadow light far away in that exact direction
             let dist = 100;
             this.sunLight.position.set(px + dir.x * dist, py + dir.y * dist, pz + dir.z * dist);
             this.sunLight.target.position.set(px, py, pz);
             this.sunLight.target.updateMatrixWorld();
 
-            // Bias has to follow the sun angle, otherwise the long shadows at
-            // sunrise and sunset come back covered in acne
             this.updateShadowBias(dir.y);
 
-            // If the sun is below the horizon, it's night
             let isDay = dir.y > 0.05;
             this.sunLight.castShadow = this.shadowsEnabled && isDay;
             
-            // Balance intensities so max brightness never exceeds 1.0
-            // Day: 0.6 ambient + 0.4 sun = 1.0 (prevents white-out)
-            // Night: 1.0 ambient + 0.0 sun = 1.0 (keeps vertex colors visible)
             this.ambientLight.intensity = isDay ? 0.6 : 1.0;
             this.sunLight.intensity = isDay ? 0.4 : 0.0;
         }
     }
 
-    /**
-     * Point the scene at the shared linear fog, changing its fields in place.
-     * Replacing the object instead would invalidate the cached shader program
-     * of every fogged material (three.js compares the fog by identity).
-     */
+    
     applyLinearFog(red, green, blue, near, far) {
         const fog = this.fogLinear;
         fog.color.setRGB(red, green, blue);
@@ -1333,7 +1111,7 @@ export default class WorldRenderer {
         this.scene.fog = fog;
     }
 
-    /** Same as applyLinearFog() for the exponential fog used by 'classic'. */
+    
     applyExp2Fog(red, green, blue, density) {
         const fog = this.fogExp2;
         fog.color.setRGB(red, green, blue);
@@ -1348,9 +1126,6 @@ export default class WorldRenderer {
         } else if (inLava) {
             this.background.background = this.backgroundColor.setRGB(0.6, 0.1, 0.0);
             this.applyLinearFog(0.6, 0.1, 0.0, 0.0025, 3);
-            // The sky dome is drawn with fog disabled, so it needs its own
-            // colour update: otherwise it keeps showing whatever sky colour it
-            // had before the player went under the lava surface.
             this.listSky.children[0].material.color.setRGB(0.6, 0.1, 0.0);
         } else {
             let world = this.minecraft.world;
@@ -1365,8 +1140,6 @@ export default class WorldRenderer {
             let fogColor = world.getFogColor(partialTicks);
             let sunsetColor = world.getSunriseSunsetColor(partialTicks);
 
-            // Above the bedrock roof the nether's custom red haze does not
-            // apply, so fall back to a neutral grey and no sunset.
             const player = this.minecraft.player;
             if (hellish && player !== null && player !== undefined
                 && player.y >= NETHER_ROOF_Y) {
@@ -1382,17 +1155,11 @@ export default class WorldRenderer {
             let green = (fogColor.y + (skyColor.y - fogColor.y) * viewFactor) * brightness;
             let blue = (fogColor.z + (skyColor.z - fogColor.z) * viewFactor) * brightness;
 
-            // Update background color
             this.background.background = this.backgroundColor.setRGB(red, green, blue);
 
-            // Update fog color based on fog type setting
             if (this.minecraft.settings.fogType === 'classic') {
-                // Classic fog: exponential fog that completely obscures past render distance
-                // Using higher density to ensure complete obscurity at render distance
                 this.applyExp2Fog(red, green, blue, (hellish ? 3.4 : 2.0) / viewDistance);
             } else {
-                // Modern fog: linear fog with gradual fade. The hellish world's
-                // haze is thicker, closing in well before the render distance.
                 this.applyLinearFog(red, green, blue, 0.0025, viewDistance * (hellish ? 1.25 : 2));
             }
 
@@ -1401,7 +1168,6 @@ export default class WorldRenderer {
             let starsMesh = this.listStars.children[0];
             let sunsetMesh = this.listSunset.children[0];
 
-            // Update sky and void color
             skyMesh.material.color.setRGB(skyColor.x, skyColor.y, skyColor.z);
             voidMesh.material.color.setRGB(
                 skyColor.x * 0.2 + 0.04,
@@ -1409,14 +1175,12 @@ export default class WorldRenderer {
                 skyColor.z * 0.6 + 0.1
             );
 
-            // Update star brightness
             if (starBrightness > 0) {
                 starsMesh.material.opacity = starBrightness;
                 starsMesh.material.color.setRGB(starBrightness, starBrightness, starBrightness);
             }
             this.listStars.visible = starBrightness > 0;
 
-            // Update sunset
             if (sunsetColor !== null) {
                 sunsetMesh.material.opacity = sunsetColor.w;
                 sunsetMesh.material.color.setRGB(sunsetColor.x, sunsetColor.y, sunsetColor.z);
@@ -1434,65 +1198,47 @@ export default class WorldRenderer {
         let world = this.minecraft.world;
         let renderDistance = this.minecraft.settings.viewDistance;
 
-        // One animation clock per frame for self-rotating blocks. It is wall
-        // clock based on purpose: in multiplayer the client world does not
-        // advance its own tick counter, so block animation must not use it.
         const animationNow = typeof performance !== 'undefined' && performance.now
             ? performance.now()
             : Date.now();
         const animationTick = Math.floor(animationNow / 50);
         const animationBlend = (animationNow % 50) / 50;
 
-        // Calculate the camera's vertical section index (Y axis)
         let player = this.minecraft.player;
         let cameraChunkY = Math.floor(player.y) >> 4;
 
-        // Update chunks
         for (let [index, chunk] of world.getChunkProvider().getChunks()) {
             let distanceX = Math.abs(cameraChunkX - chunk.x);
             let distanceZ = Math.abs(cameraChunkZ - chunk.z);
 
-            // Is in render distance check
             if (distanceX < renderDistance && distanceZ < renderDistance) {
-                // Make chunk visible
                 chunk.group.visible = true;
                 chunk.loaded = true;
 
-                // For all chunk sections
                 for (let y in chunk.sections) {
                     let chunkSection = chunk.sections[y];
 
-                    // Is in camera view check
                     if (this.frustum.intersectsBox(chunkSection.boundingBox) && !chunkSection.isEmpty()) {
-                        // Make section visible
                         chunkSection.group.visible = true;
 
-                        // Ensure shadows are enabled on chunk meshes
                         if (!chunkSection.group.userData.shadowsInit) {
                             chunkSection.group.userData.shadowsInit = true;
                         }
 
-                        // Render chunk section
                         chunkSection.render();
 
-                        // Rotating blocks have their own meshes; turn them to
-                        // the angle for this frame (blended between ticks).
                         chunkSection.updateRotatingBlocks(this, animationTick, animationBlend);
 
-                        // Queue for rebuild
                         if (chunkSection.isModified && !this.chunkSectionUpdateQueue.includes(chunkSection)) {
                             this.chunkSectionUpdateQueue.push(chunkSection);
                         }
                     } else {
-                        // Hide section
                         chunkSection.group.visible = false;
                     }
                 }
             } else {
-                // Hide chunk
                 chunk.group.visible = false;
 
-                // Unload chunk
                 if (chunk.loaded) {
                     chunk.unload();
                 }
@@ -1520,11 +1266,9 @@ export default class WorldRenderer {
                 
                 for (let child of section.group.children) {
                     if (child.isMesh && child.userData.isTranslucent) {
-                        // 1. Sort the triangles INSIDE this specific mesh
                         this.sortTranslucentGeometry(child, cameraPos);
                         
-                        // 2. Collect mesh to sort it against OTHER chunk section meshes
-                        let mx = child.matrixWorld.elements[12] + 8; // +8 to get center of 16x16 section
+                        let mx = child.matrixWorld.elements[12] + 8; 
                         let my = child.matrixWorld.elements[13] + 8;
                         let mz = child.matrixWorld.elements[14] + 8;
                         
@@ -1541,10 +1285,8 @@ export default class WorldRenderer {
             }
         }
 
-        // 3. Sort meshes back to front (far chunks render first)
         translucentMeshes.sort((a, b) => b.dist - a.dist);
 
-        // 4. Assign render order so Three.js draws far meshes first
         for (let i = 0; i < translucentMeshes.length; i++) {
             translucentMeshes[i].mesh.renderOrder = i;
         }
@@ -1559,7 +1301,6 @@ export default class WorldRenderer {
 
         let indexAttr = geometry.getIndex();
         
-        // If the tessellator didn't use an index buffer, create one so we can sort faces easily
         if (!indexAttr) {
             let indices = new Uint32Array(vertexCount);
             for (let i = 0; i < vertexCount; i++) {
@@ -1570,21 +1311,19 @@ export default class WorldRenderer {
         }
         
         let indices = indexAttr.array;
-        let faceCount = indices.length / 6; // 2 triangles per face = 6 indices
+        let faceCount = indices.length / 6; 
         
         if (faceCount === 0) return;
 
-        // Get the chunk section's world position from its matrix
         let mx = mesh.matrixWorld.elements[12];
         let my = mesh.matrixWorld.elements[13];
         let mz = mesh.matrixWorld.elements[14];
 
         let faces = new Array(faceCount);
         
-        // Calculate distance for each face
         for (let i = 0; i < faceCount; i++) {
             let idx = i * 6;
-            let vIdx = indices[idx]; // Use first vertex of the face as reference point
+            let vIdx = indices[idx]; 
             
             let dx = posAttr.getX(vIdx) + mx - cameraWorldPos.x;
             let dy = posAttr.getY(vIdx) + my - cameraWorldPos.y;
@@ -1596,16 +1335,13 @@ export default class WorldRenderer {
             };
         }
         
-        // Sort faces back to front (furthest faces draw first)
         faces.sort((a, b) => b.dist - a.dist);
         
-        // Rebuild the index buffer in the new sorted order
         let newIndices = new indices.constructor(indices.length);
         for (let i = 0; i < faceCount; i++) {
             let src = faces[i].start;
             let dst = i * 6;
             
-            // Copy the 6 indices for this face to its new sorted position
             newIndices[dst]     = indices[src];
             newIndices[dst + 1] = indices[src + 1];
             newIndices[dst + 2] = indices[src + 2];
@@ -1618,10 +1354,7 @@ export default class WorldRenderer {
         indexAttr.needsUpdate = true;
     }
 
-    /**
-     * Publish the shadow/dynamic light options to every tessellator, including
-     * ones created after startup (entities, particles).
-     */
+    
     applyTessellatorSettings() {
         Tessellator.setShadowsEnabled(this.shadowsEnabled);
         Tessellator.setDynamicLightsEnabled(this.dynamicLightsEnabled);
@@ -1632,11 +1365,7 @@ export default class WorldRenderer {
         return this.tessellator.getLit() ? this.translucentLitMaterial : this.translucentMaterial;
     }
 
-    /**
-     * Assign the texture atlas to both translucent materials, not just the one
-     * the batcher happens to be using, so switching between them never drops the
-     * texture for a frame.
-     */
+    
     setTranslucentTexture(texture) {
         if (!texture) return;
 
@@ -1648,70 +1377,39 @@ export default class WorldRenderer {
         }
     }
 
-    /**
-     * Point the batcher's single mesh at whichever translucent material matches
-     * the current lighting, carrying the texture atlas over so the swap doesn't
-     * leave water and leaves untextured for a frame.
-     */
+    
     updateTranslucentMaterial() {
         if (!this.translucentBatcher) return;
 
         let material = this.getTranslucentMaterial();
         if (this.translucentBatcher.mesh.material === material) return;
 
-        // Keep the atlas the current material is using, whichever it is
         material.map = this.translucentBatcher.mesh.material.map;
         material.needsUpdate = true;
         this.translucentBatcher.mesh.material = material;
     }
 
-    /**
-     * Scale the shadow bias to the sun angle, in world blocks instead of a magic
-     * number. Two things force this:
-     *
-     * - three.js applies bias in normalized depth ("shadowCoord.z += shadowBias")
-     *   while an ortho shadow camera is linear over (far - near) blocks, so a
-     *   bias of N blocks has to be sent as -N / (far - near).
-     * - acne comes from the receiver's depth growing by roughly texel / sin(sun
-     *   elevation) across a single shadow texel, so a bias tuned for noon is far
-     *   too small at sunrise. Scaling with the elevation covers the whole day.
-     *
-     * Clamped at 6 texels so a sun sitting on the horizon can't push the bias so
-     * far that shadows visibly detach from the blocks casting them.
-     */
+    
     updateShadowBias(sunHeight) {
         let shadow = this.sunLight.shadow;
         let camera = shadow.camera;
 
-        // Size of one shadow texel in world blocks
         let texelSize = (camera.right - camera.left) / shadow.mapSize.width;
 
-        // sin(elevation), floored just under the day/night cutoff so the clamp
-        // kicks in before the sun reaches the horizon
         let height = Math.max(Math.abs(sunHeight), 0.2);
 
         let biasBlocks = Math.min(texelSize / height, texelSize * 6);
         shadow.bias = -biasBlocks / (camera.far - camera.near);
 
-        // Normal bias slides the receiver along its own normal instead of along
-        // the light, which clears the acne on flat block faces without eating
-        // into contact shadows as much
         shadow.normalBias = texelSize;
     }
 
-    /**
-     * Turn sun shadows on or off at runtime (Options -> Shadows). Besides the
-     * renderer flags this has to patch meshes that are already in the scene and
-     * rebuild the world, since lit and unlit rendering use different materials
-     * and existing geometry can't switch between them.
-     */
+    
     setShadowsEnabled(enabled) {
         this.shadowsEnabled = !!enabled;
 
         if (this.webRenderer) {
             this.webRenderer.shadowMap.enabled = this.shadowsEnabled;
-            // Shadow support is compiled into the shader program, so force a
-            // rebuild instead of just refreshing the map.
             this.webRenderer.shadowMap.needsUpdate = true;
         }
 
@@ -1727,11 +1425,7 @@ export default class WorldRenderer {
         this.rebuildAll();
     }
 
-    /**
-     * Turn the dynamic point lights on or off (Options -> Dynamic Lighting).
-     * They light the scene through the same materials the sun uses, so toggling
-     * them swaps those between the lit and unlit material too.
-     */
+    
     setDynamicLightsEnabled(enabled) {
         this.dynamicLightsEnabled = !!enabled;
 
@@ -1758,10 +1452,6 @@ export default class WorldRenderer {
         root.traverse(child => {
             if (!child.isMesh) return;
 
-            // Translucent geometry (water, glass, leaves...) never casts
-            // shadows: the shadow pass would render it as a fully opaque
-            // blob, throwing a solid shadow onto and below itself instead of
-            // a cutout. Transparent meshes only receive shadows.
             child.castShadow = this.shadowsEnabled && !(child.userData && child.userData.isTranslucent);
             child.receiveShadow = this.shadowsEnabled;
 
@@ -1788,10 +1478,8 @@ export default class WorldRenderer {
         stack.visible = false;
         this.firstPersonItemRenderer.cameraGroup.visible = false;
 
-        // Hide hand when F1 is active
         if (GuiFunctions.isGuiHidden()) return;
 
-        // Hide hand in spectator mode
         if (player.spectator) return;
 
         let firstPerson = this.minecraft.settings.thirdPersonView === 0;
@@ -1799,17 +1487,14 @@ export default class WorldRenderer {
         let hasItem = !itemStack.isEmpty();
         let itemId = itemStack.getType();
 
-        // Hide in third person
         if (!firstPerson) {
             return;
         }
 
-        // Apply matrix mode (Put object in front of camera)
         stack.position.copy(this.camera.position);
         stack.rotation.copy(this.camera.rotation);
         stack.rotation.order = 'ZYX';
 
-        // Scale down
         stack.scale.set(0.0625, 0.0625, 0.0625);
 
         let equipProgress = this.prevEquippedProgress + (this.equippedProgress - this.prevEquippedProgress) * partialTicks;
@@ -1818,7 +1503,6 @@ export default class WorldRenderer {
         let pitchArm = player.prevRenderArmPitch + (player.renderArmPitch - player.prevRenderArmPitch) * partialTicks;
         let yawArm = player.prevRenderArmYaw + (player.renderArmYaw - player.prevRenderArmYaw) * partialTicks;
 
-        // Bobbing animation
         if (this.minecraft.settings.viewBobbing) {
             this.bobbingAnimation(player, stack, partialTicks);
         }
@@ -1831,28 +1515,22 @@ export default class WorldRenderer {
         let sqrtRotation = Math.sin(Math.sqrt(swingProgress) * Math.PI);
         let powRotation = Math.sin(swingProgress * swingProgress * Math.PI);
 
-        // Camera rotation movement
         stack.rotateX(MathHelper.toRadians((player.rotationPitch - pitchArm) * 0.1));
         stack.rotateY(MathHelper.toRadians((player.rotationYaw - yawArm) * 0.1));
 
         if (hasItem) {
-            // Initial offset on screen
             this.translate(stack, -xOffset * 0.4, yOffset * 0.2, -zOffset * 0.2);
             this.translate(stack, 0.7 * factor, -0.65 * factor - (1.0 - equipProgress) * 0.6, -0.9 * factor);
 
-            // Rotation of hand
             stack.rotateY(MathHelper.toRadians(45));
             stack.rotateY(MathHelper.toRadians(-powRotation * 20));
             stack.rotateZ(MathHelper.toRadians(-sqrtRotation * 20));
             stack.rotateX(MathHelper.toRadians(-sqrtRotation * 80));
 
-            // Scale down
             stack.scale.x *= 0.4;
             stack.scale.y *= 0.4;
             stack.scale.z *= 0.4;
 
-            // The held item has its own scene and camera; hand it the state it
-            // needs and let the dedicated pass place it.
             this.firstPersonItemRenderer.update(
                 this.itemToRender,
                 player.getEntityBrightness(),
@@ -1862,32 +1540,24 @@ export default class WorldRenderer {
                 { hand: 'main_hand', animation: { type: 'whack' } }
             );
         } else {
-            // Initial offset on screen
             this.translate(stack, -xOffset * 0.3, yOffset * 0.4, -zOffset * 0.4);
             this.translate(stack, 0.8 * factor, -0.75 * factor - (1.0 - equipProgress) * 0.6, -0.9 * factor);
 
-            // Rotation of hand
             stack.rotateY(MathHelper.toRadians(45));
             stack.rotateY(MathHelper.toRadians(sqrtRotation * 70));
             stack.rotateZ(MathHelper.toRadians(-powRotation * 20));
 
-            // Post transform
             this.translate(stack, -1, 3.6, 3.5);
             stack.rotateZ(MathHelper.toRadians(120));
             stack.rotateX(MathHelper.toRadians(200));
             stack.rotateY(MathHelper.toRadians(-135));
             this.translate(stack, 5.6, 0.0, 0.0);
 
-            // Render hand
             player.renderer.renderRightHand(player, partialTicks);
         }
     }
 
-    /**
-     * Draw the set /st corners and, once both exist, the box of the area they
-     * select. The corners are drawn even before the second one is set, so the
-     * first click is visible.
-     */
+    
     updateStructureSelectionOutline() {
         const selection = this.minecraft.structureSelection;
         const lines = this.structureSelectionLines;
@@ -1920,7 +1590,6 @@ export default class WorldRenderer {
 
         const bounds = selection.getBounds();
         if (bounds !== null) {
-            // Keep the box off the block faces it wraps so they do not z-fight.
             const expansion = 0.002;
             addBox(bounds.minX - expansion, bounds.minY - expansion, bounds.minZ - expansion,
                 bounds.maxX + expansion, bounds.maxY + expansion, bounds.maxZ + expansion);
@@ -1961,10 +1630,6 @@ export default class WorldRenderer {
 
             let world = this.minecraft.world;
 
-            // Get block type. A hit on the summoned field reports the hit in
-            // the field's LOCAL space, so the real world would read whatever
-            // terrain lies at those (grid) coordinates - usually air - and
-            // the outline silently disappeared. Ask the field instead.
             let field = (hitResult.fieldCell && world.offGridField)
                 ? world.offGridField : null;
             let typeId = field ? field.getBlockAt(x, y, z) : world.getBlockAt(x, y, z);
@@ -1972,11 +1637,8 @@ export default class WorldRenderer {
             if (typeId !== 0) {
                 let block = Block.getById(typeId);
 
-                // Get bounding boxes for the selection highlight
                 let boxes = world.getBlockCollisionBoxesAt(x, y, z);
                 if (boxes.length === 0 && block) {
-                    // Summoned cells are addressed in the field's local space;
-                    // sample their neighbours through the local proxy.
                     let bboxWorld = (hitResult.fieldCell && world.offGridField)
                         ? world.offGridField.createLocalWorld() : world;
                     let bbox = block.getBoundingBox(bboxWorld, x, y, z);
@@ -1988,16 +1650,9 @@ export default class WorldRenderer {
                     }
                 }
 
-                // Build one outline for the whole shape. Multipart blocks
-                // (stairs, fences, ...) share edges between their boxes; the
-                // merger removes those internal seams so the highlight wraps
-                // the combined silhouette instead of every part separately.
                 let segments = mergeBlockOutlineEdges(boxes, BLOCK_OUTLINE_EXPANSION);
                 this.updateBlockHitBoxOutline(segments);
 
-                // A hit on the summoned field addresses cells in local space:
-                // pose the outline group so the box wraps the block where it
-                // actually is, and reset it for ordinary world hits.
                 if (hitResult.fieldCell && field) {
                     let pose = field.getPoseTransform();
                     this.blockHitBox.position.set(pose.position.x, pose.position.y, pose.position.z);
@@ -2013,14 +1668,7 @@ export default class WorldRenderer {
         this.lastHitResult = hitResult;
     }
 
-    /**
-     * Write the selection outline into one reused geometry.
-     *
-     * Building a fresh BufferGeometry and LineSegments every frame leaked a GPU
-     * buffer every frame: the old ones were removed from the group without ever
-     * being disposed, and the block under the crosshair is redrawn every frame
-     * even while standing still.
-     */
+    
     updateBlockHitBoxOutline(segments) {
         const needed = segments.length * 6;
 
@@ -2031,8 +1679,6 @@ export default class WorldRenderer {
                 .setUsage(THREE.DynamicDrawUsage);
             this.blockHitBoxGeometry.setAttribute('position', this.blockHitBoxAttribute);
             this.blockHitBoxLines = new THREE.LineSegments(this.blockHitBoxGeometry, this.blockHitBoxMaterial);
-            // The buffer is rewritten in place, which leaves three.js's cached
-            // bounding sphere stale, so keep the outline out of frustum culling.
             this.blockHitBoxLines.frustumCulled = false;
             this.blockHitBox.add(this.blockHitBoxLines);
         } else if (needed > this.blockHitBoxPositions.length) {
@@ -2107,14 +1753,9 @@ export default class WorldRenderer {
 
         let world = this.minecraft.world;
 
-        // A hit on the summoned block field addresses cells in the field's
-        // local space; the ghost is posed with the field so it tracks the
-        // (possibly rotated/offset) structure.
         let field = hitResult.fieldCell ? world.offGridField : null;
         let queryWorld = field ? field.createLocalWorld() : world;
 
-        // Mirror the placement checks from Minecraft.js so the ghost only shows
-        // where the block could actually be placed
         if (field) {
             let cellBounds = field.cellWorldBounds(x, y, z);
             if (cellBounds && cellBounds.intersects(player.boundingBox)) return;
@@ -2131,11 +1772,6 @@ export default class WorldRenderer {
 
         const blockData = this.getBlockPlacementData(block, hitResult);
 
-        // Standing still on the same target rebuilt an identical ghost every
-        // single frame: new geometry, a cloned material, and a proxy world to
-        // render it through. Reuse the built meshes while nothing that shapes
-        // them has changed and only re-apply the pulsing opacity. Field
-        // (summoned) hits keep rebuilding: their pose is not part of the key.
         if (!field && this.blockPreviewMeshes.length > 0
             && this.isPreviewCurrent(world, typeId, x, y, z, hitResult.face, blockData)) {
             this.updateBlockPreviewPulse();
@@ -2143,7 +1779,6 @@ export default class WorldRenderer {
             return;
         }
 
-        // Clear existing preview meshes
         while (this.blockPreviewGroup.children.length > 0) {
             this.blockPreviewGroup.remove(this.blockPreviewGroup.children[0]);
         }
@@ -2151,30 +1786,19 @@ export default class WorldRenderer {
         this.previewKeyValid = false;
 
         if (field) {
-            // Pose the ghost group with the field; the mesh below is placed at
-            // the local chunk origin so the composed transform lands it on the
-            // posed structure exactly like the field's own meshes.
             let pose = field.getPoseTransform();
             this.blockPreviewGroup.position.set(pose.position.x, pose.position.y, pose.position.z);
             this.blockPreviewGroup.rotation.set(pose.rotation.x, pose.rotation.y, pose.rotation.z);
         } else {
-            // Block renderer emits chunk-local coordinates, so move the group to
-            // the chunk origin that contains the target position.
             this.blockPreviewGroup.position.set(x >> 4 << 4, y >> 4 << 4, z >> 4 << 4);
             this.blockPreviewGroup.rotation.set(0, 0, 0);
         }
-        // draw() disables matrixAutoUpdate on the group, so bake the transform
-        // manually or the ghost stays pinned to chunk 0,0
         this.blockPreviewGroup.updateMatrix();
 
         let tessellator = this.blockRenderer.tessellator;
 
-        // Render against a proxy world that reports the placement block data
-        // and shape for the target position, without touching real chunk storage.
         let fakeWorld = this.createPreviewWorld(queryWorld, typeId, x, y, z, blockData);
 
-        // Blocks like stairs, torches and door compute their orientation in
-        // onBlockPlaced; run it against the fake world so the ghost matches.
         block.onBlockPlaced(fakeWorld, x, y, z, hitResult.face);
 
         tessellator.startDrawing();
@@ -2193,8 +1817,6 @@ export default class WorldRenderer {
 
         for (const mesh of previewMeshes) {
             if (field) {
-                // Vertices are chunk-local; move the mesh back to local world
-                // space so the posed group transform maps it correctly.
                 mesh.position.set(x >> 4 << 4, y >> 4 << 4, z >> 4 << 4);
             }
             mesh.material.transparent = true;
@@ -2202,10 +1824,6 @@ export default class WorldRenderer {
             mesh.material.alphaTest = 0;
             mesh.renderOrder = 10001;
 
-            // Keep the colours the mesh was built with: the pulse tints from
-            // them each frame instead of re-tinting an already tinted buffer,
-            // which used to creep the ghost towards white the longer it stayed
-            // on screen.
             let colorAttr = mesh.geometry.getAttribute('color');
             if (colorAttr) {
                 mesh.userData.baseColors = Float32Array.from(colorAttr.array);
@@ -2221,11 +1839,7 @@ export default class WorldRenderer {
         this.blockPreviewGroup.visible = true;
     }
 
-    /**
-     * True when the ghost built for an earlier frame is still the ghost this
-     * frame would build: same world, held block, target cell and face,
-     * orientation data, and the same blocks around the target.
-     */
+    
     isPreviewCurrent(world, typeId, x, y, z, face, blockData) {
         const key = this.previewKey;
         if (this.previewKeyValid !== true || this.previewWorld !== world || key === null) {
@@ -2273,17 +1887,14 @@ export default class WorldRenderer {
         this.previewKeyValid = true;
     }
 
-    /** Drop the built ghost, e.g. when the world that produced it is gone. */
+    
     invalidateBlockPreview() {
         this.previewKeyValid = false;
         this.previewWorld = null;
         this.blockPreviewMeshes.length = 0;
     }
 
-    /**
-     * Apply the ghost's pulsing opacity and its tint toward white, recomputed
-     * from the colours captured when the mesh was built.
-     */
+    
     updateBlockPreviewPulse() {
         let previewOpacity = Math.cos(performance.now() / 300) * 0.2 + 0.8;
         previewOpacity = Math.min(previewOpacity * 0.2 + 0.3, 0.6);
@@ -2314,7 +1925,6 @@ export default class WorldRenderer {
         const chunkZ = pz >> 4;
         const isTarget = (x, y, z) => x === px && y === py && z === pz;
 
-        // Blocks that compute their orientation in onBlockPlaced write it here
         let blockData = baseData;
 
         return new Proxy(world, {
@@ -2341,12 +1951,10 @@ export default class WorldRenderer {
                                 }
                             });
                         };
-                    // Placement writes during onBlockPlaced are captured into
-                    // blockData instead of hitting real world storage
                     case 'setBlockDataAt':
                         return (x, y, z, data) => { if (isTarget(x, y, z)) blockData = data; };
                     case 'setBlockAt':
-                        return () => { /* e.g. doors place their top half here - not part of the preview */ };
+                        return () => {  };
                     case 'getChunkSectionAt':
                         return (cx, cy, cz) => {
                             const section = target.getChunkSectionAt(cx, cy, cz);
@@ -2378,32 +1986,27 @@ export default class WorldRenderer {
     }
 
     getBlockPlacementData(block, hitResult) {
-        // Mirrors the data calculation in Minecraft.js placement so the preview
-        // shows the exact shape/rotation the block would get
         let blockData = 0;
 
-        // Set rotation data for logs based on placement face
         if (block.constructor.name === 'BlockLog') {
             if (hitResult.face.isXAxis()) {
-                blockData = 1; // East-west
+                blockData = 1; 
             } else if (hitResult.face.isZAxis()) {
-                blockData = 2; // North-south
+                blockData = 2; 
             }
         }
 
-        // Slab top/bottom based on placement face
         if (block.constructor.name === 'BlockSlab') {
             if (hitResult.face.y === -1) {
-                blockData = 1; // Top slab
+                blockData = 1; 
             }
         }
 
-        // Chest/furnace facing based on player yaw
         if (block.constructor.name === 'BlockChest' || block.constructor.name === 'BlockFurnace' ||
             block.constructor.name === 'BlockCounterDrawer' || block.constructor.name === 'BlockCounterOven' ||
             block.constructor.name === 'BlockTrafficBarrier') {
             let dirIndex = Math.floor((this.minecraft.player.rotationYaw * 4 / 360) + 0.5) & 3;
-            blockData = [2, 5, 3, 4][dirIndex]; // 2=N, 3=S, 4=W, 5=E - front faces player
+            blockData = [2, 5, 3, 4][dirIndex]; 
         }
 
         return blockData;
@@ -2415,7 +2018,6 @@ export default class WorldRenderer {
 
         if (!show) return;
 
-        // Clear existing bbox lines
         while (this.entityBBoxGroup.children.length > 0) {
             this.entityBBoxGroup.remove(this.entityBBoxGroup.children[0]);
         }
@@ -2426,12 +2028,10 @@ export default class WorldRenderer {
         for (let entity of entities) {
             if (!entity) continue;
 
-            // Skip player bounding box in first-person view
             if (entity === player && this.minecraft.settings.thirdPersonView === 0) {
                 continue;
             }
 
-            // Interpolate between previous and current bounding box
             let prevBB = entity.prevBoundingBox;
             let currBB = entity.boundingBox;
 
@@ -2557,17 +2157,14 @@ export default class WorldRenderer {
     }
 
     reset() {
-        // Clear sign text meshes
         if (this.signTextRenderer) {
             this.signTextRenderer.clear();
         }
 
-        // Remove world group from scene if it exists
         if (this.minecraft.world !== null) {
             this.scene.remove(this.minecraft.world.group);
         }
 
-        // Clear any remaining children that might be stale, but preserve block hit box
         for (let i = this.scene.children.length - 1; i >= 0; i--) {
             const child = this.scene.children[i];
             if (child !== this.blockHitBox && child !== this.blockPreviewGroup) {
@@ -2585,7 +2182,6 @@ export default class WorldRenderer {
             }
         }
 
-        // Ensure block hit box is in the scene
         if (!this.scene.children.includes(this.blockHitBox)) {
             this.scene.add(this.blockHitBox);
         }
@@ -2598,14 +2194,11 @@ export default class WorldRenderer {
         }
         this.blockBreakMesh.visible = false;
 
-        // The batched translucent buffer belongs to the world that was just
-        // torn down; never let the next world reuse it.
         this.translucentBatcher?.invalidate();
         this.invalidateBlockPreview();
 
         this.webRenderer.clear();
 
-        // Hide all dynamic lights
         this.hideDynamicLights();
     }
 }

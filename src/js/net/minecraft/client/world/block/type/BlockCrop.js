@@ -5,11 +5,6 @@ import EnumCreativeInventoryTab from "../../../gui/EnumCreativeInventoryTab.js";
 import { BlockRegistry } from "../BlockRegistry.js";
 import ItemEntity from "../../../entity/ItemEntity.js";
 
-/**
- * A farmland crop. Growth stage is stored in the block metadata nibble, and
- * every crop differs only in its texture stages and drops, so the behaviour
- * lives here instead of in one class per crop.
- */
 export default class BlockCrop extends Block {
 
     constructor(id, textureSlotId, options = {}) {
@@ -19,8 +14,6 @@ export default class BlockCrop extends Block {
         this.texturePrefix = options.texturePrefix ?? "wheat_stage";
         this.maxStage = options.maxStage ?? 7;
 
-        // Registry keys, resolved lazily: the crop blocks are registered
-        // before their items, and the keys keep that order free.
         this.plantItemKey = options.plantItemKey ?? null;
         this.produceItemKey = options.produceItemKey ?? null;
         this.produceMin = options.produceMin ?? 1;
@@ -30,7 +23,6 @@ export default class BlockCrop extends Block {
 
         this.hardness = 0.0;
 
-        // Sound
         this.sound = Block.sounds.grass;
         this.inventoryTab = EnumCreativeInventoryTab.NOTLISTED;
     }
@@ -121,15 +113,12 @@ export default class BlockCrop extends Block {
             return;
         }
 
-        // Crops need farmland underneath; losing it breaks the crop.
         const soilId = world.getBlockAt(x, y - 1, z);
         if (soilId !== BlockRegistry.FARMLAND.id) {
             this.breakWithDrop(world, x, y, z);
             return;
         }
 
-        // Too dark to grow. The server world has no light engine, and its
-        // crops sit above ground, so only enforce this where light exists.
         const lightLevel = typeof world.getTotalLightAt === 'function'
             ? world.getTotalLightAt(x, y, z)
             : 15;
@@ -161,7 +150,6 @@ export default class BlockCrop extends Block {
 
         const minecraft = world.minecraft;
         if (typeof world.dropItem === 'function') {
-            // Authoritative server: spawn the items and broadcast them.
             for (const [itemId, count] of drops) {
                 for (let i = 0; i < count; i++) {
                     world.dropItem(itemId, x, y, z);
@@ -202,8 +190,6 @@ export default class BlockCrop extends Block {
         } else if (world.minecraft?.worldRenderer
             && typeof world.addEntity === 'function'
             && (typeof world.minecraft.isSingleplayer !== 'function' || world.minecraft.isSingleplayer())) {
-            // Predict the drop in a purely local world; in multiplayer the
-            // server runs the same support check and broadcasts its items.
             for (const [itemId, count] of drops) {
                 for (let i = 0; i < count; i++) {
                     world.addEntity(new ItemEntity(world.minecraft, world, itemId, x, y, z));

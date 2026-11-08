@@ -4,9 +4,7 @@ export default class MathHelper {
         return Math.min(Math.max(number, min), max);
     }
 
-    /**
-     * Returns the greatest integer less than or equal to the double argument
-     */
+    
     static floor(value) {
         let i = parseInt(value);
         return value < i ? i - 1 : i;

@@ -3,7 +3,6 @@ import EnumCreativeInventoryTab from "../../../gui/EnumCreativeInventoryTab.js";
 import BlockShaftPart from "./BlockShaftPart.js";
 import ShaftRenderer from "../../../render/ShaftRenderer.js";
 
-/** A spruce cog on a stone axle; it faces the player who placed it. */
 export default class BlockGear extends BlockShaftPart {
 
     constructor(id, textureSlotId) {
@@ -24,7 +23,6 @@ export default class BlockGear extends BlockShaftPart {
         return 'spruce_planks';
     }
 
-    // Cogs mesh with neighbouring cogs and turn the other way.
     isCog() {
         return true;
     }

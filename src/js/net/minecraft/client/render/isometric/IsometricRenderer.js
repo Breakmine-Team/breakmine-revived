@@ -4,7 +4,6 @@ import Triangle from "./Triangle.js";
 
 export default class IsometricRenderer {
 
-    // http://jsfiddle.net/xzL58dha/3/
 
     static render(stack, triangles, callback) {
         for (let triangle of triangles) {
@@ -22,12 +21,10 @@ export default class IsometricRenderer {
     }
 
     static createTriangles(texture, p1, p2, p3, p4) {
-        // clear triangles out
         let triangles = [];
 
-        // generate subdivision
-        let subs = 7; // vertical subdivisions
-        let divs = 7; // horizontal subdivisions
+        let subs = 7; 
+        let divs = 7; 
 
         let dx1 = p4.x - p1.x;
         let dy1 = p4.y - p1.y;
@@ -109,57 +106,15 @@ export default class IsometricRenderer {
     static drawTriangle(stack, x0, y0, x1, y1, x2, y2, sx0, sy0, sx1, sy1, sx2, sy2, callback) {
         stack.save();
 
-        // Clip the output to the on-screen triangle boundaries.
         stack.beginPath();
         stack.moveTo(x0, y0);
         stack.lineTo(x1, y1);
         stack.lineTo(x2, y2);
         stack.closePath();
-        //ctx.stroke();//xxxxxxx for wireframe
         stack.clip();
 
-        /*
-        ctx.transform(m11, m12, m21, m22, dx, dy) sets the context transform matrix.
+        
 
-        The context matrix is:
-
-        [ m11 m21 dx ]
-        [ m12 m22 dy ]
-        [  0   0   1 ]
-
-        Coords are column vectors with a 1 in the z coord, so the transform is:
-        x_out = m11 * x + m21 * y + dx;
-        y_out = m12 * x + m22 * y + dy;
-
-        From Maxima, these are the transform values that map the source
-        coords to the dest coords:
-
-        sy0 (x2 - x1) - sy1 x2 + sy2 x1 + (sy1 - sy2) x0
-        [m11 = - -----------------------------------------------------,
-        sx0 (sy2 - sy1) - sx1 sy2 + sx2 sy1 + (sx1 - sx2) sy0
-
-        sy1 y2 + sy0 (y1 - y2) - sy2 y1 + (sy2 - sy1) y0
-        m12 = -----------------------------------------------------,
-        sx0 (sy2 - sy1) - sx1 sy2 + sx2 sy1 + (sx1 - sx2) sy0
-
-        sx0 (x2 - x1) - sx1 x2 + sx2 x1 + (sx1 - sx2) x0
-        m21 = -----------------------------------------------------,
-        sx0 (sy2 - sy1) - sx1 sy2 + sx2 sy1 + (sx1 - sx2) sy0
-
-        sx1 y2 + sx0 (y1 - y2) - sx2 y1 + (sx2 - sx1) y0
-        m22 = - -----------------------------------------------------,
-        sx0 (sy2 - sy1) - sx1 sy2 + sx2 sy1 + (sx1 - sx2) sy0
-
-        sx0 (sy2 x1 - sy1 x2) + sy0 (sx1 x2 - sx2 x1) + (sx2 sy1 - sx1 sy2) x0
-        dx = ----------------------------------------------------------------------,
-        sx0 (sy2 - sy1) - sx1 sy2 + sx2 sy1 + (sx1 - sx2) sy0
-
-        sx0 (sy2 y1 - sy1 y2) + sy0 (sx1 y2 - sx2 y1) + (sx2 sy1 - sx1 sy2) y0
-        dy = ----------------------------------------------------------------------]
-        sx0 (sy2 - sy1) - sx1 sy2 + sx2 sy1 + (sx1 - sx2) sy0
-      */
-
-        // TODO: eliminate common subexpressions.
         let denom = sx0 * (sy2 - sy1) - sx1 * sy2 + sx2 * sy1 + (sx1 - sx2) * sy0;
         if (denom === 0) {
             return;
@@ -173,11 +128,6 @@ export default class IsometricRenderer {
 
         stack.transform(m11, m12, m21, m22, dx, dy);
 
-        // Draw the whole image.  Transform and clip will map it onto the
-        // correct output triangle.
-        //
-        // TODO: figure out if drawImage goes faster if we specify the rectangle that
-        // bounds the source coords.
         callback();
         stack.restore();
     };

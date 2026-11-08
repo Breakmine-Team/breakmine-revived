@@ -1,10 +1,5 @@
 import Packet from "../../../Packet.js";
 
-/**
- * One interactive write against a summoned cell, in the field's LOCAL grid
- * coordinates. The server validates it (existing cell for removals, adjacency
- * for new cells, limits) and broadcasts the accepted change to everyone.
- */
 export default class ClientOffGridCellPacket extends Packet {
 
     constructor(x, y, z, typeId, data = 0) {

@@ -15,11 +15,6 @@ export default class TagRegistry {
     static tagToId = new Map();
 
     static {
-        // NOTE: CompoundTag (id 10) is intentionally NOT registered here.
-        // It imports NBTIO, which imports this registry, so referencing it
-        // from this static block would create an uninitialized-binding (TDZ)
-        // cycle when CompoundTag is the first module loaded. CompoundTag
-        // self-registers at the bottom of its own module instead.
         TagRegistry.register(1, ByteTag);
         TagRegistry.register(2, ShortTag);
         TagRegistry.register(3, IntTag);
@@ -38,8 +33,6 @@ export default class TagRegistry {
     }
 
     static getIdFor(clazz) {
-        // Accept both a class (e.g. ListTag.write) and an instance
-        // (e.g. NBTIO.writeTag) so the binary writer gets the right id.
         if (clazz && typeof clazz !== "function") {
             clazz = clazz.constructor;
         }

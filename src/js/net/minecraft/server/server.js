@@ -11,7 +11,7 @@ let log = Logger;
 const PORT = config.port;
 const fs = new IsomorphicFilesystem();
 
-// Change to data directory if set (for Docker persistence)
+
 if (process.env.DATA_DIR) {
     const nodeFs = require('fs');
     if (!nodeFs.existsSync(process.env.DATA_DIR)) {
@@ -26,8 +26,6 @@ let wss = null;
 async function main() {
     const startupStartedAt = Date.now();
 
-    // Install SERVER_MOD_URLS before initServer() so downloaded mods are part
-    // of the first load and get sent to players on join.
     try {
         await installServerModsFromEnv();
     } catch (e) {
@@ -35,7 +33,6 @@ async function main() {
     }
     log.info('Server', `Startup mods finished in ${Date.now() - startupStartedAt}ms`);
 
-    // Load SSL certificate and key if available
     let server = null;
     let options = {};
 
@@ -52,18 +49,13 @@ async function main() {
         log.error('Server', 'Failed to load SSL certificates: ' + e.message);
     }
 
-    // Without certs: create a plain HTTP server so the admin panel and the
-    // WebSocket can share the same port.
     if (!server) {
         server = require('http').createServer();
     }
 
-    // Admin panel (passcode-protected world upload/download) on the same port.
     const { attachAdminPanel } = require('./admin.js');
     attachAdminPanel(server);
 
-    // Anti-DDoS admission check: floods and blocked addresses are refused
-    // during the HTTP upgrade, before a WebSocket or any game state exists.
     wss = new WebSocket.Server({
         server: server,
         verifyClient: (info, callback) => {
@@ -78,10 +70,6 @@ async function main() {
     });
     wss.on('connection', (ws, req) => onConnection(ws, req));
 
-    // Open the port before the synchronous world load. Traefik and clients can
-    // establish a connection immediately; Node does not run the connection
-    // callbacks until initServer() returns, so no player sees a half-loaded
-    // world. Keep the header timeout high enough for that initial load.
     server.headersTimeout = 5 * 60 * 1000;
     server.requestTimeout = 5 * 60 * 1000;
     server.on('error', (e) => {
@@ -93,7 +81,6 @@ async function main() {
     });
     log.info('Server', `Socket open on ${config.host}:${PORT}; loading world...`);
 
-    // Initialize the world (loads config, world data, block registry, tick loop).
     const initStartedAt = Date.now();
     initServer();
     log.info('Server', `World initialized in ${Date.now() - initStartedAt}ms`);
@@ -119,7 +106,6 @@ function shutdown() {
     try {
         if (wss) wss.close();
     } catch (e) {
-        // Ignore close errors on shutdown.
     }
     process.exit(0);
 }

@@ -69,9 +69,6 @@ export default class FirstPersonItemRenderer {
         model.traverse(node => {
             if (!node.isMesh) return;
             node.material = node.material.clone();
-            // clone() drops onBeforeCompile: without re-applying the tile
-            // wrap, oversized multipart bboxes bleed into the neighbouring
-            // atlas tiles in the hand while looking fine in the world.
             if (node.geometry?.getAttribute('aTileRect')) {
                 Tessellator.applyTileWrap(node.material);
             }
@@ -104,9 +101,6 @@ export default class FirstPersonItemRenderer {
         this.cameraGroup.rotateX((player.rotationPitch - pitchArm) * Math.PI / 1800);
         this.cameraGroup.rotateY((player.rotationYaw - yawArm) * Math.PI / 1800);
 
-        // Apply current light to both generated flat items and voxel block
-        // models. Baking brightness into voxel vertex colors during rebuild
-        // made held blocks stay at their old brightness after lighting changed.
         const light = Math.max(0, Math.min(1, Number(brightness) || 0));
         this.armTransformGroup.traverse(node => {
             if (node.isMesh && node.material?.color) {

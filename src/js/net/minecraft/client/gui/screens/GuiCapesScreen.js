@@ -7,10 +7,6 @@ import { getCapeTextureRect } from "../../render/CapeTextureLayout.js";
 const SLOT_HEIGHT = 36;
 const SLOT_SPACING = 2;
 
-/**
- * One row in the cape sidebar: a thumbnail of the cape artwork (the 10x16
- * face at (1, 1) of a 64x32 sheet) and its name, laid out like the Mods rows.
- */
 class GuiCapeSlot extends GuiButton {
 
     constructor(cape, x, y, width, height, callback, minecraft) {
@@ -80,7 +76,6 @@ class GuiCapeSlotContainer extends GuiWorldSlotContainer {
         this.slotX = parentGui.layout.sidebarX + 4;
         this.slotWidth = parentGui.layout.sidebarWidth - 16;
         this.top = parentGui.layout.top;
-        // Extend to the bottom edge of the Done button (height - 30 + 20)
         this.bottom = parentGui.height - 10;
         this.viewLeft = parentGui.layout.sidebarX;
         this.viewRight = parentGui.layout.sidebarX + parentGui.layout.sidebarWidth;
@@ -135,7 +130,6 @@ export default class GuiCapesScreen extends GuiScreen {
             this.loading = true;
             await manager?.loadCatalog?.(true);
 
-            // The screen was closed while the catalog was loading.
             if (this.minecraft.currentScreen && this.minecraft.currentScreen !== this) return;
         }
 
@@ -217,7 +211,6 @@ export default class GuiCapesScreen extends GuiScreen {
 
         this.capeSlotContainer.selectedWorld = this.selectedIndex;
 
-        // Keep the worn cape visible when the list opens.
         const rowHeight = SLOT_HEIGHT + SLOT_SPACING;
         const viewHeight = this.capeSlotContainer.bottom - this.capeSlotContainer.top;
         const target = Math.max(0, this.selectedIndex * rowHeight + 7 - Math.floor(viewHeight / 2) + Math.floor(rowHeight / 2));
@@ -225,7 +218,7 @@ export default class GuiCapesScreen extends GuiScreen {
         this.capeSlotContainer.amountScrolled = Math.min(this.capeSlotContainer.getMaxScroll(), target);
     }
 
-    /** Called by the slot container when a row is clicked. */
+    
     setSelectedWorld(index) {
         const entry = this.entries[index];
         if (!entry) return;

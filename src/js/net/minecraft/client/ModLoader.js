@@ -48,7 +48,6 @@ function normalizeOverlayCanvasColor(value) {
         const red = (value >> 16) & 0xFF;
         const green = (value >> 8) & 0xFF;
         const blue = value & 0xFF;
-        // Plain 0xRRGGBB is opaque; only values with bits above 24 carry alpha.
         const alpha = value > 0xFFFFFF ? ((value >>> 24) & 0xFF) / 255 : 1;
         return alpha < 1
             ? `rgba(${red}, ${green}, ${blue}, ${alpha})`
@@ -57,130 +56,40 @@ function normalizeOverlayCanvasColor(value) {
     return '#000000';
 }
 
-/**
- * ModLoader - discovers, installs, and registers mods.
- *
- * Supported mod layout (inside a ZIP or folder):
- *   ModData.js           - metadata (static NAME, ID, AUTHOR, VERSION)
- *   ModLoad.js           - lifecycle hook (static onLoad(world))
- *   blocks/*.js          - block classes (extend Block)
- *   items/*.js           - item classes (extend Item / ItemGeneric / ItemEdible / ItemTool)
- *   crafting/*.js        - crafting recipe classes
- *   smelting/*.js        - smelting recipe classes
- *   gui/*.js             - GUI screen classes (extend GuiScreen / GuiContainer)
- *   commands/*.js        - chat commands (extend Command); registered for
- *                           client and server use, op-only with `this.opOnly = true`
- *   tabs/*.js            - custom creative inventory tab classes (with static
- *                           NAME and ICON_BLOCK_ID properties)
- *   gui_textures/*.png   - GUI background textures (accessible via 'gui/&lt;modId&gt;/&lt;name&gt;')
- *   textures/*.png       - 16×16 block/item textures
- *   sounds/*.ogg         - custom sounds (playable via Sound.play('&lt;modId&gt;:&lt;name&gt;.ogg', volume))
- *
- * Modding API exposed to block/item/GUI/command code:
- *   Block, BlockRegistry, BoundingBox, EnumBlockFace, EnumCreativeInventoryTab,
- *   Command, THREE, Sound, AuthLib, ModAPI
- *
- * ModAPI is the mod-facing facade (also the third argument of ModLoad.onLoad
- * as the loader itself):
- *   ModAPI.registerCommand(name, usage, description, execute, { opOnly })
- *   ModAPI.registerRenderHook(hook, fn, { priority })   // 'beforeRender',
- *       'renderChunks', 'renderSky', 'renderBlockHitBox', 'afterRender', 'onTick'
- *   ModAPI.registerBlockAction(action, fn, { priority })
- *       action: 'place' | 'break' | 'interact' ('destroy' and 'use' are aliases)
- *       The handler gets { action, username, player, x, y, z, pos, currentBlock,
- *       currentBlockId, targetBlock, targetBlockId, clickedBlock,
- *       clickedBlockId, clickedPos, placePos, face, metadata, world, minecraft }.
- *       Call event.cancel() or return false to veto the action. The same hooks
- *       are registered by server-side mods, so a server-sent mod can veto the
- *       authoritative action too.
- *   ModAPI.registerOverlayText(fn, { priority })  // fn(textContext)
- *       text(value, x, y, { color, shadow, align, background, padding,
- *       scale, noColor }) draws HUD text anywhere on screen. Newlines work.
- *   ModAPI.registerKeybind(id, name, defaultKey, onPress, { category, onRelease, allowRepeat })
- *       or registerKeybind({ id, name, defaultKey, onPress, ... }). The bind
- *       appears in Options > Controls and is saved with the game settings.
- *       onPress({ key, keybind, minecraft }) runs while in game; onRelease
- *       runs on key-up. Use null for an unbound default. Key ids must be
- *       unique within the mod; allowRepeat defaults to false.
- *   ModAPI.unregisterKeybind(id), ModAPI.getKeybind(id),
- *       ModAPI.getKeybindKey(id), ModAPI.getKeybinds()
- *   ModAPI.saveJson(key, value), ModAPI.loadJson(key, fallback),
- *       ModAPI.deleteJson(key), ModAPI.listJson()
- *       Persistent per-mod JSON under mod_data/<modId>/, never inside the
- *       (possibly read-only) mod folder. *   ModAPI.sendModMessage(payload)  // JSON to the server mod's onMessage()
- *   ModAPI.getLookedAtBlock(reach = 5)
- *       The block under the crosshair as { name, namespace, id, text_id,
- *       description }: name is the first line of its description, id the
- *       numeric block id, text_id the namespaced id ("breakmine:stone").
- *       null when nothing is targeted, undefined when no world is loaded.
- *   ModAPI.registerService(id, service), ModAPI.getService(id),
- *       ModAPI.resolveTexture('modid:name'), ModAPI.log(...), ModAPI.warn(...)
- * Commands, render hooks, block-action hooks, overlay text, keybinds and
- * registered services are dropped when the mod is disabled or uninstalled;
- * its JSON data and block registrations are kept.
- * AuthLib is the account module: getAuthToken(), getUserInfo(username),
- * userExists(username), getSkinUrl(username) and getCapeUrl(username). Mods read
- * it rather than calling fetch, so they inherit the API base URL and the auth
- * token already in the browser.
- * Relative imports that point to other files inside the mod are resolved
- * automatically (e.g. `import Helper from "./Helper.js"` in blocks/BlockFoo.js
- * loads blocks/Helper.js). Imports of game classes (e.g. `../Block.js`) are
- * provided via the sandbox deps. Circular imports are allowed and cached.
- * Block naming convention:
- *   BlockUnbreakableBlock  ->  strip "Block"  ->  UnbreakableBlock  ->  unbreakable_block
- *   Final namespaced ID:  <modId>:unbreakable_block
- *
- * Item naming convention:
- *   ItemTestItem          ->  strip "Item"   ->  TestItem          ->  test_item
- *   Final namespaced ID:  <modId>:test_item
- *
- * GUI classes loaded from gui/ are automatically available in block/item eval
- * sandboxes so blocks can `new GuiMyScreen(...)` in onMouseButton.
- */
 export default class ModLoader {
-    /**
-     * @param {import("./Minecraft.js").default} minecraft
-     */
+    
     constructor(minecraft) {
         this.minecraft = minecraft;
-        this.mods = new Map();          // modId -> ModEntry
-        this.enabledMods = new Set();   // modIds that are active
-        this._disabledMods = new Set(); // modIds the user has explicitly switched off
-        // Load the deny-list up front so toggleMod()/uninstallMod() are correct
-        // regardless of whether loadAllMods() has run yet.
+        this.mods = new Map();          
+        this.enabledMods = new Set();   
+        this._disabledMods = new Set(); 
         this._loadDisabledSet();
-        this.services = new Map();      // serviceId -> mod-provided runtime service
+        this.services = new Map();      
         this.filesystem = new FileSystem('ModDB', 'mods');
-        this._devModFilesystems = new Map(); // modId -> MemoryFilesystem (temporary dev mods, never persisted)
-        this._serverModIds = new Set();      // modIds supplied by the current multiplayer server
-        this._serverModFilesystems = new Map(); // modId -> MemoryFilesystem (server-supplied mods)
-        this._serverModGeneration = 0;       // invalidates an in-flight server mod load
-        this._replacedLocalModIds = new Set(); // modIds that had local versions replaced by server versions
-        this._temporaryDisabledModIds = new Set(); // mods switched off only for this session (join a no-mods server)
-        this._diskFilesystem = null;         // BridgeFilesystem over the physical mods/ folder (Electron only)
-        this._blockBaseClass = null;    // cached Block class for eval sandbox
-        this._commandBaseClass = null;  // cached Command class for mod command sandboxes
-        this._modModuleCache = new Map(); // 'modId/filePath' -> evaluated exports
-        this.renderHooks = new Map();    // hook name -> [{ fn, modId, priority, hook }] - world-render hook targets
-        this.blockActions = new BlockActionRegistry('Patchwork'); // cancelable place/break/interact hooks
-        this.overlayTextHooks = [];      // [{ fn, modId, priority }] - screen-space HUD text providers
-        this._modRegistrations = new Map(); // modId -> { commands, hooks, blockActions, overlayText } for cleanup
-        this._activeModId = null;       // mod currently being loaded (attributes registrations)
-        this._modApis = new Map();      // modId -> ModAPI facade handed to mod sandboxes
-        this.customTabs = [];           // Array of custom tabs from mods: { modId, name, iconBlockId }
-        this.keybinds = new Map();      // "modId:keybindId" -> registered keybind entry
-        this._pressedKeybinds = new Map(); // keybind setting -> key currently held
+        this._devModFilesystems = new Map(); 
+        this._serverModIds = new Set();      
+        this._serverModFilesystems = new Map(); 
+        this._serverModGeneration = 0;       
+        this._replacedLocalModIds = new Set(); 
+        this._temporaryDisabledModIds = new Set(); 
+        this._diskFilesystem = null;         
+        this._blockBaseClass = null;    
+        this._commandBaseClass = null;  
+        this._modModuleCache = new Map(); 
+        this.renderHooks = new Map();    
+        this.blockActions = new BlockActionRegistry('Patchwork'); 
+        this.overlayTextHooks = [];      
+        this._modRegistrations = new Map(); 
+        this._activeModId = null;       
+        this._modApis = new Map();      
+        this.customTabs = [];           
+        this.keybinds = new Map();      
+        this._pressedKeybinds = new Map(); 
     }
 
-    /* ------------------------------------------------------------------
-     *  Public API
-     * ------------------------------------------------------------------ */
+    
 
-    /**
-     * Register a runtime service from a mod. Services are intentionally
-     * small objects: the core can call generic lifecycle hooks without
-     * knowing anything about a particular mod's feature set.
-     */
+    
     registerService(serviceId, service, modId = this._activeModId) {
         if (!serviceId || !service) {
             throw new Error('A service id and service instance are required.');
@@ -189,9 +98,6 @@ export default class ModLoader {
         const id = String(serviceId);
         this.services.set(id, service);
 
-        // Attribute the service to the mod that registered it, so disabling
-        // that mod also removes its services (and anything they expose, such
-        // as main-menu buttons) instead of leaving them behind until reload.
         if (modId) {
             this._trackRegistration(modId).services.set(id, service);
         }
@@ -227,26 +133,16 @@ export default class ModLoader {
         }
     }
 
-    /* ----------------------------- custom tabs ----------------------- */
+    
 
-    /**
-     * Register a custom creative tab from a mod.
-     * @param {string} modId - The mod ID
-     * @param {string} name - The tab display name
-     * @param {string} iconBlockId - The block ID to use as the tab icon (e.g., "minecraft:stone" or "modId:block_name")
-     * @returns {object} The tab object with { id, name, iconBlockId, modId }
-     */
+    
     registerCustomTab(modId, name, iconBlockId) {
-        // Mods are re-loaded every time a world is (re)entered, so the same tab
-        // arrives again. Reuse the existing one instead of stacking duplicates
-        // in the creative screen.
         const existing = this.customTabs.find(tab => tab.modId === modId && tab.name === name);
         if (existing) {
             if (iconBlockId) existing.iconBlockId = iconBlockId;
             return existing;
         }
 
-        // Find the next available ID (starting from 100 to avoid conflicts with built-in tabs)
         const nextId = 100 + this.customTabs.length;
         const tab = { id: nextId, modId, name, iconBlockId };
         this.customTabs.push(tab);
@@ -254,27 +150,17 @@ export default class ModLoader {
         return tab;
     }
 
-    /**
-     * Get all custom tabs registered by mods.
-     * @returns {Array} Array of { id, modId, name, iconBlockId }
-     */
+    
     getCustomTabs() {
         return this.customTabs;
     }
 
-    /**
-     * Get a custom tab by name.
-     * @param {string} name - The tab name
-     * @returns {object|null} The tab object or null if not found
-     */
+    
     getCustomTabByName(name) {
         return this.customTabs.find(tab => tab.name === name) || null;
     }
 
-    /**
-     * Clear all custom tabs (used when a mod is disabled/uninstalled).
-     * @param {string} modId - Optional mod ID to clear only tabs from that mod
-     */
+    
     clearCustomTabs(modId = null) {
         if (modId) {
             this.customTabs = this.customTabs.filter(tab => tab.modId !== modId);
@@ -283,24 +169,9 @@ export default class ModLoader {
         }
     }
 
-    /* ----------------------------- commands --------------------------- */
+    
 
-    /**
-     * Register a chat command for a mod.
-     *
-     * Two call styles are accepted:
-     *   registerCommand({ command: "spawn_pet", usage: "<type>", description: "...",
-     *                      opOnly: false, execute(minecraft, args) { ... } })
-     *   registerCommand("spawn_pet", "<type>", "Spawn a pet", (minecraft, args) => ..., { opOnly: true })
-     *
-     * `execute` gets the same `minecraft` object the command was typed into
-     * (the real client, or a per-player adapter on the server) and returns
-     * false to have the usage line echoed back. `opOnly: true` makes the
-     * server require operator status, exactly like the built-in mutating
-     * commands. A modId that collides with an existing command replaces it.
-     *
-     * @returns the stored registry entry
-     */
+    
     registerCommand(name, usage, description, execute, options = {}) {
         const descriptor = typeof name === 'object' && name !== null
             ? { ...name }
@@ -323,30 +194,14 @@ export default class ModLoader {
         return removed;
     }
 
-    /** Every command mods registered, in registration order. */
+    
     getModCommands() {
         return CommandRegistry.getAll();
     }
 
-    /* ----------------------------- keybinds --------------------------- */
+    
 
-    /**
-     * Register a rebindable keybind for a mod.
-     *
-     *   registerKeybind("toggle_overlay", "Toggle Overlay", "KeyU", (event) => ...)
-     *   registerKeybind({
-     *       id: "toggle_overlay",
-     *       name: "Toggle Overlay",
-     *       defaultKey: "KeyU",
-     *       category: "My Mod",
-     *       onPress({ key, keybind, minecraft }) { ... },
-     *       onRelease({ key, keybind, minecraft }) { ... }
-     *   })
-     *
-     * The binding is stored in GameSettings and appears in Options > Controls
-     * below the built-in bindings. `allowRepeat` defaults to false, so holding
-     * a key only fires onPress once until it is released.
-     */
+    
     registerKeybind(id, name, defaultKey, onPress, options = {}) {
         const descriptor = typeof id === 'object' && id !== null
             ? { ...id }
@@ -411,7 +266,7 @@ export default class ModLoader {
         return this._resolveKeybind(keybindId, modId);
     }
 
-    /** The currently bound key for a keybind, or null when it is unbound/missing. */
+    
     getKeybindKey(keybindId, modId = this._activeModId) {
         const entry = this._resolveKeybind(keybindId, modId);
         if (!entry) return null;
@@ -426,7 +281,7 @@ export default class ModLoader {
             : entry.defaultKey;
     }
 
-    /** All registered mod keybinds, with their current key, for the Controls screen. */
+    
     getKeybinds() {
         return [...this.keybinds.values()]
             .map((entry) => ({
@@ -443,7 +298,7 @@ export default class ModLoader {
             .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
     }
 
-    /** Internal: invoke matching mod keybind callbacks on a key-down. */
+    
     handleKeyPressed(key) {
         if (!key) return;
 
@@ -462,7 +317,7 @@ export default class ModLoader {
         }
     }
 
-    /** Internal: release callbacks and repeat state for a key-up. */
+    
     handleKeyReleased(key) {
         for (const entry of [...this.keybinds.values()]) {
             if (this._pressedKeybinds.get(entry.setting) !== key) continue;
@@ -478,7 +333,7 @@ export default class ModLoader {
         }
     }
 
-    /** Release keybind state when keyboard focus is lost, without waiting for key-up. */
+    
     clearKeybindStates() {
         const pressed = [...this._pressedKeybinds.entries()];
         this._pressedKeybinds.clear();
@@ -526,20 +381,9 @@ export default class ModLoader {
         return true;
     }
 
-    /* ---------------------------- render hooks ------------------------ */
+    
 
-    /**
-     * Hook a world-render function. WorldRenderer emits these points:
-     *   'beforeRender'      - once per frame before the camera is oriented
-     *   'renderChunks'      - before the visible chunks are drawn
-     *   'renderSky'         - before the sky is drawn
-     *   'renderBlockHitBox' - before the block outline is drawn
-     *   'afterRender'       - once per frame after everything is drawn
-     *   'onTick'            - once per client tick, before renderer updates
-     * A handler receives a single context object:
-     *   { hook, minecraft, worldRenderer, partialTicks, ...payload }
-     * `priority` runs lower numbers first (default 0).
-     */
+    
     registerRenderHook(hook, fn, options = {}) {
         if (typeof hook !== 'string' || !hook) {
             throw new Error('A render hook name is required.');
@@ -561,7 +405,7 @@ export default class ModLoader {
         return entry;
     }
 
-    /** Remove one hook (the handle registerRenderHook returned) or all hooks for a name. */
+    
     unregisterRenderHook(hook, handle) {
         if (typeof handle === 'function') {
             for (const entry of [...(this.renderHooks.get(hook) || [])]) {
@@ -588,7 +432,7 @@ export default class ModLoader {
         return true;
     }
 
-    /** Drop every handler for a hook name, or for all names when omitted. */
+    
     clearRenderHooks(hook) {
         if (hook) {
             const hooks = this.renderHooks.get(hook);
@@ -610,13 +454,9 @@ export default class ModLoader {
         return false;
     }
 
-    /* -------------------------- block actions ------------------------- */
+    
 
-    /**
-     * Hook a player block action. `action` is 'place', 'break' (alias
-     * 'destroy') or 'interact' (alias 'use'). A handler cancels by calling
-     * event.cancel() or returning false; canceled handlers stop the chain.
-     */
+    
     registerBlockAction(action, fn, options = {}) {
         const modId = options.modId || this._activeModId || null;
         const entry = this.blockActions.register(action, fn, { ...options, modId });
@@ -626,7 +466,7 @@ export default class ModLoader {
         return entry;
     }
 
-    /** Remove a returned handle, a handler function, or every handler for an action. */
+    
     unregisterBlockAction(action, handle) {
         const removed = this.blockActions.unregister(action, handle);
         if (!removed) return false;
@@ -656,35 +496,14 @@ export default class ModLoader {
         return this.blockActions.has(action);
     }
 
-    /** Internal: fire block-action hooks and return the event. */
+    
     emitBlockAction(action, data) {
         return this.blockActions.emit(action, data);
     }
 
-    /* --------------------------- overlay text ------------------------- */
+    
 
-    /**
-     * Register a screen-space HUD text provider. The callback runs every frame
-     * while the in-game overlay is visible and receives a drawing context:
-     *
-     *   { text(value, x, y, options), tooltip(value, x, y, options),
-     *     measure(value, options), rect(...), width, height, stack, overlay,
-     *     minecraft }
-     *
-     * `options` for text(): color (number or #rrggbb), shadow, align
-     * ('left'|'center'|'right'), background (canvas color), padding, scale and
-     * noColor. Newlines are supported. Coordinates are screen pixels, so a mod
-     * can draw anywhere on the HUD.
-     *
-     * tooltip() draws a real GuiTooltip - the same inner bounds, notched dark
-     * outline, purple gradient border and 10px line spacing as the in-game
-     * item/block tooltips. x/y is the top-left corner of the drawn box and
-     * `align` ('left'|'center'|'right') anchors the box on x, so a tooltip
-     * centred at the top of the screen is
-     * tooltip(lines, ctx.width / 2, 6, { align: 'center' }).
-     * § colour codes are interpreted, `color` overrides the text colour, and the
-     * box clamps itself to the screen edges.
-     */
+    
     registerOverlayText(fn, options = {}) {
         if (typeof fn !== 'function') {
             throw new Error('Overlay text provider must be a function.');
@@ -715,7 +534,7 @@ export default class ModLoader {
         return true;
     }
 
-    /** Called by IngameOverlay after the built-in HUD widgets. */
+    
     emitOverlayText(overlay, stack) {
         if (this.overlayTextHooks.length === 0) return;
         if (!stack || !this.minecraft?.fontRenderer) return;
@@ -802,29 +621,22 @@ export default class ModLoader {
             };
         };
 
-        /**
-         * Draws a GuiTooltip at any screen position, pixel for pixel the same
-         * box the in-game tooltips use. x/y is the top-left of the drawn box;
-         * `align` anchors the box on x instead. Returns the box bounds.
-         */
+        
         const tooltip = (value, x, y, options = {}) => {
             const lines = String(value ?? '').split('\n');
             const color = normalizeOverlayTextColor(options.color);
             const align = options.align === 'center' || options.align === 'right'
                 ? options.align : 'left';
 
-            // GuiTooltip sizes its box on the visible text, ignoring § codes.
             let maxWidth = 0;
             for (const line of lines) {
                 maxWidth = Math.max(maxWidth, font.getStringWidth(line.replace(/§./g, '')));
             }
 
-            // Same constants as GuiTooltip.
             const lineSpacing = 10;
             const padding = 2;
             const k = FontRenderer.FONT_HEIGHT + (lines.length - 1) * lineSpacing;
 
-            // The outline reaches 2px outside the inner bounds on every side.
             const boxWidth = maxWidth + padding * 2 + 4;
             const boxHeight = k + padding * 2 + 4;
 
@@ -833,11 +645,9 @@ export default class ModLoader {
             if (align === 'right') boxLeft -= boxWidth;
             let boxTop = Number(y) || 0;
 
-            // Keep the whole box on screen, like the built-in tooltips.
             boxLeft = Math.max(0, Math.min(Math.floor(boxLeft), Math.max(0, width - boxWidth)));
             boxTop = Math.max(0, Math.min(Math.floor(boxTop), Math.max(0, height - boxHeight)));
 
-            // Text origin, then the inner bounds GuiTooltip draws around it.
             const l1 = boxLeft + padding + 2;
             const i2 = boxTop + padding + 2;
             const x1 = l1 - padding;
@@ -849,7 +659,6 @@ export default class ModLoader {
             const borderStart = 'rgba(80, 0, 255, 0.50)';
             const borderEnd = 'rgba(40, 0, 127, 0.50)';
 
-            // Gui.drawRect, minus the helper instance.
             const fill = (left, top, right, bottom, style) => {
                 stack.save();
                 stack.fillStyle = style;
@@ -860,7 +669,6 @@ export default class ModLoader {
                 stack.restore();
             };
 
-            // Gui.drawGradientRect, including its gradient axis.
             const gradient = (left, top, right, bottom, from, to) => {
                 const startX = left + (right - left) / 2;
                 const grad = stack.createLinearGradient(startX, top, startX, bottom - top);
@@ -869,20 +677,17 @@ export default class ModLoader {
                 fill(left, top, right, bottom, grad);
             };
 
-            // 1. Outer 1px dark frame, with 1px notched corners
             fill(x1 - 1, y1 - 2, x2 + 1, y1 - 1, bgColor);
             fill(x1 - 1, y2 + 1, x2 + 1, y2 + 2, bgColor);
             fill(x1 - 1, y1 - 1, x2 + 1, y2 + 1, bgColor);
             fill(x1 - 2, y1 - 1, x1 - 1, y2 + 1, bgColor);
             fill(x2 + 1, y1 - 1, x2 + 2, y2 + 1, bgColor);
 
-            // 2. Inner gradient border, also with notched corners
             gradient(x1 - 1, y1, x1, y2, borderStart, borderEnd);
             gradient(x2, y1, x2 + 1, y2, borderStart, borderEnd);
             gradient(x1, y1 - 1, x2, y1, borderStart, borderStart);
             gradient(x1, y2, x2, y2 + 1, borderEnd, borderEnd);
 
-            // 3. Text lines, 10px apart, shadowed, § codes interpreted
             for (let i = 0; i < lines.length; i++) {
                 font.drawString(stack, lines[i], l1, i2 + i * lineSpacing, color, true, false);
             }
@@ -919,12 +724,9 @@ export default class ModLoader {
         };
     }
 
-    /* ---------------------------- mod data ---------------------------- */
+    
 
-    /**
-     * Store JSON data for this mod. Data lives under its own namespace in the
-     * persistent game store, never inside a read-only disk mod folder.
-     */
+    
     async saveJson(key, value, modId = this._activeModId) {
         if (!modId) throw new Error('No mod is active for saveJson().');
         const path = modDataPath(modId, key);
@@ -964,11 +766,7 @@ export default class ModLoader {
             .filter((key) => /^[A-Za-z0-9._-]{1,64}$/.test(key));
     }
 
-    /**
-     * Fire a render hook. Called from WorldRenderer; mods never need this.
-     * A throwing hook is reported and skipped so one bad mod cannot break the
-     * frame for everybody else.
-     */
+    
     emitRenderHook(hook, payload = {}, worldRenderer = null) {
         const hooks = this.renderHooks.get(hook);
         if (!hooks || hooks.length === 0) return;
@@ -989,7 +787,7 @@ export default class ModLoader {
         }
     }
 
-    /* --------------------------- mod bookkeeping ---------------------- */
+    
 
     _trackRegistration(modId) {
         let record = this._modRegistrations.get(modId);
@@ -1007,7 +805,7 @@ export default class ModLoader {
         return record;
     }
 
-    /** Remove every command, hook, overlay provider, tab and service a mod registered. */
+    
     releaseModRegistrations(modId) {
         const record = this._modRegistrations.get(modId);
         this._modRegistrations.delete(modId);
@@ -1031,8 +829,6 @@ export default class ModLoader {
             this._pressedKeybinds.delete(entry.setting);
         }
         for (const [serviceId, service] of record.services) {
-            // Only remove the service this mod registered; another mod may have
-            // taken over the same id since it was added.
             if (this.services.get(serviceId) === service) {
                 this.services.delete(serviceId);
             }
@@ -1042,10 +838,7 @@ export default class ModLoader {
             record.overlayText.size + record.keybinds.size + record.services.size;
     }
 
-    /**
-     * The object injected into every mod sandbox as `ModAPI` (and passed to
-     * ModLoad.onLoad as its third argument is this loader itself).
-     */
+    
     _getModApi(modId) {
         const cached = this._modApis.get(modId);
         if (cached) return cached;
@@ -1095,20 +888,14 @@ export default class ModLoader {
         return api;
     }
 
-    /**
-     * Install a mod from a ZIP File object (user-uploaded).
-     * @param {File} zipFile
-     * @returns {Promise<string>} the installed modId
-     */
+    
     async installModFromZip(zipFile) {
         const JSZip = await this._ensureJSZip();
         const zip = await JSZip.loadAsync(zipFile);
 
-        // --- 1. Read ModData ---
         const modData = await this._readModDataFromZip(zip);
         const modId = modData.ID;
 
-        // --- 2. Validate ---
         if (!modId || typeof modId !== 'string') {
             throw new Error('ModData.js must export a class with a static ID property.');
         }
@@ -1118,10 +905,8 @@ export default class ModLoader {
 
         console.log(`[Patchwork] Installing mod '${modData.NAME}' (${modId}) v${modData.VERSION}`);
 
-        // --- 3. Store mod metadata ---
         await this.filesystem.saveFile(JSON.stringify(modData), `mods/${modId}/ModData.json`);
 
-        // --- 4. Extract files from ZIP ---
         for (const [path, entry] of Object.entries(zip.files)) {
             if (entry.dir) continue;
 
@@ -1129,10 +914,6 @@ export default class ModLoader {
                 const src = await entry.async('string');
                 await this.filesystem.saveFile(src, `mods/${modId}/ModLoad.js`);
             } else if (path.endsWith('.js') && !path.includes('/')) {
-                // Root-level helper modules are used by runtime-only mods
-                // (for example a renderer/service module imported by
-                // ModLoad.js). Preserve them instead of silently dropping
-                // them during persistent ZIP installation.
                 const src = await entry.async('string');
                 const filename = path.split('/').pop();
                 await this.filesystem.saveFile(src, `mods/${modId}/${filename}`);
@@ -1145,7 +926,6 @@ export default class ModLoader {
                 const filename = path.split('/').pop();
                 await this.filesystem.saveFile(src, `mods/${modId}/items/${filename}`);
             } else if (path === 'icon.png' || path === './icon.png') {
-                // Mod icon shown on the Mods screen.
                 const b64 = await entry.async('base64');
                 await this.filesystem.saveBinaryFile(b64, `mods/${modId}/icon.png.b64`);
             } else if (path.startsWith('textures/') && path.endsWith('.png')) {
@@ -1175,7 +955,6 @@ export default class ModLoader {
             }
         }
 
-        // --- 5. Enable & load ---
         this.enabledMods.add(modId);
         this._saveEnabledSet();
         await this._loadMod(modId);
@@ -1183,16 +962,7 @@ export default class ModLoader {
         return modId;
     }
 
-    /**
-     * Install a mod from a selected folder. Accepts the FileList produced by
-     * an `<input type="file" webkitdirectory>` picker (or any array of File
-     * objects with `webkitRelativePath` paths). The folder is copied into the
-     * same persistent layout as a ZIP install, so it loads and unloads like any
-     * other installed mod.
-     *
-     * @param {FileList|File[]} fileList
-     * @returns {Promise<string>} the installed modId
-     */
+    
     async installModFromFolder(fileList) {
         const files = Array.from(fileList || []);
         if (files.length === 0) {
@@ -1218,7 +988,6 @@ export default class ModLoader {
             throw new Error('ModData.js or ModData.json was not found in the selected folder.');
         }
 
-        // Prefer explicit JSON metadata when a folder carries both forms.
         const metadataEntry = metadataEntries.find(({ path }) =>
             path === 'ModData.json' || path.endsWith('/ModData.json')
         ) || metadataEntries[0];
@@ -1280,14 +1049,7 @@ export default class ModLoader {
         return modId;
     }
 
-    /**
-     * Temporarily load a mod from a ZIP file served over HTTP (dev mode).
-     * Triggered by a `?dev-mod=<url>` query parameter. The mod is held in
-     * memory only - nothing is written to the filesystem, so it is gone on
-     * the next page load.
-     * @param {string} url  - e.g. 'http://localhost:8080/mod.zip'
-     * @returns {Promise<string>} the modId
-     */
+    
     async loadDevModFromUrl(url) {
         console.log(`[Patchwork] Loading dev mod from URL: ${url}`);
 
@@ -1300,7 +1062,6 @@ export default class ModLoader {
         const zipData = await response.arrayBuffer();
         const zip = await JSZip.loadAsync(zipData);
 
-        // 1. Read ModData ---
         const modData = await this._readModDataFromZip(zip);
         const modId = modData.ID;
         if (!modId || typeof modId !== 'string') {
@@ -1310,8 +1071,6 @@ export default class ModLoader {
             throw new Error(`A mod with ID '${modId}' is already loaded.`);
         }
 
-        // 2. Extract all files into an in-memory map (mirrors the persisted
-        //    layout from installModFromZip, but never saved to disk).
         const fileMap = new Map();
         fileMap.set(`mods/${modId}/ModData.json`, JSON.stringify(modData));
 
@@ -1326,7 +1085,6 @@ export default class ModLoader {
             }
         }
 
-        // 3. Load using an in-memory-only source ---
         const fs = new MemoryFilesystem(fileMap);
         this._devModFilesystems.set(modId, fs);
 
@@ -1335,37 +1093,19 @@ export default class ModLoader {
         return modId;
     }
 
-    /**
-     * Get the in-memory filesystem backing a temporarily-loaded dev mod, or
-     * null if it is not a dev mod.
-     * @param {string} modId
-     * @returns {MemoryFilesystem|null}
-     */
+    
     getDevModFilesystem(modId) {
         return this._devModFilesystems.get(modId) || null;
     }
 
-    /**
-     * The in-memory filesystem for a server- or dev-supplied mod, or null for
-     * mods that live in IndexedDB / the physical mods folder.
-     */
+    
     getModFilesystem(modId) {
         return this._serverModFilesystems.get(modId)
             || this._devModFilesystems.get(modId)
             || null;
     }
 
-    /**
-     * Register the mods a multiplayer server sent on join.
-     *
-     * The payload mirrors the on-disk layout the loader already understands:
-     * text files are text, images/sounds carry base64 and are stored under
-     * `<name>.b64`. Server mods live only in memory and are tracked separately
-     * so leaving the server can remove everything they registered.
-     *
-     * @param {Array<{id:string,name?:string,author?:string,version?:string,files?:Array}>} serverMods
-     * @returns {Promise<string[]>} ids that were loaded
-     */
+    
     async loadServerMods(serverMods) {
         this.unloadServerMods();
         const generation = this._serverModGeneration;
@@ -1374,25 +1114,16 @@ export default class ModLoader {
             return [];
         }
 
-        // `handleJoinGame` starts the client world asynchronously and that may
-        // rebuild the texture atlas. Waiting here keeps server textures from
-        // being painted into an atlas that is about to be replaced.
         const worldLoad = this.minecraft?.worldLoadPromise;
         if (worldLoad && typeof worldLoad.then === 'function') {
             try {
                 await worldLoad;
             } catch {
-                // A failed world load will surface through its own path; mods
-                // can still be registered for the next join.
             }
         }
 
-        // The player may have disconnected while the world/mod payload was
-        // loading. Everything registered by that attempt must be discarded.
         if (generation !== this._serverModGeneration) return [];
 
-        // The world and its texture atlas are ready now, so the remaining work
-        // really is importing the server's mods.
         this.minecraft?.setLoadingStatus?.("Importing mods...");
 
         const loaded = [];
@@ -1408,11 +1139,8 @@ export default class ModLoader {
             }
             if (this.mods.has(modId)) {
                 console.log(`[Patchwork] Server mod '${modId}' is also installed locally; using server version.`);
-                // Unload the local version before loading the server version
                 this._unregisterModContent(modId);
-                // Mark it as a server mod so it gets cleaned up on disconnect
                 this._serverModIds.add(modId);
-                // Track that this mod had a local version that was replaced
                 this._replacedLocalModIds.add(modId);
             }
 
@@ -1465,15 +1193,8 @@ export default class ModLoader {
         return loaded;
     }
 
-    /**
-     * Remove every mod supplied by the server that was joined last. Called
-     * when the connection closes or the player returns to the main menu, so
-     * server content never leaks into another server or singleplayer.
-     */
+    
     async unloadServerMods() {
-        // Even when nothing has finished loading yet, this invalidates an
-        // in-flight loadServerMods() so it cannot register content after the
-        // player has already left.
         this._serverModGeneration++;
         if (this._serverModIds.size === 0) return;
 
@@ -1485,7 +1206,6 @@ export default class ModLoader {
             this._serverModIds.delete(modId);
             this._replacedLocalModIds.delete(modId);
 
-            // Reload the local version if it was replaced by the server version
             if (hadLocalVersion) {
                 try {
                     const fs = await this._fsForMod(modId);
@@ -1499,19 +1219,13 @@ export default class ModLoader {
         console.log(`[Patchwork] Unloaded ${ids.length} server mod(s)`);
     }
 
-    /**
-     * Load a mod from a folder of pre-extracted files (dev mode).
-     * @param {string} modId
-     * @param {object} fileMap - { relativePath: stringContent | ArrayBuffer }
-     */
+    
     async loadModFromFolder(modId, fileMap) {
         console.log(`[Patchwork] Loading mod from folder: ${modId}`);
 
-        // Store all files
         for (const [path, content] of Object.entries(fileMap)) {
             const fullPath = `mods/${modId}/${path}`;
             if (content instanceof ArrayBuffer || content instanceof Blob) {
-                // Convert to base64 for binary storage
                 const b64 = await this._arrayBufferToBase64(content instanceof Blob ? await content.arrayBuffer() : content);
                 await this.filesystem.saveBinaryFile(b64, fullPath + '.b64');
             } else {
@@ -1524,13 +1238,8 @@ export default class ModLoader {
         await this._loadMod(modId);
     }
 
-    /**
-     * Uninstall a mod and clean up its blocks/textures.
-     * @param {string} modId
-     */
+    
     async uninstallMod(modId) {
-        // Files in the physical mods/ folder belong to the user; deleting
-        // them is a deliberate act outside the game.
         if (await this.isDiskMod(modId)) {
             throw new Error(
                 `'${modId}' is a folder in the mods/ directory and cannot be deleted from inside the game. Remove the folder and restart.`
@@ -1552,11 +1261,7 @@ export default class ModLoader {
         console.log(`[Patchwork] Uninstalled mod '${modId}'`);
     }
 
-    /**
-     * Remove every registration a mod made, without touching its files.
-     * Used by uninstall and by the server-mod lifecycle when a connection
-     * ends.
-     */
+    
     _unregisterModContent(modId, entryOverride = null) {
         const entry = entryOverride || this.mods.get(modId) || null;
         const atlas = this.minecraft?.worldRenderer?.textureAtlas;
@@ -1598,12 +1303,8 @@ export default class ModLoader {
         return entry;
     }
 
-    /**
-     * Toggle a mod on/off without uninstalling.
-     */
+    
     async toggleMod(modId, enabled) {
-        // An explicit toggle overrides the session-only switch made when
-        // joining a server that refuses mods.
         this._temporaryDisabledModIds.delete(modId);
         const loadedEntry = this.mods.get(modId);
         if (loadedEntry) this._temporaryDisabledModIds.delete(loadedEntry.id);
@@ -1613,33 +1314,20 @@ export default class ModLoader {
             this._disabledMods.delete(modId);
             const fs = await this._fsForMod(modId);
             if (this.mods.has(modId)) {
-                // The mod stayed registered while disabled, so only its live
-                // registrations (commands, tabs, services, hooks) need to
-                // come back - not its blocks, items, recipes or textures.
                 await this._reactivateMod(modId, fs);
             } else {
                 await this._loadMod(modId, fs);
             }
         } else {
             this.enabledMods.delete(modId);
-            // Commands, hooks and services are live JS, so they must go away
-            // with the switch; blocks/textures stay registered like they always did.
             this.releaseModRegistrations(modId);
-            // Remember the refusal, otherwise a wiki-installed folder would be
-            // switched straight back on at the next launch.
             this._disabledMods.add(modId);
         }
         this._saveEnabledSet();
         this._saveDisabledSet();
     }
 
-    /**
-     * Switch every locally loaded mod off for this session so the player can
-     * join a server that refuses mods. Unlike toggleMod this never touches the
-     * saved enabled set, so reloading the game turns the mods back on.
-     *
-     * @returns {number} how many mods were switched off
-     */
+    
     temporarilyDisableMods() {
         let count = 0;
         for (const [modId, entry] of this.mods) {
@@ -1655,10 +1343,7 @@ export default class ModLoader {
         return count;
     }
 
-    /**
-     * Restore the runtime registrations a disable removed, without reloading
-     * the parts that stayed in place (blocks, items, recipes, textures).
-     */
+    
     async _reactivateMod(modId, fs = this.filesystem) {
         const entry = this.mods.get(modId);
         if (!entry) {
@@ -1690,7 +1375,6 @@ export default class ModLoader {
             console.log(`[Patchwork] Re-enabled mod '${entry.name}'`);
             return entry;
         } catch (err) {
-            // Do not leave half of the mod's live content registered.
             this.releaseModRegistrations(modId);
             throw err;
         } finally {
@@ -1698,9 +1382,7 @@ export default class ModLoader {
         }
     }
 
-    /**
-     * Return list of mod IDs that have a ModData.json stored.
-     */
+    
     async getInstalledModIds() {
         const modIdSet = new Set();
 
@@ -1710,7 +1392,6 @@ export default class ModLoader {
             if (match) modIdSet.add(match[1]);
         }
 
-        // Mods dropped into the physical mods/ folder (Electron only).
         const disk = this._getDiskFilesystem();
         if (disk) {
             for (const modId of await disk.getModIds()) {
@@ -1721,12 +1402,7 @@ export default class ModLoader {
         return [...modIdSet];
     }
 
-    /**
-     * The filesystem a mod should be loaded from, or null when mods/ is not
-     * reachable (i.e. the web build). A folder on disk wins over a ZIP of the
-     * same name so that editing the folder takes effect immediately.
-     * @param {string} modId
-     */
+    
     async _fsForMod(modId) {
         const disk = this._getDiskFilesystem();
         if (!disk) return this.filesystem;
@@ -1734,39 +1410,25 @@ export default class ModLoader {
         return diskIds.includes(modId) ? disk : this.filesystem;
     }
 
-    /**
-     * True when the mod is a folder in the physical mods/ directory rather
-     * than a ZIP installed into IndexedDB.
-     * @param {string} modId
-     */
+    
     async isDiskMod(modId) {
         const disk = this._getDiskFilesystem();
         if (!disk) return false;
         return (await disk.getModIds()).includes(modId);
     }
 
-    /**
-     * Re-scan the physical mods/ folder. Use after adding or removing files
-     * there while the game is running.
-     */
+    
     async refreshDiskMods() {
         const disk = this._getDiskFilesystem();
         if (disk) await disk.refresh();
     }
 
-    /**
-     * Get a loaded mod entry.
-     * @param {string} modId
-     * @returns {ModEntry|undefined}
-     */
+    
     getMod(modId) {
         return this.mods.get(modId);
     }
 
-    /**
-     * Resolve a namespaced texture key '<modId>:<name>' to texture atlas data.
-     * Returns { modId, textureName } or null.
-     */
+    
     resolveTexture(namespacedKey) {
         if (!namespacedKey || !namespacedKey.includes(':')) return null;
         const colonIndex = namespacedKey.indexOf(':');
@@ -1780,13 +1442,7 @@ export default class ModLoader {
         return { modId, textureName };
     }
 
-    /**
-     * Load a mod's texture as an HTMLImageElement from IndexedDB.
-     * @param {string} modId
-     * @param {string} textureName  e.g. 'unbreakable_block'
-     * @param {object} fs  - filesystem to read from (defaults to persisted store)
-     * @returns {Promise<HTMLImageElement>}
-     */
+    
     async loadModTexture(modId, textureName, fs = null) {
         fs = fs || this.getModFilesystem(modId) || this.filesystem;
         const b64Path = `mods/${modId}/textures/${textureName}.png.b64`;
@@ -1804,13 +1460,7 @@ export default class ModLoader {
         });
     }
 
-    /**
-     * Load a mod's root `icon.png` as a data URL for the Mods screen. Returns
-     * null when the mod has no icon or it cannot be read.
-     * @param {string} modId
-     * @param {object} fs - filesystem to read from (defaults to the mod's own)
-     * @returns {Promise<string|null>}
-     */
+    
     async loadModIcon(modId, fs = null) {
         fs = fs || this.getModFilesystem(modId) || this.filesystem;
         try {
@@ -1823,18 +1473,9 @@ export default class ModLoader {
         }
     }
 
-    /* ------------------------------------------------------------------
-     *  Integrated server support
-     * ------------------------------------------------------------------ */
+    
 
-    /**
-     * The mods list advertised to a server during login. A mod switched off at
-     * runtime stays in `mods` (its blocks and textures keep working), so the
-     * handshake must filter on `enabledMods`; otherwise a server with mods
-     * disabled kicks the player for a mod they just turned off.
-     *
-     * @returns {Array<{id:string,name:string,version:string}>}
-     */
+    
     getHandshakeMods() {
         const mods = [];
         for (const [modId, entry] of this.mods) {
@@ -1845,27 +1486,12 @@ export default class ModLoader {
         return mods;
     }
 
-    /**
-     * Snapshot every locally installed mod in the same shape the server's
-     * servermods/ directory uses.
-     *
-     * Singleplayer runs the world in a worker, so the integrated server cannot
-     * read this ModDB store or the Electron mods/ folder. Passing the files
-     * over lets the server register the mods' commands and authoritative
-     * hooks (block protection, etc.) for the same mods the player sees.
-     * Mods supplied by a remote server are excluded; they belong to that
-     * server, not to the local world.
-     *
-     * @returns {Promise<Array<{id:string,name:string,author:string,version:string,files:Array}>>}
-     */
+    
     async getServerModPayload() {
         const mods = [];
 
         for (const [modId, entry] of this.mods) {
             if (this._serverModIds.has(modId)) continue;
-            // A disabled mod stays registered for its blocks/textures, but it
-            // is not part of what the player runs, so a fresh world must not
-            // load it server-side either.
             if (!this.enabledMods.has(modId) && !this.enabledMods.has(entry.id)) continue;
             if (this._temporaryDisabledModIds.has(modId) || this._temporaryDisabledModIds.has(entry.id)) continue;
 
@@ -1926,24 +1552,16 @@ export default class ModLoader {
         return mods;
     }
 
-    /* ------------------------------------------------------------------
-     *  Internal - load a single mod from IndexedDB
-     * ------------------------------------------------------------------ */
+    
 
     async _loadMod(modId, fs = this.filesystem) {
-        // Attribute anything registered while this mod loads (and everything
-        // ModLoad.onLoad does) to it, so it can be removed again on disable.
         const previousActiveMod = this._activeModId;
         this._activeModId = modId;
         try {
-            // A reload would otherwise leave the previous run's hooks behind.
             this.releaseModRegistrations(modId);
             const entry = await this._loadModInner(modId, fs);
             return entry;
         } catch (err) {
-            // Content registered before the failure must not survive as a
-            // half-loaded mod (this matters for server mods, which are swapped
-            // on every join).
             this._unregisterModContent(modId);
             throw err;
         } finally {
@@ -1952,7 +1570,6 @@ export default class ModLoader {
     }
 
     async _loadModInner(modId, fs = this.filesystem) {
-        // 1. Read metadata
         const raw = await fs.loadFile(`mods/${modId}/ModData.json`);
         if (!raw) throw new Error(`ModData.json not found for mod '${modId}'`);
         const modData = JSON.parse(raw);
@@ -1977,11 +1594,8 @@ export default class ModLoader {
             smeltingRecipes: []
         };
 
-        // Store the entry before registering anything so a partial failure can
-        // still be cleaned up through _unregisterModContent().
         this.mods.set(modId, entry);
 
-        // 2. Discover files
         const allFiles = await fs.listDir(`mods/${modId}/`);
         const modPrefix = `mods/${modId}/`;
         const relFiles = allFiles.map(f => f.startsWith(modPrefix) ? f.slice(modPrefix.length) : f);
@@ -2026,43 +1640,31 @@ export default class ModLoader {
             .filter(f => f.startsWith('sounds/') && f.endsWith('.ogg.b64'))
             .map(f => f.replace(/^sounds\//, '').replace(/\.ogg\.b64$/, ''));
 
-        // 3. Register mod textures into the TextureAtlas
         await this._registerModTextures(modId, entry, fs);
 
-        // 4. Register GUI textures into minecraft.resources
         await this._registerModGuiTextures(modId, entry, fs);
 
-        // 5. Load and register GUI classes (before blocks so blocks can reference them)
         await this._registerModGuis(modId, entry, guiFiles, fs);
 
-        // 5b. Load and register chat commands from commands/
         await this._registerModCommands(modId, entry, commandFiles, fs);
 
-        // 5c. Load and register custom tabs from tabs/
         await this._registerModTabs(modId, entry, tabFiles, fs);
 
-        // 6. Load and register block classes (may reference GUI classes)
         await this._registerModBlocks(modId, entry, blockFiles, fs);
 
-        // 7. Load and register item classes
         await this._registerModItems(modId, entry, itemFiles, fs);
 
-        // 8. Register crafting recipes
         await this._registerModCrafting(modId, entry, craftingFiles, fs);
 
-        // 9. Register smelting recipes
         await this._registerModSmelting(modId, entry, smeltingFiles, fs);
 
-        // 10. Call ModLoad.onLoad if present
         await this._callModLoad(modId, entry, fs);
 
         console.log(`[Patchwork] Loaded mod '${entry.name}' - ${entry.blockIds.length} block(s), ${entry.itemIds.length} item(s), ${entry.textureNames.length} texture(s), ${entry.soundNames.length} sound(s)`);
         return entry;
     }
 
-    /* ------------------------------------------------------------------
-     *  Internal - register mod textures into TextureAtlas
-     * ------------------------------------------------------------------ */
+    
 
     async _registerModTextures(modId, entry, fs = this.filesystem) {
         const atlas = this.minecraft.worldRenderer?.textureAtlas;
@@ -2082,9 +1684,7 @@ export default class ModLoader {
         }
     }
 
-    /* ------------------------------------------------------------------
-     *  Internal - load block JS files, eval classes, register with BlockRegistry
-     * ------------------------------------------------------------------ */
+    
 
     async _registerModBlocks(modId, entry, blockFiles, fs = this.filesystem) {
         const BlockClass = await this._getBlockClass();
@@ -2095,7 +1695,6 @@ export default class ModLoader {
 
         const EnumCreativeInventoryTabClass = await this._getEnumCreativeInventoryTab();
 
-        // Build deps: base block deps + any GUI classes from this mod
         const blockDeps = { Block: BlockClass, BlockRegistry, BoundingBox: BoundingBoxClass, EnumBlockFace: EnumBlockFaceClass, EnumCreativeInventoryTab: EnumCreativeInventoryTabClass, THREE, Sound, AuthLib, ModAPI: this._getModApi(modId) };
         for (const [className, cls] of entry.guiClasses) {
             blockDeps[className] = cls;
@@ -2122,22 +1721,17 @@ export default class ModLoader {
                 if (registered) {
                     registered.mod = entry.name;
 
-                    // Set inventory tab - check if block specifies one, otherwise default to MATERIALS
-                    // First check class property, then instance property (in case it's set in constructor)
                     const tabValue = blockClass.inventoryTab || (blockClass.prototype && blockClass.prototype.inventoryTab);
 
                     if (tabValue) {
                         if (typeof tabValue === 'object') {
-                            // It's already a tab object (EnumCreativeInventoryTab)
                             registered.inventoryTab = tabValue;
                         } else if (typeof tabValue === 'string') {
-                            // It's a tab name - look up custom tab
                             const customTab = this.getCustomTabByName(tabValue);
                             if (customTab) {
                                 registered.inventoryTab = { id: customTab.id, name: customTab.name };
                                 console.log(`[Patchwork] Assigned block '${namespacedId}' to custom tab '${tabValue}' (ID: ${customTab.id})`);
                             } else {
-                                // Tab not found, default to MATERIALS
                                 registered.inventoryTab = EnumCreativeInventoryTab.MATERIALS;
                                 console.warn(`[Patchwork] Custom tab '${tabValue}' not found for block '${namespacedId}', defaulting to MATERIALS`);
                             }
@@ -2158,9 +1752,7 @@ export default class ModLoader {
         }
     }
 
-    /* ------------------------------------------------------------------
-     *  Internal - load item JS files, eval classes, register with BlockRegistry
-     * ------------------------------------------------------------------ */
+    
 
     async _registerModItems(modId, entry, itemFiles, fs = this.filesystem) {
         const itemClasses = await this._getItemClasses(modId);
@@ -2186,18 +1778,14 @@ export default class ModLoader {
                 if (registered) {
                     registered.mod = entry.name;
 
-                    // Set inventory tab - check if item specifies one, otherwise default to MATERIALS
                     if (itemClass.inventoryTab) {
                         if (typeof itemClass.inventoryTab === 'object') {
-                            // It's already a tab object (EnumCreativeInventoryTab)
                             registered.inventoryTab = itemClass.inventoryTab;
                         } else if (typeof itemClass.inventoryTab === 'string') {
-                            // It's a tab name - look up custom tab
                             const customTab = this.getCustomTabByName(itemClass.inventoryTab);
                             if (customTab) {
                                 registered.inventoryTab = { id: customTab.id, name: customTab.name };
                             } else {
-                                // Tab not found, default to MATERIALS
                                 registered.inventoryTab = EnumCreativeInventoryTab.MATERIALS;
                                 console.warn(`[Patchwork] Custom tab '${itemClass.inventoryTab}' not found for item '${namespacedId}', defaulting to MATERIALS`);
                             }
@@ -2218,9 +1806,7 @@ export default class ModLoader {
         }
     }
 
-    /* ------------------------------------------------------------------
-     *  Internal - register crafting recipes
-     * ------------------------------------------------------------------ */
+    
 
     async _registerModCrafting(modId, entry, craftingFiles, fs = this.filesystem) {
         for (const filename of craftingFiles) {
@@ -2239,7 +1825,6 @@ export default class ModLoader {
                 if (!match) continue;
                 const className = match[1];
 
-                // Extract block name: BlockOakTableCrafting -> OakTable
                 let blockName = className;
                 if (blockName.startsWith('Block')) blockName = blockName.substring(5);
                 if (blockName.endsWith('Crafting')) blockName = blockName.slice(0, -8);
@@ -2306,9 +1891,7 @@ export default class ModLoader {
         }
     }
 
-    /* ------------------------------------------------------------------
-     *  Internal - register smelting recipes
-     * ------------------------------------------------------------------ */
+    
 
     async _registerModSmelting(modId, entry, smeltingFiles, fs = this.filesystem) {
         try {
@@ -2330,7 +1913,6 @@ export default class ModLoader {
                     if (!match) continue;
                     const className = match[1];
 
-                    // Extract block name: BlockOakTableSmelting -> OakTable
                     let blockName = className;
                     if (blockName.startsWith('Block')) blockName = blockName.substring(5);
                     if (blockName.endsWith('Smelting')) blockName = blockName.slice(0, -8);
@@ -2381,9 +1963,7 @@ export default class ModLoader {
         }
     }
 
-    /* ------------------------------------------------------------------
-     *  Internal - register GUI textures into minecraft.resources
-     * ------------------------------------------------------------------ */
+    
 
     async _registerModGuiTextures(modId, entry, fs = this.filesystem) {
         for (const texName of entry.guiTextureNames) {
@@ -2410,9 +1990,7 @@ export default class ModLoader {
         }
     }
 
-    /* ------------------------------------------------------------------
-     *  Internal - dynamically import GUI base classes for mod sandboxing
-     * ------------------------------------------------------------------ */
+    
 
     async _getGuiDeps(modId = null) {
         try {
@@ -2455,9 +2033,7 @@ export default class ModLoader {
         }
     }
 
-    /* ------------------------------------------------------------------
-     *  Internal - load GUI JS files and store class constructors
-     * ------------------------------------------------------------------ */
+    
 
     async _registerModGuis(modId, entry, guiFiles, fs = this.filesystem) {
         const guiDeps = await this._getGuiDeps(modId);
@@ -2479,22 +2055,9 @@ export default class ModLoader {
         }
     }
 
-    /* ------------------------------------------------------------------
-     *  Internal - load commands/*.js and register them in CommandRegistry
-     * ------------------------------------------------------------------ */
+    
 
-    /**
-     * A commands/CommandSpawnPet.js file is a normal Command subclass:
-     *
-     *   export default class CommandSpawnPet extends Command {
-     *       constructor() { super("spawn_pet", "<type>", "Spawn a pet") }
-     *       execute(minecraft, args) { ... return true; }
-     *   }
-     *
-     * The instance is registered in the shared CommandRegistry, so it works
-     * both in singleplayer and on the server (which shares the registry and
-     * hands each command a per-player `minecraft` adapter).
-     */
+    
     async _registerModCommands(modId, entry, commandFiles, fs = this.filesystem) {
         if (commandFiles.length === 0) return;
 
@@ -2534,20 +2097,9 @@ export default class ModLoader {
         }
     }
 
-    /* ------------------------------------------------------------------
-     *  Internal - load tabs/*.js and register custom creative tabs
-     * ------------------------------------------------------------------ */
+    
 
-    /**
-     * A tabs/TabMyItems.js file should export a class with static properties:
-     *
-     *   export default class TabMyItems {
-     *       static NAME = "My Items";
-     *       static ICON_BLOCK_ID = "minecraft:stone";  // or "modId:block_name"
-     *   }
-     *
-     * The tab will be added to the creative inventory with the specified icon.
-     */
+    
     async _registerModTabs(modId, entry, tabFiles, fs = this.filesystem) {
         if (tabFiles.length === 0) return;
 
@@ -2581,9 +2133,7 @@ export default class ModLoader {
         }
     }
 
-    /* ------------------------------------------------------------------
-     *  Internal - call ModLoad.onLoad if present
-     * ------------------------------------------------------------------ */
+    
 
     async _callModLoad(modId, entry, fs = this.filesystem) {
         try {
@@ -2625,23 +2175,9 @@ export default class ModLoader {
         }
     }
 
-    /* ------------------------------------------------------------------
-     *  Internal - eval a class from source string with provided dependencies
-     * ------------------------------------------------------------------ */
+    
 
-    /**
-     * Evaluate a class source string and return the constructor.
-     * Strips all imports and provides the named classes from the deps map.
-     * Relative imports that resolve to other files in the same mod are loaded
-     * and evaluated automatically, and their exports are injected into deps.
-     *
-     * @param {string} source  - JavaScript source with `export default class`
-     * @param {Object<string, Function>} deps  - map of variable names to actual classes
-     * @param {string|null} modId  - id of the mod the file belongs to (for same-mod imports)
-     * @param {string|null} filePath  - mod-relative path of the file (e.g. 'blocks/BlockFoo.js')
-     * @param {object} fs  - filesystem to read from
-     * @returns {Function|null}
-     */
+    
     async _evalClass(source, deps, modId = null, filePath = null, fs = this.filesystem) {
         const localDeps = { ...deps };
 
@@ -2649,16 +2185,13 @@ export default class ModLoader {
             await this._resolveModImports(source, localDeps, modId, filePath, new Set([filePath]), fs);
         }
 
-        // Strip all imports
         let transformed = source.replace(
             /import\s+.*?from\s+["'][^"']*["']\s*;?/g,
             ''
         );
 
-        // Remove `export default` so we can capture the class
         transformed = transformed.replace(/export\s+default\s+class\s+(\w+)/, 'class $1');
 
-        // Build variable assignments from provided classes
         const assignments = Object.keys(localDeps).map(name =>
             `const ${name} = __deps__["${name}"];`
         ).join('\n');
@@ -2681,25 +2214,15 @@ export default class ModLoader {
         }
     }
 
-    /**
-     * Extract the class name from 'export default class BlockFoo ...'
-     */
+    
     _extractClassName(source) {
         const match = source.match(/export\s+default\s+class\s+(\w+)/);
         return match ? match[1] : null;
     }
 
-    /* ------------------------------------------------------------------
-     *  Internal - same-mod imports
-     * ------------------------------------------------------------------ */
+    
 
-    /**
-     * Parse import statements from a source string.
-     * Handles default, named and namespace imports.
-     *
-     * @param {string} source
-     * @returns {Array<{specifier: string, defaultName: string|null, namedNames: string[], namespace: string|null}>}
-     */
+    
     _parseImports(source) {
         const imports = [];
         const re = /import\s+([\s\S]*?)\s+from\s+["']([^"']+)["']\s*;?/g;
@@ -2733,15 +2256,7 @@ export default class ModLoader {
         return imports;
     }
 
-    /**
-     * Resolve a relative import specifier against the importing file's
-     * mod-relative path. Returns a normalized mod-relative path, or null if
-     * the specifier would escape the mod directory (game code, provided via deps).
-     *
-     * @param {string} fromPath  - mod-relative path of the importing file
-     * @param {string} specifier - relative import path from the source
-     * @returns {string|null}
-     */
+    
     _resolveImportPath(fromPath, specifier) {
         const base = fromPath.split('/');
         base.pop();
@@ -2760,24 +2275,11 @@ export default class ModLoader {
         return base.join('/');
     }
 
-    /**
-     * Resolve all same-mod imports in a source string, loading and evaluating
-     * the imported mod files and injecting their exports into the deps map.
-     * Imports that point outside the mod (game classes) are left for deps.
-     *
-     * @param {string} source
-     * @param {Object<string, Function>} deps  - mutated in place
-     * @param {string} modId
-     * @param {string} filePath  - mod-relative path of the importing file
-     * @param {Set<string>} stack  - files currently being processed (cycle detection)
-     * @param {object} fs  - filesystem to read from
-     */
+    
     async _resolveModImports(source, deps, modId, filePath, stack, fs = this.filesystem) {
         for (const imp of this._parseImports(source)) {
             if (!imp.specifier) continue;
 
-            // Bare specifiers (e.g. `import Explosive from "Explosive.js"`) are
-            // treated as files in the importing file's own directory.
             const specifier = imp.specifier.startsWith('.')
                 ? imp.specifier
                 : `./${imp.specifier}`;
@@ -2799,17 +2301,7 @@ export default class ModLoader {
         }
     }
 
-    /**
-     * Load and evaluate a module file from the same mod, resolving its own
-     * imports recursively. Results are cached per mod file.
-     *
-     * @param {string} modId
-     * @param {string} filePath  - mod-relative path of the module file
-     * @param {Object<string, Function>} deps
-     * @param {Set<string>} stack
-     * @param {object} fs  - filesystem to read from
-     * @returns {Promise<Object|null>}  exports object: { __default, ...named }
-     */
+    
     async _loadModModule(modId, filePath, deps, stack, fs = this.filesystem) {
         const cacheKey = `${modId}/${filePath}`;
         if (this._modModuleCache.has(cacheKey)) return this._modModuleCache.get(cacheKey);
@@ -2831,17 +2323,7 @@ export default class ModLoader {
         return result;
     }
 
-    /**
-     * Evaluate a mod module file (with exports) in a sandbox with deps.
-     *
-     * @param {string} source
-     * @param {Object<string, Function>} deps
-     * @param {string} modId
-     * @param {string} filePath
-     * @param {Set<string>} stack
-     * @param {object} fs  - filesystem to read from
-     * @returns {Promise<Object|null>}  exports object: { __default, ...named }
-     */
+    
     async _evalModModule(source, deps, modId, filePath, stack, fs = this.filesystem) {
         const modDeps = { ...deps };
         await this._resolveModImports(source, modDeps, modId, filePath, stack, fs);
@@ -2873,13 +2355,7 @@ export default class ModLoader {
         }
     }
 
-    /**
-     * Transform a module source so it can run in a plain function scope,
-     * capturing default and named exports.
-     *
-     * @param {string} source
-     * @returns {{transformed: string, defaultName: string|null, namedNames: string[]}}
-     */
+    
     _transformModuleExports(source) {
         let transformed = source.replace(
             /import\s+[\s\S]*?from\s+["'][^"']*["']\s*;?/g,
@@ -2919,9 +2395,7 @@ export default class ModLoader {
         return { transformed, defaultName, namedNames };
     }
 
-    /* ------------------------------------------------------------------
-     *  Internal - read ModData from ZIP
-     * ------------------------------------------------------------------ */
+    
 
     async _readModDataFromZip(zip) {
         let modDataSrc = null;
@@ -2940,19 +2414,13 @@ export default class ModLoader {
         return this._parseModDataSource(modDataSrc);
     }
 
-    /**
-     * Parse ModData.js source and extract static properties. NAME, ID, AUTHOR
-     * and VERSION are required by every mod; DESCRIPTION and LICENSE are
-     * optional and are returned as empty strings when undeclared.
-     */
+    
     _parseModDataSource(source) {
         let cleaned = source.replace(/export\s+default\s+class\s+\w+\s*\{/, '{');
         cleaned = cleaned.replace(/import\s+.*?from\s+["'][^"']*["']\s*;?/g, '');
         cleaned = cleaned.replace(/\}\s*;?\s*$/, '}');
         cleaned = cleaned.replace(/static\s+(\w+)\s*=/g, '$1 =');
 
-        // Optional fields are read defensively: referencing an undeclared
-        // identifier would throw and lose NAME/ID for the whole mod.
         const wrapped = `return (function() { ${cleaned} return { NAME, ID, AUTHOR, VERSION,`
             + ` DESCRIPTION: typeof DESCRIPTION === 'undefined' ? '' : DESCRIPTION,`
             + ` LICENSE: typeof LICENSE === 'undefined' ? '' : LICENSE }; })()`;
@@ -2964,14 +2432,9 @@ export default class ModLoader {
         }
     }
 
-    /* ------------------------------------------------------------------
-     *  Internal - utilities
-     * ------------------------------------------------------------------ */
+    
 
-    /**
-     * Convert a Block class name to a snake_case block ID.
-     * BlockUnbreakableBlock -> UnbreakableBlock -> unbreakable_block
-     */
+    
     static classToBlockId(className) {
         let name = className;
         if (name.startsWith('Block')) {
@@ -2980,10 +2443,7 @@ export default class ModLoader {
         return name.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
     }
 
-    /**
-     * Convert an Item class name to a snake_case item ID.
-     * ItemTestItem -> TestItem -> test_item
-     */
+    
     static classToItemId(className) {
         let name = className;
         if (name.startsWith('Item')) {
@@ -2992,9 +2452,7 @@ export default class ModLoader {
         return name.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
     }
 
-    /**
-     * Dynamically import the Block base class.
-     */
+    
     async _getCommandBaseClass() {
         if (!this._commandBaseClass) {
             const mod = await import('./command/Command.js');
@@ -3068,9 +2526,7 @@ export default class ModLoader {
         }
     }
 
-    /**
-     * Dynamically import item base classes for mod sandboxing.
-     */
+    
     async _getItemClasses(modId = null) {
         const BlockClass = await this._getBlockClass();
         const BoundingBoxClass = await this._getBoundingBox();
@@ -3101,9 +2557,7 @@ export default class ModLoader {
         }
     }
 
-    /**
-     * Ensure JSZip is loaded.
-     */
+    
     async _ensureJSZip() {
         return loadJSZip();
     }
@@ -3117,13 +2571,7 @@ export default class ModLoader {
         return btoa(binary);
     }
 
-    /* ------------------------------------------------------------------
-     *  Internal - persistence of enabled set
-     * ------------------------------------------------------------------ */
-/**
-     * The read-only view of the physical `mods/` folder, or null when running
-     * outside Electron (the preload bridge is simply absent in the browser).
-     */
+    
     _getDiskFilesystem() {
         if (!BridgeFilesystem.isAvailable()) return null;
         if (!this._diskFilesystem) {
@@ -3135,11 +2583,7 @@ export default class ModLoader {
         return this._diskFilesystem;
     }
 
-    /**
-     * Load every enabled mod - both ZIPs installed into IndexedDB and folders
-     * in the physical mods/ directory - and register their content.
-     * Call this once during game startup, after BlockRegistry.create().
-     */
+    
     async loadAllMods() {
         await this._loadEnabledSet();
 
@@ -3162,14 +2606,9 @@ export default class ModLoader {
         console.log(`[Patchwork] ${this.mods.size} mod(s) loaded successfully`);
     }
 
-    /**
-     * Get metadata for all installed mods, including the optional description,
-     * license and the root icon.png (as a data URL) the Mods screen renders.
-     * @returns {Promise<Array<{id:string, name:string, author:string, version:string,
-     *   description:string, license:string, icon:string|null, enabled:boolean}>>}
-     */
+    
     async getInstalledMods() {
-        await this._loadEnabledSet(); // Ensure set is populated before querying status
+        await this._loadEnabledSet(); 
         const modIds = await this.getInstalledModIds();
         const result = [];
         for (const modId of modIds) {
@@ -3191,8 +2630,6 @@ export default class ModLoader {
                     enabled: (this.enabledMods.has(actualId) || this.enabledMods.has(modId))
                         && !this._temporaryDisabledModIds.has(modId)
                         && !this._temporaryDisabledModIds.has(actualId),
-                    // Folder in the physical mods/ directory rather than an
-                    // installed ZIP; the GUI uses this to hide Delete.
                     disk: fs !== this.filesystem
                 });
             } catch (e) {
@@ -3202,9 +2639,7 @@ export default class ModLoader {
         return result;
     }
 
-    /* ------------------------------------------------------------------
-     *  Internal - persistence of enabled set
-     * ------------------------------------------------------------------ */
+    
 
     async _loadEnabledSet() {
         try {
@@ -3215,16 +2650,11 @@ export default class ModLoader {
                 const arr = JSON.parse(stored);
                 this.enabledMods = new Set(arr);
             } else {
-                // First boot ever: treat all installed mods as enabled by default
                 const modIds = await this.getInstalledModIds();
                 this.enabledMods = new Set(modIds);
                 this._saveEnabledSet();
             }
 
-            // A mod installed from the wiki lands in mods/ as a folder, and
-            // this enabled set was written before it existed. Enable it
-            // unless the user has since switched it off - without this a
-            // deep-link install would need a manual enable every time.
             const disk = this._getDiskFilesystem();
             if (disk) {
                 for (const modId of await disk.getModIds()) {
@@ -3267,14 +2697,9 @@ export default class ModLoader {
     }
 }
 
-/**
- * In-memory filesystem backing temporarily-loaded dev mods. Implements the
- * subset of FileSystem used by the mod loading pipeline (loadFile,
- * loadBinaryFile, listDir) and never persists anything.
- */
 class MemoryFilesystem {
     constructor(fileMap) {
-        this.fileMap = fileMap; // Map<path, string | Uint8Array>
+        this.fileMap = fileMap; 
     }
 
     async loadFile(filename) {
@@ -3305,18 +2730,3 @@ class MemoryFilesystem {
     }
 }
 
-/**
- * @typedef {Object} ModEntry
- * @property {string} id
- * @property {string} name
- * @property {string} author
- * @property {string} version
- * @property {string[]} blockIds
- * @property {Map<string, Function>} blockClasses
- * @property {string[]} itemIds
- * @property {Map<string, Function>} itemClasses
- * @property {Map<string, Function>} guiClasses
- * @property {string[]} guiTextureNames
- * @property {string[]} textureNames
- * @property {string[]} soundNames
- */

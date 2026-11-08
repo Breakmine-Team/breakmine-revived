@@ -12,126 +12,56 @@ import {
     OFF_GRID_WORLD_HEIGHT
 } from "../../util/OffGridConstants.js";
 
-/**
- * Summoned block field: a sparse set of server-owned blocks rendered on the
- * client that behave like real ones without touching chunk storage.
- *
- * The field is bound to a World as `world.offGridField`. World reads
- * (getBlockAt / getBlockDataAt / getTotalLightAt) and local writes
- * (setBlockAt / setBlockDataAt) consult the field first for covered
- * positions, which is what makes summoned blocks work with every system that
- * already goes through the World API. Server-authoritative chunk updates
- * (setBlockAtNoEvents) deliberately bypass the field: those describe real
- * terrain, not summoned cells, which arrive through the off-grid packets.
- *
- *   - collision        (World.getCollisionBoxes -> offGridField.addCollisionBoxes)
- *   - block raytrace   (World.rayTraceBlocks -> offGridField.rayTrace) ->
- *     breaking, targeting and the placement preview ghost all hit summoned
- *     blocks
- *
- * The group carries a pose (rotation + fractional offset, see applyTransform).
- * Once posed, the cells can no longer be found by looking at their integer
- * keys in world space, so every interaction seam is pose aware: collision
- * boxes are contributed for the query region as posed boxes, the raytrace
- * runs in local space through the inverse pose, and the rebuild/preview
- * proxies answer in local space while sampling the real world underneath the
- * pose.
- *   - server-authoritative state (ServerOffGridStatePacket / UpdatePacket via
- *     OffGridClientSync), so every player sees the same summoned structure
- *     and interactive edits are validated once by the server
- *
- * Rendering mimics ChunkSection.rebuild(): cells are batched per 16^3 region,
- * tessellated through the real BlockRenderer (so AO, face culling, multipart
- * models, liquids and custom renderers behave exactly like placed blocks) and
- * drawn as one opaque + one translucent mesh per region. Editing one cell
- * only re-tessellates the regions it and its neighbours live in.
- */
 export default class OffGridBlockField {
 
-    /** Safety caps for the debug command: per axis, and per summon. */
+    
     static MAX_DIM = OFF_GRID_MAX_DIM;
     static MAX_CELLS = OFF_GRID_MAX_CELLS;
 
-    /** Lattice step of the rotated-box collision approximation (world units). */
+    
     static COLLISION_STEP = 1 / 6;
 
-    /** Fine lattice step tried first when approximating rotated boxes. */
+    
     static COLLISION_STEP_FINE = 1 / 12;
 
-    /** Boxes above which the fine lattice falls back to the coarse grid. */
+    
     static COLLISION_BOX_CAP = 1200;
 
     constructor(minecraft) {
         this.minecraft = minecraft;
         this.world = null;
 
-        // "x,y,z" -> { x, y, z, typeId, data }. Only non-air cells exist, so
-        // breaking a summoned block simply deletes its entry and the read
-        // falls through to the real world underneath.
         this.cells = new Map();
 
-        // "rx,ry,rz" (region origin, multiples of 16) -> { group, meshes }
         this.regions = new Map();
 
-        // Parent of every region group. Attached to the world renderer's
-        // scene; WorldRenderer.reset() drops it on a world switch, and the
-        // next bind()/rebuild() re-attaches (stale meshes are cleared when
-        // the command notices the world changed).
         this.group = new THREE.Object3D();
         this.group.updateMatrix();
         this.group.matrixAutoUpdate = false;
 
-        // Group transform (see applyTransform): accumulated rotation in
-        // degrees per axis, and the fractional part of the move offset in
-        // world units. Whole-block movement is re-anchored into `cells`
-        // instead, so collision and editing keep following the grid. The
-        // pose itself is honoured by the interaction seams below        // (addCollisionBoxes / rayTrace / createLocalWorld), so collision,
-        // breaking and the placement ghost track the posed structure.
         this.rotation = { x: 0, y: 0, z: 0 };
         this.offset = { x: 0, y: 0, z: 0 };
 
-        // Pose collision approximation cache (per rigid pose of one box, see
-        // posedRotatedBoxes). Invalidated by applyTransform / clear.
         this.posedBoxCache = new Map();
         this._poseContext = null;
 
-        // Rotation anchor, frozen the first time a pose is needed and kept
-        // while cells are edited - see getPivot.
         this.pivot = null;
 
-        // "rx,ry,rz" -> Set of cell keys, so region rebuilds never scan the
-        // whole cell map (an 8k-cell field re-scanned all of it once per
-        // touched region on every single edit).
         this.regionCells = new Map();
 
-        // Field-local block lifecycle: local tick queue + neighbor-update
-        // cascade, mirroring World.scheduledBlockTicks / notifyNeighborBlockChange
-        // but addressed in the field's LOCAL space (the proxy world's keys).
         this.localTicks = new Map();
         this.localNeighborQueue = [];
         this.processingLocalNeighborUpdates = false;
 
-        // Cached local-world proxy; dropped whenever the pose or cells change
-        // (applyTransform / clear are the mutation funnels). The previous
-        // per-query rebuild churned a fresh Proxy + closure set through the
-        // renderer's every block/face read.
         this._localWorld = null;
         this._localWorldWorld = null;
 
-        // Bulk population (fill/snapshot) and remote writes bypass
-        // setLocalBlock(), so the power hooks are replayed separately. Those
-        // replays must not echo every recomputed power nibble back to the
-        // server.
         this._suppressCellSync = false;
 
-        // Optional observer for cell writes, local or from the server:
-        // (x, y, z, typeId, data) after every change. The mechanical bearing
-        // keeps a live copy of the structure it carries through this, so it can
-        // put back exactly what the player left behind.
         this.onCellEdit = null;
     }
 
-    /** Attach this field to a world (idempotent) and to the current scene. */
+    
     bind(world) {
         if (this.world !== null && this.world !== world && this.world.offGridField === this) {
             this.world.offGridField = null;
@@ -143,7 +73,7 @@ export default class OffGridBlockField {
         this.attachToScene();
     }
 
-    /** Drop the binding, every mesh and every summoned block. */
+    
     dispose() {
         this.clear();
         if (this.world && this.world.offGridField === this) {
@@ -163,15 +93,12 @@ export default class OffGridBlockField {
         }
     }
 
-    // ------------------------------------------------------------------
-    // World-facing API (called from the World read/write hooks)
-    // ------------------------------------------------------------------
 
     covers(x, y, z) {
         return this.cells.has(x + "," + y + "," + z);
     }
 
-    /** Cell keys grouped by their 16^3 region, kept in sync by the writes. */
+    
     regionKeyOf(x, y, z) {
         return ((x >> 4) << 4) + "," + ((y >> 4) << 4) + "," + ((z >> 4) << 4);
     }
@@ -195,11 +122,7 @@ export default class OffGridBlockField {
         }
     }
 
-    /**
-     * Mark the real chunk sections around a box so their neighbour culling
-     * re-resolves against the overlay (World reads the field through
-     * getBlockAt / getBlockDataAt while it lies flat on the grid).
-     */
+    
     markWorldSectionsDirty(minX, minY, minZ, maxX, maxY, maxZ) {
         const world = this.world || (this.minecraft && this.minecraft.world);
         if (world && typeof world.setModified === "function") {
@@ -207,27 +130,20 @@ export default class OffGridBlockField {
         }
     }
 
-    /** @returns {number} type id, or -1 when the position is not covered. */
+    
     getBlockAt(x, y, z) {
         const cell = this.cells.get(x + "," + y + "," + z);
         return cell === undefined ? -1 : cell.typeId;
     }
 
-    /** @returns {number} metadata, or -1 when the position is not covered. */
+    
     getBlockDataAt(x, y, z) {
         const cell = this.cells.get(x + "," + y + "," + z);
         return cell === undefined ? -1 : cell.data;
     }
 
-    /**
-     * Mirror a local write aimed at a covered position into the field and
-     * re-tessellate the affected regions. Server-authored writes use
-     * applyRemoteWrite() so they are not echoed back to the server.
-     * @returns {boolean} true when the field actually changed.
-     */
+    
     applyWrite(xRaw, yRaw, zRaw, typeId, data = 0, fromNetwork = false) {
-        // Same integer-grid rule as fill(): fractional coordinates would
-        // silently produce cells no interaction seam can reach.
         const x = Math.floor(xRaw);
         const y = Math.floor(yRaw);
         const z = Math.floor(zRaw);
@@ -247,15 +163,9 @@ export default class OffGridBlockField {
             this.addToRegionIndex(x, y, z);
         }
 
-        // Re-apply the pose BEFORE tessellation: the region meshes sample
-        // neighbours at posed positions.
         this.applyTransform();
         this.rebuildAround(x, y, z);
 
-        // Real chunk meshes read the overlay cells through the world for
-        // their neighbour culling; those sections must re-tessellate to keep
-        // agreeing with the overlay (hidden faces under placed cells, shown
-        // terrain under broken ones).
         this.markWorldSectionsDirty(x, y, z, x, y, z);
 
         if (typeof this.onCellEdit === "function") {
@@ -266,9 +176,6 @@ export default class OffGridBlockField {
             }
         }
 
-        // Local interactive writes are mirrored to the server; server writes
-        // arrive through applyRemoteWrite() and must not echo back. Replays of
-        // the block lifecycle after a bulk load also stay local.
         if (!fromNetwork && !this._suppressCellSync && typeof this.onCellChanged === "function") {
             try {
                 this.onCellChanged(x, y, z, typeId ? typeId : 0, typeId ? (data || 0) : 0);
@@ -279,27 +186,14 @@ export default class OffGridBlockField {
         return true;
     }
 
-    /** Apply an authoritative write from the server without echoing it back. */
+    
     applyRemoteWrite(x, y, z, typeId, data = 0) {
         const changed = this.applyWrite(x, y, z, typeId, data, true);
-        // A remote placement bypasses the local placement hooks, so a
-        // bluestone source placed by another player would never wake the
-        // wires around it. Re-run only the power-relevant lifecycle here.
         if (changed) this.initializeBlockState(Math.floor(x), Math.floor(y), Math.floor(z));
         return changed;
     }
 
-    /**
-     * Re-run the power-relevant block hooks for one cell. Bulk fills and
-     * server snapshots populate cells directly (and remote writes skip
-     * setLocalBlock's placement callbacks), so without this a bluestone
-     * source loaded into an off-grid structure never schedules the adjacent
-     * wires and the structure stays unpowered until an unrelated update.
-     *
-     * Placement hooks (onBlockPlaced) are deliberately not replayed: door
-     * orientation and other authoritative data already arrived from the
-     * server and must not be recomputed from the local player's context.
-     */
+    
     initializeBlockState(xRaw, yRaw, zRaw) {
         const x = Math.floor(xRaw);
         const y = Math.floor(yRaw);
@@ -310,10 +204,6 @@ export default class OffGridBlockField {
         const block = Block.getById(cell.typeId) || BlockRegistry.get(cell.typeId);
         if (!block) return;
 
-        // Wires are intentionally not scheduled here. A source (or consumer)
-        // wakes its own neighbours, and one wire tick settles its whole
-        // connected network synchronously; scheduling every wire in a large
-        // fill would re-walk the same network thousands of times.
         if (!block.isPowerSource && !block.isBluestoneConsumer) return;
 
         const localWorld = this.createLocalWorld();
@@ -325,8 +215,6 @@ export default class OffGridBlockField {
             if (typeof block.onBlockAdded === 'function') {
                 block.onBlockAdded(localWorld, x, y, z);
             } else if (typeof block.onBlockTick === 'function') {
-                // Queue instead of running immediately: a large fill can hold
-                // many consumers, and tickBlocks() drains in bounded batches.
                 this.scheduleLocalTick(x, y, z, 1);
             }
         } catch (e) {
@@ -336,19 +224,14 @@ export default class OffGridBlockField {
         }
     }
 
-    /** Initialize every power-related cell after a bulk population. */
+    
     initializeBlockStates() {
         for (const cell of this.cells.values()) {
             this.initializeBlockState(cell.x, cell.y, cell.z);
         }
     }
 
-    /**
-     * Replace the whole field with a server snapshot. The cells and pose are
-     * copied verbatim (no local re-anchoring), then all affected regions are
-     * tessellated once, so a join or a command cannot leave stale meshes or a
-     * pose that only matches the client's own history.
-     */
+    
     applyNetworkSnapshot(cells, rotation, offset, pivot) {
         this.clear();
 
@@ -364,10 +247,6 @@ export default class OffGridBlockField {
             if (!Number.isInteger(x) || !Number.isInteger(y) || !Number.isInteger(z)) continue;
             if (y < 0 || y >= OFF_GRID_WORLD_HEIGHT) continue;
             if (!Number.isInteger(typeId) || typeId <= 0) continue;
-            // A server-side mod can persist block ids this client does not
-            // have. Keeping such a cell would make every interaction seam
-            // (raytrace, collision, break) see a block with no definition;
-            // drop it instead so the rest of the state still renders.
             if (!Block.getById(typeId) && !BlockRegistry.get(typeId)) continue;
 
             const data = Number.isInteger(cell.data) ? (cell.data & 0xF) : 0;
@@ -397,24 +276,16 @@ export default class OffGridBlockField {
                 bounds.maxX, bounds.maxY, bounds.maxZ);
         }
 
-        // Tessellate after the pose is applied: neighbour sampling reads the
-        // real terrain through the posed position, exactly like a local edit.
         this.applyTransform();
         for (const key of [...this.regionCells.keys()]) {
             const parts = key.split(",");
             this.rebuildRegion(parseInt(parts[0]), parseInt(parts[1]), parseInt(parts[2]));
         }
 
-        // Bulk-loaded bluestone has never run its placement hooks, so make
-        // sources schedule their neighbours and let the wires settle.
         this.initializeBlockStates();
     }
 
-    /**
-     * Replace the pose without touching the cells. Used by incremental pose
-     * updates; every region is re-tessellated because face culling/AO sample
-     * the real world under the new pose.
-     */
+    
     setPose(rotation, offset, pivot) {
         const bounds = this.getBounds();
         const numberOrZero = (value) => typeof value === 'number' && Number.isFinite(value) ? value : 0;
@@ -446,24 +317,14 @@ export default class OffGridBlockField {
         }
     }
 
-    // ------------------------------------------------------------------
-    // Field-local block lifecycle (bluestone, doors, ...)
-    // ------------------------------------------------------------------
-    //
-    // The local proxy world (createLocalWorld) routes reads into local space,
-    // so block code called with LOCAL coordinates must get local sequencing
-    // too: scheduled ticks and neighbor notifications fall through to the
-    // real world otherwise, where the local keys name unrelated terrain (or
-    // nothing), and placed bluestone propagates into the void while doors
-    // never write their upper half.
 
-    /** Local point -> integer world position the proxy would read for it. */
+    
     mapLocalToWorldInt(x, y, z) {
         const w = this.localToWorld({ x, y, z });
         return { x: Math.floor(w.x), y: Math.floor(w.y), z: Math.floor(w.z) };
     }
 
-    /** Local-space read (field cell first, real terrain through the pose). */
+    
     readLocal(x, y, z, kind = "block") {
         const cell = this.cells.get(x + "," + y + "," + z);
         if (cell) return kind === "data" ? cell.data : cell.typeId;
@@ -477,12 +338,7 @@ export default class OffGridBlockField {
             : world.getBlockAt(w.x, w.y, w.z);
     }
 
-    /**
-     * Local-space setBlockAt with the full block lifecycle the real world
-     * runs (onBlockRemoved / onBlockPlaced / onBlockAdded / neighbor notify).
-     * This is what makes doors place their upper half and bluestone dust
-     * propagate when written against the proxy world.
-     */
+    
     setLocalBlock(xRaw, yRaw, zRaw, type, data = 0, events = true) {
         const x = Math.floor(xRaw);
         const y = Math.floor(yRaw);
@@ -507,9 +363,6 @@ export default class OffGridBlockField {
         if (events) {
             const newBlock = Block.getById(type);
             if (newBlock) {
-                // Re-fetch after the write: applyWrite() invalidates the pose
-                // cache, so the fresh proxy answers the callbacks' follow-up
-                // writes (door top half, dust propagation) consistently.
                 const freshWorld = this.createLocalWorld() || localWorld;
                 if (typeof newBlock.onBlockPlaced === "function") {
                     try {
@@ -530,9 +383,8 @@ export default class OffGridBlockField {
         }
     }
 
-    /** Metadata write against the proxy (BlockBluestone power levels etc.) */
+    
     setLocalData(xRaw, yRaw, zRaw, data) {
-        // Round to int for cell lookup like fill/applyWrite do.
         const x = Math.floor(xRaw);
         const y = Math.floor(yRaw);
         const z = Math.floor(zRaw);
@@ -541,12 +393,7 @@ export default class OffGridBlockField {
         this.applyWrite(x, y, z, cell.typeId, data);
     }
 
-    /**
-     * Local neighbor-notification cascade, mirroring
-     * World.notifyNeighborBlockChange but running inside the field: targeted
-     * blocks receive the LOCAL world + LOCAL coordinates, so their own reads
-     * and writes (dust data updates, schedules) stay in the pose space.
-     */
+    
     notifyNeighbors(xRaw, yRaw, zRaw, recursive) {
         const localWorld = this.createLocalWorld();
         if (!localWorld) return;
@@ -566,8 +413,6 @@ export default class OffGridBlockField {
                 { x: 0, y: 0, z: 1 }, { x: 0, y: 0, z: -1 },
                 { x: 0, y: 1, z: 0 }, { x: 0, y: -1, z: 0 }
             ];
-            // When recursive, also probe the six neighbors of the origin;
-            // otherwise just the neighbors of the queued origin below.
             const queue = (recursive ? this.localNeighborQueue : [[x, y, z]]);
             let steps = 0;
             while (queue.length > 0 && steps < 16384) {
@@ -595,7 +440,7 @@ export default class OffGridBlockField {
         }
     }
 
-    /** Field-local version of World.scheduleBlockTick. */
+    
     scheduleLocalTick(xRaw, yRaw, zRaw, delay) {
         const world = this.minecraft && this.minecraft.world;
         if (!world) return;
@@ -606,7 +451,7 @@ export default class OffGridBlockField {
         this.localTicks.set(x + "," + y + "," + z, { x, y, z, time: world.time + delay });
     }
 
-    /** Schedule ticks for neighbors (originally triggered by removal) */
+    
     scheduleLocalNeighborTicks(xRaw, yRaw, zRaw) {
         const x = Math.floor(xRaw);
         const y = Math.floor(yRaw);
@@ -629,7 +474,7 @@ export default class OffGridBlockField {
         }
     }
 
-    /** Drain the local tick queue; called from World.onTick. */
+    
     tickBlocks() {
         if (this.localTicks.size === 0) return;
 
@@ -655,27 +500,14 @@ export default class OffGridBlockField {
                 }
                 if (iterations >= 512) {
                     this.localTicks.delete(key);
-                    break; // cap per frame to avoid runaway cascades
+                    break; 
                 }
             }
         }
     }
 
-    // ------------------------------------------------------------------
-    // Summoning
-    // ------------------------------------------------------------------
-    /**
-     * Fill the axis-aligned volume with one block type.
-     * Validation (size caps, world bounds, loaded chunks) belongs to the
-     * caller - see OffGridBlockRendererCommand.
-     *
-     * @returns {number} number of cells written.
-     */
+    
     fill(minXRaw, minYRaw, minZRaw, sizeX, sizeY, sizeZ, typeId, data = 0) {
-        // Cells are keyed and looked up on the integer grid everywhere
-        // (covers / raytrace / collision boxes), so fractional summon
-        // positions (e.g. a raw player position) MUST be floored here: they
-        // used to render fine but were invisible to every interaction seam.
         const minX = Math.floor(minXRaw);
         const minY = Math.floor(minYRaw);
         const minZ = Math.floor(minZRaw);
@@ -691,14 +523,10 @@ export default class OffGridBlockField {
             }
         }
 
-        // Real chunk meshes read the overlay cells through the world; their
-        // sections must re-tessellate around the summoned volume.
         this.markWorldSectionsDirty(
             minX, minY, minZ,
             minX + sizeX - 1, minY + sizeY - 1, minZ + sizeZ - 1);
 
-        // The pose mapping may have changed - apply it BEFORE tessellating,
-        // since the meshes sample neighbours at posed positions.
         this.applyTransform();
 
         for (const key of regionKeys) {
@@ -706,15 +534,12 @@ export default class OffGridBlockField {
             this.rebuildRegion(parseInt(rx), parseInt(ry), parseInt(rz));
         }
 
-        // Cells written in bulk skipped setLocalBlock(), so initialize the
-        // bluestone network explicitly (a filled source must power a wire
-        // filled next to it).
         this.initializeBlockStates();
 
         return sizeX * sizeY * sizeZ;
     }
 
-    /** Remove every summoned block, dispose all meshes and reset transforms. */
+    
     clear() {
         const clearedBounds = this.getBounds();
         if (clearedBounds) {
@@ -741,18 +566,13 @@ export default class OffGridBlockField {
         this.group.updateMatrix();
         this.group.updateMatrixWorld(true);
 
-        // The pose (rotation + bounds pivot) any cached collision geometry
-        // was approximated for is gone.
         this.posedBoxCache.clear();
         this._poseContext = null;
         this.pivot = null;
     }
 
-    // ------------------------------------------------------------------
-    // Group transforms (move / rotate the whole summoned assembly)
-    // ------------------------------------------------------------------
 
-    /** Axis-aligned bounds of the summoned cells (inclusive), or null. */
+    
     getBounds() {
         let minX = Infinity;
         let minY = Infinity;
@@ -773,14 +593,7 @@ export default class OffGridBlockField {
         return minX > maxX ? null : { minX, minY, minZ, maxX, maxY, maxZ };
     }
 
-    /**
-     * Move the whole group by a (possibly fractional) world-space delta.
-     * Whole-block parts re-anchor the cells - collision, raytracing and
-     * editing follow them to the new grid position; the fractional remainder
-     * stays a visual offset on the group, so decimal moves work too.
-     *
-     * @returns {{ shifted: boolean }} true when the grid was re-anchored.
-     */
+    
     move(dx, dy, dz, world) {
         const boundsBefore = this.getBounds();
         const deltas = { x: dx, y: dy, z: dz };
@@ -792,8 +605,6 @@ export default class OffGridBlockField {
             if (amount === 0) continue;
             const regions = this.shiftCellsAlongAxis(axis, amount, world);
             if (regions) {
-                // Grid took over this part of the delta; keep only the
-                // fraction on the visual offset (offset += delta - amount).
                 this.offset[axis] -= amount;
                 shifted = true;
                 for (const key of regions) touched.add(key);
@@ -805,18 +616,12 @@ export default class OffGridBlockField {
         this.offset.z += dz;
         this.applyTransform();
 
-        // Rebuild after the pose is applied: mesh neighbour sampling happens
-        // at posed positions, so tessellating against the stale pose is what
-        // made moved structures lose their sides.
         const keys = shifted ? touched : this.regions.keys();
         for (const key of keys) {
             const parts = key.split(",");
             this.rebuildRegion(parseInt(parts[0]), parseInt(parts[1]), parseInt(parts[2]));
         }
 
-        // The grid footprint changed: the real sections under the old keys
-        // must show their terrain again, the ones under the new keys read
-        // the overlay cells for their neighbour culling.
         if (boundsBefore) {
             this.markWorldSectionsDirty(
                 boundsBefore.minX, boundsBefore.minY, boundsBefore.minZ,
@@ -832,18 +637,11 @@ export default class OffGridBlockField {
         return { shifted };
     }
 
-    /**
-     * Accumulate a rotation (degrees) around one axis of the group's own
-     * centre. Arbitrary angles cannot be re-baked into the integer block
-     * grid, so the cells stay on the grid and the interaction seams
-     * (addCollisionBoxes / rayTrace / createLocalWorld) follow the pose.
-     */
+    
     rotate(degrees, axis) {
         this.rotation[axis] = (this.rotation[axis] || 0) + degrees;
         this.applyTransform();
 
-        // Rotating toggles the pose: real sections read the overlay through
-        // the world only while it lies flat, so re-tessellate around it.
         const bounds = this.getBounds();
         if (bounds) {
             this.markWorldSectionsDirty(
@@ -852,41 +650,22 @@ export default class OffGridBlockField {
         }
     }
 
-    /**
-     * Recompute the group transform: rotate around the centre of the
-     * summoned bounds, then translate by the fractional offset:
-     *
-     *   world' = R * (v - pivot) + pivot + offset
-     *
-     * Everything the field draws hangs off this group, so the meshes follow
-     * without touching their region-local positions.
-     */
+    
     applyTransform() {
         const pose = this.computePose();
         this.group.rotation.set(pose.rotation.x, pose.rotation.y, pose.rotation.z);
         this.group.position.set(pose.position.x, pose.position.y, pose.position.z);
 
-        // matrixAutoUpdate is off on the group (Tessellator.draw disables it),
-        // so bake the transform and force world matrices down the tree.
         this.group.updateMatrix();
         this.group.updateMatrixWorld(true);
 
-        // The pose (rotation + bounds pivot) any cached collision geometry
-        // was approximated for is gone; the local world proxy follows the
-        // same pose.
         this.posedBoxCache.clear();
         this._poseContext = null;
         this._localWorld = null;
         this._localWorldWorld = null;
     }
 
-    /**
-     * Rotation anchor. Frozen the first time a pose is needed and kept while
-     * cells are edited: re-centering on every edit moved the whole structure
-     * (group position = pivot + offset - R*pivot), so faces ended up sampled
-     * against random ground and placements landed elsewhere. Movement sticks
-     * the anchor to the structure (shiftCellsAlongAxis).
-     */
+    
     getPivot() {
         if (this.pivot !== null) return this.pivot;
         const bounds = this.getBounds();
@@ -899,13 +678,7 @@ export default class OffGridBlockField {
         return this.pivot;
     }
 
-    /**
-     * The current pose as { position, rotation (radians) }, matching exactly
-     * what the group matrix does: rotate around the summoned pivot, then
-     * translate by the fractional offset. Consumers (hit box outline,
-     * placement ghost) copy it onto their own groups to draw in the posed
-     * space.
-     */
+    
     computePose() {
         const pivot = this.getPivot();
         const pivotX = pivot.x;
@@ -920,7 +693,6 @@ export default class OffGridBlockField {
             "XYZ"
         );
 
-        // Rewrite as a plain position/rotation node: pos = pivot + offset - R*pivot.
         const rotatedPivot = new THREE.Vector3(pivotX, pivotY, pivotZ).applyEuler(euler);
         return {
             position: {
@@ -936,17 +708,7 @@ export default class OffGridBlockField {
         return this.computePose();
     }
 
-    /**
-     * Shift every cell along one axis by a whole number of blocks, provided
-     * the destination (with the renderer's 1-block sample margin) sits in
-     * loaded chunks and inside the world - otherwise this returns null and
-     * the caller keeps the move purely visual, avoiding a mid-frame chunk
-     * generation or an out-of-world cell.
-     *
-     * @returns {null|Set<string>} keys "rx,ry,rz" of the regions to re-
-     *          tessellate once the caller has re-applied the pose, or null
-     *          when the shift was not possible (cells untouched).
-     */
+    
     shiftCellsAlongAxis(axis, amount, world) {
         const bounds = this.getBounds();
         if (!bounds) return null;
@@ -982,25 +744,18 @@ export default class OffGridBlockField {
 
         this.cells = next;
 
-        // Stick the rotation anchor to the moved structure so a later
-        // rotation pivots around the structure's current, not former, centre.
         if (this.pivot !== null) this.pivot[axis] += amount;
 
-        // Rebuild the region -> cells index for the new layout.
         this.regionCells = new Map();
         for (const cell of next.values()) {
             this.addToRegionIndex(cell.x, cell.y, cell.z);
         }
 
-        // Caller tessellates these after the new pose has been applied.
         return new Set([...oldRegions, ...newRegions]);
     }
 
-    // ------------------------------------------------------------------
-    // Rendering
-    // ------------------------------------------------------------------
 
-    /** Re-tessellate every region the edited cell and its neighbours touch. */
+    
     rebuildAround(x, y, z) {
         const regionKeys = new Set();
         for (let dx = -1; dx <= 1; dx++) {
@@ -1020,21 +775,12 @@ export default class OffGridBlockField {
         }
     }
 
-    /**
-     * Re-tessellate one 16^3 region: one opaque and one translucent mesh,
-     * exactly like ChunkSection.rebuild() but only over field cells.
-     *
-     * All cells in a 16-aligned region share the same chunk origin, and
-     * BlockRenderer emits vertices relative to that origin
-     * (x - (chunkX << 4)), so both meshes sit at the region origin.
-     */
+    
     rebuildRegion(rx, ry, rz) {
         const world = this.minecraft && this.minecraft.world;
         const worldRenderer = this.minecraft && this.minecraft.worldRenderer;
         if (!world || !worldRenderer || !worldRenderer.blockRenderer) return;
 
-        // Cells are indexed per region by the write paths - an 8k-cell
-        // field used to be rescanned in full for every touched region.
         const cellsInRegion = [];
         const cellKeys = this.regionCells.get(rx + "," + ry + "," + rz);
         if (cellKeys) {
@@ -1055,7 +801,6 @@ export default class OffGridBlockField {
             return;
         }
 
-        // WorldRenderer.reset() may have dropped the group from the scene.
         this.attachToScene();
 
         if (region) {
@@ -1073,19 +818,9 @@ export default class OffGridBlockField {
 
         const blockRenderer = worldRenderer.blockRenderer;
         const tessellator = blockRenderer.tessellator;
-        // Same setting the chunk sections render with.
         const ambientOcclusion = !!world.minecraft.settings.ambientOcclusion;
-        // Cells live in the field's local space: sample neighbours through a
-        // local proxy so culling/AO/multipart read the cells themselves and
-        // the real world under the current pose for everything else.
         const localWorld = this.createLocalWorld() || world;
 
-        // Camera in LOCAL space for translucent ordering. ChunkSection
-        // rebuild() sorts translucent blocks back-to-front before
-        // tessellating; the field must do the same, and since the mesh
-        // vertices are in local space the camera has to be mapped through
-        // the inverse pose (rotation/offset) or the sort would compare world
-        // distances against local cell centres.
         let cameraLocal = null;
         const player = world.minecraft.player;
         if (player) {
@@ -1103,7 +838,6 @@ export default class OffGridBlockField {
             tessellator.setRenderingPass(translucentPass);
             blockRenderer.beginModelPass();
 
-            // Collect blocks for this pass (mirrors ChunkSection.rebuild)
             const blocksToRender = [];
             for (const cell of cellsInRegion) {
                 const block = Block.getById(cell.typeId) || BlockRegistry.get(cell.typeId);
@@ -1111,8 +845,6 @@ export default class OffGridBlockField {
                 blocksToRender.push({ cell, block });
             }
 
-            // Sort translucent blocks back-to-front from the (local-space)
-            // camera for proper depth ordering, exactly like chunk sections.
             if (translucentPass && cameraLocal) {
                 blocksToRender.sort((a, b) => {
                     const ax = a.cell.x + 0.5 - cameraLocal.x;
@@ -1123,7 +855,6 @@ export default class OffGridBlockField {
                     const bz = b.cell.z + 0.5 - cameraLocal.z;
                     const distASq = ax * ax + ay * ay + az * az;
                     const distBSq = bx * bx + by * by + bz * bz;
-                    // Far to near (far blocks render first)
                     return distBSq - distASq;
                 });
             }
@@ -1137,10 +868,6 @@ export default class OffGridBlockField {
                 const mesh = tessellator.draw(region.group);
                 mesh.position.set(rx, ry, rz);
                 if (translucentPass) {
-                    // Mirror ChunkSection.rebuild(): translucent meshes are
-                    // hidden and their geometry is stolen by the global
-                    // TranslucentMeshBatcher every frame, which does the
-                    // perfect world-wide face sort.
                     mesh.userData.isTranslucent = true;
                     mesh.visible = false;
                 }
@@ -1158,38 +885,22 @@ export default class OffGridBlockField {
             this.regions.delete(regionKey);
         }
 
-        // A region group added after applyTransform() has never had its
-        // matrixWorld composed with the field's posed matrix. Without this
-        // refresh the join snapshot rendered the structure unrotated until a
-        // later edit forced another transform update.
         this.group.updateMatrixWorld(true);
     }
 
-    // ------------------------------------------------------------------
-    // Pose-aware interaction seams
-    // ------------------------------------------------------------------
 
-    /** True when the group carries a non-identity transform. */
+    
     isPosed() {
         return this.rotation.x !== 0 || this.rotation.y !== 0 || this.rotation.z !== 0 ||
             this.offset.x !== 0 || this.offset.y !== 0 || this.offset.z !== 0;
     }
 
-    /**
-     * Pose helpers for effects that spawn around a summoned cell in its
-     * local (grid) coordinates - break particles, and anything else that
-     * would otherwise appear at the grid key instead of on the posed block.
-     *
-     * @returns {null|{point: Function, delta: Function}} null when the field
-     *     is unposed, so callers take the free identity path.
-     */
+    
     getParticlePose() {
         if (!this.isPosed()) return null;
 
         return {
-            // Cell-local position -> world position through the group matrix.
             point: (x, y, z) => this.localToWorld({ x, y, z }),
-            // Cell-local direction -> world direction (rotation only).
             delta: (x, y, z) => {
                 const pose = this.computePose();
                 const v = new THREE.Vector3(x, y, z).applyEuler(new THREE.Euler(
@@ -1200,18 +911,18 @@ export default class OffGridBlockField {
         };
     }
 
-    /** Map a local-space point into world space through the group matrix. */
+    
     localToWorld(v) {
         return new THREE.Vector3(v.x, v.y, v.z).applyMatrix4(this.group.matrix);
     }
 
-    /** Map a world-space point into the field's local space. */
+    
     worldToLocal(v) {
         const inverse = this.group.matrix.clone().invert();
         return new THREE.Vector3(v.x, v.y, v.z).applyMatrix4(inverse);
     }
 
-    /** World-space bounds of one cell under the current pose. */
+    
     cellWorldBounds(lx, ly, lz) {
         let minX = Infinity;
         let minY = Infinity;
@@ -1237,17 +948,10 @@ export default class OffGridBlockField {
         return new BoundingBox(minX, minY, minZ, maxX, maxY, maxZ);
     }
 
-    /**
-     * Contribute the posed collision boxes of every summoned cell that can
-     * touch `region` to `out`. World.getCollisionBoxes calls this once per
-     * query: a per-position lookup cannot see a rotated structure, so the
-     * field answers for the whole region from its local space instead.
-     */
+    
     addCollisionBoxes(region, out) {
         if (this.cells.size === 0) return;
 
-        // Conservative local-space bounds of the query region: inverse-transform
-        // its eight corners and take the enclosing box (plus a 1-cell margin).
         let lMinX = Infinity;
         let lMinY = Infinity;
         let lMinZ = Infinity;
@@ -1290,11 +994,7 @@ export default class OffGridBlockField {
         }
     }
 
-    /**
-     * Collision shapes of one cell in local space - mirrors
-     * World.getBlockCollisionBoxesAt (multipart, liquids, custom boxes,
-     * half blocks) so posed cells collide exactly like placed blocks.
-     */
+    
     localCollisionBoxes(lx, ly, lz, localWorld) {
         const cell = this.cells.get(lx + "," + ly + "," + lz);
         if (cell === undefined) return [];
@@ -1306,7 +1006,6 @@ export default class OffGridBlockField {
             const parts = block.getMultipart(localWorld, lx, ly, lz);
             if (Array.isArray(parts) && parts.length > 0) {
                 return parts.map((part) => {
-                    // Texture parts wrap their box as {texture, bbox}.
                     const bbox = Block.getPartBoundingBox(part);
                     if (!bbox) return null;
                     return new BoundingBox(
@@ -1321,7 +1020,6 @@ export default class OffGridBlockField {
             }
         }
 
-        // Liquids have no collision
         if (block.isLiquid()) return [];
 
         const collisionBb = block.getCollisionBoundingBox(localWorld, lx, ly, lz);
@@ -1347,16 +1045,7 @@ export default class OffGridBlockField {
         return [];
     }
 
-    /**
-     * Push the posed version of one local collision box into `out`, keeping
-     * only boxes that can touch `region`:
-     *   - unposed: the box itself (exact);
-     *   - translated: the box shifted by the fractional offset (exact);
-     *   - rotated: the exact box for 90 degree steps, otherwise a fine
-     *     axis-aligned lattice that strictly covers the rotated geometry
-     *     (posedRotatedBoxes) so sliding along a tilted side feels close to
-     *     the rendered surface instead of stepping every quarter block.
-     */
+    
     pushPosedBox(box, out, region) {
         const rotated = this.rotation.x !== 0 || this.rotation.y !== 0 || this.rotation.z !== 0;
         let posed;
@@ -1373,13 +1062,10 @@ export default class OffGridBlockField {
                 box.maxZ + this.offset.z
             )];
         } else {
-            // Cached per (rotation, box), WITHOUT the fractional offset.
             posed = this.posedRotatedBoxes(box);
         }
 
         for (const b of posed) {
-            // Rotated geometry carries no offset (the cache is offset-free);
-            // translation-only boxes already include it.
             const emit = rotated
                 ? new BoundingBox(
                     b.minX + this.offset.x,
@@ -1390,8 +1076,6 @@ export default class OffGridBlockField {
                     b.maxZ + this.offset.z)
                 : b;
 
-            // Keep only boxes that can touch the query region (the world path
-            // includes boundary-touching blocks too, hence the epsilon).
             if (emit.minX > region.maxX + 1e-6 || emit.maxX < region.minX - 1e-6 ||
                 emit.minY > region.maxY + 1e-6 || emit.maxY < region.minY - 1e-6 ||
                 emit.minZ > region.maxZ + 1e-6 || emit.maxZ < region.minZ - 1e-6) {
@@ -1402,7 +1086,7 @@ export default class OffGridBlockField {
         }
     }
 
-    /** True when every rotated axis lands back on a world axis (90° steps). */
+    
     hasExactRotation() {
         const skewed = (deg) => {
             const norm = ((deg % 90) + 90) % 90;
@@ -1411,17 +1095,11 @@ export default class OffGridBlockField {
         return !skewed(this.rotation.x) && !skewed(this.rotation.y) && !skewed(this.rotation.z);
     }
 
-    /**
-     * Cached context for the current rotation: the summoned bounds pivot and
-     * the rotated basis vectors. Null when nothing is summoned.
-     */
+    
     getPoseContext() {
         const bounds = this.getBounds();
         if (!bounds) return null;
 
-        // The pivot is part of the key: whole-block moves carry it (the
-        // anchor stays stuck to the structure), so cached screened pose
-        // geometry must not leak across a move.
         const pivot = this.getPivot();
         const key = this.rotation.x + "," + this.rotation.y + "," + this.rotation.z +
             "|" + pivot.x + "," + pivot.y + "," + pivot.z;
@@ -1437,7 +1115,6 @@ export default class OffGridBlockField {
             "XYZ"
         );
         const e = new THREE.Matrix4().makeRotationFromEuler(euler).elements;
-        // Column-major matrix elements: the rotated block-local axes.
         const axes = [
             new THREE.Vector3(e[0], e[1], e[2]),
             new THREE.Vector3(e[4], e[5], e[6]),
@@ -1453,10 +1130,7 @@ export default class OffGridBlockField {
         return this._poseContext;
     }
 
-    /**
-     * Rotate a local-space point around the summoned bounds pivot, WITHOUT
-     * the fractional world offset the render group carries on top.
-     */
+    
     posePointNoOffset(v) {
         const ctx = this.getPoseContext();
         if (!ctx) return { x: v.x, y: v.y, z: v.z };
@@ -1474,18 +1148,7 @@ export default class OffGridBlockField {
         };
     }
 
-    /**
-     * Posed, offset-free collision geometry of one local box under the
-     * current rotation. Exact for multiples of 90°; otherwise a lattice of
-     * COLLISION_STEP-sized axis-aligned cubes that intersect the rotated box
-     * (a separating-axis test on the box's OBB, so the union always covers
-     * the rendered geometry and never lets the player clip through), merged
-     * into streaks where cubes fall fully inside to keep the box count low.
-     * The partial rim cubes are what make sliding along a tilted side track
-     * the rendered surface instead of stepping every slab.
-     *
-     * @returns {BoundingBox[]} cached per (rotation, local box).
-     */
+    
     posedRotatedBoxes(box) {
         const ctx = this.getPoseContext();
         if (!ctx) return [box];
@@ -1508,7 +1171,6 @@ export default class OffGridBlockField {
             z: (box.minZ + box.maxZ) / 2
         });
 
-        // World-space AABB of the posed box (offset ignored here).
         let minX = Infinity, minY = Infinity, minZ = Infinity;
         let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
         for (let i = 0; i < 8; i++) {
@@ -1528,23 +1190,17 @@ export default class OffGridBlockField {
         const boxes = [];
 
         if (this.hasExactRotation()) {
-            // 90° steps re-align the box with the world axes.
             boxes.push(new BoundingBox(minX, minY, minZ, maxX, maxY, maxZ));
         } else {
             const AXJ = ["x", "y", "z"];
             const axes = ctx.axes;
             const dot = (a, v) => a.x * v.x + a.y * v.y + a.z * v.z;
             const halves = [half.x, half.y, half.z];
-            // Half-extent of the box's OBB along each world axis.
             const worldRadius = AXJ.map((j) =>
                 half.x * Math.abs(axes[0][j]) +
                 half.y * Math.abs(axes[1][j]) +
                 half.z * Math.abs(axes[2][j]));
 
-            // Axis-aligned staircase approximating the rotated box. A fine
-            // step hugs the rendered surface (smoother sliding along tilted
-            // sides); boxes that explode the rim count fall back to the
-            // coarser grid that keeps collision queries cheap.
             const buildLattice = (STEP) => {
                 const from = { x: Math.floor(minX / STEP), y: Math.floor(minY / STEP), z: Math.floor(minZ / STEP) };
                 const to = { x: Math.floor(maxX / STEP), y: Math.floor(maxY / STEP), z: Math.floor(maxZ / STEP) };
@@ -1553,7 +1209,6 @@ export default class OffGridBlockField {
                 const nz = to.z - from.z + 1;
 
                 if (nx <= 0 || ny <= 0 || nz <= 0 || nx * ny * nz > 150000) {
-                    // Degenerate or huge: fall back to the plain AABB over-cover.
                     return [new BoundingBox(minX, minY, minZ, maxX, maxY, maxZ)];
                 }
 
@@ -1609,8 +1264,6 @@ export default class OffGridBlockField {
                     (from.z + zMax + 1) * STEP
                 );
 
-                // Merge streaks of fully-contained cubes along z; the rim's
-                // partial cubes stay individual so they can hug the surface.
                 for (let gx = 0; gx < nx; gx++) {
                     for (let gy = 0; gy < ny; gy++) {
                         let gz = 0;
@@ -1652,18 +1305,7 @@ export default class OffGridBlockField {
         return boxes;
     }
 
-    /**
-     * A proxy world that answers in field-local space: covered positions
-     * come from the cells, everything else is sampled from the real world at
-     * the posed (world) position of the query. Used for neighbour culling/AO
-     * during rebuilds, for placement checks and for raytracing cells.
-     *
-     * The proxy and every chunk sub-proxy are cached and only rebuilt when
-     * the world changes or a mutation drops the cache (applyTransform /
-     * clear, see the constructor): each of the renderer's per-block/per-face
-     * reads used to allocate a fresh closure (and every getChunkAt a fresh
-     * Proxy) which made every break/place a GC storm.
-     */
+    
     createLocalWorld() {
         const realWorld = this.minecraft && this.minecraft.world;
         if (!realWorld) return null;
@@ -1681,12 +1323,6 @@ export default class OffGridBlockField {
         const cellAt = (x, y, z) => field.cells.get(x + "," + y + "," + z);
         const outOfWorld = (w) => w.y < 0 || w.y >= World.TOTAL_HEIGHT;
 
-        // Reads through the proxy share one responder so every seam
-        // (getBlockAt / getBlockAtFace / isTranslucentBlockAt) samples the
-        // same local space. Block.shouldRenderFace and BlockRenderer's face
-        // culling both go through getBlockAtFace - without interception it
-        // read the real terrain under the grid key, hiding the structure's
-        // sides after a move put it over different ground.
         const readLocalBlock = (x, y, z) => {
             const cell = cellAt(x, y, z);
             if (cell) return cell.typeId;
@@ -1720,9 +1356,6 @@ export default class OffGridBlockField {
         };
         const readLocalAtFace = (x, y, z, face) => readLocalBlock(x + face.x, y + face.y, z + face.z);
 
-        // Chunk-local reads (BlockRenderer reads metadata through the chunk
-        // with chunk-local x/z and world y): answered in local space. One
-        // Proxy per chunk column instead of one per getChunkAt call.
         const chunkProxies = new Map();
         const chunkProxyAt = (cx, cz) => {
             const ckey = cx + "," + cz;
@@ -1770,13 +1403,6 @@ export default class OffGridBlockField {
                         return isSolidLocal;
                     case "getChunkAt":
                         return chunkProxyAt;
-                    // Writes done against the proxy go into the field at the
-                    // same LOCAL key, so placer items (bluestone dust, doors,
-                    // ... called with local coordinates after a fieldCell hit)
-                    // extend the summoned structure instead of scribbling on
-                    // the real terrain at whatever grid position the local
-                    // key happens to name. The block lifecycle mirrors the
-                    // real World.setBlockAt so both get the full write.
                     case "setBlockAt":
                         return (x, y, z, type, data = 0) =>
                             field.setLocalBlock(x, y, z, type, data, true);
@@ -1786,10 +1412,6 @@ export default class OffGridBlockField {
                     case "setBlockDataAt":
                         return (x, y, z, data) =>
                             field.setLocalData(x, y, z, data);
-                    // Local sequencing: tick schedules and neighbor updates
-                    // must resolve inside the LOCAL space (dust propagation,
-                    // lever scheduling, lamp ticks), not against the real
-                    // terrain that happens to sit at the local keys.
                     case "scheduleBlockTick":
                         return (x, y, z, delay) =>
                             field.scheduleLocalTick(x, y, z, delay);
@@ -1814,18 +1436,13 @@ export default class OffGridBlockField {
                             const fx = Math.floor(x);
                             const fy = Math.floor(y);
                             const fz = Math.floor(z);
-                            if (field.covers(fx, fy, fz)) return; // field meshes rebuild themselves
+                            if (field.covers(fx, fy, fz)) return; 
                             const w = field.mapLocalToWorldInt(fx, fy, fz);
                             if (w.y < 0 || w.y >= World.TOTAL_HEIGHT) return;
                             if (typeof target.onBlockChanged === "function") {
                                 target.onBlockChanged(w.x, w.y, w.z);
                             }
                         };
-                    // Marker for placer items: suppress the vanilla placement
-                    // packet. Field writes are mirrored to the server by
-                    // onCellChanged() in local-grid coordinates; sending the
-                    // placer at these world coordinates would place a real
-                    // block on top of unrelated terrain.
                     case "isFieldLocalWorld":
                         return true;
                 }
@@ -1837,7 +1454,7 @@ export default class OffGridBlockField {
         return this._localWorld;
     }
 
-    /** Test one local cell against the local-space ray. */
+    
     traceCell(x, y, z, lFrom, lTo, localWorld) {
         const cell = this.cells.get(x + "," + y + "," + z);
         if (cell === undefined) return null;
@@ -1848,14 +1465,7 @@ export default class OffGridBlockField {
         return block.collisionRayTrace(localWorld, x, y, z, lFrom, lTo);
     }
 
-    /**
-     * Raytrace the summoned cells in local space so the hit follows the pose.
-     *
-     * @returns {MovingObjectPosition} with a world-space `vector` but LOCAL
-     *          x/y/z and face (edits address cells in local space, which is
-     *          also what the server echo keys off), or null / the 0/1 slab
-     *          sentinels in slab mode.
-     */
+    
     rayTrace(from, to, slab = false) {
         if (this.cells.size === 0) return null;
 

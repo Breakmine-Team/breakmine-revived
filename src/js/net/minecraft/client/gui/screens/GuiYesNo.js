@@ -30,7 +30,6 @@ export default class GuiYesNo extends GuiScreen {
 
         this.buttonList.push(new GuiButton(this.minecraft, this.buttonText2, this.width / 2 + 5, buttonY, 150, 20, () => {
             if (typeof this.contextId === 'function') {
-                // Do nothing on cancel for callback-based usage
             } else if (this.parentScreen.deleteWorld) {
                 this.parentScreen.deleteWorld(false, this.contextId);
             }

@@ -10,7 +10,6 @@ export default class BlockGrassPath extends Block {
         this.description = "Grass Path";
         this.hardness = 0.5;
 
-        // Sound
         this.sound = Block.sounds.grass;
         this.boundingBox = new BoundingBox(0, 0, 0, 1, (1/16) * 15, 1);
 

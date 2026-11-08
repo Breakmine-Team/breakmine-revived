@@ -10,7 +10,6 @@ export default class BlockGrass extends Block {
         this.description = "Grass Block";
         this.hardness = 0.6;
 
-        // Sound
         this.sound = Block.sounds.grass;
         this.inventoryTab = EnumCreativeInventoryTab.DECORATION;
     }
@@ -20,12 +19,10 @@ export default class BlockGrass extends Block {
     }
 
     getColor(world, x, y, z, face) {
-        // Only top face has a biome color
         if (face !== EnumBlockFace.TOP) {
             return 0xFFFFFF;
         }
 
-        // Inventory items have a default color
         if (world === null) {
             return 0x7cbd6b;
         }
@@ -34,22 +31,16 @@ export default class BlockGrass extends Block {
         let humidity = world.getHumidity(x, y, z);
         let color = world.minecraft.grassColorizer.getColor(temperature, humidity);
 
-        // Blend toward blue the closer the block is to a Snowy biome (max 5 blocks)
         const snowDist = BlockGrass.getDistanceToSnowBiome(world, x, z);
         if (snowDist < 5) {
-            const t = (5 - snowDist) / 5; // 0 at 5 blocks, 1 at the edge
+            const t = (5 - snowDist) / 5; 
             color = BlockGrass.blendTowardBlue(color, t);
         }
 
         return color;
     }
 
-    // Searches rings of increasing radius around (x, z) for a snowy biome.
-    // Returns the radius of the closest snowy biome, or 6 when none is close.
     static getDistanceToSnowBiome(world, x, z) {
-        // Result only depends on the chunk column, so memoize per chunk: meshing
-        // evaluates grass color for many blocks in the same chunk and the ring
-        // scan would otherwise cost tens of biome lookups per top face.
         const chunkX = x >> 4;
         const chunkZ = z >> 4;
 
@@ -66,7 +57,6 @@ export default class BlockGrass extends Block {
                     let found = false;
                     for (let dx = -d; dx <= d && !found; dx++) {
                         for (let dz = -d; dz <= d; dz++) {
-                            // Ring border only so each column is sampled once
                             if (Math.abs(dx) !== d && Math.abs(dz) !== d) continue;
                             if (world.getTemperature(chunkX * 16 + lx + dx, 0, chunkZ * 16 + lz + dz) <= 0.05) {
                                 cache[lz * 16 + lx] = d;
@@ -97,7 +87,7 @@ export default class BlockGrass extends Block {
     }
 
     getDrop(world, x, y, z) {
-        return [BlockRegistry.DIRT.getId(), 1]; // Drop dirt block
+        return [BlockRegistry.DIRT.getId(), 1]; 
     }
 
     getParticleTextureFace() {

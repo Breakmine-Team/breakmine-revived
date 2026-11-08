@@ -1,19 +1,4 @@
-/**
- * Shared registry for mod-defined commands.
- *
- * The built-in commands live as Command instances inside CommandHandler, but
- * mods register theirs here so that every CommandHandler in the process sees
- * them: the singleplayer client, the integrated server client, and the
- * standalone server (which builds its own CommandHandler in
- * src/js/net/minecraft/server/commands.js) all share one registry.
- *
- * A registered command is a plain object:
- *   { command, usage, description, opOnly, execute(minecraft, args) }
- * `execute` follows the built-in Command contract: it is handed the same
- * `minecraft` object the caller is using (the real client on the client, a
- * per-player adapter on the server) and the argument array, and returns false
- * to make the handler echo the usage line back to the caller.
- */
+
 
 const commands = new Map();
 
@@ -24,10 +9,7 @@ function normalizeName(name) {
 }
 
 export const CommandRegistry = {
-    /**
-     * @param {{command?: string, name?: string, usage?: string, description?: string,
-     *          opOnly?: boolean, modId?: string, execute: Function}} descriptor
-     */
+    
     register(descriptor) {
         if (!descriptor || typeof descriptor !== 'object') {
             throw new Error('registerCommand() needs a command object.');
@@ -59,7 +41,7 @@ export const CommandRegistry = {
         return commands.delete(key);
     },
 
-    /** Drop every command a mod registered (used when it is disabled/uninstalled). */
+    
     unregisterMod(modId) {
         let removed = 0;
         for (const [name, entry] of commands) {

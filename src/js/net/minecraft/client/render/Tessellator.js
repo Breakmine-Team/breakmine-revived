@@ -2,15 +2,6 @@ import * as THREE from "../../../../../../libraries/three.module.js";
 import EnumBlockFace from "../../util/EnumBlockFace.js";
 import { getLiquidBlockCornerHeights } from "./LiquidMeshHelper.js";
 
-/**
- * Shader patch that makes a face's coordinates wrap inside its own atlas tile.
- * The atlas is a single texture, so three.js's RepeatWrapping would otherwise
- * sample the neighbouring tiles (and around the atlas) instead of tiling the
- * block's own texture. Faces longer than one block need this just as much as
- * scrolling ones: their UVs run past the tile and bleed into whatever is
- * stored next to it. Keep this at module scope so every cloned material shares
- * one program (three hashes onBeforeCompile.toString()).
- */
 export function applyTileWrapToShader(shader) {
     shader.vertexShader = shader.vertexShader
         .replace(
@@ -53,9 +44,9 @@ export function applyTileWrapToShader(shader) {
         );
 }
 
-// Rotate a point by an angle in degrees per axis (applied X, then Y, then Z)
-// around a pivot. Whole-block rotation and per-part rotation share this so a
-// turned part composes with a turning block instead of fighting it.
+
+
+
 function rotatePoint(x, y, z, pivot, angles) {
     const radians = Math.PI / 180;
     let dx = x - pivot[0];
@@ -93,17 +84,10 @@ const NO_PIVOT = [0, 0, 0];
 
 export default class Tessellator {
 
-    // Client-wide defaults for tessellators that don't override them. Both are
-    // global graphics options and tessellators are created ad-hoc (particles,
-    // entity models, GUI previews), so shared flags are the only way to reach
-    // all of them.
     static shadows = true;
     static dynamicLights = false;
 
     constructor() {
-        // Two materials for the same geometry. The lit one is used whenever a
-        // real light source can affect the mesh; otherwise the baked vertex
-        // colors carry all the lighting and the cheaper unlit one is used.
         this.litMaterial = new THREE.MeshLambertMaterial({
             side: THREE.FrontSide,
             transparent: true,
@@ -120,18 +104,9 @@ export default class Tessellator {
             vertexColors: true
         });
 
-        // Put the tile-wrap patch on the base materials too, so a mesh that
-        // uses one of them directly (not via draw()) still wraps. Note that
-        // three.js's Material.clone() does NOT copy onBeforeCompile, so any
-        // code that clones a tessellator material (held/inventory renderers
-        // swap in getUnlitGUIMaterial(), the first-person renderer clones
-        // for depth flags, ...) must re-apply it with
-        // Tessellator.applyTileWrap(), or oversized multipart bboxes bleed
-        // into neighbouring atlas tiles exactly as they did before.
         this.litMaterial.onBeforeCompile = applyTileWrapToShader;
         this.unlitMaterial.onBeforeCompile = applyTileWrapToShader;
 
-        // null = follow Tessellator.shadows
         this.shadows = null;
 
         this.red = 0;
@@ -161,20 +136,14 @@ export default class Tessellator {
         this.usesTileWrap = false;
     }
 
-    // Material meshes are built from. A getter so callers can keep using
-    // tessellator.material; the underlying material swaps with the settings.
     get material() {
         return this.getLit() ? this.litMaterial : this.unlitMaterial;
     }
 
-    // Override shadow casting for meshes produced by this tessellator, or pass
-    // null to follow the shared setting again.
     setShadows(enabled) {
         this.shadows = enabled === null ? null : !!enabled;
     }
 
-    // Toggle the shared setting. Meshes already in a scene keep their current
-    // flag until the owner re-applies it (see WorldRenderer.applyShadowsToObject).
     static setShadowsEnabled(enabled) {
         Tessellator.shadows = !!enabled;
     }
@@ -187,21 +156,11 @@ export default class Tessellator {
         return this.shadows === null ? Tessellator.shadows : this.shadows;
     }
 
-    // MeshBasicMaterial ignores scene lights entirely, so anything that can
-    // still light a mesh - the sun or dynamic point lights - forces the lit
-    // material even when no shadow map is being rendered.
     getLit() {
         return this.getShadows() || Tessellator.dynamicLights;
     }
 
-    /**
-     * Re-apply the tile-wrap shader patch to a material. Required after
-     * Material.clone(): three.js does not copy onBeforeCompile on clone, so
-     * a cloned tessellator material silently loses the wrap that keeps
-     * faces longer than one block (oversized multipart bboxes) inside
-     * their own atlas tile. Safe on materials whose geometry has no
-     * aTileRect attribute: vWrap defaults to 0 and UVs pass through.
-     */
+    
     static applyTileWrap(material) {
         if (!material) return material;
         material.onBeforeCompile = applyTileWrapToShader;
@@ -216,16 +175,9 @@ export default class Tessellator {
 
     startDrawing() {
         this.addedVertices = 0;
-        // Reuse the buffers between meshes. draw() copies them into typed
-        // arrays, so nothing retains the JS arrays after a flush.
         this.vertices.length = 0;
         this.uv.length = 0;
         this.colors.length = 0;
-        // Per-vertex atlas tile rect (minU, minV, uSpan, vSpan) and a flag that
-        // tells the shader to wrap the U coordinate inside that rect. Used by
-        // animated faces (e.g. conveyor belts) so the texture scrolls within
-        // its own tile instead of sliding across the whole atlas. Most meshes
-        // never use this, so the data is only materialized on demand.
         this.tileRects.length = 0;
         this.wraps.length = 0;
         this.tileWrap = null;
@@ -234,13 +186,7 @@ export default class Tessellator {
         this.clearRotation();
     }
 
-    // Set the atlas sub-rect that the next vertices' U coordinate wraps within,
-    // or null to disable wrapping. Kept as state so the block renderer doesn't
-    // have to thread it through every addVertexWithUV call.
     setTileWrap(rect) {
-        // A wrapping face can appear after non-wrapping geometry in the same
-        // mesh. Give the earlier vertices the neutral rect before enabling the
-        // attributes, otherwise the buffer lengths would stop matching.
         if (rect !== null && !this.usesTileWrap) {
             const missing = this.addedVertices * 4 - this.tileRects.length;
             for (let i = 0; i < missing; i += 4) {
@@ -251,21 +197,15 @@ export default class Tessellator {
         }
 
         this.tileWrap = rect;
-        // rect[4] is a wrap mask (1 = U, 2 = V); a plain rect keeps the
-        // original U-only wrap used by animated faces.
         this.tileWrapFlags = rect === null ? 0 : (rect[4] === undefined ? 1 : rect[4]);
     }
 
-    // TODO: Use in the game for better FPS
     setDepthWrite(value) {
-        //this.material.depthWrite = value;
     }
 
     setRenderingPass(isTransparent) {
         this.material.transparent = isTransparent;
         this.material.depthWrite = !isTransparent;
-        // Reset cutout each pass; blocks that need it (e.g. embedded dust
-        // rendered inside a solid lever) opt back in while drawing.
         this.material.alphaTest = 0;
     }
 
@@ -284,9 +224,6 @@ export default class Tessellator {
         this.setAlpha(alpha);
     }
 
-    // Apply a directional shading factor to the current base color.
-    // Unlike setColor, this does NOT replace the base color, so multiple
-    // polygons can shade independently without compounding.
     setColorShaded(shading) {
         this.setColorRGB(
             this.baseRed * shading,
@@ -310,8 +247,6 @@ export default class Tessellator {
     addVertex(x, y, z) {
         this.addedVertices++;
 
-        // Turn the part first: a rotated multipart part spins inside its cell,
-        // and only then does the whole block's rotation carry it around.
         if (this.partRotationPivot !== null) {
             let turned = rotatePoint(x, y, z, this.partRotationPivot, this.partRotationAngles);
             x = turned[0];
@@ -319,7 +254,6 @@ export default class Tessellator {
             z = turned[2];
         }
 
-        // Apply the active block-model rotation before pushing the vertex
         if (this.rotationPivot !== null) {
             let rotated = this.rotate(x, y, z);
             x = rotated[0];
@@ -327,19 +261,15 @@ export default class Tessellator {
             z = rotated[2];
         }
 
-        // Add vertex
         this.vertices.push(x);
         this.vertices.push(y);
         this.vertices.push(z);
 
-        // Add colors
         this.colors.push(this.red);
         this.colors.push(this.green);
         this.colors.push(this.blue);
         this.colors.push(this.alpha);
 
-        // Add tile wrap data (minU, minV, uSpan, vSpan) and the wrap flag.
-        // Until the first wrapping face appears this data is not needed at all.
         if (this.usesTileWrap) {
             if (this.tileWrap !== null) {
                 this.tileRects.push(this.tileWrap[0], this.tileWrap[1], this.tileWrap[2], this.tileWrap[3]);
@@ -351,18 +281,11 @@ export default class Tessellator {
         }
     }
 
-    // Rotate a model so it mounts on one of the six block faces. The model is
-    // authored in "floor" orientation (base against the -Y face, handle
-    // pointing +Y); with a pivot at the block center, rotating around it keeps
-    // the base flush against the selected face.
     setRotation(pivotX, pivotY, pivotZ, faceIndex) {
         this.rotationPivot = [pivotX, pivotY, pivotZ];
         this.rotationFace = faceIndex;
     }
 
-    // Turn everything emitted from now on around a pivot point, by an angle in
-    // degrees per axis (applied X, then Y, then Z). Blocks use this to rotate
-    // themselves around their own center without moving the block itself.
     setBlockRotation(pivotX, pivotY, pivotZ, angleX, angleY, angleZ) {
         this.rotationPivot = [pivotX, pivotY, pivotZ];
         this.rotationFace = 0;
@@ -375,11 +298,6 @@ export default class Tessellator {
         this.rotationAngles = null;
     }
 
-    // Turn only the geometry emitted from now on, around a part-local pivot,
-    // by an angle in degrees per axis (applied X, then Y, then Z). Multipart
-    // blocks use this so one part can be tilted or spun without moving the
-    // rest of the shape. Composes with setBlockRotation (part first, then
-    // block), so parts of a self-rotating block keep their own offset.
     setPartRotation(pivotX, pivotY, pivotZ, angleX, angleY, angleZ) {
         this.partRotationPivot = [pivotX, pivotY, pivotZ];
         this.partRotationAngles = [angleX, angleY, angleZ];
@@ -390,14 +308,6 @@ export default class Tessellator {
         this.partRotationAngles = null;
     }
 
-    // Rotate a vertex around the active pivot. faceIndex maps to the face the
-    // model is mounted on:
-    //   0 = floor   (base -Y, handle +Y)
-    //   1 = ceiling (base +Y, handle -Y)
-    //   2 = north   (base -Z, handle +Z)
-    //   3 = south   (base +Z, handle -Z)
-    //   4 = west    (base -X, handle +X)
-    //   5 = east    (base +X, handle -X)
     rotate(x, y, z) {
         let dx = x - this.rotationPivot[0];
         let dy = y - this.rotationPivot[1];
@@ -425,9 +335,6 @@ export default class Tessellator {
                 break;
         }
 
-        // Spin the already-mounted model around the pivot (the block center),
-        // for blocks that turn in place. The deltas are already relative to
-        // the pivot, so they turn around the origin here.
         if (this.rotationAngles !== null) {
             const spun = rotatePoint(rx, ry, rz, NO_PIVOT, this.rotationAngles);
             rx = spun[0];
@@ -441,17 +348,11 @@ export default class Tessellator {
     addVertexWithUV(x, y, z, u, v) {
         this.addVertex(x, y, z);
 
-        // Add UV
         this.uv.push(u);
         this.uv.push(v);
     }
 
-    /**
-     * Build a quad for a liquid surface. The top surface follows the smoothed
-     * corner heights sampled by LiquidMeshHelper (sloped water), while side
-     * faces drop from the two edge corners down to the block bottom.
-     * UVs must already be V-flipped, matching addFace conventions.
-     */
+    
     addLiquidFace(world, liquidId, face, chunkX, chunkY, chunkZ, x, y, z, minU, minV, maxU, maxV) {
         const cx = chunkX << 4;
         const cy = chunkY << 4;
@@ -514,9 +415,6 @@ export default class Tessellator {
     }
 
     draw(group, inThing = false) {
-        // A single non-finite coordinate makes three.js complain that the
-        // bounding sphere radius is NaN and drops the whole mesh. Clamp them so
-        // the rest of the geometry stays visible, and say how many were found.
         let badCoordinates = 0;
         for (let i = 0; i < this.vertices.length; i++) {
             if (!Number.isFinite(this.vertices[i])) {
@@ -534,16 +432,11 @@ export default class Tessellator {
         if (this.uv.length > 0) {
             geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(this.uv), 2));
         }
-        // Only carry the (fairly large) wrap attributes on meshes that use them;
-        // every other mesh falls back to the shader's default generic values.
         if (this.usesTileWrap && this.tileRects.length === this.addedVertices * 4) {
             geometry.setAttribute('aTileRect', new THREE.BufferAttribute(new Float32Array(this.tileRects), 4));
             geometry.setAttribute('aWrap', new THREE.BufferAttribute(new Float32Array(this.wraps), 1));
         }
 
-        // Create the index buffer directly at its final size. Uint16 is enough
-        // for every normal section and halves the index bandwidth; only fall
-        // back to 32-bit for unusually large meshes.
         const faces = this.addedVertices / 4;
         const IndexArray = this.addedVertices <= 65535 ? Uint16Array : Uint32Array;
         const index = new IndexArray(faces * 6);
@@ -558,18 +451,14 @@ export default class Tessellator {
         }
         geometry.setIndex(new THREE.BufferAttribute(index, 1));
 
-        // Compute bounding sphere so Three.js knows the exact geometric center for depth sorting
         geometry.computeBoundingSphere();
 
         let shadows = this.getShadows();
 
-        // Normals are only used by the lit material. Every quad contributes its
-        // own vertices, so these are already flat per-face normals.
         if (this.getLit()) {
             geometry.computeVertexNormals();
         }
 
-        // Clone the material so opaque and translucent passes maintain separate states
         let material = Tessellator.applyTileWrap(this.material.clone());
         let mesh = new THREE.Mesh(geometry, material);
         mesh.castShadow = shadows;

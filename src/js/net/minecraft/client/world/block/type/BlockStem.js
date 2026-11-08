@@ -12,11 +12,6 @@ const HORIZONTAL_DIRECTIONS = [
     { x: 0, z: -1 }
 ];
 
-/**
- * A pumpkin or melon stem. It grows on farmland like a crop, but at full
- * growth it places its fruit block on an adjacent dirt/farmland block instead
- * of being harvested by hand.
- */
 export default class BlockStem extends BlockCrop {
 
     constructor(id, textureSlotId, options = {}) {
@@ -56,8 +51,6 @@ export default class BlockStem extends BlockCrop {
     }
 
     onMouseButton(world, x, y, z, button) {
-        // Stems are broken with the normal dig action, never harvested by
-        // right-clicking them.
         return false;
     }
 
@@ -70,14 +63,12 @@ export default class BlockStem extends BlockCrop {
             return;
         }
 
-        // Stems need farmland underneath; losing it breaks the stem.
         if (world.getBlockAt(x, y - 1, z) !== BlockRegistry.FARMLAND.id) {
             this.breakWithDrop(world, x, y, z);
             return;
         }
 
         if (this.isAttached(world, x, y, z)) {
-            // If the fruit was removed without notifying us, release the stem.
             if (!this.hasFruit(world, x, y, z)) {
                 const stage = Math.max(0, this.getStage(world, x, y, z) - 1);
                 world.setBlockDataAt(x, y, z, stage);
@@ -94,8 +85,6 @@ export default class BlockStem extends BlockCrop {
             return;
         }
 
-        // Match the other crops: only grow in light. The server world has no
-        // light engine, so treat its missing light hook as full daylight.
         const lightLevel = typeof world.getTotalLightAt === "function"
             ? world.getTotalLightAt(x, y, z)
             : 15;
@@ -124,8 +113,6 @@ export default class BlockStem extends BlockCrop {
 
     canSpawnFruit(world) {
         const minecraft = world.minecraft;
-        // In multiplayer the server owns block changes. Let it place the fruit
-        // and broadcast it instead of predicting a position of our own.
         return !minecraft || typeof minecraft.isSingleplayer !== "function"
             || minecraft.isSingleplayer();
     }
@@ -155,8 +142,6 @@ export default class BlockStem extends BlockCrop {
 
             world.setBlockAt(fruitX, y, fruitZ, fruit.getId(), 0);
             world.setBlockDataAt(x, y, z, ATTACHED_BIT | STAGE_MASK);
-            // Keep checking while attached so a fruit removed by anything
-            // other than the normal break path still releases the stem.
             world.scheduleBlockTick(x, y, z, 100 + Math.floor(Math.random() * 40));
             return true;
         }

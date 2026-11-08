@@ -35,11 +35,8 @@ export default class ItemBluestoneLeverPlacer extends ItemGeneric {
         this.notifyServerPlacement(world, x, y, z, hitFace, BlockRegistry.BLUESTONE_LEVER.getId());
     }
 
-    // See ItemBluestoneDustPlacer.notifyServerPlacement: without this the
-    // server never learns about the lever, so its mount/power state is never
-    // persisted or simulated and the block vanishes when the chunk reloads.
     notifyServerPlacement(world, x, y, z, hitFace, blockId) {
-        if (world && world.isFieldLocalWorld) return; // see ItemBluestoneDustPlacer
+        if (world && world.isFieldLocalWorld) return; 
         const minecraft = world.minecraft;
         if (!minecraft || !hitFace || !minecraft.playerController ||
             typeof minecraft.playerController.sendBlockPlacementPacket !== 'function') {

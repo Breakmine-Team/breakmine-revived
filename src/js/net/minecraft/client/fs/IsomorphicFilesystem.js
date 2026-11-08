@@ -2,8 +2,8 @@ import { Buffer } from '../../../../../../libraries/buffer.js';
 import BrowserFS from './Filesystem.js';
 import { inflate } from '../../lib/pako.js';
 
-// Node.js detection that stays false inside a Web Worker even if the bundle
-// polyfills a global `process` (real Node always exposes process.versions.node).
+
+
 const isNode =
     (typeof process !== 'undefined' &&
     !!process.versions &&
@@ -31,10 +31,10 @@ function nodeFsUnavailable(methodName) {
     return new Error(`IsomorphicFilesystem.${methodName} is only supported in Node.js mode`);
 }
 
-// Normalize a browser-side path into a flat store key. Leading/trailing
-// slashes are stripped so '/worlds/main/world_data.bin' and
-// 'worlds/main/world_data.bin' address the same file, and '' / '.' both mean
-// the virtual root.
+
+
+
+
 function normalizeKey(filePath) {
     return String(filePath == null || filePath === '' ? '' : filePath)
         .replace(/^\/+/, '')
@@ -43,7 +43,7 @@ function normalizeKey(filePath) {
 
 export class IsomorphicFilesystem {
     #browserFS = null;
-    #cache = new Map();      // key -> { kind: 'file', data: Uint8Array } | { kind: 'dir' }
+    #cache = new Map();      
     #readyPromise = null;
 
     constructor(dbName = 'BrowserFileStoreDB', storeName = 'text_files') {
@@ -52,9 +52,6 @@ export class IsomorphicFilesystem {
         }
     }
 
-    // In Node.js mode every relative path is resolved against the project root
-    // ('.'), matching how the in-browser virtual filesystem treats its keys.
-    // Absolute paths are passed through unchanged.
     #resolvePath(filePath) {
         if (isNode && nodePath) {
             const p = filePath == null || filePath === '' ? '.' : String(filePath);
@@ -74,9 +71,6 @@ export class IsomorphicFilesystem {
         return nodeFs;
     }
 
-    // Browser backend: hydrate the in-memory cache from the persisted store.
-    // Only needed before the first server init; import-time sync reads run
-    // against an empty cache and fall back to defaults until ready() resolves.
     async ready() {
         if (isNode || !this.#browserFS) {
             return;
@@ -88,17 +82,12 @@ export class IsomorphicFilesystem {
         return this.#readyPromise;
     }
 
-    // Re-hydrate the in-memory cache from the persisted store. Used when files
-    // may have been written by another filesystem instance (e.g. the main
-    // thread imports/exports worlds while the integrated server runs in a
-    // worker, or a freshly stopped worker must re-read main-thread changes).
     async refresh() {
         if (isNode || !this.#browserFS) return;
         if (this.#readyPromise) {
             try {
                 await this.#readyPromise;
             } catch (e) {
-                // Ignore a failed initial load; retry below.
             }
         }
         this.#cache.clear();
@@ -112,8 +101,6 @@ export class IsomorphicFilesystem {
                 try {
                     const raw = await this.#browserFS.loadBinaryFile(key);
                     if (raw === null || raw.length === 0) continue;
-                    // saveFile() stores deflate(text); saveBinaryFile() stores
-                    // the raw bytes. Inflate what we can, keep the rest.
                     let bytes = raw;
                     try {
                         bytes = inflate(raw);
@@ -122,30 +109,19 @@ export class IsomorphicFilesystem {
                     }
                     this.#cache.set(normalizeKey(key), { kind: 'file', data: bytes });
                 } catch {
-                    // Skip unreadable entries.
                 }
             }
         } catch {
-            // No store available; start with an empty cache.
         }
         this.#cache.set('worlds', { kind: 'dir' });
     }
 
-    // Lazily persist a cache entry to the async store (fire-and-forget).
     #persist(key, entry) {
         if (isNode || !this.#browserFS || entry.kind !== 'file') return;
-        // saveFile() deflates the text and the loader inflates it back on the
-        // next session, which is only lossless for real UTF-8. World files are
-        // opaque binary (BMW3 header plus deflate streams); routing them through
-        // the text path replaced every non-UTF-8 byte with U+FFFD and corrupted
-        // the save the next time it was read. A strict UTF-8 decode distinguishes
-        // the two: only genuine text goes through saveFile(), everything else is
-        // written raw via saveBinaryFile().
         let text = null;
         try {
             text = new TextDecoder('utf-8', { fatal: true }).decode(entry.data);
         } catch {
-            // Not valid UTF-8 -> opaque binary; store the raw bytes.
         }
         try {
             if (text !== null) {
@@ -154,7 +130,6 @@ export class IsomorphicFilesystem {
                 this.#browserFS.saveBinaryFile(entry.data, key).catch(() => {});
             }
         } catch {
-            // Ignore persistence failures; the in-memory copy still works.
         }
     }
 
@@ -267,7 +242,6 @@ export class IsomorphicFilesystem {
         if (this.#cache.has(key)) {
             return true;
         }
-        // A path is "present" if it is an ancestor of a stored key.
         const prefix = key + '/';
         for (const stored of this.#cache.keys()) {
             if (stored.startsWith(prefix)) {
@@ -309,7 +283,7 @@ export class IsomorphicFilesystem {
         for (const stored of this.#cache.keys()) {
             if (!stored.startsWith(prefix) || stored === key) continue;
             const rest = stored.slice(prefix.length);
-            if (rest.includes('/')) continue; // only direct children
+            if (rest.includes('/')) continue; 
             const entry = this.#cache.get(stored);
             if (options && options.withFileTypes) {
                 names.push({

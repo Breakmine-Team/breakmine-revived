@@ -45,10 +45,10 @@ import {
     sendState as sendOffGridState
 } from './offgrid.js';
 
-// Sign-text censoring. The bad-words package is never loaded when the server
-// runs without Node modules (singleplayer integrated server), so sign text is
-// stored verbatim there. In Node it is imported lazily and applies from the
-// first edit after it resolves.
+
+
+
+
 let filter = null;
 if (!NO_MODULES) {
     import('bad-words')
@@ -63,8 +63,8 @@ function sanitizeText(text) {
     return filter ? filter.clean(text) : text;
 }
 
-// A block counts as "solid" for the buried-at-login check only if it fully
-// occupies its cell: air, water, lava and passable plants don't count.
+
+
 const FLUID_IDS = new Set([8, 9, 10, 11]);
 function isSolidBlock(blockId) {
     return blockId !== 0 && !FLUID_IDS.has(blockId);
@@ -72,8 +72,8 @@ function isSolidBlock(blockId) {
 
 let log = Logger;
 
-// A failed world save (disk full, sandboxed FS, ...) must never take down the
-// connection or interrupt gameplay - log it and continue.
+
+
 function doSaveWorld() {
     try {
         saveWorld();
@@ -82,16 +82,16 @@ function doSaveWorld() {
     }
 }
 
-// saveWorld() rewrites the entire world file, and a single action triggers
-// several of them: placing a block also fires onBlockAdded, neighbour ticks
-// and the dig that follows, so a burst of activity wrote the whole world over
-// and over. On a world with ~1M changes that is tens of megabytes per block
-// placed, which is slow enough to look like the game has hung and leaves the
-// write open long enough to be interrupted.
-//
-// Coalesce a burst into one write. This is a throttle rather than a trailing
-// debounce: the first change schedules the write and later changes ride along
-// with it, so a continuous stream of edits can never starve the save.
+
+
+
+
+
+
+
+
+
+
 const SAVE_DEBOUNCE_MS = 2000;
 let pendingSaveTimer = null;
 
@@ -101,13 +101,12 @@ function safeSaveWorld() {
         pendingSaveTimer = null;
         doSaveWorld();
     }, SAVE_DEBOUNCE_MS);
-    // Never hold the process open just to write a world.
     if (typeof pendingSaveTimer.unref === 'function') pendingSaveTimer.unref();
 }
 
-// A scheduled save that never fires would lose the last couple of seconds of
-// edits, so the shutdown path calls this to write immediately. Returns true if
-// there was something pending, so the caller can skip a redundant second write.
+
+
+
 function flushSaveWorld() {
     if (pendingSaveTimer === null) return false;
     clearTimeout(pendingSaveTimer);
@@ -123,20 +122,17 @@ function canSee(viewer, target) {
     return true;
 }
 
-// Track which chunks each player has received
+
 const playerChunks = new Map();
 
-// Helper function to unpack Protocol 47 (1.8) packed 64-bit Position types
+
 function readPosition(buffer, offset) {
     const val = readLongBE(buffer, offset);
 
-    // Protocol 47 Bit Allocations: X (26 MSBs), Z (26 LSBs), Y (12 bits in between)
-    // We use BigInt bitwise arithmetic and shift them back to signed values
     let x = val >> 38n;
     let y = (val >> 26n) & 0xFFFn;
     let z = val & 0x3FFFFFFn;
 
-    // Handle 2's complement sign extension for negative coordinates (using BigInt)
     const xBit = 1n << 25n;
     const yBit = 1n << 11n;
     const zBit = 1n << 25n;
@@ -153,8 +149,6 @@ function handlePacket(player, buffer) {
         return;
     }
 
-    // Every block read/write made while handling this packet belongs to the
-    // sending player's dimension.
     setActiveDimension(player.dimension ?? 0);
 
     try {
@@ -162,8 +156,6 @@ function handlePacket(player, buffer) {
         const [length, lenBytes] = readVarInt(buffer, offset);
         offset += lenBytes;
 
-        // The declared packet length must not exceed the bytes actually
-        // present, otherwise subsequent reads would run off the end.
         if (length < 1 || length + lenBytes > buffer.length) {
             throw new MalformedPacketError('Packet length mismatch');
         }
@@ -186,17 +178,13 @@ function handlePacket(player, buffer) {
         const who = player.username || 'unknown';
         if (err instanceof MalformedPacketError) {
             log.warn('Server', `Rejected malformed packet from ${who}: ${err.message}`);
-            // Protocol violations are unrecoverable - drop the connection.
             try {
                 if (player.ws && player.ws.readyState === 1) {
                     player.ws.close();
                 }
             } catch (e) {
-                // Ignore errors while closing the broken connection.
             }
         } else {
-            // Internal/gameplay errors (a failed world save, a block handler
-            // edge case, ...) must not disconnect the player. Log and carry on.
             log.error('Server', `Error handling packet from ${who}: ${err.message}`);
         }
     }
@@ -243,8 +231,6 @@ function handleLoginPacket(player, packetId, buffer, offset) {
     if (packetId === 0x00) {
         const [username, bytesConsumed] = readString(buffer, offset);
 
-        // Reject absurdly long names up front so downstream fixed-size packet
-        // writers can never run off the end of their buffers.
         if (!username || username.length > 32) {
             log.info('Server', `Rejected login with invalid username length`);
             if (player.ws.readyState === 1) {
@@ -256,9 +242,6 @@ function handleLoginPacket(player, packetId, buffer, offset) {
 
         player.username = username;
 
-        // Banned names never reach the world: no player list entry, no chunks,
-        // no inventory. Temp bans that have run out are dropped here, so the
-        // same connection is allowed again once the ban expires.
         const ban = isBanned(username);
         if (ban) {
             log.info('Server', `${username} refused - banned${ban.reason ? ': ' + ban.reason : ''}`);
@@ -281,19 +264,12 @@ function handleLoginPacket(player, packetId, buffer, offset) {
 
         const existingPlayer = findPlayerByUsername(username);
         if (existingPlayer) {
-            // A stale player object left behind by a previous connection or
-            // session must not survive the rejoin: if it stays in the player
-            // list the client sees a duplicate of itself (a clone that mirrors
-            // movement and chat). Close its socket and remove it so the new
-            // connection below is the only player with this username.
             if (existingPlayer.ws && existingPlayer.ws.readyState === 1) {
                 existingPlayer.ws.close();
             }
             if (existingPlayer.eid !== null) {
                 removePlayer(existingPlayer);
                 cleanupPlayerChunks(existingPlayer.eid);
-                // Mark it so the socket's own 'close' handler (which guards on
-                // player.eid) skips the redundant second removal.
                 existingPlayer.eid = null;
             }
         }
@@ -302,7 +278,6 @@ function handleLoginPacket(player, packetId, buffer, offset) {
 
         let spawn = getSpawnPosition();
 
-        // Load player data if exists
         const playerData = loadPlayerData(username);
         player.dimension = playerData && Number(playerData.dimension) === NETHER_DIMENSION
             ? NETHER_DIMENSION
@@ -322,10 +297,6 @@ function handleLoginPacket(player, packetId, buffer, offset) {
             player.inventory = normalizeInventoryState(playerData.inventory);
             player.cape = typeof playerData.cape === 'string' ? playerData.cape : null;
 
-            // A saved position from a previous world type/seed can be buried
-            // inside solid terrain (e.g. y=10 saved on a flat world, now
-            // underground on a normal world). If the player's whole body is in
-            // solid blocks, respawn at the current world spawn instead.
             const px = Math.floor(player.x);
             const py = Math.floor(player.y);
             const pz = Math.floor(player.z);
@@ -335,7 +306,6 @@ function handleLoginPacket(player, packetId, buffer, offset) {
                 player.z = spawn.z;
             }
         } else {
-            // Initialize player position at spawn
             player.x = spawn.x;
             player.y = spawn.y;
             player.z = spawn.z;
@@ -352,19 +322,11 @@ function handleLoginPacket(player, packetId, buffer, offset) {
         sendLoginSuccess(player);
         sendServerRules(player);
         sendJoinGame(player);
-        // Sent after Join Game so the client has a world to load into; its
-        // chunk packets are held until the mods are registered.
         sendServerMods(player);
         sendSpawnPosition(player);
 
-        // Transmit the saved position right away so the client is placed at
-        // its saved spot before it can report the spawn position back to us.
         sendPlayerPositionLook(player);
 
-        // Send the player's saved state via a custom JSON packet. This is the
-        // authoritative restore: position, rotation, health and gamemode all in
-        // one atomic message, so the client can apply them regardless of how the
-        // vanilla 0x08 teleport happens to be ordered against world loading.
         if (player.ws.readyState === 1) {
             player.ws.send(JSON.stringify({
                 type: 'playerState',
@@ -379,8 +341,6 @@ function handleLoginPacket(player, packetId, buffer, offset) {
             }));
         }
 
-        // Send the player's saved inventory, health and gamemode so the client
-        // starts with the same state as when they left, instead of a fresh one.
         if (player.ws.readyState === 1) {
             player.ws.send(JSON.stringify({
                 type: 'inventory',
@@ -397,10 +357,7 @@ function handleLoginPacket(player, packetId, buffer, offset) {
             }));
         }
 
-        // Initialize chunk tracking BEFORE sending chunks so checkAndSendChunks
-        // can track which chunks have already been sent
         const sentChunks = new Set();
-        // Pre-populate with the 5x5 spawn chunks that sendChunks will send
         for (let cx = -2; cx <= 2; cx++) {
             for (let cz = -2; cz <= 2; cz++) {
                 sentChunks.add(`${cx},${cz}`);
@@ -408,13 +365,8 @@ function handleLoginPacket(player, packetId, buffer, offset) {
         }
         playerChunks.set(player.eid, sentChunks);
 
-        // Send initial 5x5 spawn chunks + PlayerPositionLook
         sendChunks(player);
 
-        // Immediately send the rest of the render distance worth of chunks
-        // without waiting for the client's position response round-trip.
-        // This prevents the loading screen from getting stuck at low progress
-        // on slow connections.
         checkAndSendChunks(player);
 
         if (player.ws.readyState === 1) {
@@ -423,7 +375,6 @@ function handleLoginPacket(player, packetId, buffer, offset) {
                 inventories: getAllBlockInventoriesState()
             }));
 
-            // Send sign text updates for all signs
             const inventories = getBlockInventories();
             for (const [key, inv] of inventories) {
                 if (inv && inv.text) {
@@ -433,10 +384,8 @@ function handleLoginPacket(player, packetId, buffer, offset) {
             }
         }
 
-        // Send initial time to client
         sendTimeUpdate(player, getWorldTime());
 
-        // Send player list to the new player (include self so Tab list shows own username)
         const players = getPlayers();
         const visiblePlayers = Array.from(players.values()).filter(p => p.eid === player.eid || canSee(player, p));
         player.ws.send(sendPlayerListEntry(visiblePlayers, 0));
@@ -444,21 +393,17 @@ function handleLoginPacket(player, packetId, buffer, offset) {
 
         for (const [eid, p] of players) {
             if (eid === player.eid) continue;
-            // Only send spawn for players visible to the new player
             if (canSee(player, p)) {
                 player.ws.send(createSpawnPlayerPacket(p));
             }
-            // Only send new player spawn to players who can see him
             if (canSee(p, player)) {
                 p.ws.send(createSpawnPlayerPacket(player));
             }
-            // Only send player list entry to players who can see the new player
             if (canSee(p, player)) {
                 p.ws.send(sendPlayerListEntry([player], 0));
             }
         }
 
-        // Send existing item entities to the new player
         const allItems = getAllItemEntities();
         for (const item of allItems) {
             player.ws.send(createSpawnObjectPacket(item));
@@ -472,10 +417,9 @@ function handleLoginPacket(player, packetId, buffer, offset) {
 
 function handlePlayPacket(player, packetId, buffer, offset) {
     switch (packetId) {
-        case 0x01: { // Chat Message
+        case 0x01: { 
             const [msg] = readString(buffer, offset);
 
-            // Check if message is a command
             if (msg.startsWith('/')) {
                 handleCommand(player, msg);
                 log.info('Chat', `<${player.username}> executed command: ${msg}`);
@@ -493,7 +437,7 @@ function handlePlayPacket(player, packetId, buffer, offset) {
             break;
         }
 
-        case 0x04: { // Player Position
+        case 0x04: { 
             ensureReadable(buffer, offset, 25);
             player.x = buffer.readDoubleBE(offset);
             player.y = buffer.readDoubleBE(offset + 8);
@@ -505,7 +449,7 @@ function handlePlayPacket(player, packetId, buffer, offset) {
             break;
         }
 
-        case 0x05: { // Player Look
+        case 0x05: { 
             ensureReadable(buffer, offset, 9);
             player.yaw = buffer.readFloatBE(offset);
             player.pitch = buffer.readFloatBE(offset + 4);
@@ -514,7 +458,7 @@ function handlePlayPacket(player, packetId, buffer, offset) {
             break;
         }
 
-        case 0x06: { // Player Position And Look
+        case 0x06: { 
             ensureReadable(buffer, offset, 33);
             player.x = buffer.readDoubleBE(offset);
             player.y = buffer.readDoubleBE(offset + 8);
@@ -528,22 +472,22 @@ function handlePlayPacket(player, packetId, buffer, offset) {
             break;
         }
 
-        case 0x07: { // Protocol 47: Player Digging (Block Breaking)
+        case 0x07: { 
             handlePlayerDigging(player, buffer, offset);
             break;
         }
 
-        case 0x08: { // Protocol 47: Player Block Placement
+        case 0x08: { 
             handleBlockPlacement(player, buffer, offset);
             break;
         }
 
-        case 0x0A: { // Animation (Arm Swing)
+        case 0x0A: { 
             broadcastAnimation(player);
             break;
         }
 
-        case 0x0B: { // Entity Action (Player State)
+        case 0x0B: { 
             const [entityId, eidBytes] = readVarInt(buffer, offset);
             ensureReadable(buffer, offset + eidBytes, 1);
             const state = buffer.readUInt8(offset + eidBytes);
@@ -561,27 +505,27 @@ function handlePlayPacket(player, packetId, buffer, offset) {
             break;
         }
 
-        case 0x09: { // Client Drop Item
+        case 0x09: { 
             handleDropItem(player, buffer, offset);
             break;
         }
 
-        case 0x0D: { // Client Pickup Item
+        case 0x0D: { 
             handlePickupItem(player, buffer, offset);
             break;
         }
 
-        case 0x0E: { // Client Update Sign Text
+        case 0x0E: { 
             handleUpdateSignText(player, buffer, offset);
             break;
         }
 
-        case OFF_GRID_REQUEST_PACKET_ID: { // Client requests the current off-grid state
+        case OFF_GRID_REQUEST_PACKET_ID: { 
             sendOffGridState(player);
             break;
         }
 
-        case OFF_GRID_CELL_PACKET_ID: { // Client edited one summoned cell
+        case OFF_GRID_CELL_PACKET_ID: { 
             handleOffGridCellEdit(player, buffer, offset);
             break;
         }
@@ -590,11 +534,6 @@ function handlePlayPacket(player, packetId, buffer, offset) {
     }
 }
 
-/**
- * Apply one interactive edit made against a summoned cell. The client sends
- * local grid coordinates (what its field and raytrace address), so the server
- * can validate and store the edit without knowing the client's pose.
- */
 function handleOffGridCellEdit(player, buffer, offset) {
     if (isSpectator(player)) {
         return;
@@ -623,8 +562,6 @@ function handleOffGridCellEdit(player, buffer, offset) {
 
     const result = applyOffGridCellEdit(x, y, z, typeId, data);
     if (!result.valid) {
-        // Reject the write and send the authoritative state back so the
-        // client's optimistic local edit is reverted.
         sendOffGridState(player);
         return;
     }
@@ -643,7 +580,6 @@ function getHeldItemId(player) {
     return inventory.items?.[slot]?.typeId || 0;
 }
 
-/** Re-send the authoritative block so a client prediction is reverted. */
 function revertBlockForPlayer(player, x, y, z) {
     const blockId = getBlockAt(x, y, z) || 0;
     const metadata = getBlockMetadata(x, y, z) || 0;
@@ -656,7 +592,6 @@ function isInteractiveBlock(block) {
         block.onMouseButton !== Block.prototype.onMouseButton;
 }
 
-/** Build the shared event shape for authoritative server-side mod hooks. */
 function emitServerBlockAction(action, player, x, y, z, options = {}) {
     const world = getServerWorld();
     const targetBlockId = getBlockAt(x, y, z) || 0;
@@ -689,16 +624,12 @@ function emitServerBlockAction(action, player, x, y, z, options = {}) {
 function handlePlayerDigging(player, buffer, offset) {
     setActiveDimension(player.dimension ?? 0);
     ensureReadable(buffer, offset, 10);
-    const status = buffer.readUInt8(offset); // 0: Started, 1: Cancelled, 2: Finished
+    const status = buffer.readUInt8(offset); 
     const [x, y, z] = readPosition(buffer, offset + 1);
     const face = buffer.readUInt8(offset + 9);
 
-    // Only "finished" (2) actually destroys the block. Treating "started" (0)
-    // as a break made the server delete the block the moment mining began, so
-    // an aborted dig could never be undone and the removal was saved and
-    // broadcast before the client had even decided to break anything.
     if (status === 2) {
-        const blockId = 0; // Air (broken block)
+        const blockId = 0; 
         const prevBlockId = getBlockAt(x, y, z);
         const serverWorld = getServerWorld();
 
@@ -715,11 +646,8 @@ function handlePlayerDigging(player, buffer, offset) {
 
         addWorldChange(x, y, z, blockId);
 
-        // Delete sign text / block inventory state on server
         deleteBlockInventory(`${x},${y},${z}`);
 
-        // Let the removed block clean up (door halves, pusher head, dust
-        // network re-propagation) before its neighbors are woken up.
         const prevBlock = Block.getById(prevBlockId);
         if (prevBlock && prevBlock.onBlockRemoved) {
             try {
@@ -729,19 +657,17 @@ function handlePlayerDigging(player, buffer, offset) {
             }
         }
 
-        // Wake up neighbors so observers / repeaters / dust react.
         serverWorld.scheduleNeighborTicks(x, y, z);
         serverWorld.notifyNeighborBlockChange(x, y, z);
 
         safeSaveWorld();
 
         const players = getPlayers();
-        const blockState = (blockId << 4) | 0; // No metadata for broken blocks
+        const blockState = (blockId << 4) | 0; 
         for (const p of players.values()) {
             sendBlockChange(p.ws, x, y, z, blockState);
         }
 
-        // Broadcast animation to other players when block is broken
         broadcastAnimation(player);
     }
 }
@@ -751,8 +677,6 @@ function handleUpdateSignText(player, buffer, offset) {
     const [x, y, z] = readPosition(buffer, offset);
     const [rawText, textBytes] = readString(buffer, offset + 8);
 
-    // Clean text using the bad-words library (when enabled; singleplayer
-    // integrated servers store sign text verbatim).
     const text = sanitizeText(rawText).substring(0, 200);
 
     log.info('Server', `Sign text update: ${x},${y},${z} = "${text}"`);
@@ -761,7 +685,6 @@ function handleUpdateSignText(player, buffer, offset) {
     setBlockInventory(blockKey, { text: text });
     safeSaveWorld();
 
-    // Broadcast sign text update to all players via packet
     const players = getPlayers();
     for (const p of players.values()) {
         if (p.ws.readyState === 1) {
@@ -776,12 +699,8 @@ function handleBlockPlacement(player, buffer, offset) {
     const [x, y, z] = readPosition(buffer, offset);
     const direction = buffer.readUInt8(offset + 8);
 
-    // Read held item from packet (offset + 9)
     const heldItemId = buffer.readInt16BE(offset + 9);
 
-    // Our client appends one optional metadata byte after the vanilla payload
-    // (18 bytes after the packet id). Vanilla clients stop at 18 bytes and let
-    // the block compute its own placement metadata.
     let metadataOverride = -1;
     if (buffer.length > offset + 18) {
         const override = buffer.readUInt8(offset + 18);
@@ -790,19 +709,32 @@ function handleBlockPlacement(player, buffer, offset) {
         }
     }
 
-    // Protocol 47: direction 255 means "use item / interact with block"
-    // (right-click). Blocks that change state when activated (doors) are
-    // handled here so the change is authoritative and broadcast to everyone.
     if (direction === 255) {
         const serverWorld = getServerWorld();
         const heldBlock = heldItemId > 0 ? Block.getById(heldItemId) : null;
 
-        // Clicking the top of an existing pavement slope adds a layer to it
-        // instead of placing a floating layer above, matching snow layers.
         const targetId = getBlockAt(x, y, z);
 
-        // Flint and steel inside a finished obsidian frame lights it.
         if (heldItemId === 236) {
+            const ignitionTarget = Block.getById(targetId);
+            if (ignitionTarget && typeof ignitionTarget.ignite === 'function') {
+                const interactAction = emitServerBlockAction('interact', player, x, y, z, {
+                    currentBlockId: heldItemId,
+                    face: direction
+                });
+                if (interactAction.canceled) {
+                    revertBlockForPlayer(player, x, y, z);
+                    return;
+                }
+
+                try {
+                    ignitionTarget.onMouseButton(serverWorld, x, y, z, 2, heldItemId);
+                } catch (e) {
+                    log.error('Server', `onMouseButton error at ${x},${y},${z}: ${e.message}`);
+                }
+                return;
+            }
+
             lightPortal(player, x, y, z);
             return;
         }
@@ -830,9 +762,6 @@ function handleBlockPlacement(player, buffer, offset) {
             return;
         }
 
-        // Held items that act on a block (hoes tilling soil, seeds planting on
-        // farmland) run their authoritative hook on the clicked block instead
-        // of the client's local prediction.
         if (heldBlock && typeof heldBlock.onUseOnBlockServer === 'function') {
             const interactAction = emitServerBlockAction('interact', player, x, y, z, {
                 currentBlockId: heldItemId,
@@ -863,7 +792,10 @@ function handleBlockPlacement(player, buffer, offset) {
             }
 
             try {
-                targetBlock.onMouseButton(serverWorld, x, y, z, 2);
+                // The held item decides whether the click acts (TNT only lights
+                // from flint and steel). Server worlds have no local player to
+                // read it from, so pass it explicitly.
+                targetBlock.onMouseButton(serverWorld, x, y, z, 2, heldItemId);
             } catch (e) {
                 log.error('Server', `onMouseButton error at ${x},${y},${z}: ${e.message}`);
             }
@@ -872,7 +804,6 @@ function handleBlockPlacement(player, buffer, offset) {
     }
 
     if (direction !== 255) {
-        // Calculate offset block position based on face targeted
         const dx = [0, 0, 0, 0, -1, 1][direction];
         const dy = [-1, 1, 0, 0, 0, 0][direction];
         const dz = [0, 0, -1, 1, 0, 0][direction];
@@ -881,15 +812,12 @@ function handleBlockPlacement(player, buffer, offset) {
         const placeY = y + dy;
         const placeZ = z + dz;
 
-        // Prevent placement below y=0
         if (placeY < 0) {
             return;
         }
 
-        // Prevent placement inside other players
         const players = getPlayers();
         for (const p of players.values()) {
-            // Player bounding box: width 0.6, height 1.8
             const playerMinX = p.x - 0.3;
             const playerMaxX = p.x + 0.3;
             const playerMinY = p.y;
@@ -897,11 +825,9 @@ function handleBlockPlacement(player, buffer, offset) {
             const playerMinZ = p.z - 0.3;
             const playerMaxZ = p.z + 0.3;
 
-            // Check if block intersects with player (AABB intersection)
             if (placeX < playerMaxX && placeX + 1 > playerMinX &&
                 placeY < playerMaxY && placeY + 1 > playerMinY &&
                 placeZ < playerMaxZ && placeZ + 1 > playerMinZ) {
-                // Send block change to revert client prediction
                 const currentBlockId = getBlockAt(placeX, placeY, placeZ) || 0;
                 const currentMetadata = getBlockMetadata(placeX, placeY, placeZ) || 0;
                 const currentBlockState = (currentBlockId << 4) | currentMetadata;
@@ -910,11 +836,6 @@ function handleBlockPlacement(player, buffer, offset) {
             }
         }
 
-        // The client reports which block it placed. Only a real, placeable
-        // block may be written: an absent id, an id the registry doesn't know
-        // or a non-block item (bucket, flint, ...) must be dropped, because
-        // such an id survives the save file and is then decoded as an unknown
-        // block on the next chunk load, which the client renders as stone.
         const heldBlock = heldItemId > 0 ? Block.getById(heldItemId) : null;
         if (heldBlock === null || typeof heldBlock.isItem === 'function' && heldBlock.isItem()) {
             return;
@@ -941,9 +862,6 @@ function handleBlockPlacement(player, buffer, offset) {
             return;
         }
 
-        // Ask the block itself for its placement metadata. Every directional
-        // block implements getPlacementMetadata() in its own class, so the
-        // server needs no per-block special cases here - mod blocks included.
         const heldBlockForMeta = Block.getById(blockId);
         let metadata = 0;
         if (metadataOverride >= 0) {
@@ -959,15 +877,11 @@ function handleBlockPlacement(player, buffer, offset) {
 
         addWorldChange(placeX, placeY, placeZ, blockId, metadata);
 
-        // Doors are two blocks tall; the bottom half always carries the top.
         const doorTop = blockId === 160 && getBlockAt(placeX, placeY + 1, placeZ) !== 161;
         if (doorTop) {
             addWorldChange(placeX, placeY + 1, placeZ, 161, metadata);
         }
 
-        // Trigger the block's server-side lifecycle + wake up neighbors so the
-        // bluestone simulation (dust propagation, lamps, repeaters, observers,
-        // doors) runs authoritatively on the server.
         const placedBlock = Block.getById(blockId);
         if (placedBlock && typeof placedBlock.onBlockAdded === 'function') {
             try {
@@ -991,7 +905,6 @@ function handleBlockPlacement(player, buffer, offset) {
             }
         }
 
-        // Broadcast animation to other players when block is placed
         broadcastAnimation(player);
     }
 }
@@ -1030,24 +943,18 @@ function handleDropItem(player, buffer, offset) {
     ensureReadable(buffer, offset, 15);
     const blockId = buffer.readInt16BE(offset);
 
-    // The client sends the exact spawn position: the broken block's position
-    // when an item is dropped from breaking, or the player's position when
-    // dropping the held item (Q).
     const spawnX = buffer.readInt32BE(offset + 2) + 0.5;
     const spawnY = buffer.readInt32BE(offset + 6) + 0.5;
     const spawnZ = buffer.readInt32BE(offset + 10) + 0.5;
 
-    // Only Q-drops keep the pickup delay on the client.
     const hasPickupDelay = buffer.readUInt8(offset + 14) === 1;
 
-    // Motion: pop upward with a little random drift
     const motionX = (Math.random() - 0.5) * 0.15;
     const motionY = 0.2;
     const motionZ = (Math.random() - 0.5) * 0.15;
 
     const entity = addItemEntity(blockId, spawnX, spawnY, spawnZ, motionX, motionY, motionZ, player.eid, hasPickupDelay);
 
-    // Broadcast spawn to all players
     const packet = createSpawnObjectPacket(entity);
     const players = getPlayers();
     for (const p of players.values()) {
@@ -1063,10 +970,8 @@ function handlePickupItem(player, buffer, offset) {
     const entity = getItemEntity(entityId);
     if (!entity) return;
 
-    // Remove from server tracking
     removeItemEntity(entityId);
 
-    // Broadcast destroy to all players
     const destroyPacket = createDestroyEntityPacket(entityId);
     const players = getPlayers();
     for (const p of players.values()) {
@@ -1086,9 +991,9 @@ function broadcastBlockToDimension(dimension, x, y, z, blockId, metadata) {
     }
 }
 
-// Flint and steel lights a 2x3 obsidian frame. The clicked block may be any
-// interior block (the usual case) or part of the frame; both portal planes are
-// tried. Returns true when a frame was found and filled.
+
+
+
 function lightPortal(player, x, y, z) {
     const dimension = player.dimension ?? 0;
     const isFrame = (bx, by, bz) => getBlockAt(bx, by, bz, dimension) === 256;
@@ -1098,9 +1003,6 @@ function lightPortal(player, x, y, z) {
     };
 
     for (const [dx, dz] of [[1, 0], [0, 1]]) {
-        // The click can land on the interior or on any part of the rim (the
-        // usual target is the bottom obsidian block), so try every anchor that
-        // puts the clicked block somewhere in the 2x3 frame.
         for (let ox = -1; ox <= 2; ox++) {
             for (let oy = -1; oy <= 3; oy++) {
                 const bx = x - ox * dx;
@@ -1118,7 +1020,6 @@ function lightPortal(player, x, y, z) {
                 }
                 if (!valid) continue;
 
-                // Obsidian rim: bottom, top and both sides.
                 for (let i = -1; i <= 2 && valid; i++) {
                     if (!isFrame(bx + i * dx, by - 1, bz + i * dz)
                         || !isFrame(bx + i * dx, by + 3, bz + i * dz)) {
@@ -1133,8 +1034,6 @@ function lightPortal(player, x, y, z) {
                 }
                 if (!valid) continue;
 
-                // Metadata 0 lies along X (thin in Z), 1 lies along Z (thin in
-                // X), so the 2px plate is oriented like the frame it fills.
                 const portalData = dx === 0 ? 1 : 0;
                 for (let i = 0; i < 2; i++) {
                     for (let j = 0; j < 3; j++) {
@@ -1150,8 +1049,8 @@ function lightPortal(player, x, y, z) {
     return false;
 }
 
-// Walking into a portal block swaps the player to the other dimension. Each
-// player carries their own dimension, so others keep playing where they are.
+
+
 function checkPortalTravel(player) {
     if (Date.now() < (player.portalCooldown || 0)) return;
 
@@ -1170,14 +1069,11 @@ function checkPortalTravel(player) {
 function travelToDimension(player, targetDimension) {
     if ((player.dimension ?? 0) === targetDimension) return;
 
-    // The nether is 1/8 scale, like the real game.
     const scale = targetDimension === NETHER_DIMENSION ? 1 / 8 : 8;
     const tx = Math.floor(player.x * scale);
     const tz = Math.floor(player.z * scale);
     const ty = Math.max(4, Math.min(Math.floor(player.y), targetDimension === NETHER_DIMENSION ? 100 : 200));
 
-    // Carve a pocket, floor it with obsidian and put a return portal in it so
-    // the player can come back instead of being stranded.
     for (let dx = 0; dx < 4; dx++) {
         for (let dz = 0; dz < 2; dz++) {
             for (let dy = 0; dy < 5; dy++) {
@@ -1200,7 +1096,6 @@ function travelToDimension(player, targetDimension) {
     player.onGround = false;
     player.portalCooldown = Date.now() + PORTAL_COOLDOWN_MS;
 
-    // Everything around the arrival point has to stream in again.
     playerChunks.set(player.eid, new Set());
     savePlayerData(player);
 
@@ -1242,9 +1137,9 @@ function cleanupPlayerChunks(eid) {
     playerChunks.delete(eid);
 }
 
-// Respawn a player after death: reset to the world spawn, push fresh chunks
-// around it, and tell the client to re-arm its loading gate so the player only
-// becomes active once the terrain around the spawn is loaded. Returns nothing.
+
+
+
 function respawnPlayer(player) {
     const spawn = getSpawnPosition(player.dimension ?? 0);
 
@@ -1258,8 +1153,6 @@ function respawnPlayer(player) {
     player.isFlying = false;
     savePlayerData(player);
 
-    // Reset per-player chunk tracking so every chunk around the new spawn is
-    // sent again instead of being skipped as "already sent" from the old spot.
     const sentChunks = new Set();
     for (let cx = -2; cx <= 2; cx++) {
         for (let cz = -2; cz <= 2; cz++) {
@@ -1269,9 +1162,6 @@ function respawnPlayer(player) {
     playerChunks.set(player.eid, sentChunks);
 
     if (player.ws.readyState === 1) {
-        // Authoritative respawn state must arrive BEFORE chunks so the client
-        // re-arms its loading screen and targets the new position while it
-        // streams terrain in (it cannot fall while frozen on the loading screen).
         player.ws.send(JSON.stringify({
             type: 'respawn',
             x: player.x,
@@ -1289,7 +1179,6 @@ function respawnPlayer(player) {
     checkAndSendChunks(player);
     sendSpawnPosition(player);
 
-    // Let other players see the respawned player at the new position.
     broadcast(createEntityTeleportPacket(player), getPlayers());
 }
 

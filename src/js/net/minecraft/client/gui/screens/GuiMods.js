@@ -11,11 +11,6 @@ const SLOT_HEIGHT = 36;
 const PANE_BACKGROUND = "rgba(0, 0, 0, 0.45)";
 const INFO_ICON_SIZE = 64;
 
-/**
- * Mods screen. Installed mods live in a scrollable sidebar on the left, drawn
- * like the singleplayer world list (icon + three text lines); the selected
- * mod's details, including a larger icon, fill the pane on the right.
- */
 export default class GuiMods extends GuiScreen {
 
     constructor(minecraft, previousScreen) {
@@ -26,8 +21,6 @@ export default class GuiMods extends GuiScreen {
         this.modSlotContainer = null;
         this.selectedIndex = -1;
 
-        // data URL -> decoded image, so the info pane and the rows share one
-        // decode per mod icon instead of starting a new load every frame.
         this.iconImages = new Map();
     }
 
@@ -50,7 +43,7 @@ export default class GuiMods extends GuiScreen {
                 data, this.modSlotContainer.slotX, 0, this.modSlotContainer.slotWidth, SLOT_HEIGHT,
                 () => {
                     this.modSlotContainer.setSelected(index);
-                    this.setSelectedWorld(index); // Sync selectedIndex in GuiMods
+                    this.setSelectedWorld(index); 
                 },
                 this.minecraft
             )
@@ -60,11 +53,6 @@ export default class GuiMods extends GuiScreen {
     async init() {
         super.init();
 
-        // --- Layout -------------------------------------------------------
-        // Computed before the first await: drawScreen can run while the mod
-        // list is still loading, and a layout that is still undefined fed NaN
-        // into the fade gradients. The sidebar stops short of the bottom edge
-        // to leave room for the Browse Mods button.
         this.top = 34;
         this.bottom = this.height - 34;
 
@@ -79,7 +67,6 @@ export default class GuiMods extends GuiScreen {
 
         await this.refreshModList();
 
-        // Ensure mod.enabled defaults to true if missing from the modloader startup response
         this.mods.forEach(mod => {
             if (mod.enabled === undefined || mod.enabled === null) {
                 mod.enabled = true;
@@ -87,25 +74,20 @@ export default class GuiMods extends GuiScreen {
         });
 
         this.modSlotContainer = new GuiModSlotContainer(this, this.mods);
-        // Use the list as a sidebar instead of a full-width list.
         this.modSlotContainer.viewLeft = this.sidebarX;
         this.modSlotContainer.viewRight = this.sidebarX + this.sidebarWidth;
         this.modSlotContainer.top = this.top;
         this.modSlotContainer.bottom = this.bottom;
-        // 4px inset left and right, plus clearance for the 6px scrollbar and
-        // its 2px margin, so rows never run underneath it.
         this.modSlotContainer.slotX = this.sidebarX + 4;
         this.modSlotContainer.slotWidth = this.sidebarWidth - 16;
         this.modSlotContainer.scrollBarX = this.sidebarX + this.sidebarWidth - 8;
         this.modSlotContainer.scrollStep = SLOT_HEIGHT / 6;
         this.modSlotContainer.drawBackgroundTexture = false;
-        // The sidebar always shows its scrollbar, even when every mod fits.
         this.modSlotContainer.alwaysShowScrollBar = true;
 
         this.selectedIndex = -1;
         this.rebuildSlotList();
 
-        // Check if running in Electron
         const isElectron = typeof navigator === 'object' &&
             typeof navigator.userAgent === 'string' &&
             navigator.userAgent.indexOf('Electron') !== -1;
@@ -115,8 +97,6 @@ export default class GuiMods extends GuiScreen {
         const topY = this.height - 52;
         const bottomY = this.height - 28;
 
-        // Split a row of `count` buttons evenly, giving the remainder to the
-        // last one so the row always ends at paneRight.
         const rowWidths = (count) => {
             const each = Math.floor((paneWidth - gap * (count - 1)) / count);
             return Array.from({ length: count }, (_, i) =>
@@ -133,8 +113,6 @@ export default class GuiMods extends GuiScreen {
             return xs;
         };
 
-        // Top row: three buttons. Bottom row: two (three in the Electron build,
-        // where Open Folder joins Delete and Cancel).
         const topWidths = rowWidths(3);
         const topXs = rowXs(topWidths);
         const bottomCount = isElectron ? 3 : 2;
@@ -159,8 +137,6 @@ export default class GuiMods extends GuiScreen {
             this.uploadModFolder();
         });
 
-        // Sits underneath the sidebar list, rather than in the info pane's
-        // button rows, so it reads as part of the installed-mod list.
         this.buttonBrowse = new GuiButton(this.minecraft, "Browse Mods", this.sidebarX + 4, this.height - 28, this.sidebarWidth - 8, 20, () => {
             this.minecraft.displayScreen(new GuiModBrowser(this.minecraft, this));
         });
@@ -214,7 +190,6 @@ export default class GuiMods extends GuiScreen {
     }
 
     openModsFolder() {
-        // Use the modsBridge to open the mods folder
         if (typeof window !== 'undefined' && window.modsBridge && typeof window.modsBridge.openFolder === 'function') {
             window.modsBridge.openFolder();
         } else {
@@ -223,16 +198,12 @@ export default class GuiMods extends GuiScreen {
     }
 
     goBack() {
-        // Toggles and deletes are applied by ModLoader at runtime, so there is
-        // no page reload to wait for when leaving the screen.
         this.minecraft.displayScreen(this.previousScreen);
     }
 
     updateButtonStates() {
         const mod = this.getSelectedMod();
         const hasSelection = mod !== null;
-        // Folder mods live in the physical mods/ directory, which the game
-        // never writes to - deleting them is a filesystem action, not a UI one.
         const isDiskMod = !!mod?.disk;
 
         this.buttonToggle.enabled = hasSelection;
@@ -255,11 +226,6 @@ export default class GuiMods extends GuiScreen {
 
     async refreshModList() {
         if (!this.minecraft.modLoader) return;
-        // init() awaits this before it builds any buttons, so a rejection here
-        // used to leave the whole screen blank with nothing on screen to
-        // explain it. Report the failure and render an empty list instead: the
-        // buttons are still useful (Delete/Toggle on a refresh, Upload for
-        // recovery), and the console now carries the reason.
         try {
             this.mods = await this.minecraft.modLoader.getInstalledMods();
         } catch (err) {
@@ -279,8 +245,6 @@ export default class GuiMods extends GuiScreen {
             if (!files || files.length === 0) return;
             try {
                 await this.minecraft.modLoader.installModFromFolder(files);
-                // Installs load live - ModLoader registers the blocks, items and
-                // textures immediately - so leaving the screen must not reload.
                 await this.refreshModList();
                 this.rebuildSlotList();
                 this.selectedIndex = this.mods.length - 1;
@@ -301,8 +265,6 @@ export default class GuiMods extends GuiScreen {
             if (!file) return;
             try {
                 await this.minecraft.modLoader.installModFromZip(file);
-                // Installs load live - ModLoader registers the blocks, items and
-                // textures immediately - so leaving the screen must not reload.
                 await this.refreshModList();
                 this.rebuildSlotList();
                 this.selectedIndex = this.mods.length - 1;
@@ -314,7 +276,6 @@ export default class GuiMods extends GuiScreen {
         input.click();
     }
 
-    // --- Rendering ---------------------------------------------------------
 
     getIconImage(mod) {
         if (!mod.icon) return null;
@@ -334,7 +295,6 @@ export default class GuiMods extends GuiScreen {
             return;
         }
 
-        // No icon.png: the shared placeholder icon.
         const placeholder = this.getTexture("gui/placeholder_mod.png");
         if (placeholder) {
             this.drawSprite(stack, placeholder, 0, 0, placeholder.width, placeholder.height, x, y, size, size);
@@ -350,8 +310,6 @@ export default class GuiMods extends GuiScreen {
 
         this.drawRect(stack, left, top, right, bottom, PANE_BACKGROUND);
 
-        // Clip the details to the pane, like the sidebar list, and fade its
-        // edges so content never ends on a hard line.
         stack.save();
         stack.beginPath();
         stack.rect(left, top, right - left, bottom - top);
@@ -399,10 +357,6 @@ export default class GuiMods extends GuiScreen {
         y += 6;
 
         const bodyX = left + 5;
-        // Lines are drawn from bodyX, so the wrap width is the distance from
-        // there to the pane's right padding. Using the pane's right coordinate
-        // (as before) made the limit almost the full window, so descriptions
-        // never wrapped and just ran off the edge.
         const bodyWidth = Math.max(40, right - 5 - bodyX);
         const textBottom = bottom - 34;
 
@@ -434,9 +388,8 @@ export default class GuiMods extends GuiScreen {
         super.drawScreen(stack, mouseX, mouseY, partialTicks);
     }
 
-    // --- Text helpers ------------------------------------------------------
 
-    /** Greedy word wrap, measuring with § color codes preserved. */
+    
     wrapText(stack, text, maxWidth) {
         const lines = [];
 
@@ -474,7 +427,6 @@ export default class GuiMods extends GuiScreen {
         return result + '\u2026';
     }
 
-    // --- Input -------------------------------------------------------------
 
     mouseClicked(mouseX, mouseY, mouseButton) {
         if (this.modSlotContainer) {
@@ -489,7 +441,6 @@ export default class GuiMods extends GuiScreen {
         }
     }
 
-    // Forward drag/release so the scrollbar thumb can be dragged.
     mouseDragged(mouseX, mouseY, mouseButton) {
         if (this.modSlotContainer) {
             this.modSlotContainer.mouseDragged(mouseX, mouseY, mouseButton);

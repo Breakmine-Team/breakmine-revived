@@ -2,7 +2,6 @@ import GuiButton from "./GuiButton.js";
 
 export default class GuiKeyButton extends GuiButton {
 
-    // event.code -> the label Minecraft-style key bind menus show.
     static KEY_NAMES = {
         "Escape": "Esc",
         "Tab": "Tab",
@@ -90,9 +89,7 @@ export default class GuiKeyButton extends GuiButton {
         this.key = key;
         this.defaultKey = defaultKey;
 
-        // While true the next key press becomes the binding (" > ... < ").
         this.listening = false;
-        // Another action already uses this key.
         this.conflict = false;
 
         this.updateString();
@@ -137,7 +134,6 @@ export default class GuiKeyButton extends GuiButton {
             return;
         }
 
-        // Right-click resets this binding, like Minecraft's key bind menu.
         if (mouseButton === 2) {
             this.resetToDefault();
             return;
@@ -158,7 +154,6 @@ export default class GuiKeyButton extends GuiButton {
 
         this.listening = false;
 
-        // Backspace/Delete unbind the action instead of binding that key.
         if (key === "Backspace" || key === "Delete") {
             this.setKey(null);
         } else {

@@ -29,7 +29,6 @@ export default class GuiMainMenu extends GuiScreen {
 
         this.splashText = SplashTexts.generateSplash();
 
-        // Filled in by the background update check; see checkForUpdateInBackground.
         this.updateInfo = null;
         this.updateCheckStarted = false;
 
@@ -40,8 +39,6 @@ export default class GuiMainMenu extends GuiScreen {
         super.init();
         this.textureLogo = this.getTexture("gui/title/logo_hd.png");
 
-        // Coming back to the main menu rebuilds buttonList, so the update
-        // button is (re)added here rather than only on first load.
         this.updateButtonAdded = false;
         if (this.updateInfo && this.updateInfo.available) {
             this.addUpdateButton();
@@ -84,9 +81,7 @@ export default class GuiMainMenu extends GuiScreen {
                 .setEnabled(false)
                 .setTooltip("Coming soon!");
             realmsButton.drawButton = function(stack, enabled, mouseOver, x, y, width, height) {
-                // Black border
                 this.drawRect(stack, x, y, x + width, y + height, "#000000");
-                // Purple gradient background (dark to light) - inset by 1px for border
                 const gradient = stack.createLinearGradient(x, y + 1, x, y + height - 1);
                 if (mouseOver && false) {
                     gradient.addColorStop(1, "#6326a8");
@@ -143,19 +138,13 @@ export default class GuiMainMenu extends GuiScreen {
         this.buttonList.push(new GuiButton(this.minecraft, "Account", this.width / 2 - 100, y + 24 * 3, 98, 20, () => {
             this.minecraft.displayScreen(new GuiAccount(this));
         }));
-        //}).setEnabled(false).setTooltip("Server not operational currently!\nWill be fixed soon."));
 
         this.initPanoramaRenderer();
         this.initPlayerPreview();
     }
 
-    /**
-     * Character shown in the corner of the menu. It renders its own model, so
-     * it works before a world (and therefore a player entity) exists.
-     */
+    
     initPlayerPreview() {
-        // init() can run again on the same instance, so never leave an old
-        // WebGL context behind
         if (this.playerPreview) {
             this.playerPreview.dispose();
         }
@@ -171,17 +160,13 @@ export default class GuiMainMenu extends GuiScreen {
         const width = GuiPlayerPreview.WIDTH * scale;
         const height = GuiPlayerPreview.HEIGHT * scale;
 
-        // Free strip between the button column and the right screen edge
         const buttonRight = this.width / 2 + 100;
         const strip = this.width - buttonRight;
 
-        // Narrow windows leave no room beside the button column
         if (strip < width + 16) return;
 
         const x = Math.floor(buttonRight + (strip - width) / 2);
 
-        // Level with the button column. It sits below the exact middle of the
-        // screen, so centring on the screen itself leaves the preview too high.
         const buttonsTop = this.height / 4 + 36;
         const buttonsBottom = buttonsTop + 108 + 20;
         const y = Math.round((buttonsTop + buttonsBottom) / 2 - height / 2);
@@ -189,17 +174,8 @@ export default class GuiMainMenu extends GuiScreen {
         this.playerPreview.draw(stack, x, y, mouseX, mouseY, partialTicks, scale);
     }
 
-    /**
-     * Ask GitHub whether `main` has moved past this build.
-     *
-     * Runs off the init path so the menu paints immediately; the button is
-     * appended to buttonList when the answer arrives, and drawScreen picks it
-     * up on the next frame.
-     */
+    
     async checkForUpdateInBackground() {
-        // Single-file builds update through the "New Update" prompt in
-        // index.html. The installer cannot run from a file:// page, so never
-        // offer it from the main menu there.
         if (window.location.protocol === 'file:') return;
 
         if (this.updateCheckStarted) return;
@@ -223,11 +199,9 @@ export default class GuiMainMenu extends GuiScreen {
         this.addUpdateButton();
     }
 
-    /** Top-left of the main menu, only present while an update is pending. */
+    
     addUpdateButton() {
         if (!this.updateInfo || this.updateButtonAdded) return;
-        // init() may have been re-entered while the check was in flight, which
-        // would otherwise leave the button list with no way to rebuild it.
         if (!this.buttonList) return;
         this.updateButtonAdded = true;
 
@@ -246,14 +220,13 @@ export default class GuiMainMenu extends GuiScreen {
 
     drawScreen(stack, mouseX, mouseY, partialTicks) {
         let logoWidth = 274;
-        let logoHeight = Math.round(logoWidth * (158 / 1024)); // maintain aspect ratio from 1024x158 source
+        let logoHeight = Math.round(logoWidth * (158 / 1024)); 
         let x = this.width / 2 - logoWidth / 2;
         let y = 30;
 
         let rotationX = Math.sin((this.panoramaTimer + partialTicks) / 400.0) * 25.0 + 20.0;
         let rotationY = -(this.panoramaTimer + partialTicks) * 0.1;
 
-        // Draw panorama
         this.camera.aspect = this.width / this.height;
         this.camera.rotation.x = -MathHelper.toRadians(rotationX + 180);
         this.camera.rotation.y = -MathHelper.toRadians(rotationY - 180);
@@ -261,46 +234,30 @@ export default class GuiMainMenu extends GuiScreen {
         this.minecraft.worldRenderer.webRenderer.clear();
         this.minecraft.worldRenderer.webRenderer.render(this.scene, this.camera);
 
-        // Draw panorama overlay
-        //this.drawGradientRect(stack, 0, 0, this.width, this.height, 'rgba(255,255,255,0.5)', 'rgb(255,255,255,0)');
-        //this.drawGradientRect(stack, 0, 0, this.width, this.height, 'rgb(0,0,0,0)', 'rgb(0,0,0,0.5)');
 
-        // Draw logo
         this.drawLogo(stack, x, y, logoWidth, logoHeight);
 
-        // Draw "Play at breakmine.com!" label for singlefile builds
         const isSinglefile = typeof process !== 'undefined' && process.env && process.env.SINGLEFILE_BUILD === 'true' ||
                              window.location.protocol === 'file:';
         if (isSinglefile) {
             this.drawRightString(stack, "Play at breakmine.com!", this.width - 2, 2, 0xFFFFFFff);
         }
 
-        // Draw version
         this.drawRightString(stack, "Updated at " + Minecraft.TIMESTAMP, this.width - 2, this.height - 20, 0xFFFFFFff);
         this.drawString(stack, "Breakmine " + Minecraft.VERSION, 2, this.height - 10, 0xFFFFFFff);
 
-        // Draw Patchwork version
         this.drawString(stack, "Patchwork " + Version.PATCHWORK_VERSION, 2, this.height - 20, 0xFFFFFFff);
 
         let mouseOver = mouseX > this.width - 190 && mouseY > this.height - 10;
         this.drawRightString(stack, "SpinningCubes & Others under SCLv1", this.width - 2, this.height - 10, mouseOver ? 0xFF00FFFF : 0xFFFFFFff);
         
-        // Draw copyright
-        // this.drawRightString(stack, "2026 SpinningCubes under SCLv1.", this.width - 2, this.height - 10);
 
-        // Draw buttons
         super.drawScreen(stack, mouseX, mouseY, partialTicks);
 
-        // Draw player preview on the right side
         this.drawPlayerPreview(stack, mouseX, mouseY, partialTicks);
 
-        // Draw splash text
         this.drawSplash(stack);
 
-        // Draw warning
-        //let pageText = "In development, expect bugs and breaking changes.";
-        //let centerX = Math.floor(this.width / 2);
-        //this.drawString(stack, pageText, centerX - this.getStringWidth(stack, pageText) / 2, 10, 0xFF6363, false);
     }
 
     updateScreen() {
@@ -308,7 +265,6 @@ export default class GuiMainMenu extends GuiScreen {
     }
 
     drawLogo(stack, x, y, width = 274, height = 42) {
-        // Draw whole 1024x158 source texture stretched to target width/height
         this.drawSprite(stack, this.textureLogo, 0, 0, 1024, 158, x, y, width, height);
     }
 
@@ -326,11 +282,9 @@ export default class GuiMainMenu extends GuiScreen {
     }
 
     keyTyped(key) {
-        // In TV mode, allow navigation keys through to parent
         if (this.minecraft && this.minecraft.settings.tvmode) {
             super.keyTyped(key);
         }
-        // Cancel other key inputs
     }
 
     mouseClicked(mouseX, mouseY, mouseButton) {
@@ -345,9 +299,8 @@ export default class GuiMainMenu extends GuiScreen {
     initPanoramaRenderer() {
         this.scene = new THREE.Scene();
 
-        const useAltBg = true; // false=overworld, true=nether
+        const useAltBg = true; 
 
-        // Create cube
         let geometry = new THREE.BoxBufferGeometry(1, 1, 1);
         let materials = [
             new THREE.MeshBasicMaterial({
@@ -388,7 +341,6 @@ export default class GuiMainMenu extends GuiScreen {
         this.camera = new THREE.PerspectiveCamera(120, 1, 0.1, 1);
         this.camera.rotation.order = 'ZYX';
 
-        // Apply blur
         let style = this.minecraft.window.canvas.style;
         style.backdropFilter = "blur(0px)";
         style.webkitBackdropFilter = "blur(0px)";
@@ -401,7 +353,6 @@ export default class GuiMainMenu extends GuiScreen {
             this.playerPreview = null;
         }
 
-        // Remove blur
         let style = this.minecraft.window.canvas.style;
         style.backdropFilter = "";
         style.webkitBackdropFilter = "";

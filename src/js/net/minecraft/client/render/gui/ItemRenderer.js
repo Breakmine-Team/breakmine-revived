@@ -13,10 +13,6 @@ export default class ItemRenderer {
         this.dirtyGroups = new Set();
         this.zIndex = 0;
 
-        // Both item layers are window-sized and are composited over the world
-        // every frame. This tracks what they currently show so they are only
-        // redrawn when their contents (or the size / atlas) really change -
-        // the HUD asks for the same sprites every frame.
         this.revision = 0;
         this.drawnRevision = -1;
         this.drawnGuiScale = -1;
@@ -65,10 +61,6 @@ export default class ItemRenderer {
         let fallbackImage = this.minecraft.worldRenderer?.textureTerrain?.image;
         let guiScale = Math.min(this.window.scaleFactor, 4);
 
-        // Redraw only when something that ends up on these canvases changed.
-        // Clearing and re-rendering them every frame meant a full-size webgl
-        // clear plus a static scene re-render, a full-size 2D clear and the
-        // same sprite draws - all of it thrown away again one frame later.
         let needsRedraw = this.revision !== this.drawnRevision
             || guiScale !== this.drawnGuiScale
             || this.canvas2d.width !== this.drawnCanvasWidth
@@ -89,8 +81,6 @@ export default class ItemRenderer {
         this.drawnItemsHeight = this.window.canvasItems.height;
         this.drawnAtlasImage = image;
 
-        // autoClear is off, so every redraw starts with an explicit wipe; a
-        // redraw may follow items that moved or disappeared.
         this.webRenderer.clear();
 
         if (this.scene.children.length > 0) {
@@ -120,12 +110,12 @@ export default class ItemRenderer {
         this.ctx2d.restore();
     }
 
-    /** True when the 3D item layer holds anything to composite. */
+    
     hasBlockItems() {
         return this.scene.children.length > 0;
     }
 
-    /** True when the 2D sprite layer holds anything to composite. */
+    
     hasSprites() {
         return this.itemSprites.size > 0;
     }
@@ -182,10 +172,6 @@ export default class ItemRenderer {
         let textureName = block.getTextureForFace(EnumBlockFace.NORTH);
         let existing = this.itemSprites.get(pairId);
 
-        // The HUD asks for the same sprites every frame. Only touch the layer
-        // when an entry actually changes, so the redraw check in render()
-        // stays meaningful (and a static hotbar stops reallocating an entry
-        // per slot per frame).
         if (existing && existing.block.getId() === block.getId()
             && existing.x === x && existing.y === y
             && existing.brightness === brightness && existing.zIndex === this.zIndex
@@ -272,8 +258,6 @@ export default class ItemRenderer {
         this.items = [];
         this.itemSprites.clear();
         this.webRenderer.clear();
-        // The sprite layer has to be wiped here as well: render() only redraws
-        // it when its contents change, and it is still composited every frame.
         this.ctx2d.clearRect(0, 0, this.canvas2d.width, this.canvas2d.height);
         this.revision++;
     }

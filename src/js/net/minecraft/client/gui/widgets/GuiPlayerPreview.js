@@ -6,20 +6,12 @@ import MathHelper from "../../../util/MathHelper.js";
 import * as AuthLib from "../../network/AuthLib.js";
 import { createCapeGeometry } from "../../render/CapeGeometry.js";
 
-/**
- * Rotating player model drawn into a 2D GUI through its own offscreen WebGL
- * canvas. Uses the same rig and framing as the survival inventory preview, but
- * loads the skin from the auth API instead of a player entity, so screens that
- * exist outside a world (the main menu) can show the signed-in character.
- */
 export default class GuiPlayerPreview {
 
     static WIDTH = 60;
     static HEIGHT = 85;
     static RENDER_SCALE = 6;
 
-    // Model-space pivot height that puts the rig's geometric middle on the
-    // camera axis. The measured silhouette offset is applied on top of it.
     static MODEL_BASE_Y = 8;
 
     constructor(minecraft) {
@@ -44,11 +36,8 @@ export default class GuiPlayerPreview {
         this.playerMeshes = [];
         this.lastWalkBob = 0;
 
-        // How far above the frame centre the drawn character actually lands,
-        // measured from a real render (see measureSilhouetteOffset)
         this.modelOffsetY = 0;
 
-        // Cape drawn from the account's own cape, loaded alongside the skin
         this.capeMesh = null;
         this.capeTexture = null;
         this.capeUsername = null;
@@ -67,8 +56,6 @@ export default class GuiPlayerPreview {
         this.renderCanvas.height = ch;
 
         try {
-            // Start from the default character so something is visible while
-            // the real skin is still downloading (or when none was uploaded)
             this.skinImage = this.minecraft.resources['char.png'] || null;
             const texture = GuiPlayerTexture.createSharpTexture(this.minecraft.resources, this.skinImage);
             if (!texture) return;
@@ -80,8 +67,6 @@ export default class GuiPlayerPreview {
             this.model.rebuild(this.tessellator, this.modelGroup);
             this.modelGroup.traverse(child => {
                 if (child.isMesh) {
-                    // This scene has no lights, so the baked vertex colors
-                    // carry all of the shading
                     child.material = this.tessellator.unlitMaterial.clone();
                     this.playerMeshes.push(child);
                 }
@@ -105,9 +90,6 @@ export default class GuiPlayerPreview {
             this.scene.add(this.modelGroup);
             this.modelReady = true;
 
-            // The geometric middle of the rig is not the middle of what is
-            // actually drawn, so measure the rendered silhouette and correct
-            // for the difference instead of guessing
             this.modelOffsetY = this.measureSilhouetteOffset();
         } catch (e) {
             console.warn('GuiPlayerPreview init error:', e);
@@ -119,11 +101,7 @@ export default class GuiPlayerPreview {
         this.loadCape();
     }
 
-    /**
-     * Render the model once offscreen and measure where the drawn character
-     * actually lands. Returns how far its vertical centre of mass sits above
-     * the frame centre in model units (positive = too high, so it moves down).
-     */
+    
     measureSilhouetteOffset() {
         try {
             this.modelGroup.position.set(0, GuiPlayerPreview.MODEL_BASE_Y, 0);
@@ -139,10 +117,6 @@ export default class GuiPlayerPreview {
             const pixels = new Uint8Array(width * height * 4);
             gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
 
-            // Centre of mass of the drawn pixels, not the bounding box: the
-            // head and arms carry more weight than the legs, and that is what
-            // the eye reads as the middle of the character. readPixels rows
-            // start at the bottom of the frame, so higher y is higher on screen.
             let weight = 0;
             let weightedY = 0;
             for (let y = 0; y < height; y++) {
@@ -181,8 +155,6 @@ export default class GuiPlayerPreview {
     }
 
     loadSkin() {
-        // Anonymous sessions only have a generated name, so there is nothing
-        // to fetch; the default character stays
         if (!this.minecraft?.settings?.loggedIn) return;
 
         const username = this.getUsername();
@@ -194,13 +166,11 @@ export default class GuiPlayerPreview {
             const image = new Image();
             image.crossOrigin = "anonymous";
             image.onload = () => {
-                // Ignore replies for a session that has already been replaced
                 if (this.skinUsername === username) {
                     this.applySkinImage(image);
                 }
             };
             image.onerror = () => {
-                // No uploaded skin (or the request was blocked): keep the default
             };
             image.src = `${AuthLib.getSkinUrl(username)}?t=${Date.now()}`;
         } catch (e) {
@@ -235,7 +205,6 @@ export default class GuiPlayerPreview {
     loadCape() {
         this.clearCape();
 
-        // Anonymous sessions have no account cape to fetch
         if (!this.minecraft?.settings?.loggedIn) return;
 
         const capeManager = this.minecraft.capeManager;
@@ -244,7 +213,6 @@ export default class GuiPlayerPreview {
         const username = this.getUsername();
         if (!username) return;
 
-        // A cape picked in the cape screen wins over the server default
         const selected = capeManager?.getSelectedTexture?.() || null;
         const source = selected || `${AuthLib.getCapeUrl(username)}?t=${Date.now()}`;
 
@@ -259,7 +227,6 @@ export default class GuiPlayerPreview {
                 }
             };
             image.onerror = () => {
-                // No cape (or the request was blocked): leave the back bare
             };
             image.src = source;
         } catch (e) {
@@ -267,7 +234,7 @@ export default class GuiPlayerPreview {
         }
     }
 
-    /** Reload the cape after the cape picker changed the selection. */
+    
     reloadCape() {
         this.loadCape();
     }
@@ -324,19 +291,13 @@ export default class GuiPlayerPreview {
         return this;
     }
 
-    /**
-     * Turn the preview a little so the back of the model, and therefore the
-     * cape, is visible while the cursor is at rest.
-     */
+    
     setBaseYaw(degrees) {
         this.baseYaw = Math.max(-60, Math.min(60, Number(degrees) || 0));
         return this;
     }
 
-    /**
-     * Screen-space Y of the top of the rendered head, for GUI overlays such
-     * as the nametag. Must be called after the most recent draw().
-     */
+    
     getHeadTopY(y, height) {
         if (!this.modelReady || !this.camera) return y + 8;
 
@@ -347,11 +308,7 @@ export default class GuiPlayerPreview {
         return y + height / 2 - headTop * pixelsPerModelUnit;
     }
 
-    /**
-     * Render the model and blit it at the given GUI position.
-     *
-     * @param scale Pixel size of one inventory preview pixel
-     */
+    
     draw(stack, x, y, mouseX, mouseY, partialTicks = 0, scale = 1) {
         if (!this.modelReady || !this.glRenderer) return;
 
@@ -395,7 +352,6 @@ export default class GuiPlayerPreview {
 
         this.model.render(this.modelGroup, limbSwing, limbSwingStrength, this.animTime, headYaw, pitch, 0);
 
-        // The cape lifts a little while the walk/run previews play
         if (this.capeMesh) {
             this.capeMesh.rotation.x = this.animationMode === "run" ? 0.45
                 : this.animationMode === "walk" ? 0.25 : 0.06;
@@ -419,8 +375,6 @@ export default class GuiPlayerPreview {
 
         if (this.glRenderer) {
             this.glRenderer.dispose();
-            // The menu can be reopened many times and browsers cap the number
-            // of live WebGL contexts per page, so drop this one explicitly
             if (this.glRenderer.forceContextLoss) this.glRenderer.forceContextLoss();
             this.glRenderer = null;
         }

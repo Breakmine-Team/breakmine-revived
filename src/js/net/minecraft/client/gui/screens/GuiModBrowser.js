@@ -5,9 +5,9 @@ import GuiWorldSlotContainer from "../widgets/GuiWorldSlotContainer.js";
 import GuiModBrowserSlot from "../widgets/GuiModBrowserSlot.js";
 import GuiYesNo from "./GuiYesNo.js";
 
-// The public mod catalogue (the modding site in ./wiki). Both /api/mods and
-// the download URLs it hands out send CORS headers, so the game can read them
-// from any origin, including the packaged Electron build.
+
+
+
 const MODS_SITE = "https://mods.breakmine.com";
 const SEARCH_TIMEOUT_MS = 15000;
 const DOWNLOAD_TIMEOUT_MS = 60000;
@@ -23,11 +23,6 @@ const ORANGE = 0xFFAA00;
 const GRAY = 0xAAAAAA;
 const DIM = 0x888888;
 
-/**
- * Browse Mods screen. Lists the mod site's catalogue in the same sidebar style
- * as the installed-mods screen, with a search bar across the top and a details
- * pane that can download and install the selected mod on the spot.
- */
 export default class GuiModBrowser extends GuiScreen {
 
     constructor(minecraft, previousScreen) {
@@ -35,8 +30,6 @@ export default class GuiModBrowser extends GuiScreen {
         this.minecraft = minecraft;
         this.previousScreen = previousScreen;
         this.mods = [];
-        // Normalised mod name -> the installed mod's metadata, so a catalogue
-        // entry can be mapped back to the ID uninstallMod() needs.
         this.installedMods = new Map();
         this.selectedIndex = -1;
         this.modListContainer = null;
@@ -52,11 +45,9 @@ export default class GuiModBrowser extends GuiScreen {
         this._downloadController = null;
     }
 
-    // --- Selection ---------------------------------------------------------
 
     setSelectedWorld(index) {
         this.selectedIndex = index;
-        // A message about the previously selected mod would be misleading.
         this.statusMessage = "";
         this.updateButtonStates();
     }
@@ -86,15 +77,10 @@ export default class GuiModBrowser extends GuiScreen {
         );
     }
 
-    // --- Lifecycle ---------------------------------------------------------
 
     async init() {
         super.init();
 
-        // --- Layout -------------------------------------------------------
-        // Computed before the first await: drawScreen can run while the
-        // catalogue is still loading, and an unset layout would feed NaN into
-        // the fades below.
         this.top = 50;
         this.bottom = this.height - 8;
         this.paneBottom = this.height - 34;
@@ -107,7 +93,6 @@ export default class GuiModBrowser extends GuiScreen {
         this.paneX = this.sidebarX + this.sidebarWidth + 6;
         this.paneRight = this.width - 6;
 
-        // --- Search bar ---------------------------------------------------
         const searchY = 24;
         const searchButtonWidth = 64;
         const searchWidth = Math.max(
@@ -126,7 +111,6 @@ export default class GuiModBrowser extends GuiScreen {
             () => this.search()
         );
 
-        // --- Installation buttons ----------------------------------------
         const paneWidth = Math.max(120, this.paneRight - this.paneX);
         const gap = 4;
         const buttonY = this.height - 28;
@@ -150,13 +134,11 @@ export default class GuiModBrowser extends GuiScreen {
         this.buttonList.push(this.buttonInstall);
         this.buttonList.push(this.buttonBack);
 
-        // --- Catalogue list (sidebar) ------------------------------------
         this.modListContainer = new GuiWorldSlotContainer(this, []);
         this.modListContainer.viewLeft = this.sidebarX;
         this.modListContainer.viewRight = this.sidebarX + this.sidebarWidth;
         this.modListContainer.top = this.top;
         this.modListContainer.bottom = this.bottom;
-        // 4px inset each side plus clearance for the scrollbar and its margin.
         this.modListContainer.slotX = this.sidebarX + 4;
         this.modListContainer.slotWidth = this.sidebarWidth - 16;
         this.modListContainer.scrollBarX = this.sidebarX + this.sidebarWidth - 8;
@@ -179,15 +161,12 @@ export default class GuiModBrowser extends GuiScreen {
     }
 
     onClose() {
-        // Leaving the screen cancels an in-flight download instead of letting
-        // it install a mod the user has navigated away from.
         if (this._downloadController) {
             this._downloadController.abort();
             this._downloadController = null;
         }
     }
 
-    // --- Catalogue loading -------------------------------------------------
 
     normalizeName(name) {
         return String(name ?? '').trim().toLowerCase();
@@ -209,8 +188,6 @@ export default class GuiModBrowser extends GuiScreen {
             const entry = this.installedMods.get(this.normalizeName(mod.name)) || null;
             mod.installed = !!entry;
             mod.installedId = entry ? entry.id : null;
-            // Folder mods live in the physical mods/ directory, which the game
-            // never writes to; they cannot be uninstalled from here.
             mod.installedDisk = !!entry?.disk;
         }
     }
@@ -281,7 +258,6 @@ export default class GuiModBrowser extends GuiScreen {
         }
     }
 
-    // --- Installation ------------------------------------------------------
 
     downloadUrlFor(mod) {
         const raw = typeof mod.download_url === "string" ? mod.download_url : "";
@@ -289,9 +265,6 @@ export default class GuiModBrowser extends GuiScreen {
         try {
             const url = new URL(raw, MODS_SITE);
             if (url.protocol !== "http:" && url.protocol !== "https:") return null;
-            // The site reports download URLs as http:// behind its proxy, but
-            // the game is normally served over https, where fetching them as
-            // http would be blocked as mixed content.
             if (url.protocol === "http:") url.protocol = "https:";
             return url;
         } catch {
@@ -336,7 +309,6 @@ export default class GuiModBrowser extends GuiScreen {
             }
 
             const filename = `${String(mod.name || "mod").replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 64) || "mod"}.zip`;
-            // JSZip accepts any Blob; File is only constructed for the nicer name.
             const archive = typeof File === "function"
                 ? new File([blob], filename, { type: "application/zip" })
                 : blob;
@@ -353,9 +325,6 @@ export default class GuiModBrowser extends GuiScreen {
                 this.statusMessage = "Download cancelled.";
                 this.statusColor = ORANGE;
             } else if (/already loaded|already installed|already exists/i.test(err.message || "")) {
-                // The catalogue has no ID to match against, and the names did
-                // not line up, so mark the row installed without an ID. It can
-                // still be removed from the installed-mods screen.
                 mod.installed = true;
                 mod.installedId = null;
                 mod.installedDisk = false;
@@ -405,8 +374,6 @@ export default class GuiModBrowser extends GuiScreen {
                     return;
                 }
 
-                // The confirmation screen re-opens this one, so refresh its
-                // installed map once the files are actually gone.
                 await this.refreshInstalledMods();
                 this.applyInstalledFlags();
                 this.rebuildSlotList();
@@ -443,7 +410,6 @@ export default class GuiModBrowser extends GuiScreen {
         this.buttonInstall.string = this.installingModId !== null ? "Installing..." : "Install";
     }
 
-    // --- Rendering ---------------------------------------------------------
 
     drawInfoPane(stack) {
         const left = this.paneX;
@@ -548,8 +514,6 @@ export default class GuiModBrowser extends GuiScreen {
     }
 
     drawModIcon(stack, x, y, size) {
-        // The catalogue does not serve icons, so use the same placeholder the
-        // installed-mods screen falls back to.
         const placeholder = this.getTexture("gui/placeholder_mod.png");
         if (placeholder) {
             this.drawSprite(stack, placeholder, 0, 0, placeholder.width, placeholder.height, x, y, size, size);
@@ -575,8 +539,6 @@ export default class GuiModBrowser extends GuiScreen {
 
         super.drawScreen(stack, mouseX, mouseY, partialTicks);
 
-        // Placeholder for the empty search box, drawn after the field so its
-        // background does not cover it.
         if (this.searchField && this.searchField.getText().length === 0 && !this.searchField.isFocused) {
             this.drawString(
                 stack,
@@ -590,9 +552,8 @@ export default class GuiModBrowser extends GuiScreen {
         }
     }
 
-    // --- Text helpers ------------------------------------------------------
 
-    /** Greedy word wrap, measuring with § color codes preserved. */
+    
     wrapText(stack, text, maxWidth) {
         const lines = [];
 
@@ -630,7 +591,6 @@ export default class GuiModBrowser extends GuiScreen {
         return result + '\u2026';
     }
 
-    // --- Input -------------------------------------------------------------
 
     mouseClicked(mouseX, mouseY, mouseButton) {
         if (this.modListContainer) {
@@ -638,8 +598,6 @@ export default class GuiModBrowser extends GuiScreen {
         }
         super.mouseClicked(mouseX, mouseY, mouseButton);
 
-        // GuiTextField only holds focus while the cursor is over it, which
-        // makes typing a query awkward. Keep focus until the next click.
         if (this.searchField) {
             const field = this.searchField;
             const inside = mouseX >= field.x - 1 && mouseX <= field.x + field.width + 1
@@ -654,7 +612,6 @@ export default class GuiModBrowser extends GuiScreen {
         }
     }
 
-    // Forward drag/release so the scrollbar thumb can be dragged.
     mouseDragged(mouseX, mouseY, mouseButton) {
         if (this.modListContainer) {
             this.modListContainer.mouseDragged(mouseX, mouseY, mouseButton);

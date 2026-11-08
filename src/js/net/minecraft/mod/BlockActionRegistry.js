@@ -1,10 +1,4 @@
-/**
- * Shared registry for mod hooks that can veto player block actions.
- *
- * Both the client mod loader and the server-side mod loader use one instance
- * of this class, so the same mod code can cancel prediction locally and the
- * authoritative action on a server.
- */
+
 
 export const BLOCK_ACTIONS = Object.freeze({
     PLACE: 'place',
@@ -25,12 +19,6 @@ export function normalizeBlockAction(action) {
     return ACTION_ALIASES[normalized] || normalized;
 }
 
-/**
- * Build the object passed to every block-action handler.
- *
- * `cancel()` and returning `false` both cancel the action. Once a handler
- * cancels, later handlers are skipped.
- */
 export function createBlockActionEvent(action, data = {}) {
     const event = {
         ...data,
@@ -84,10 +72,7 @@ export default class BlockActionRegistry {
         return entry;
     }
 
-    /**
-     * Remove one returned handle, a handler function, or every handler for an
-     * action name.
-     */
+    
     unregister(action, handle) {
         const normalized = normalizeBlockAction(action);
         if (!normalized) return false;
@@ -145,10 +130,7 @@ export default class BlockActionRegistry {
         return !!normalized && (this.handlers.get(normalized)?.length || 0) > 0;
     }
 
-    /**
-     * Fire handlers for one action and return the event. Check `canceled`
-     * before mutating the world or sending the action packet.
-     */
+    
     emit(action, data = {}) {
         const normalized = normalizeBlockAction(action);
         const event = createBlockActionEvent(normalized, data);

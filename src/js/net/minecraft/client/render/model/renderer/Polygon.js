@@ -12,11 +12,9 @@ export default class Polygon {
         maxU /= textureWidth;
         maxV /= textureHeight;
 
-        // Flip V
         minV = 1 - minV;
         maxV = 1 - maxV;
 
-        // Map UV on vertices
         vertices[0] = Vertex.create(vertices[0].position).withUV(maxU, minV);
         vertices[1] = Vertex.create(vertices[1].position).withUV(minU, minV);
         vertices[2] = Vertex.create(vertices[2].position).withUV(minU, maxV);
@@ -24,14 +22,11 @@ export default class Polygon {
     }
 
     render(tessellator) {
-        // Apply directional face shading to the current base color
         tessellator.setColorShaded(this.shading);
 
-        // Render all vertices
         for (let i = 3; i >= 0; i--) {
             let vertex = this.vertices[i];
 
-            // Bind UV mappings and render vertex
             tessellator.addVertexWithUV(vertex.position.x, vertex.position.y, vertex.position.z, vertex.u, vertex.v);
         }
     }

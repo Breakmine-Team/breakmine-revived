@@ -45,7 +45,6 @@ export default class EntityLiving extends Entity {
         this.onLivingUpdate();
         this.updateBodyRotation();
 
-        // Normalize rotation differences using modulo instead of while loops to prevent infinite loops
         let yawDiff = this.rotationYaw - this.prevRotationYaw;
         if (yawDiff < -180.0) {
             this.prevRotationYaw -= 360.0 * Math.ceil(Math.abs(yawDiff) / 360.0);
@@ -81,28 +80,22 @@ export default class EntityLiving extends Entity {
         }
 
         if (this.rotationPositionIncrements > 0) {
-            // Interpolate the position and rotation
             let x = this.x + (this.targetX - this.x) / this.rotationPositionIncrements;
             let y = this.y + (this.targetY - this.y) / this.rotationPositionIncrements;
             let z = this.z + (this.targetZ - this.z) / this.rotationPositionIncrements;
 
-            // Update yaw and pitch
             let yaw = MathHelper.wrapAngleTo180(this.targetYaw - this.rotationYaw);
             this.rotationYaw = this.rotationYaw + yaw / this.rotationPositionIncrements;
             this.rotationPitch = (this.rotationPitch + (this.targetPitch - this.rotationPitch) / this.rotationPositionIncrements);
 
-            // Decrement position increments
             this.rotationPositionIncrements--;
 
-            // Update position
             this.setPosition(x, y, z);
             this.setRotation(this.rotationYaw, this.rotationPitch);
         }
 
-        // TODO Find the right spot to update this
         this.rotationYawHead = this.rotationYaw;
 
-        // Stop if too slow
         if (Math.abs(this.motionX) < 0.003) {
             this.motionX = 0.0;
         }
@@ -113,10 +106,8 @@ export default class EntityLiving extends Entity {
             this.motionZ = 0.0;
         }
 
-        // Jump / swim
         if (this.jumping) {
             if (this.isInLava && this.isInLava()) {
-                // Lava is much thicker than water: a weaker upstroke.
                 this.motionY += 0.06;
             } else if (this.isInWater()) {
                 this.motionY += 0.04;
@@ -139,14 +130,10 @@ export default class EntityLiving extends Entity {
             this.travelFlying(moveForward, 0, moveStrafing);
         } else if (this.isInLava && this.isInLava() && !this.spectator
             && typeof this.travelInLava === "function") {
-            // Swim through lava instead of walking on its floor. Only entities
-            // that implement lava movement (the player) take this path.
             this.travelInLava(moveForward, 0, moveStrafing);
         } else if (this.isInWater()) {
-            // Is inside of water
             this.travelInWater(moveForward, 0, moveStrafing);
         } else {
-            // Is on land
             this.travel(moveForward, 0, moveStrafing);
         }
 
@@ -263,8 +250,7 @@ export default class EntityLiving extends Entity {
     }
 
     setRotationYawHead(yaw) {
-        this.targetYaw = yaw; // TODO should be rotationYawHead
-        // this.rotationYawHead = yaw;
+        this.targetYaw = yaw; 
     }
 
     damageEntitySimple(amount) {

@@ -1,19 +1,19 @@
 import Long from "../../../../../libraries/long.js";
 
-// Java-compatible 48-bit LCG: seed = (seed * 25214903917 + 0xB) & ((1 << 48) - 1)
-// Implemented with plain 32-bit limbs (no long.js / BigInt) for speed.
-// multiplier 25214903917 = 5 * 2^32 + 0xDEECE66D
+
+
+
 const MULT_HI = 0x5;
 const MULT_LO = 0xDEECE66D;
-const MULT_LO_HI = 0xDEEC; // MULT_LO >>> 16
-const MULT_LO_LO = 0xE66D; // MULT_LO & 0xFFFF
+const MULT_LO_HI = 0xDEEC; 
+const MULT_LO_LO = 0xE66D; 
 const ADDEND = 0xB;
 
-// skip(n) support: precompute affine transforms for 2^i-step advances.
-// A single LCG step is state' = (state * M + C) mod 2^48, stored as 48-bit
-// values (hi16, lo32). P[i] is the transform for 2^i consecutive steps:
-//   m = M^(2^i) mod 2^48
-//   a = C * (1 + M + M^2 + ... + M^(2^i - 1)) mod 2^48
+
+
+
+
+
 const M_BIG = 0x5DEECE66Dn;
 const C_BIG = 0xBn;
 const MASK48 = (1n << 48n) - 1n;
@@ -45,8 +45,8 @@ export default class Random {
 
     constructor(seed = Date.now() % 1000000000 ^ Random.instances++ * 1000) {
         this.doubleUnit = 1.1102230246251565E-16;
-        this._hi = 0; // high 16 bits of the 48-bit seed
-        this._lo = 0; // low 32 bits of the 48-bit seed
+        this._hi = 0; 
+        this._lo = 0; 
         this.setSeed(seed);
     }
 
@@ -125,10 +125,6 @@ export default class Random {
         return value >= 0x80000000 ? value - 0x100000000 : value;
     }
 
-    // Advance the LCG by exactly `n` single steps without iterating, using the
-    // closed-form affine transform state' = (M^n * state + A_n) mod 2^48.
-    // All arithmetic is exact: 48-bit values live as (hi16, lo32) pairs and
-    // every intermediate product stays well under 2^53.
     skip(n) {
         n = n >>> 0;
         let mh = 0;
@@ -139,11 +135,10 @@ export default class Random {
         while (n > 0) {
             if (n & 1) {
                 const [sh, sl, ah2, al2] = SKIP_TABLE[i];
-                // compose (m,a) = P[i] o (m,a): m' = m_i*m ; a' = m_i*a + a_i
-                const k2 = sh;        // m_i limbs (16-bit each)
+                const k2 = sh;        
                 const k1 = sl >>> 16;
                 const k0 = sl & 0xFFFF;
-                const j2 = mh;        // m limbs
+                const j2 = mh;        
                 const j1 = ml >>> 16;
                 const j0 = ml & 0xFFFF;
 
@@ -157,7 +152,7 @@ export default class Random {
                 const mhi = prod2 & 0xFFFF;
                 const mlo = ((r1 << 16) | r0) >>> 0;
 
-                const i2 = ah;        // a limbs
+                const i2 = ah;        
                 const i1 = al >>> 16;
                 const i0 = al & 0xFFFF;
 
@@ -187,14 +182,13 @@ export default class Random {
             i++;
         }
 
-        // apply state' = state * m + a mod 2^48
-        const s2 = this._hi;          // state limbs
+        const s2 = this._hi;          
         const s1 = this._lo >>> 16;
         const s0 = this._lo & 0xFFFF;
-        const k2 = mh;                // m limbs
+        const k2 = mh;                
         const k1 = ml >>> 16;
         const k0 = ml & 0xFFFF;
-        const a2 = ah;                // a limbs
+        const a2 = ah;                
         const a1 = al >>> 16;
         const a0 = al & 0xFFFF;
 

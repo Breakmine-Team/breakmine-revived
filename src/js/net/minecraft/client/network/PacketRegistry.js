@@ -66,14 +66,11 @@ export default class PacketRegistry {
         this.packetsClient = [];
         this.packetsServer = [];
 
-        // Register handshake
         this.registerClient(ProtocolState.HANDSHAKE, 0x00, HandshakePacket);
 
-        // Register server status
         this.registerClient(ProtocolState.STATUS, 0x00, StatusQueryPacket);
         this.registerServer(ProtocolState.STATUS, 0x00, StatusResponsePacket);
 
-        // Register login
         this.registerServer(ProtocolState.LOGIN, 0x00, LoginDisconnectPacket);
         this.registerServer(ProtocolState.LOGIN, 0x01, EncryptionRequestPacket);
         this.registerServer(ProtocolState.LOGIN, 0x02, LoginSuccessPacket);
@@ -82,7 +79,6 @@ export default class PacketRegistry {
         this.registerClient(ProtocolState.LOGIN, 0x00, LoginStartPacket);
         this.registerClient(ProtocolState.LOGIN, 0x01, EncryptionResponsePacket);
 
-        // Register play
         this.registerServer(ProtocolState.PLAY, 0x00, ServerKeepAlivePacket);
         this.registerServer(ProtocolState.PLAY, 0x01, ServerJoinGamePacket);
         this.registerServer(ProtocolState.PLAY, 0x02, ServerChatPacket);

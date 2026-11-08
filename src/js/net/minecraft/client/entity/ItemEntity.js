@@ -28,8 +28,6 @@ export default class ItemEntity extends Entity {
 
         this.tickCount = 0;
 
-        // Only items dropped via the Q key (or flagged by the server) keep the
-        // pickup delay; items from block breaking are collectible immediately.
         this.hasPickupDelay = false;
 
         this.initRenderer(); 
@@ -42,10 +40,7 @@ export default class ItemEntity extends Entity {
 
         this.tickCount += 1;
 
-        // Only allow pickup after 3 seconds (60 ticks) when the item was
-        // dropped with the Q key; everything else is instantly collectible.
         if (!this.hasPickupDelay || this.tickCount >= 60) {
-            // Check distance to player (target head level)
             let player = this.minecraft.player;
             let targetY = player.y + 1.2;
             let dx = player.x - this.x;
@@ -53,22 +48,16 @@ export default class ItemEntity extends Entity {
             let dz = player.z - this.z;
             let distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-            // If within 2.5 range, move towards player
             if (distance < 2.5) {
-                // Normalize direction and apply speed
                 let speed = 0.25;
                 this.motionX += (dx / distance) * speed;
                 this.motionY += (dy / distance) * speed;
                 this.motionZ += (dz / distance) * speed;
 
-                // If touching player (very close), collect item
                 if (distance < 0.6) {
-                    // Add to inventory (stacks with existing or first empty slot, hotbar first)
                     if (player.inventory.addItem(this.blockId, 1)) {
-                        // Play pop sound
                         this.minecraft.soundManager.playSound('random.pop', this.x, this.y, this.z, 1.0, 1.0);
 
-                        // In multiplayer, tell server to remove item for all players
                         if (!this.minecraft.isSingleplayer()) {
                             let networkHandler = this.minecraft.playerController?.getNetworkHandler?.();
                             if (networkHandler) {
@@ -76,7 +65,6 @@ export default class ItemEntity extends Entity {
                             }
                         }
 
-                        // Despawn item
                         this.isDead = true;
                         this.world.removeEntityById(this.id);
                         return;

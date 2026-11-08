@@ -1,4 +1,4 @@
-// Direction offsets for 6 faces (used to fake light passing through non-AO blocks)
+
 const FACE_DX = [1, -1, 0, 0, 0, 0];
 const FACE_DY = [0, 0, 1, -1, 0, 0];
 const FACE_DZ = [0, 0, 0, 0, 1, -1];
@@ -17,19 +17,19 @@ import getTrafficConeModel, { getTrafficConeTexture } from "./model/TrafficConeM
 import getSnailModel, { getSnailTexture } from "./model/SnailModel.js";
 import getTrafficBarrierModel, { getTrafficBarrierTexture } from "./model/TrafficBarrierModel.js";
 
-// Hoisted once: EnumBlockFace.values() allocates a fresh array on every call,
-// and the mesh generator calls it per block.
+
+
 const FACES = EnumBlockFace.values();
 
-// Bounding boxes use 1/16-block steps, so this only absorbs float noise.
+
 const PART_FACE_EPSILON = 1e-6;
 
-// UV spans are compared against a tile's own span; same float-noise margin.
+
 const FACE_UV_EPSILON = 1e-6;
 
-// Ambient occlusion tests a one-pixel probe at each face corner. Geometry has
-// to reach into that probe to count, which is what lets a shape smaller than a
-// block shadow only the part of the cell it really fills.
+
+
+
 const AO_PROBE = 1 / 32;
 
 export default class BlockRenderer {
@@ -37,31 +37,21 @@ export default class BlockRenderer {
     constructor(worldRenderer) {
         this.worldRenderer = worldRenderer;
         this.tessellator = new Tessellator();
-        // Bind to texture atlas if available, otherwise fallback to terrain texture
         if (worldRenderer.textureAtlas && worldRenderer.textureAtlas.isLoaded()) {
             this.tessellator.bindTexture(worldRenderer.textureAtlas.getTexture());
         } else {
             this.tessellator.bindTexture(worldRenderer.textureTerrain);
         }
 
-        // Custom models carry their own texture, so they cannot share the block
-        // atlas tessellator (one mesh has one material). Each model gets a
-        // separate tessellator and is flushed as an extra mesh alongside the
-        // chunk mesh.
         this.modelTessellators = [];
         this.modelTessellator = this.createModelTessellator(getTrafficConeTexture());
         this.barrierModelTessellator = this.createModelTessellator(getTrafficBarrierTexture());
         this.snailModelTessellator = this.createModelTessellator(getSnailTexture());
         this.modelPassActive = false;
 
-        // Blocks that turn themselves are built one mesh at a time here, so the
-        // object can be rotated every frame instead of re-meshing the section.
         this.rotatingTessellator = new Tessellator();
         this.suppressRotation = false;
 
-        // Scratch cache for ambient-occlusion samples. Every face of a block
-        // asks about the same 3x3x3 neighbourhood, so the answers are kept for
-        // one block at a time (aoBlockX marks which block the cache is for).
         this.aoCells = new Array(27).fill(undefined);
         this.aoBlockX = NaN;
         this.aoBlockY = 0;
@@ -84,11 +74,7 @@ export default class BlockRenderer {
         this.modelPassActive = true;
     }
 
-    /**
-     * Flush every custom-model tessellator that produced geometry. A chunk can
-     * contain several custom model types, and each type needs its own mesh
-     * because the material carries the model's texture.
-     */
+    
     flushModelPasses(group) {
         if (!this.modelPassActive) {
             return [];
@@ -107,7 +93,7 @@ export default class BlockRenderer {
         return meshes;
     }
 
-    /** Convenience for single-block contexts (hand, GUI, previews). */
+    
     flushModelPass(group) {
         return this.flushModelPasses(group)[0] ?? null;
     }
@@ -118,7 +104,6 @@ export default class BlockRenderer {
         }
     }
 
-    // Toggle shadow casting for the block meshes this renderer tessellates.
     setShadows(enabled) {
         this.tessellator.setShadows(enabled);
         this.rotatingTessellator.setShadows(enabled);
@@ -127,24 +112,16 @@ export default class BlockRenderer {
         }
     }
 
-    /**
-     * Normalize a block's self-rotation into {x, y, z} degrees, or null when it
-     * does not rotate. A bare number turns the block around Y.
-     */
+    
     getBlockRotation(world, block, x, y, z, tick = null) {
         if (block === null || typeof block.getRenderRotation !== 'function'
             || block.getRenderRotation === Block.prototype.getRenderRotation) {
-            // The base implementation is a constant 0. Most blocks inherit it,
-            // so skip the world data lookup and method call entirely.
             return null;
         }
 
         const data = world && typeof world.getBlockDataAt === 'function'
             ? world.getBlockDataAt(x, y, z)
             : 0;
-        // The animation clock is passed in from the caller: the client only
-        // advances its own tick counter reliably in singleplayer, so rotating
-        // blocks must not read world.ticks to decide how far to turn.
         let rotation = block.getRenderRotation(world, x, y, z, data, tick);
 
         if (typeof rotation === 'number') {
@@ -162,13 +139,12 @@ export default class BlockRenderer {
         return angleX === 0 && angleY === 0 && angleZ === 0 ? null : {x: angleX, y: angleY, z: angleZ};
     }
 
-    /** Every tessellator a single block's geometry can be emitted into. */
+    
     getBlockTessellators() {
         return [this.tessellator, ...this.modelTessellators];
     }
 
     applyBlockRotation(x, y, z, rotation) {
-        // The pivot is chunk-local, matching the vertex coordinates.
         const pivotX = x + 0.5 - ((x >> 4) << 4);
         const pivotY = y + 0.5 - ((y >> 4) << 4);
         const pivotZ = z + 0.5 - ((z >> 4) << 4);
@@ -184,30 +160,17 @@ export default class BlockRenderer {
         }
     }
 
-    /**
-     * Build one block as its own mesh, unrotated, so the mesh object can be
-     * turned every frame. Vertices stay in section-local space; the caller
-     * recenters them on the block's middle.
-     */
+    
     buildRotatingMesh(world, block, ambientOcclusion, x, y, z, translucent = false, parts = null) {
         const tessellator = this.rotatingTessellator;
 
-        // Follow whatever atlas the section mesh is using (it can be rebound
-        // when texture packs or mod textures load).
         tessellator.bindTexture(this.tessellator.material.map);
         tessellator.startDrawing();
         tessellator.setRenderingPass(translucent);
 
-        // renderBlock (and every face helper under it) emits through
-        // this.tessellator, so swap it for the rotating one while this block is
-        // built. Without the swap the geometry lands in the section mesh and
-        // the rotating mesh comes out empty.
         const sectionTessellator = this.tessellator;
         this.tessellator = tessellator;
-        // The object applies the rotation, so it must not be baked in here.
         this.suppressRotation = true;
-        // Only the parts that actually move belong in this mesh; the casing is
-        // already in the section mesh (see getStaticParts below).
         this.buildingRotatingMesh = true;
         try {
             if (parts !== null) {
@@ -229,18 +192,11 @@ export default class BlockRenderer {
     }
 
     renderBlock(world, block, ambientOcclusion, x, y, z, knownRotation = undefined) {
-        // Start a fresh occlusion cache for this block; the coords make it
-        // readable only while this block is being built.
         this.aoCells.fill(undefined);
         this.aoBlockX = x;
         this.aoBlockY = y;
         this.aoBlockZ = z;
 
-        // Blocks can turn themselves around their own center; the angle is
-        // baked into the vertices below and cleared before the next block.
-        // Callers that already resolved the rotation (chunk meshing does, to
-        // decide whether the block needs its own mesh) pass it in; null means
-        // "known static" and skips a second world/block lookup.
         const blockRotation = this.suppressRotation
             ? null
             : knownRotation !== undefined
@@ -257,10 +213,8 @@ export default class BlockRenderer {
         } else if (block?.lever === true) {
             this.renderLever(world, block, x, y, z, ambientOcclusion);
         } else if (block) {
-            // Pass 'this' (the BlockRenderer / WorldRenderer instance) to onRender
             const customRenderHandled = block.onRender(world, x, y, z, this);
 
-            // If onRender returns true, skip standard block rendering
             if (!customRenderHandled) {
                 switch (block.getRenderType()) {
                     case BlockRenderType.ITEM:
@@ -286,8 +240,6 @@ export default class BlockRenderer {
             }
         }
 
-        // Render blocks declared inside this block (e.g. dust inside a lever).
-        // The lever renders its inner parts itself so they rotate with it.
         if (block && Array.isArray(block.renderInside) && block.lever !== true) {
             this.renderParts(world, block.renderInside, x, y, z, false, false, null, ambientOcclusion);
         }
@@ -296,7 +248,6 @@ export default class BlockRenderer {
             this.clearBlockRotation();
         }
 
-        // The cache is only valid while its block is being built.
         this.aoBlockX = NaN;
     }
 
@@ -341,7 +292,6 @@ export default class BlockRenderer {
             super(id, texId);
             this.inventoryTab = EnumCreativeInventoryTab.NOTLISTED;
             this.texName = texName;
-            // Optional per-face overrides, keyed by face name
             this.texFaces = texFaces;
         }
         
@@ -380,10 +330,7 @@ export default class BlockRenderer {
         this.renderParts(world, moving || block.getMultipart(world, x, y, z), x, y, z, false, true, block, ambientOcclusion);
     }
 
-    /**
-     * The parts of `block` that turn with it, or null when the whole block turns
-     * (or does not turn at all).
-     */
+    
     getRotatingParts(block, world, x, y, z) {
         if (typeof block.getRotatingMultipart !== "function") {
             return null;
@@ -393,10 +340,7 @@ export default class BlockRenderer {
         return Array.isArray(parts) && parts.length > 0 ? parts : null;
     }
 
-    /**
-     * Groups of parts that turn on different axles - a gearbox's crossed pairs
-     * - or null when the block turns as one piece.
-     */
+    
     getRotatingGroups(block, world, x, y, z) {
         if (typeof block.getRotatingGroups !== "function") {
             return null;
@@ -411,7 +355,7 @@ export default class BlockRenderer {
         return usable ? groups : null;
     }
 
-    /** How one rotating group of a block is turned right now. */
+    
     getGroupRotation(block, index, world, x, y, z, tick) {
         if (typeof block.getGroupRotation === "function") {
             return block.getGroupRotation(index, world, x, y, z, tick);
@@ -420,7 +364,7 @@ export default class BlockRenderer {
         return this.getBlockRotation(world, block, x, y, z, tick);
     }
 
-    /** The still casing of a block whose moving parts are listed separately. */
+    
     getStaticParts(block, world, x, y, z) {
         if (this.getRotatingParts(block, world, x, y, z) === null
             || typeof block.getStaticMultipart !== "function") {
@@ -458,20 +402,7 @@ export default class BlockRenderer {
         return resolvedParts;
     }
 
-    /**
-     * Normalize the optional rotation of one multipart part.
-     *
-     * A part's data object (or, for the plain ["block", id, bbox] form, the
-     * box itself) may carry `rotation` - a single Y angle, an [x, y, z] array
-     * or an {x, y, z} object, in degrees - plus an optional block-local
-     * `pivot` in the same shapes. Without a pivot the part turns around the
-     * middle of its own box, so it spins in place.
-     *
-     * The rotation is visual: collision and the hit selection keep using the
-     * unrotated boxes.
-     *
-     * @returns {{pivot: number[], angles: number[]}|null}
-     */
+    
     getPartRotation(partData, bbox) {
         let rotation = partData !== null && typeof partData === 'object' ? partData.rotation : undefined;
         let pivot = partData !== null && typeof partData === 'object' ? partData.pivot : undefined;
@@ -513,9 +444,8 @@ export default class BlockRenderer {
         return { pivot: pivotPoint, angles };
     }
 
-    /** Turn the vertices of one multipart part around its own pivot. */
+    
     applyPartRotation(x, y, z, rotation) {
-        // Part pivots are block-local, the emitted vertices are section-local.
         const pivotX = x + rotation.pivot[0] - ((x >> 4) << 4);
         const pivotY = y + rotation.pivot[1] - ((y >> 4) << 4);
         const pivotZ = z + rotation.pivot[2] - ((z >> 4) << 4);
@@ -534,14 +464,8 @@ export default class BlockRenderer {
 
     renderParts(world, parts, x, y, z, respectFaces = false, cullHidden = false, multipartBlock = null, ambientOcclusion = false) {
         let resolvedParts = this.resolveParts(parts);
-        // Every part of this block shares one metadata value; resolving it
-        // once avoids a chunk lookup for every face of every part.
         const blockData = this.getBlockDataAt(world, x, y, z);
 
-        // Collect occluders for boundary faces lazily: not every shape has a
-        // part touching every side of its cell. Full opaque cubes are the
-        // common case; two parts of the same multipart block (neighbouring
-        // stairs, for example) can also fully cover each other's boundary.
         let neighborOccluders = null;
         let neighborOccludersResolved = null;
         if (cullHidden && world !== null) {
@@ -554,14 +478,9 @@ export default class BlockRenderer {
             let bbox = resolvedParts[i].bbox;
             let partRotation = resolvedParts[i].rotation;
 
-            // Ambient occlusion follows the block the parts belong to, so a
-            // door or a wire that opts out stays flat while a stair or a clock
-            // gets its corners shaded like any other block.
             const partAo = ambientOcclusion
                 && (multipartBlock !== null ? multipartBlock : partBlock).getAmbientOcclusion();
 
-            // A turned part no longer sits inside its box, so the box-based
-            // occluder tests would hide faces that are actually visible.
             const cullHiddenPart = cullHidden && world !== null && partRotation === null;
 
             if (partRotation !== null) {
@@ -577,9 +496,6 @@ export default class BlockRenderer {
                     }
 
                     if (cullHiddenPart) {
-                        // Interior faces must not use the boundary test: the part
-                        // may sit well inside the block while its neighbour is
-                        // solid.
                         if (this.isPartFaceAtBoundary(bbox, face)) {
                             if (!neighborOccludersResolved[j]) {
                                 neighborOccluders[j] = this.getNeighborFaceOccluders(world, multipartBlock, x, y, z, face);
@@ -606,11 +522,7 @@ export default class BlockRenderer {
         }
     }
 
-    /**
-     * Resolve the boxes in front of a block-boundary face. Returns null when
-     * nothing can occlude it, otherwise a part list in this block's local
-     * coordinates.
-     */
+    
     getNeighborFaceOccluders(world, multipartBlock, x, y, z, face) {
         let nx = x + face.x;
         let ny = y + face.y;
@@ -632,9 +544,6 @@ export default class BlockRenderer {
             }];
         }
 
-        // The same multipart block uses the same part layout, so its boxes can
-        // be shifted into this block's coordinates and tested directly. This
-        // removes the faces hidden where two stair blocks meet.
         if (neighborBlock === multipartBlock) {
             return this.resolveParts(multipartBlock.getMultipart(world, nx, ny, nz)).map((part) => ({
                 partBlock: part.partBlock,
@@ -648,12 +557,7 @@ export default class BlockRenderer {
         return null;
     }
 
-    /**
-     * True when another part of this multipart block fully covers `bbox`'s
-     * face and extends out through it. Covers the seam between a stair's step
-     * and its base (the step's bottom face) and rail ends buried in a fence
-     * post, while leaving partially covered faces (a stair base's top) alone.
-     */
+    
     isPartFaceCoveredByPart(parts, partIndex, bbox, face) {
         let minA, maxA, minU, maxU, minV, maxV;
         if (face.x !== 0) {
@@ -685,8 +589,6 @@ export default class BlockRenderer {
 
             let other = parts[i].bbox;
 
-            // The other part must reach this face's plane from the outward
-            // side. A box that only lies behind the face cannot hide it.
             if (positive) {
                 if (other[minA] > plane + PART_FACE_EPSILON
                     || other[maxA] <= plane + PART_FACE_EPSILON) {
@@ -749,9 +651,6 @@ export default class BlockRenderer {
         let blockData = this.getBlockDataAt(world, x, y, z);
         let blockAmbientOcclusion = block.getAmbientOcclusion() && ambientOcclusion;
 
-        // neighborId is fetched once per face here instead of inside
-        // shouldRenderFace() as well, halving the world-space block lookups
-        // performed by the single most executed loop in mesh generation.
         for (let i = 0; i < FACES.length; i++) {
             let face = FACES[i];
             let neighborId = world ? world.getBlockAtFace(x, y, z, face) : undefined;
@@ -769,7 +668,6 @@ export default class BlockRenderer {
         const chunkZ = z >> 4;
         const liquidId = block.id;
 
-        // Texture UVs (V-flipped to match the other renderers)
         const textureName = block.getTextureForFace(EnumBlockFace.TOP);
         let minU, maxU, minV, maxV;
         if (this.worldRenderer.textureAtlas && this.worldRenderer.textureAtlas.isLoaded()) {
@@ -788,20 +686,16 @@ export default class BlockRenderer {
         minV = 1 - minV;
         maxV = 1 - maxV;
 
-        // Color multiplier (water/lava textures carry their own tint)
         let color = block.getColor(world, x, y, z, EnumBlockFace.TOP);
         let red = (color >> 16 & 255) / 255.0;
         let green = (color >> 8 & 255) / 255.0;
         let blue = (color & 255) / 255.0;
 
-        // Lighting sampled just above the liquid so open water stays bright
         const lightLevel = world === null ? 15 : this.getEffectiveLightLevel(world, x, y + 0.9, z);
         const brightness = 0.9 / 15.0 * lightLevel + 0.1;
 
         const isLiquidAt = (nx, ny, nz) => world !== null && world.getBlockAt(nx, ny, nz) === liquidId;
 
-        // A full 1x1x1 solid opaque block hides whatever is directly behind it,
-        // so faces pressed against one are never visible and can be culled.
         const isOpaqueFullCubeAt = (nx, ny, nz) => {
             if (world === null) return false;
             const neighborId = world.getBlockAt(nx, ny, nz);
@@ -813,16 +707,12 @@ export default class BlockRenderer {
                    box.maxX === 1 && box.maxY === 1 && box.maxZ === 1;
         };
 
-        // TOP: culled when liquid sits directly above (the upper block owns the surface)
-        // or when a full opaque block covers the liquid.
         if (world === null || (!isLiquidAt(x, y + 1, z) && !isOpaqueFullCubeAt(x, y + 1, z))) {
             const shade = brightness * EnumBlockFace.TOP.getShading();
             this.tessellator.setColor(red * shade, green * shade, blue * shade);
             this.tessellator.addLiquidFace(world, liquidId, EnumBlockFace.TOP, chunkX, chunkY, chunkZ, x, y, z, minU, minV, maxU, maxV);
         }
 
-        // BOTTOM: only when exposed to an air/non-solid cave below (never
-        // under a liquid of the same type, so stacked columns stay seamless)
         const belowId = world === null ? 1 : world.getBlockAt(x, y - 1, z);
         const belowBlock = belowId === 0 ? null : Block.getById(belowId);
         if (world === null || ((belowBlock === null || !belowBlock.isSolid()) && !isLiquidAt(x, y - 1, z))) {
@@ -831,8 +721,6 @@ export default class BlockRenderer {
             this.tessellator.addLiquidFace(world, liquidId, EnumBlockFace.BOTTOM, chunkX, chunkY, chunkZ, x, y, z, minU, minV, maxU, maxV);
         }
 
-        // SIDES: culled when the neighbor column is the same liquid or when a
-        // full 1x1x1 solid opaque block sits on that side
         const sides = [
             { face: EnumBlockFace.NORTH, dx: 0, dz: -1 },
             { face: EnumBlockFace.SOUTH, dx: 0, dz: 1 },
@@ -864,7 +752,7 @@ export default class BlockRenderer {
         }
     }
 
-    /** Block metadata at an absolute position, using the chunk directly. */
+    
     getBlockDataAt(world, x, y, z) {
         if (!world) return 0;
         const chunk = world.getChunkAt(x >> 4, z >> 4);
@@ -876,8 +764,6 @@ export default class BlockRenderer {
         let chunkY = y >> 4;
         let chunkZ = z >> 4;
 
-        // Most callers already resolved the block's metadata; only fall back
-        // to a chunk lookup for callers that render a one-off face.
         let blockData = knownBlockData !== undefined
             ? knownBlockData
             : this.getBlockDataAt(world, x, y, z);
@@ -910,35 +796,19 @@ export default class BlockRenderer {
         
         let height = boundingBox.maxY - boundingBox.minY;
 
-        // UV span of a single full texture tile, derived from the bound texture's own size
         let uSpan = maxU - minU;
         let vSpan = maxV - minV;
 
-        // Remember where the tile itself starts: a face longer than one block
-        // repeats the tile from here instead of running into its neighbours.
         const tileMinU = minU;
         const tileMinV = minV;
 
-        // Lay the texture over the whole face of the 16x16x16 cell and project
-        // the box onto it, so a shape that does not fill the cell samples the
-        // matching part of its texture instead of a stretched copy pinned to
-        // one corner. A box inset by 1px on every side keeps the texture's
-        // centre; one hanging from the ceiling keeps the texture's top rows.
-        //
-        // U runs along the face's horizontal axis: X for north/south and for
-        // top/bottom, Z for east/west. Picking the wrong one only shows up on
-        // shapes smaller than a block, where it stretches the sampled span
-        // across the face.
         minU = tileMinU + uSpan * (face.isXAxis() ? boundingBox.minZ : boundingBox.minX);
         maxU = tileMinU + uSpan * (face.isXAxis() ? boundingBox.maxZ : boundingBox.maxX);
 
         if (face.isYAxis()) {
-            // Top and bottom faces run X across and Z down.
             minV = tileMinV + vSpan * boundingBox.minZ;
             maxV = tileMinV + vSpan * boundingBox.maxZ;
         } else if (block?.topAlign === true) {
-            // Parts that hang off the top of the cell sample the first rows,
-            // whatever their box says.
             minV = tileMinV;
             maxV = tileMinV + (vSpan * height);
         } else {
@@ -946,14 +816,6 @@ export default class BlockRenderer {
             maxV = tileMinV + vSpan * (1 - boundingBox.minY);
         }
 
-        // A face longer than one block would sample past this tile into the
-        // neighbouring tiles stored in the atlas. Wrap the offending axis back
-        // inside the tile so the texture repeats instead of bleeding. Measure
-        // the spans before the V flip below, which reverses their sign.
-        // Wrap as soon as the face's UV rect leaves its tile, in either
-        // direction: a projected box can overhang the tile by starting before
-        // it (a part that reaches outside the cell) just as much as by running
-        // past its end, and both would sample the neighbouring tiles.
         const wrapsU = minU < tileMinU - FACE_UV_EPSILON
             || maxU > tileMinU + uSpan + FACE_UV_EPSILON;
         const wrapsV = minV < tileMinV - FACE_UV_EPSILON
@@ -962,13 +824,7 @@ export default class BlockRenderer {
         minV = 1 - minV;
         maxV = 1 - maxV;
 
-        // Apply face slide animation if the block implements it. The texture is
-        // scrolled inside its own atlas tile and wrapped there, rather than
-        // moving the sample window across the atlas (which bleeds into the
-        // neighbouring tiles and then wraps around the whole atlas).
         let uSlideOffset = 0;
-        // Shader wrap mask: 1 = U, 2 = V. Set for faces that repeat a tile
-        // (longer than a block) and for scrolling faces.
         let wrapFlags = wrapsU ? 1 : 0;
         if (wrapsV) {
             wrapFlags |= 2;
@@ -978,9 +834,7 @@ export default class BlockRenderer {
             let slideOffset = 0;
             let tick = world.ticks || 0;
             let result = block.doSlideFaceAnimate(face, x, y, z, world, tick);
-            // Support both number and object return values (face -> offset)
             if (typeof result === 'object' && result !== null) {
-                // Try by name, enum value, or ordinal
                 if (result[face]) {
                     slideOffset = result[face];
                 } else if (face && face.name && result[face.name]) {
@@ -993,22 +847,16 @@ export default class BlockRenderer {
             } else {
                 slideOffset = result || 0;
             }
-            // Normalize slideOffset to 0-16 range (handle wrapping)
             slideOffset = ((slideOffset % 16) + 16) % 16;
             
             if (slideOffset !== 0) {
-                // Calculate slide amount as a fraction (0-1) of the tile's U span
                 let slideFraction = slideOffset / 16.0;
                 let uRange = maxU - minU;
                 uSlideOffset = uRange * slideFraction;
-                // Keep the tile as the wrap boundary; addFace offsets the UVs.
                 wrapFlags |= 1;
             }
         }
 
-        // The rect is (minU, minV, uSpan, vSpan, mask). A repeating face wraps
-        // around the tile itself; a scrolling-only face keeps the old
-        // face-span boundary so existing animations look unchanged.
         let wrapRect;
         if (wrapFlags === 0) {
             wrapRect = null;
@@ -1018,8 +866,6 @@ export default class BlockRenderer {
             wrapRect = [minU, minV, maxU - minU, maxV - minV, wrapFlags];
         }
 
-        // The base implementations are constants; skip the virtual calls for
-        // the many blocks that inherit them.
         let rotation = block.getRotationForFace === Block.prototype.getRotationForFace
             ? 0
             : block.getRotationForFace(face, blockData, x, y, z, world);
@@ -1031,14 +877,7 @@ export default class BlockRenderer {
         let green = (color >> 8 & 255) / 255.0;
         let blue = (color & 255) / 255.0;
 
-        // Classic lightning
         if (!ambientOcclusion) {
-            // Bake the shading from the brightest light the block receives:
-            // the max over the block's own cell and its six surrounding cells.
-            // This keeps inner faces of hollow multipart blocks (stair steps,
-            // fence rails, door panels...) from sampling a dark cell, and top
-            // faces of short blocks (paths, slabs) from sampling the block
-            // itself. Face axis shading is still applied on top.
             let level;
             if (world === null) {
                 level = 15;
@@ -1054,8 +893,6 @@ export default class BlockRenderer {
             this.tessellator.setColor(red * shade, green * shade, blue * shade);
         }
 
-        // Ambient occlusion needs the cell and the box this face belongs to,
-        // so each corner can sample the cells just outside the face.
         const ao = ambientOcclusion
             ? {face: face, x: x, y: y, z: z, bbox: boundingBox}
             : null;
@@ -1068,8 +905,6 @@ export default class BlockRenderer {
         let chunkY = y >> 4;
         let chunkZ = z >> 4;
 
-        // UV mapping from the texture atlas. Decoration blocks such as crops
-        // keep their growth stage in the metadata nibble.
         let blockData = world ? world.getBlockDataAt(x, y, z) : 0;
         let textureName = block.getTextureForFace(EnumBlockFace.NORTH, blockData, x, y, z, world);
         let minU, maxU, minV, maxV;
@@ -1087,17 +922,14 @@ export default class BlockRenderer {
             maxV = minV + (16 / 256);
         }
 
-        // Flip V
         minV = 1 - minV;
         maxV = 1 - maxV;
 
-        // Get color multiplier
         let color = block.getColor(world, x, y, z, EnumBlockFace.NORTH);
         let red = (color >> 16 & 255) / 255.0;
         let green = (color >> 8 & 255) / 255.0;
         let blue = (color & 255) / 255.0;
 
-        // Classic lightning (full brightness, no directional shading for a cross)
         if (world === null) {
             this.tessellator.setColor(red, green, blue);
         } else {
@@ -1106,7 +938,6 @@ export default class BlockRenderer {
             this.tessellator.setColor(red * brightness, green * brightness, blue * brightness);
         }
 
-        // Two crossed squares in the block's X shape
         this.addDecorationQuad(chunkX, chunkY, chunkZ, x, y, z, x + 1, y + 1, z + 1, minU, minV, maxU, maxV);
         this.addDecorationQuad(chunkX, chunkY, chunkZ, x + 1, y, z, x, y + 1, z + 1, minU, minV, maxU, maxV);
     }
@@ -1116,13 +947,11 @@ export default class BlockRenderer {
         let cy = chunkY << 4;
         let cz = chunkZ << 4;
 
-        // Forward winding (front side of the quad)
         this.tessellator.addVertexWithUV(minX - cx, minY - cy, minZ - cz, minU, maxV);
         this.tessellator.addVertexWithUV(maxX - cx, minY - cy, maxZ - cz, maxU, maxV);
         this.tessellator.addVertexWithUV(maxX - cx, maxY - cy, maxZ - cz, maxU, minV);
         this.tessellator.addVertexWithUV(minX - cx, maxY - cy, minZ - cz, minU, minV);
 
-        // Reversed winding so the quad is visible from both sides
         this.tessellator.addVertexWithUV(minX - cx, minY - cy, minZ - cz, minU, maxV);
         this.tessellator.addVertexWithUV(minX - cx, maxY - cy, minZ - cz, minU, minV);
         this.tessellator.addVertexWithUV(maxX - cx, maxY - cy, maxZ - cz, maxU, minV);
@@ -1150,7 +979,6 @@ export default class BlockRenderer {
                     v = minV + localU * vRange;
                 }
             }
-            // Slide after rotation so the offset stays in the tile's U direction
             this.addBlockCorner(world, face, ambientOcclusion, chunkX, chunkY, chunkZ, x, y, z, u + uOffset, v, red, green, blue);
         };
 
@@ -1194,30 +1022,15 @@ export default class BlockRenderer {
         this.tessellator.setTileWrap(null);
     }
 
-    /**
-     * Brightness for one face corner.
-     *
-     * The corner takes the light of the four cells just outside the face - the
-     * cell in front of it and the 2x2 patch the vertex stands in - and a cell
-     * only counts as lit when its block's shape actually reaches the corner.
-     * That makes a block shadow exactly where its box sits: a slab leaves the
-     * empty half of its cell open, a stair step only darkens behind itself,
-     * while a full cube still darkens the whole corner.
-     *
-     * The old cell-average could only be used on full cubes, so partial and
-     * multipart shapes had ambient occlusion switched off altogether.
-     */
+    
     setCornerBrightness(world, ao, x, y, z, red = 1, green = 1, blue = 1) {
         const face = ao.face;
         const bbox = ao.bbox;
 
-        // The layer just outside the face.
         const cellX = ao.x + face.x;
         const cellY = ao.y + face.y;
         const cellZ = ao.z + face.z;
 
-        // The vertex leans towards the box's max or min side on each of the
-        // face's two axes; that picks the other three cells of the patch.
         const centreX = ao.x + (bbox.minX + bbox.maxX) / 2;
         const centreY = ao.y + (bbox.minY + bbox.maxY) / 2;
         const centreZ = ao.z + (bbox.minZ + bbox.maxZ) / 2;
@@ -1244,12 +1057,9 @@ export default class BlockRenderer {
         const occludedA = this.isCellOccluding(sideA, cellX + offAX, cellY + offAY, cellZ + offAZ, x, y, z);
         const occludedB = this.isCellOccluding(sideB, cellX + offBX, cellY + offBY, cellZ + offBZ, x, y, z);
 
-        // Classic smooth lighting: when both sides of a corner are filled, the
-        // corner is as dark as if the diagonal were filled too.
         const occludedDiagonal = (occludedA && occludedB)
             || this.isCellOccluding(diagonal, cellX + offAX + offBX, cellY + offAY + offBY, cellZ + offAZ + offBZ, x, y, z);
 
-        // A corner standing against geometry gets no light from that side.
         const level = (cell.light
             + (occludedA ? 0 : sideA.light)
             + (occludedB ? 0 : sideB.light)
@@ -1261,17 +1071,12 @@ export default class BlockRenderer {
         this.tessellator.setColor(red * shading, green * shading, blue * shading);
     }
 
-    /**
-     * One cell of a corner sample: the light it lets through and the boxes of
-     * the block standing in it. Cached for the block currently being built,
-     * which asks about the same cells from every face.
-     */
+    
     getAoCell(world, cellX, cellY, cellZ, ao) {
         const dx = cellX - ao.x;
         const dy = cellY - ao.y;
         const dz = cellZ - ao.z;
 
-        // Corner samples always stay inside the block's 3x3x3 neighbourhood.
         if (this.aoBlockX === ao.x && this.aoBlockY === ao.y && this.aoBlockZ === ao.z
             && dx >= -1 && dx <= 1 && dy >= -1 && dy <= 1 && dz >= -1 && dz <= 1) {
             const index = (dx + 1) * 9 + (dy + 1) * 3 + (dz + 1);
@@ -1296,8 +1101,6 @@ export default class BlockRenderer {
 
         if (typeId !== 0) {
             const block = Block.getById(typeId);
-            // A block that opts out of casting AO (machinery, wires, thin
-            // decoration) never shadows the corners around it.
             if (block !== null && block.isSolid() && !block.isTranslucent()
                 && this.castsAmbientOcclusion(block)) {
                 boxes = this.getOccluderBoxes(block, world, cellX, cellY, cellZ);
@@ -1307,21 +1110,13 @@ export default class BlockRenderer {
         return {light: this.getEffectiveLightLevel(world, cellX, cellY, cellZ), boxes: boxes};
     }
 
-    /**
-     * Whether a block may shadow its neighbours. `canCastAmbientOcclusion` is
-     * normally a method, but a few blocks set it as a plain property, so both
-     * forms are accepted.
-     */
+    
     castsAmbientOcclusion(block) {
         const flag = block.canCastAmbientOcclusion;
         return typeof flag === 'function' ? flag.call(block) : flag !== false;
     }
 
-    /**
-     * The boxes a block standing in a whole cell actually fills, in cell-local
-     * coordinates. A multipart block contributes one box per part, so a stair
-     * only shadows where its step is rather than its whole cell.
-     */
+    
     getOccluderBoxes(block, world, cellX, cellY, cellZ) {
         if (block.multipart === true) {
             const parts = block.getMultipart(world, cellX, cellY, cellZ);
@@ -1343,11 +1138,7 @@ export default class BlockRenderer {
         return box === null ? [] : [box];
     }
 
-    /**
-     * True when one of the cell's boxes reaches the corner vertex. The probe is
-     * a one-pixel cube of the cell nearest the vertex, so a box has to really
-     * extend to the corner to shadow it.
-     */
+    
     isCellOccluding(cell, cellX, cellY, cellZ, vx, vy, vz) {
         const boxes = cell.boxes;
         if (boxes.length === 0) {
@@ -1372,8 +1163,6 @@ export default class BlockRenderer {
 
     addBlockCorner(world, face, ambientOcclusion, chunkX, chunkY, chunkZ, x, y, z, u, v, red, green, blue) {
         if (ambientOcclusion === true) {
-            // Quads built by hand (the lever's handle) carry no box of their
-            // own, so they keep the old cell-average light.
             this.setAverageBrightness(world, face, x, y, z, red, green, blue);
         } else if (ambientOcclusion !== null && ambientOcclusion !== false) {
             this.setCornerBrightness(world, ambientOcclusion, x, y, z, red, green, blue);
@@ -1397,16 +1186,10 @@ export default class BlockRenderer {
         let typeId = world.getBlockAt(x, y, z);
         let block = !typeId ? null : Block.getById(typeId);
 
-        // Air or translucent blocks let light pass normally
         if (!block || block.isTranslucent()) {
             return world.getTotalLightAt(x, y, z);
         } 
         
-        // Blocks that don't cast AO (like fences) block the light engine, 
-        // so their internal light is 0. We fake it by checking neighbors.
-        // Multipart blocks (stairs, fences, doors...) are also hollow: a face
-        // that looks into one must sample the light around that block instead
-        // of the 0 light inside it, or inner faces render black.
         if (!block.canCastAmbientOcclusion() || block.multipart === true) {
             let maxSurroundingLight = 0;
             for (let i = 0; i < 6; i++) {
@@ -1418,7 +1201,6 @@ export default class BlockRenderer {
             return maxSurroundingLight;
         }
 
-        // Solid blocks that cast AO
         return world.getTotalLightAt(x, y, z);
     }
 
@@ -1444,9 +1226,6 @@ export default class BlockRenderer {
                         totalLightLevel += world.getTotalLightAt(bx, by, bz);
                         totalBlocks++;
                     } 
-                    // Multipart blocks (stairs etc.) are hollow -- their internal
-                    // light is 0, so sample their surroundings instead. This keeps
-                    // inner faces (steps looking into another stair) from going black.
                     else if (!block.canCastAmbientOcclusion() || block.multipart === true) {
                         let maxSurroundingLight = 0;
                         for (let i = 0; i < 6; i++) {
@@ -1493,7 +1272,6 @@ export default class BlockRenderer {
             facing = 2;
         }
 
-        // The barrier model's front faces -Z (north) at rest.
         const rotation = facing === 3 ? Math.PI
             : facing === 4 ? Math.PI / 2
             : facing === 5 ? -Math.PI / 2
@@ -1523,16 +1301,12 @@ export default class BlockRenderer {
 
         tessellator.material.alphaTest = 0.5;
 
-        // Tessellator faces are quads. Emit each OBJ triangle as a quad with a
-        // duplicated last vertex, ordered so the two generated triangles keep
-        // the OBJ's outward winding (the index buffer swaps vertices 1 and 2).
         const order = [0, 2, 1, 1];
         const cos = Math.cos(rotation);
         const sin = Math.sin(rotation);
 
         for (const face of model.faces) {
             let [nx, ny, nz] = face.normal;
-            // Shade by the world-space normal after the model is rotated.
             const rnx = nx * cos + nz * sin;
             const rnz = -nx * sin + nz * cos;
             nx = rnx;
@@ -1549,12 +1323,9 @@ export default class BlockRenderer {
                 const vx = vertex.position[0];
                 const vz = vertex.position[2];
 
-                // Rotate around the block center so the model's front can face
-                // all four cardinal directions without moving the block.
                 const rx = vx * cos + vz * sin;
                 const rz = -vx * sin + vz * cos;
 
-                // Direct texture coordinates: no atlas region, scale or offset.
                 tessellator.addVertexWithUV(
                     x - originX + 0.5 + rx,
                     y - originY + vertex.position[1],
@@ -1651,8 +1422,6 @@ export default class BlockRenderer {
         let chunkY = y >> 4;
         let chunkZ = z >> 4;
 
-        // Rotate the floor-authored lever model so its base sits flush against
-        // the face it was mounted on (block data bits 1-3).
         let faceIndex = 0;
         if (world != null) {
             const data = world.getBlockDataAt(x, y, z) || 0;
@@ -1670,8 +1439,6 @@ export default class BlockRenderer {
         let distortX2 = 0;
         let distortZ2 = 0;
         if (world != null) {
-            // Tilt the handle based on the powered state (block data bit 0).
-            // Off = leaning one way, on = leaning the other way.
             const data = world.getBlockDataAt(x, y, z) || 0;
             switch (data & 1) {
                 case 0:
@@ -1691,7 +1458,6 @@ export default class BlockRenderer {
         let maxY = y + 10 / 16;
         let maxZ = z + centerZ + size;
 
-        // Outmost two corners dropped by 2/16 based on tilt direction
         let topYMinX = distortX2 < 0 ? maxY - (.75 / 16) : maxY;
         let topYMaxX = distortX2 >= 0 ? maxY - (.75 / 16) : maxY;
 
@@ -1710,23 +1476,17 @@ export default class BlockRenderer {
         maxV = 1 - maxV;
         this.tessellator.setColor(1, 1, 1);
         
-        // Add lever handle faces to tessellator second
         this.addLeverFace(world, EnumBlockFace.NORTH, true, chunkX, chunkY, chunkZ, minX, minY, minZ, maxX, maxY, maxZ, minU, minV, maxU, maxV, distortX2, distortZ2, topYMinX, topYMaxX);
         this.addLeverFace(world, EnumBlockFace.EAST, true, chunkX, chunkY, chunkZ, minX, minY, minZ, maxX, maxY, maxZ, minU, minV, maxU, maxV, distortX2, distortZ2, topYMinX, topYMaxX);
         this.addLeverFace(world, EnumBlockFace.SOUTH, true, chunkX, chunkY, chunkZ, minX, minY, minZ, maxX, maxY, maxZ, minU, minV, maxU, maxV, distortX2, distortZ2, topYMinX, topYMaxX);
         this.addLeverFace(world, EnumBlockFace.WEST, true, chunkX, chunkY, chunkZ, minX, minY, minZ, maxX, maxY, maxZ, minU, minV, maxU, maxV, distortX2, distortZ2, topYMinX, topYMaxX);
         
-        // Top Face with custom corner Y values
         let leverPixelV = 8 / this.worldRenderer.textureAtlas.atlasSize;
         this.addBlockCorner(world, EnumBlockFace.TOP, true, chunkX, chunkY, chunkZ, minX + distortX2, topYMinX, maxZ + distortZ2, minU, maxV + leverPixelV);
         this.addBlockCorner(world, EnumBlockFace.TOP, true, chunkX, chunkY, chunkZ, minX + distortX2, topYMinX, minZ + distortZ2, minU, minV);
         this.addBlockCorner(world, EnumBlockFace.TOP, true, chunkX, chunkY, chunkZ, maxX + distortX2, topYMaxX, minZ + distortZ2, maxU, minV);
         this.addBlockCorner(world, EnumBlockFace.TOP, true, chunkX, chunkY, chunkZ, maxX + distortX2, topYMaxX, maxZ + distortZ2, maxU, maxV + leverPixelV);
 
-        // Render embedded blocks (e.g. bluestone dust) so they rotate with the
-        // lever. Enable cutout so the dust's transparent texture pixels don't
-        // render black in the solid pass (alphaTest persists until the mesh is
-        // drawn at the end of the pass).
         if (Array.isArray(block.renderInside)) {
             this.tessellator.material.alphaTest = 0.5;
             this.renderParts(world, block.renderInside, x, y, z, true, false, null, ambientOcclusion);
@@ -1766,17 +1526,13 @@ export default class BlockRenderer {
         const data = world ? world.getBlockDataAt(x, y, z) : 0;
         const xAxis = data & 1;
 
-        // Render post with log texture (always centered)
         this.renderFakeBlockWithBlockClassWithBoundingBox(world, BlockRegistry.LOG, false, x, y, z, 
             new BoundingBox(0.4375, 0, 0.4375, 0.5625, 0.4375, 0.5625));
 
-        // Render board with planks texture (rotated based on data)
         if (xAxis) {
-            // X-axis rotation: board extends along X axis (0 to 1), thin on Z axis
             this.renderFakeBlockWithBlockClassWithBoundingBox(world, BlockRegistry.WOOD, false, x, y, z,
                 new BoundingBox(0, 0.4375, 0.4375, 1, 1, 0.5625));
         } else {
-            // Z-axis rotation: board extends along Z axis (0 to 1), thin on X axis
             this.renderFakeBlockWithBlockClassWithBoundingBox(world, BlockRegistry.WOOD, false, x, y, z,
                 new BoundingBox(0.4375, 0.4375, 0, 0.5625, 1, 1));
         }
@@ -1809,19 +1565,8 @@ export default class BlockRenderer {
         }
     }
 
-    /**
-     * Blocks drawn outside the world - GUI slots, the held block, preview
-     * renderers - end up in scenes that have no lights at all, so they have to
-     * use the unlit material. Cloning the tessellator's instance rather than
-     * building a fresh MeshBasicMaterial keeps the texture atlas the
-     * tessellator has bound; the flags are set explicitly because
-     * Tessellator.setRenderingPass() mutates the shared instance it hands out.
-     */
+    
     getUnlitGUIMaterial(alphaTest = 0.1, tessellator = this.tessellator) {
-        // Clone() drops onBeforeCompile, so without re-applying the tile
-        // wrap every held/inventory mesh sampled raw atlas UVs: multipart
-        // bboxes bigger than 1x1x1 bled into neighbouring tiles there
-        // while the world mesh (which keeps draw()'s patch) was fine.
         let material = Tessellator.applyTileWrap(tessellator.unlitMaterial.clone());
         material.transparent = true;
         material.alphaTest = alphaTest;
@@ -1830,11 +1575,7 @@ export default class BlockRenderer {
         return material;
     }
 
-    /**
-     * Items are flat sprites packed into the shared atlas, which cannot be
-     * extruded: the pixel scan needs the sprite on its own. Crop the cell out of
-     * the atlas into a small canvas texture carrying image-top UVs.
-     */
+    
     getSpriteItemTexture(textureName) {
         const atlas = this.worldRenderer.textureAtlas;
         if (!atlas || !atlas.isLoaded() || !atlas.canvas) {
@@ -1863,12 +1604,7 @@ export default class BlockRenderer {
         return texture;
     }
 
-    /**
-     * A held item as a real 3D object: the sprite is extruded a couple of pixels
-     * deep so it has an edge when it turns, instead of a single billboard. Each
-     * call builds its own geometry and texture because the hand renderers
-     * dispose whatever they are given when the held item changes.
-     */
+    
     createHeldItemSprite(block) {
         const texture = this.getSpriteItemTexture(block.getTextureForFace(EnumBlockFace.NORTH));
         if (texture === null) {
@@ -1878,22 +1614,17 @@ export default class BlockRenderer {
         return createSpriteItemMesh(texture);
     }
 
-    /**
-     * A sprite item for the hand. The mesh stays one block wide: the display
-     * transform's scale is already relative to that box (0.68 in first person),
-     * so scaling here as well made held items fill the whole screen.
-     */
+    
     createGeneratedItemMesh(block, brightness, firstPerson = false) {
         return this.createHeldItemSprite(block);
     }
 
-    /** No trident model is packed here, so a trident item has no special mesh. */
+    
     createTridentItemModel() {
         return null;
     }
 
     renderBlockInHandThirdPerson(group, block, brightness) {
-        // Held items are extruded sprites, so the flat atlas quad is skipped.
         if (block.getRenderType() === BlockRenderType.ITEM) {
             const spriteMesh = this.createHeldItemSprite(block);
             if (spriteMesh !== null) {
@@ -1936,7 +1667,6 @@ export default class BlockRenderer {
     }
 
     renderBlockInFirstPerson(group, block, brightness) {
-        // Held items are extruded sprites, so the flat atlas quad is skipped.
         if (block.getRenderType() === BlockRenderType.ITEM) {
             const spriteMesh = this.createHeldItemSprite(block);
             if (spriteMesh !== null) {
@@ -1982,7 +1712,6 @@ export default class BlockRenderer {
                 mesh.position.y += 8;
                 if (block.isTool === true) {
                     mesh.rotation.x -= Math.PI / 2.5;
-                    //mesh.rotation.y -= Math.PI / 6;
                     mesh.rotation.z -= Math.PI / 6;
                 }
             }
@@ -1994,8 +1723,6 @@ export default class BlockRenderer {
         this.tessellator.setColor(1, 1, 1);
         this.beginModelPass();
 
-        // Render block by type. A custom onRender draws its own geometry, but
-        // the mesh still has to go through the shared draw/rotation path below.
         const customRenderHandled = block
             ? block.onRender(null, 0, 0, 0, this)
             : false;
@@ -2026,13 +1753,11 @@ export default class BlockRenderer {
             }
         }
 
-        // Change brightness on both the atlas mesh and the custom-model mesh.
         this.tessellator.transformBrightness(brightness);
         this.transformModelBrightness(brightness);
 
         const meshes = [];
 
-        // Create the atlas mesh only when this block actually used it.
         if (this.tessellator.addedVertices > 0) {
             const mesh = this.tessellator.draw(group);
             mesh.material = this.getUnlitGUIMaterial();
@@ -2048,7 +1773,6 @@ export default class BlockRenderer {
         for (const mesh of meshes) {
             mesh.geometry.center();
 
-            // Rotate block
             if (block.multipart === true || block.path) {
                 mesh.rotation.x = MathHelper.toRadians(45 / 1.5);
                 mesh.rotation.y = -MathHelper.toRadians(45 + 90);
@@ -2065,12 +1789,10 @@ export default class BlockRenderer {
                 }
             }
 
-            // Relative position
             mesh.position.x = x;
             mesh.position.y = -y;
             mesh.position.z = -10;
 
-            // Scale
             const meshSize = block.getRenderType() === BlockRenderType.BLOCK
                 || block.getRenderType() === BlockRenderType.SIGN
                 || block.multipart === true

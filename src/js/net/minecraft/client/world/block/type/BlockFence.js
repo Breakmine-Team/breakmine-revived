@@ -32,7 +32,6 @@ export default class BlockFence extends Block {
     }
 
     onBlockPlaced(world, x, y, z, face) {
-        // Mark neighbors as modified so they update their connections
         world.onBlockChanged(x - 1, y, z);
         world.onBlockChanged(x + 1, y, z);
         world.onBlockChanged(x, y, z - 1);
@@ -61,7 +60,6 @@ export default class BlockFence extends Block {
                 let blockAt = world.getBlockAt(nx, ny, nz);
                 let blockTypeAt = Block.getById(blockAt);
                 if (blockTypeAt !== null && (blockTypeAt.isSolid() || blockTypeAt instanceof BlockFence)) {
-                    // X
                     if (dx === -1) {
                         base.push(["block", this.woodId, new BoundingBox(
                             0, fac*12, fac*7, 
@@ -83,7 +81,6 @@ export default class BlockFence extends Block {
                         )]);
                     }
 
-                    // Z
                     if (dz === -1) {
                         base.push(["block", this.woodId, new BoundingBox(
                             fac*7, fac*12, 0, 

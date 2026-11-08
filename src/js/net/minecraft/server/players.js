@@ -11,10 +11,10 @@ let nextEntityId = 1;
 
 let log = Logger;
 
-// Player data is stored inside each server's own directory so every server
-// keeps its players' positions, inventories and states separate:
-//   main    -> <root>/players/<username>.json
-//   server2 -> <root>/worlds/server2/players/<username>.json
+
+
+
+
 function getPlayersDir() {
     return path.join(world.getWorldDir(world.getCurrentWorldName()), 'players');
 }
@@ -82,13 +82,10 @@ function isOp(player) {
     if (!username) {
         return false;
     }
-    // Super ops are ops by definition, and outrank an entry on the deop list.
     const superOps = Array.isArray(config.super_op_player_list) ? config.super_op_player_list : [];
     const isSuper = config.isEnvSuperOp(username)
         || superOps.some(name => String(name).toLowerCase() === username);
 
-    // An explicit /deop wins over default_op and the op list, so a server that
-    // opens op to everyone can still demote one player.
     const deop = Array.isArray(config.deop_player_list) ? config.deop_player_list : [];
     if (!isSuper && deop.some(name => String(name).toLowerCase() === username)) {
         return false;
@@ -100,8 +97,8 @@ function isOp(player) {
     return list.some(name => String(name).toLowerCase() === username);
 }
 
-// Super ops are the ones trusted with moderation (kick, ban, unban) and with
-// handing out super op themselves.
+
+
 function isSuperOp(player) {
     const username = String((player && player.username) || '').toLowerCase();
     if (!username) {
@@ -143,19 +140,15 @@ function findPlayerByUsername(username) {
 }
 
 function removePlayer(player) {
-    // Send player list removal (action 4 = REMOVE_PLAYER) BEFORE deleting from map
     if (packets.sendPlayerListEntry && protocol.broadcast) {
         const removePacket = packets.sendPlayerListEntry([player], 4);
         protocol.broadcast(removePacket, players);
 
-        // Send destroy entity packet to remove player entity from all clients
         protocol.broadcast(packets.createDestroyEntityPacket(player.eid), players);
     }
 
-    // Save player data before removing
     savePlayerData(player);
 
-    // Remove from players map
     players.delete(player.eid);
 
     const playTime = Math.floor((Date.now() - player.joinTime) / 1000);
@@ -179,7 +172,6 @@ function getPlayerCount() {
 }
 
 function updatePosition(player) {
-    // Placeholder for position validation if needed
 }
 
 function getPlayerFile(username) {

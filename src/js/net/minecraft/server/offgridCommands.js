@@ -1,9 +1,9 @@
-// Server-side counterpart of the client OffGridBlockRendererCommand.
-//
-// The command classes stay client-side because they render, but the shared
-// structure itself is server-authoritative now. These handlers validate the
-// same limits, mutate server/offgrid.js and broadcast a snapshot so every
-// connected client (including the executor) renders exactly the same result.
+
+
+
+
+
+
 import Block from '../client/world/block/Block.js';
 import { BlockRegistry } from '../client/world/block/BlockRegistry.js';
 import {
@@ -22,7 +22,6 @@ function usage(player) {
     sendChatMessageToPlayer(player, '§c/offgridrenderer ' + USAGE);
 }
 
-/** Resolve a numeric id or registry name to a Block. */
 function resolveBlock(blockArg) {
     const blockIdNum = parseInt(blockArg);
     if (!isNaN(blockIdNum)) {
@@ -32,7 +31,6 @@ function resolveBlock(blockArg) {
     return BlockRegistry.get(blockArg);
 }
 
-/** Only real blocks can be summoned or rendered as ghost blocks. */
 function resolvePlaceableBlock(blockArg) {
     const block = resolveBlock(blockArg);
     if (!block) return null;
@@ -44,10 +42,6 @@ function blockName(block) {
     return block.name || block.getId();
 }
 
-/**
- * Handle a command already known to be one of ours. Returns true so callers
- * can stop dispatching to the client command classes.
- */
 function handleOffGridCommand(player, cmd, args) {
     if (!isOp(player)) {
         sendChatMessageToPlayer(player, '§cYou do not have permission to use this command.');
@@ -78,7 +72,6 @@ function handleOffGridCommand(player, cmd, args) {
     return true;
 }
 
-/** Render one block from a source position to a render position. */
 function executeSingle(player, args) {
     if (args.length < 6) {
         usage(player);
@@ -139,7 +132,6 @@ function executeSingle(player, args) {
         '(' + renderX + ', ' + renderY + ', ' + renderZ + ').');
 }
 
-/** Summon a volume of one block type at (x,y,z). */
 function executeFill(player, args) {
     if (args.length < 7) {
         usage(player);
@@ -192,7 +184,6 @@ function executeFill(player, args) {
         (x + w - 1) + ', ' + (y + h - 1) + ', ' + (z + d - 1) + ').');
 }
 
-/** Move the summoned structure by a (possibly fractional) delta. */
 function executeMove(player, args) {
     if (args.length < 3) {
         usage(player);
@@ -223,7 +214,6 @@ function executeMove(player, args) {
     }
 }
 
-/** Rotate the summoned structure around its own centre. */
 function executeRotate(player, args) {
     if (args.length < 1) {
         usage(player);
@@ -251,7 +241,6 @@ function executeRotate(player, args) {
     sendChatMessageToPlayer(player, '§aRotated the summoned group by ' + degrees + '° around ' + axis.toUpperCase());
 }
 
-/** Remove summoned blocks and every off-grid rendering. */
 function executeClear(player) {
     const removed = offgrid.getCellCount();
     offgrid.applyClear();
@@ -260,7 +249,6 @@ function executeClear(player) {
         (removed > 0 ? ' and ' + removed + ' summoned block(s)' : '') + '.');
 }
 
-/** /ofr: summon a rotated stone block field at the player's feet. */
 function executeShortcut(player) {
     if (!Number.isFinite(player.x) || !Number.isFinite(player.y) || !Number.isFinite(player.z)) {
         sendChatMessageToPlayer(player, '§cInvalid player position.');
@@ -282,8 +270,6 @@ function executeShortcut(player) {
         return;
     }
 
-    // Match the client shortcut: replace the current summoned field (but not
-    // any separately rendered ghost blocks) with the stone block at the feet.
     offgrid.applyClearField();
     const count = offgrid.applyFill(x, y, z, 8, 8, 8, stone.getId(), 0);
     offgrid.applyRotate(45, 'x');

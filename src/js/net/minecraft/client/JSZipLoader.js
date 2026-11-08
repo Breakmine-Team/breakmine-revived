@@ -1,16 +1,4 @@
-/**
- * JSZip loader.
- *
- * JSZip used to be fetched at runtime via a <script src="libraries/jszip.min.js">
- * tag. That path only resolves in the dev server and in Electron, which serve
- * the repository root. Neither `dist/` nor `dist-single/` contains a
- * `libraries/` directory, so the tag 404'd in built games and callers crashed
- * with "Cannot read properties of undefined (reading 'loadAsync')".
- *
- * Bundling the npm package makes the library part of the build output, so it is
- * embedded in the single-file build too. The vendored UMD file is still used as
- * a fallback for setups that run the sources un-bundled.
- */
+
 
 let pending = null;
 
@@ -27,10 +15,6 @@ function loadFromScriptTag() {
     });
 }
 
-/**
- * Returns the JSZip constructor, loading it on first use.
- * The result is cached on window.JSZip so repeat calls stay synchronous.
- */
 export function loadJSZip() {
     if (typeof window !== 'undefined' && window.JSZip) return Promise.resolve(window.JSZip);
     if (pending) return pending;
@@ -47,7 +31,6 @@ export function loadJSZip() {
             return loadFromScriptTag();
         }
     })().catch((error) => {
-        // Let a later call retry instead of caching the failure forever.
         pending = null;
         throw new Error(
             'JSZip is unavailable, so ZIP operations (mod install, texture packs, ' +

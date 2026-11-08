@@ -21,10 +21,7 @@ export default class Vector3 {
         return d0 * d0 + d1 * d1 + d2 * d2;
     }
 
-    /**
-     * Returns a new vector with x value equal to the second parameter, along the line between this vector and the
-     * passed in vector, or null if not possible.
-     */
+    
     getIntermediateWithXValue(vec, x) {
         let d0 = vec.x - this.x;
         let d1 = vec.y - this.y;
@@ -38,10 +35,7 @@ export default class Vector3 {
         }
     }
 
-    /**
-     * Returns a new vector with y value equal to the second parameter, along the line between this vector and the
-     * passed in vector, or null if not possible.
-     */
+    
     getIntermediateWithYValue(vec, y) {
         let d0 = vec.x - this.x;
         let d1 = vec.y - this.y;
@@ -55,10 +49,7 @@ export default class Vector3 {
         }
     }
 
-    /**
-     * Returns a new vector with z value equal to the second parameter, along the line between this vector and the
-     * passed in vector, or null if not possible.
-     */
+    
     getIntermediateWithZValue(vec, z) {
         let d0 = vec.x - this.x;
         let d1 = vec.y - this.y;
@@ -72,13 +63,7 @@ export default class Vector3 {
         }
     }
 
-    /**
-     * Create an interpolated vector from the current vector position to the given one
-     *
-     * @param vector       The end vector
-     * @param partialTicks Interpolation progress
-     * @return Interpolated vector between the two positions
-     */
+    
     interpolateTo(vector, partialTicks) {
         let interpolatedX = this.x + (vector.x - this.x) * partialTicks;
         let interpolatedY = this.y + (vector.y - this.y) * partialTicks;

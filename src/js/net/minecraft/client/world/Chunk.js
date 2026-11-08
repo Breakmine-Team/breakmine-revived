@@ -23,7 +23,6 @@ export default class Chunk {
         this.loaded = false;
         this.isTerrainPopulated = false;
 
-        // Initialize sections
         this.sections = [];
         for (let y = 0; y < Chunk.SECTION_AMOUNT; y++) {
             let section = new ChunkSection(world, this, x, y, z);
@@ -32,27 +31,15 @@ export default class Chunk {
             this.group.add(section.group);
         }
 
-        // Create height map
         this.heightMap = [];
 
-        // Create biome map (biome ID for each column)
         this.biomeMap = new Array(256).fill(0);
 
-        // Block entities located in this chunk. The world also keeps a global
-        // position->entity map; this list is the chunk-local view used for
-        // serialization and chunk unload.
         this.blockEntities = [];
     }
 
-    // ------------------------------------------------------------------
-    // Block entity tracking (chunk-local view; world owns the global map)
-    // ------------------------------------------------------------------
 
-    /**
-     * Add a block entity to this chunk's tracking list. Called by
-     * World.setBlockEntity. Idempotent - adding the same entity twice is
-     * a no-op.
-     */
+    
     addBlockEntity(entity) {
         if (!entity) return;
         if (this.blockEntities.indexOf(entity) !== -1) return;
@@ -60,10 +47,7 @@ export default class Chunk {
         this.isModified = true;
     }
 
-    /**
-     * Remove a block entity from this chunk's tracking list. Called by
-     * World.removeBlockEntity.
-     */
+    
     removeBlockEntity(entity) {
         if (!entity) return;
         let i = this.blockEntities.indexOf(entity);
@@ -73,15 +57,12 @@ export default class Chunk {
         }
     }
 
-    /**
-     * Returns a snapshot array of block entities located in this chunk.
-     */
+    
     getBlockEntities() {
         return this.blockEntities.slice();
     }
 
     generateSkylightMap() {
-        // Calculate height map
         for (let x = 0; x < 16; x++) {
             for (let z = 0; z < 16; z++) {
                 this.setHeightAt(x, z, 0);
@@ -89,21 +70,16 @@ export default class Chunk {
             }
         }
 
-        // Update light of neighbor blocks
         for (let x = 0; x < 16; x++) {
             for (let z = 0; z < 16; z++) {
                 this.notifyNeighbors(x, z);
             }
         }
 
-        // Rebuild all sections
         this.setModifiedAllSections();
     }
 
     generateBlockLightMap() {
-        // Walk section-by-section so empty sections (air everywhere) are
-        // skipped entirely instead of looping all 256 y levels for all 256
-        // columns (the original layout re-scanned 65k voxels per chunk).
         for (let sy = 0; sy < World.TOTAL_HEIGHT >> 4; sy++) {
             let section = this.getSection(sy);
             if (section.isEmpty()) continue;
@@ -125,9 +101,6 @@ export default class Chunk {
             }
         }
 
-        // Attenuate block light vertically the way the original column loop
-        // did (starting just below sea level target), but bail out per column
-        // as soon as the light level is exhausted.
         for (let x = 0; x < 16; x++) {
             for (let z = 0; z < 16; z++) {
                 let level = 15;
@@ -143,10 +116,6 @@ export default class Chunk {
                     let opacity = typeId === 0 ? 0 : block.getOpacity(this.world, x + this.x * 16, y, z + this.z * 16, block);
                     let blockLight = typeId === 0 ? 0 : block.getLightValue(this.world, x + this.x * 16, y, z + this.z * 16);
 
-                    // Always lose at least one level per block. Liquid opacity
-                    // is 0.01, which used to leave the level untouched forever
-                    // in a lava sea: the scan then walked every column to the
-                    // build limit, resetting to 15 on every lava block.
                     opacity = Math.max(opacity, 1);
 
                     level -= opacity;
@@ -159,10 +128,6 @@ export default class Chunk {
                         level = 0;
                     }
 
-                    // ChunkSection.setLightAt() always marks the section dirty,
-                    // so writing values the new chunk already has (0 almost
-                    // everywhere) would force every section to remesh for no
-                    // visible change.
                     if (section.getLightAt(EnumSkyBlock.BLOCK, x, y & 15, z) !== blockLight) {
                         section.setLightAt(EnumSkyBlock.BLOCK, x, y & 15, z, blockLight);
                     }
@@ -287,44 +252,32 @@ export default class Chunk {
         this.heightMap[z << 4 | x] = height;
     }
 
-    /**
-     * Is the highest solid block or above
-     */
+    
     isHighestBlock(x, y, z) {
         return y >= this.getHighestBlockAt(x, z);
     }
 
-    /**
-     * Is above the highest solid block
-     */
+    
     isAboveGround(x, y, z) {
         return y >= this.getHeightAt(x, z);
     }
 
-    /**
-     * Get the first non-solid block
-     */
+    
     getHeightAt(x, z) {
         return this.heightMap[z << 4 | x];
     }
 
-    /**
-     * Get the highest solid block
-     */
+    
     getHighestBlockAt(x, z) {
         return this.getHeightAt(x, z) - 1;
     }
 
-    /**
-     * Get biome ID at position
-     */
+    
     getBiomeAt(x, z) {
         return this.biomeMap[z << 4 | x];
     }
 
-    /**
-     * Set biome ID at position
-     */
+    
     setBiomeAt(x, z, biomeId) {
         this.biomeMap[z << 4 | x] = biomeId;
     }
@@ -350,12 +303,10 @@ export default class Chunk {
         let prevTypeId = section.getBlockAt(x, yInSection, z);
         let prevData = section.getBlockDataAt(x, yInSection, z);
 
-        // Check if block type has changed
         if (prevTypeId === typeId && prevData === data) {
             return false;
         }
 
-        // Update block type and data
         section.setBlockAt(x, yInSection, z, typeId);
         section.setBlockDataAt(x, yInSection, z, data);
 
@@ -363,7 +314,6 @@ export default class Chunk {
             return;
         }
 
-        // Update height map
         let block = Block.getById(typeId);
         if (typeId !== 0 && block !== null && block.isSolid()) {
             if (y >= height) {
@@ -376,14 +326,11 @@ export default class Chunk {
         let totalX = this.x * 16 + x;
         let totalZ = this.z * 16 + z;
 
-        // Update light
         this.world.updateLight(EnumSkyBlock.SKY, totalX, y, totalZ, totalX, y, totalZ);
         this.world.updateLight(EnumSkyBlock.BLOCK, totalX, y, totalZ, totalX, y, totalZ);
 
-        // Notify surrounding blocks
         this.notifyNeighbors(x, z);
 
-        // Handle block abilities
         if (typeId !== 0 && block !== null) {
             block.onBlockAdded(this.world, totalX, y, totalZ);
         }
@@ -393,13 +340,12 @@ export default class Chunk {
 
     fillChunk(data, mask, fullChunk) {
         let i = 0;
-        const NIBBLE_SIZE = 2048; // 2048 bytes
+        const NIBBLE_SIZE = 2048; 
 
         for (let layer = 0; layer < Chunk.SECTION_AMOUNT; layer++) {
             if ((mask & 1 << layer) !== 0) {
                 let section = this.getSection(layer);
 
-                // Read block states
                 for (let k = 0; k < ChunkSection.SIZE * ChunkSection.SIZE * ChunkSection.SIZE; k++) {
                     let x = k & 15;
                     let z = (k >> 4) & 15;
@@ -409,7 +355,6 @@ export default class Chunk {
                     let typeId = value >> 4;
                     let meta = value & 0xF;
 
-                    // TODO support more blocks
                     if (typeId !== 0 && Block.getById(typeId) === null) {
                         typeId = 1;
                     }
@@ -420,7 +365,6 @@ export default class Chunk {
                     i += 2;
                 }
 
-                // Read block light (2048 bytes)
                 let blockLightOffset = i;
                 for (let k = 0; k < ChunkSection.SIZE * ChunkSection.SIZE * ChunkSection.SIZE; k++) {
                     let x = k & 15;
@@ -434,7 +378,6 @@ export default class Chunk {
                 }
                 i += NIBBLE_SIZE;
 
-                // Read sky light (2048 bytes)
                 let skyLightOffset = i;
                 for (let k = 0; k < ChunkSection.SIZE * ChunkSection.SIZE * ChunkSection.SIZE; k++) {
                     let x = k & 15;
@@ -459,9 +402,6 @@ export default class Chunk {
         this.setModifiedAllSections();
 
         if (this.loaded) {
-            // Recompute this chunk's lightmaps and those of its already-loaded
-            // neighbors, so chunk borders stay consistent no matter the order
-            // chunks arrive in.
             this.world.updateChunkLight(this);
         }
     }
@@ -496,7 +436,6 @@ export default class Chunk {
     }
 
     unload() {
-        // Detach all block entities from the world when the chunk unloads.
         if (this.world && typeof this.world.unloadBlockEntities === "function") {
             this.world.unloadBlockEntities(this);
         }
@@ -563,11 +502,7 @@ export default class Chunk {
         };
     }
 
-    /**
-     * Serialize every block entity in this chunk to a plain-JS array of
-     * TagCompound.toObject() representations. Returns null when the chunk
-     * has no block entities (so old saves stay compatible).
-     */
+    
     serializeBlockEntities() {
         if (!this.blockEntities || this.blockEntities.length === 0) {
             return null;
@@ -621,8 +556,6 @@ export default class Chunk {
         chunk.heightMap = data.heightMap.slice();
         chunk.biomeMap = data.biomeMap ? data.biomeMap.slice() : new Array(256).fill(0);
 
-        // Restore block entities from NBT objects, then push their state back
-        // into the block data nibble (NBT is authoritative for entity state).
         chunk.blockEntities = [];
         if (Array.isArray(data.blockEntities)) {
             for (let obj of data.blockEntities) {
@@ -639,9 +572,6 @@ export default class Chunk {
             }
         }
 
-        // Migration: blocks that own a BlockEntity but had no NBT entity
-        // stored (e.g. saves made before block entities existed) get one
-        // seeded from their current block data so state persists from now on.
         {
             let existing = new Set(chunk.blockEntities.map(
                 (e) => `${e.x},${e.y},${e.z}`
@@ -677,9 +607,6 @@ export default class Chunk {
         chunk.loaded = true;
         chunk.isTerrainPopulated = true;
 
-        // Register restored entities with the world's global map. Done here
-        // (rather than from the caller) so that by the time deserialize()
-        // returns, the chunk is fully wired up.
         if (typeof world.loadBlockEntities === "function") {
             world.loadBlockEntities(chunk);
         }

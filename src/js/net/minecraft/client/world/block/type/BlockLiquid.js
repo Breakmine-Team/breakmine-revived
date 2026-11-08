@@ -9,8 +9,8 @@ export default class BlockLiquid extends Block {
     constructor(id, textureSlotId, liquidType = 'water') {
         super(id, textureSlotId);
         this.liquidType = liquidType;
-        this.maxDistance = liquidType === 'lava' ? 4 : 7; // Max horizontal spread
-        this.tickRate = liquidType === 'lava' ? 30 : 5;   // Tick interval in game ticks
+        this.maxDistance = liquidType === 'lava' ? 4 : 7; 
+        this.tickRate = liquidType === 'lava' ? 30 : 5;   
     }
 
     getRenderType() {
@@ -24,10 +24,6 @@ export default class BlockLiquid extends Block {
         return world?.minecraft?.serverRules?.allowLiquidFlow !== false;
     }
 
-    // Kick off the flow simulation whenever a liquid is placed at runtime
-    // (bucket use, spreading, and server-authoritative placement). Generated
-    // and loaded blocks never hit these hooks (chunk data is written straight
-    // into sections), so oceans/lakes stay static sources and don't tick.
     onBlockPlaced(world, x, y, z, face) {
         if (!this.isFlowEnabled(world)) {
             return;
@@ -44,9 +40,6 @@ export default class BlockLiquid extends Block {
         this.checkContact(world, x, y, z);
     }
 
-    // The id of the other liquid (water <-> lava) and of the solid formed when
-    // they touch. Overridden in BlockWater / BlockLava so this base class stays
-    // out of the registry import cycle.
     getOppositeLiquidId() {
         return -1;
     }
@@ -55,9 +48,6 @@ export default class BlockLiquid extends Block {
         return -1;
     }
 
-    // Water + lava => cobblestone in the base implementation. Subclasses
-    // (BlockLava / BlockWater) override to also produce obsidian when source
-    // blocks touch.
     checkContact(world, x, y, z) {
         if (!this.isFlowEnabled(world)) {
             return false;
@@ -132,9 +122,7 @@ export default class BlockLiquid extends Block {
         return box;
     }
 
-    /**
-     * Called when a block tick executes for this liquid position.
-     */
+    
     onBlockTick(world, x, y, z) {
         if (!this.isFlowEnabled(world)) {
             return;
@@ -143,35 +131,26 @@ export default class BlockLiquid extends Block {
     }
 
     updateFlow(world, x, y, z) {
-        // Contact with the opposite liquid turns it to cobblestone immediately.
         if (this.checkContact(world, x, y, z)) {
             return;
         }
 
         const currentData = world.getBlockDataAt(x, y, z);
-        const currentLevel = currentData & BlockLiquid.MAX_LEVEL; // Level 0 (source) to 7
+        const currentLevel = currentData & BlockLiquid.MAX_LEVEL; 
         const isFalling = (currentData & BlockLiquid.FALLING_FLAG) !== 0;
 
-        // A source block never dries up. Every other liquid block has to keep
-        // finding a source upstream; once that source is removed it loses one
-        // level per tick, and its neighbours are woken so the whole stream
-        // recedes with it until no water is left.
         if (!this.isSourceData(currentData) && !this.hasSourceSupply(world, x, y, z)) {
             this.decay(world, x, y, z, currentLevel);
             return;
         }
 
-        // 1. Try flowing straight down
         const targetY = y - 1;
         if (this.canFlowInto(world, x, targetY, z)) {
-            // Data flag 8 marks falling liquid
             this.flowInto(world, x, targetY, z, BlockLiquid.FALLING_FLAG);
             
-            // Flowing straight down prevents spreading horizontally at this level
             return;
         }
 
-        // 2. Horizontal spread if on top of a solid block or full liquid
         if (currentLevel < this.maxDistance) {
             const nextLevel = isFalling ? 1 : currentLevel + 1;
             const flowDirections = this.getOptimalFlowDirections(world, x, y, z);
@@ -185,7 +164,6 @@ export default class BlockLiquid extends Block {
                     const existingData = world.getBlockDataAt(nx, y, nz);
                     const existingLevel = existingData & 7;
 
-                    // Spread if target is empty or has a weaker liquid level
                     if (existingTypeId !== this.id || existingLevel > nextLevel) {
                         this.flowInto(world, nx, y, nz, nextLevel);
                     }
@@ -194,7 +172,7 @@ export default class BlockLiquid extends Block {
         }
     }
 
-    /** True for a source block: level 0 and not part of a falling stream. */
+    
     isSourceData(data) {
         return (data & BlockLiquid.FALLING_FLAG) === 0
             && (data & BlockLiquid.MAX_LEVEL) === 0;
@@ -204,11 +182,9 @@ export default class BlockLiquid extends Block {
         if (y < 0 || y >= 256) return false;
 
         const typeId = world.getBlockAt(x, y, z);
-        if (typeId === 0) return true; // Air
-        if (typeId === this.getOppositeLiquidId()) return false; // Never flow into the opposite liquid (reacts instead)
+        if (typeId === 0) return true; 
+        if (typeId === this.getOppositeLiquidId()) return false; 
 
-        // A source is never overwritten by a neighbouring stream. Flowing
-        // liquid may merge into other flowing liquid, though.
         if (typeId === this.id) {
             return !this.isSourceData(world.getBlockDataAt(x, y, z));
         }
@@ -216,7 +192,6 @@ export default class BlockLiquid extends Block {
         const block = Block.getById(typeId);
         if (block === null) return true;
 
-        // Can flow into replaceable blocks (grass, flowers)
         return block.isReplaceable(world, x, y, z);
     }
 
@@ -225,9 +200,7 @@ export default class BlockLiquid extends Block {
         world.scheduleBlockTick(x, y, z, this.tickRate);
     }
 
-    /**
-     * Determines optimal horizontal directions towards nearest drop-offs (holes).
-     */
+    
     getOptimalFlowDirections(world, x, y, z) {
         const directions = [
             { x: 1, z: 0 },
@@ -254,23 +227,18 @@ export default class BlockLiquid extends Block {
 
     getDistanceToDrop(world, x, y, z, distance, dir) {
         if (!this.canFlowInto(world, x, y, z)) return 99;
-        if (this.canFlowInto(world, x, y - 1, z)) return distance; // Found drop-off
+        if (this.canFlowInto(world, x, y - 1, z)) return distance; 
         if (distance >= this.maxDistance) return 99;
 
         return this.getDistanceToDrop(world, x + dir.x, y, z + dir.z, distance + 1, dir);
     }
 
-    /**
-     * Loses one level of water. Called once per tick while the block cannot
-     * find a source upstream, so a stream dries up one level at a time and is
-     * removed after level 7. Neighbours are woken so the whole stream decays
-     * together, not one block at a time.
-     */
+    
     decay(world, x, y, z, currentLevel) {
         const nextLevel = currentLevel + 1;
 
         if (nextLevel > BlockLiquid.MAX_LEVEL) {
-            world.setBlockAt(x, y, z, 0, 0); // Completely dried up
+            world.setBlockAt(x, y, z, 0, 0); 
         } else {
             world.setBlockAt(x, y, z, this.id, nextLevel);
             world.scheduleBlockTick(x, y, z, this.tickRate);
@@ -281,13 +249,7 @@ export default class BlockLiquid extends Block {
         }
     }
 
-    /**
-     * Walks upstream through the connected liquid looking for a source block.
-     * Liquid is fed from directly above (falling streams) or from a horizontal
-     * neighbour one level closer to the source. When the only source is
-     * removed every flowing block fails this search and starts decaying, so
-     * the stream recedes evenly until nothing is left.
-     */
+    
     hasSourceSupply(world, x, y, z) {
         const directions = [
             { x: 1, z: 0 },
@@ -309,8 +271,6 @@ export default class BlockLiquid extends Block {
 
             const key = `${nx},${ny},${nz}`;
             if (seen.has(key)) return false;
-            // Fail safe: a huge body is treated as supplied rather than
-            // wiping out a legitimate body of water on a search limit.
             if (seen.size >= 1024) return true;
 
             seen.add(key);
@@ -318,7 +278,6 @@ export default class BlockLiquid extends Block {
             return false;
         };
 
-        // Directly above always feeds (it is what makes a falling stream).
         if (consider(x, y + 1, z, BlockLiquid.MAX_LEVEL + 1)) return true;
 
         const ownLevel = world.getBlockDataAt(x, y, z) & BlockLiquid.MAX_LEVEL;

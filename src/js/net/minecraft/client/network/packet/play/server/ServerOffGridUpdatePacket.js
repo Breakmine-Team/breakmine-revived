@@ -7,12 +7,6 @@ import {
     OFF_GRID_UPDATE_SET_CELL
 } from "../../../../../util/OffGridConstants.js";
 
-/**
- * One incremental off-grid change. Cell edits use this (they can be frequent
- * while building); structural commands broadcast a full state packet instead,
- * which is simpler and guarantees every client converges on the server's
- * exact cell grid after a move/rotate.
- */
 export default class ServerOffGridUpdatePacket extends Packet {
 
     constructor() {
@@ -30,7 +24,6 @@ export default class ServerOffGridUpdatePacket extends Packet {
                     x: buffer.readInt(),
                     y: buffer.readVarInt(),
                     z: buffer.readInt(),
-                    // Normalise registry-hash ids above 2^31.
                     typeId: buffer.readVarInt() >>> 0,
                     data: buffer.readUnsignedByte() & 0xF
                 };

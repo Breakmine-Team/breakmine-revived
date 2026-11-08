@@ -45,7 +45,6 @@ export default class ChatOverlay extends Gui {
             let message = this.messages[i];
             message.updateCounter++;
 
-            // Fade out animation
             if (message.updateCounter >= 180 && message.updateCounter <= 200) {
                 this.dirty = true;
             }

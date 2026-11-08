@@ -19,7 +19,6 @@ export default class GuiDynamicSwitchButton extends GuiButton {
     onPress() {
         if (!this.options.values || this.options.values.length === 0) return;
 
-        // Play click sound
         if (this.minecraft && this.minecraft.soundManager) {
             this.minecraft.soundManager.playGuiClick();
         }

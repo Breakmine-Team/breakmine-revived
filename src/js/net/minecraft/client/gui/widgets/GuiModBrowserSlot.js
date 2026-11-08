@@ -1,11 +1,5 @@
 import GuiButton from "./GuiButton.js";
 
-/**
- * One row in the Browse Mods sidebar. Same layout as GuiModSlot (34x34 icon
- * plus three lines of text), but the metadata comes from the mod site's
- * catalogue rather than from an installed mod, so the third line shows the
- * category and an "Installed" marker instead of the enabled state.
- */
 export default class GuiModBrowserSlot extends GuiButton {
 
     static ICON_SIZE = 34;
@@ -46,7 +40,6 @@ export default class GuiModBrowserSlot extends GuiButton {
         const versionStr = `v${this.modVersion}`;
         this.drawString(stack, versionStr, textX, slotY + 22, GRAY, true, false);
 
-        // Status is right-aligned when the sidebar is wide enough for it.
         const statusStr = this.modData.installed ? "Installed" : this.modCategory;
         const statusColor = this.modData.installed ? GREEN : GRAY;
         const statusX = slotX + slotW - 2 - this.getStringWidth(stack, statusStr);
@@ -56,8 +49,6 @@ export default class GuiModBrowserSlot extends GuiButton {
     }
 
     drawModIcon(stack, x, y, size) {
-        // The catalogue does not serve mod icons, so every row uses the shared
-        // placeholder the installed-mods screen falls back to.
         const placeholder = this.getTexture("gui/placeholder_mod.png");
         if (placeholder) {
             this.drawSprite(stack, placeholder, 0, 0, placeholder.width, placeholder.height, x, y, size, size);
@@ -71,7 +62,7 @@ export default class GuiModBrowserSlot extends GuiButton {
         this.drawCenteredString(stack, initial, x + size / 2, y + size / 2 - 4, 0xAAAAAA, false);
     }
 
-    /** Cut text to fit `maxWidth`, ending in an ellipsis. */
+    
     trimToWidth(stack, text, maxWidth) {
         const value = String(text ?? '');
         if (this.getStringWidth(stack, value, true) <= maxWidth) return value;

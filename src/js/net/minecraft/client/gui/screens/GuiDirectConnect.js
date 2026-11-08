@@ -54,11 +54,9 @@ export default class GuiDirectConnect extends GuiScreen {
                 let proxy = null;
                 let proxyText = this.fieldProxy.text.trim();
                 
-                // Check if custom proxy is provided
                 if (proxyText && (proxyText.startsWith('ws://') || proxyText.startsWith('wss://'))) {
                     proxy = { url: proxyText };
                 } else {
-                    // Auto-detect: use proxy if not localhost or 10.0.0.213
                     let address = this.fieldAddress.text.trim().toLowerCase();
                     let isLocalhost = address === 'localhost' || address === '127.0.0.1' || address.startsWith('127.0.0.');
                     let isAllowedHost = address === '10.0.0.213';
@@ -77,20 +75,16 @@ export default class GuiDirectConnect extends GuiScreen {
     }
 
     drawScreen(stack, mouseX, mouseY, partialTicks) {
-        // Background
         this.drawDefaultBackground(stack);
 
-        // Title
         this.drawCenteredString(stack, this.tunnel ? "Join someone's world" : (this.addServer ? "Add a server" : "Connect to a server"), this.width / 2, 50);
 
         let y = this.height / 2 - 50;
 
         if (this.addServer) {
-            // Server name
             this.drawString(stack, "Name", this.width / 2 - 100, y - 21, -6250336);
         }
 
-        // Server address
         this.drawString(stack, this.tunnel ? "Join Code" : "Server Address", this.width / 2 - 100, y + 17, -6250336);
         
         super.drawScreen(stack, mouseX, mouseY, partialTicks);

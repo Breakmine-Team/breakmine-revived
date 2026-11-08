@@ -18,7 +18,6 @@ export default class PlayerRenderer extends EntityRenderer {
         PlayerRenderer.instances.add(this);
         this.worldRenderer = worldRenderer;
 
-        // Load default character texture
         this.defaultTexture = worldRenderer.minecraft.getThreeTexture('char.png');
         this.defaultTexture.magFilter = THREE.NearestFilter;
         this.defaultTexture.minFilter = THREE.NearestFilter;
@@ -28,22 +27,18 @@ export default class PlayerRenderer extends EntityRenderer {
         this.pendingSkinLoads = new Map();
         this.lastEntity = null;
 
-        // Built-in cape mesh; cape mods, when installed, own this instead
         this.capeMesh = null;
         this.capeAngle = 0;
 
-        // First person right-hand holder
         this.handModel = null;
         this.firstPersonGroup = new THREE.Object3D();
         this.worldRenderer.overlay.add(this.firstPersonGroup);
 
-        // Nametag group (added to scene directly, not entity group, to avoid entity scale)
         this.nametagGroup = new THREE.Object3D();
         this.nametagSprite = null;
         this.nametagTexture = null;
         this.worldRenderer.overlay.add(this.nametagGroup);
 
-        // Shadow sprite rendered below the entity
         this.shadowGroup = new THREE.Object3D();
         this.shadowSprite = null;
         this.worldRenderer.scene.add(this.shadowGroup);
@@ -108,8 +103,6 @@ export default class PlayerRenderer extends EntityRenderer {
                 this.skinTextures.set(username, texture);
                 this.pendingSkinLoads.delete(username);
 
-                // Force a rebuild so the skin applies immediately, even if the
-                // entity has not been rendered yet (e.g. local player in first person)
                 this.group.buildMeta = undefined;
                 if (this.lastEntity) {
                     this.rebuild(this.lastEntity);
@@ -143,23 +136,17 @@ export default class PlayerRenderer extends EntityRenderer {
         if (firstPerson && hasItem && isSelf) {
             super.rebuild(entity);
 
-            // Create new item group and add it to the hand
             this.firstPersonGroup.clear();
             let itemGroup = new THREE.Object3D();
             this.firstPersonGroup.add(itemGroup);
 
-            // Render item in hand in first person
             let block = Block.getById(itemId);
             if (block !== null) {
                 this.worldRenderer.blockRenderer.renderBlockInFirstPerson(itemGroup, block, entity.getEntityBrightness());
 
-                // Copy material and update depth test of the item to render it always in front
                 if (itemGroup.children.length > 0) {
                     let mesh = itemGroup.children[0];
                     mesh.material = mesh.material.clone();
-                    // clone() drops onBeforeCompile (see Tessellator):
-                    // re-apply the tile wrap or oversized multipart bboxes
-                    // bleed into neighbouring atlas tiles in the hand.
                     if (mesh.geometry?.getAttribute('aTileRect')) {
                         Tessellator.applyTileWrap(mesh.material);
                     }
@@ -170,14 +157,12 @@ export default class PlayerRenderer extends EntityRenderer {
             this.tessellator.bindTexture(this.getTextureForEntity(entity));
             super.rebuild(entity);
 
-            // Render item in hand in third person
             if (hasItem) {
                 let block = Block.getById(itemId);
                 if (block !== null) {
                     let group = this.model.rightArm.bone;
                     this.worldRenderer.blockRenderer.renderBlockInHandThirdPerson(group, block, entity.getEntityBrightness());
 
-                    // Prevent legs from overwriting item in depth buffer
                     if (group.children.length > 0) {
                         let itemMesh = group.children[group.children.length - 1];
                         itemMesh.material.depthTest = false;
@@ -187,14 +172,11 @@ export default class PlayerRenderer extends EntityRenderer {
                 }
             }
 
-            // Create first person right hand and attach it to the holder
             this.firstPersonGroup.clear();
             this.handModel = this.model.rightArm.clone();
             this.firstPersonGroup.add(this.handModel.bone);
 
-            // Copy material and update depth test of the hand to render it always in front
             let mesh = this.handModel.bone.children[0];
-            // The overlay scene has no lights, so the hand has to render unlit
             mesh.material = this.tessellator.unlitMaterial.clone();
             mesh.material.depthTest = false;
         }
@@ -208,11 +190,7 @@ export default class PlayerRenderer extends EntityRenderer {
         }
     }
 
-    /**
-     * Attach the player's cape as a quad hanging from the shoulders. The cape
-     * texture arrives separately from the skin (the server broadcasts it), so
-     * the mesh is rebuilt whenever a texture becomes available.
-     */
+    
     buildCape(entity) {
         this.capeMesh = null;
         this.capeAngle = 0;
@@ -223,9 +201,6 @@ export default class PlayerRenderer extends EntityRenderer {
         const userData = texture.userData || {};
         const geometry = createCapeGeometry(userData.capeWidth || 64, userData.capeHeight || 32);
 
-        // The player model bakes its light level into vertex colors, but the
-        // cape is a separate unlit quad. Give it the same brightness so it
-        // darkens at night instead of staying fully lit.
         const rawBrightness = entity?.getEntityBrightness?.();
         const brightness = Number.isFinite(rawBrightness) ? Math.max(0, Math.min(1, rawBrightness)) : 1;
         const vertexCount = geometry.getAttribute('position').count;
@@ -250,10 +225,7 @@ export default class PlayerRenderer extends EntityRenderer {
         this.capeMesh = mesh;
     }
 
-    /**
-     * Sway the cape with movement: it lifts while falling and trails behind
-     * when running, settling back against the back at rest.
-     */
+    
     updateCape(entity) {
         if (!this.capeMesh) return;
 
@@ -288,7 +260,6 @@ export default class PlayerRenderer extends EntityRenderer {
         this.model.hasItemInHand = !entity.inventory.getItemInSelectedSlot().isEmpty();
         this.model.isSneaking = entity.isSneaking();
 
-        // TODO find a better way
         if (entity !== this.worldRenderer.minecraft.player) {
             this.firstPersonGroup.visible = false;
         }
@@ -300,10 +271,8 @@ export default class PlayerRenderer extends EntityRenderer {
         const capeService = this.worldRenderer.minecraft.modLoader?.getService('cape_plus');
         capeService?.render?.(this, entity, partialTicks);
 
-        // Render shadow below the entity
         this.renderShadow(entity, partialTicks);
 
-        // Render nametag for other players, or for local player in third person
         let isThirdPerson = this.worldRenderer.minecraft.settings.thirdPersonView !== 0;
         if ((entity !== this.worldRenderer.minecraft.player || isThirdPerson) && entity.username && !entity.isSneaking()) {
             this.renderNametag(entity, partialTicks);
@@ -313,19 +282,16 @@ export default class PlayerRenderer extends EntityRenderer {
     }
 
     renderShadow(entity, partialTicks) {
-        // Entity blob shadows follow the Shadows graphics option
         if (!this.worldRenderer.shadowsEnabled) {
             this.shadowGroup.visible = false;
             return;
         }
 
-        // Only render shadow when entity is on the ground
         if (!entity.onGround) {
             this.shadowGroup.visible = false;
             return;
         }
 
-        // Create shadow mesh on first render
         if (!this.shadowMesh) {
             const texture = this.worldRenderer.minecraft.getThreeTexture('terrain/pack/minecraft/textures/misc/shadow.png');
             if (!texture) {
@@ -341,44 +307,36 @@ export default class PlayerRenderer extends EntityRenderer {
                 side: THREE.DoubleSide
             });
 
-            // Shadow dimensions matching source image proportions at original resolution
             const geometry = new THREE.PlaneGeometry(1, 1);
             this.shadowMesh = new THREE.Mesh(geometry, material);
-            // Lay flat on the ground (rotate from XY plane to XZ plane)
             this.shadowMesh.rotation.x = -Math.PI / 2;
             this.shadowGroup.add(this.shadowMesh);
         }
 
-        // Interpolate entity position
         let interpolatedX = entity.prevX + (entity.x - entity.prevX) * partialTicks;
         let interpolatedY = entity.prevY + (entity.y - entity.prevY) * partialTicks;
         let interpolatedZ = entity.prevZ + (entity.z - entity.prevZ) * partialTicks;
 
-        // Position shadow at entity's feet, slightly above ground to avoid z-fighting
         this.shadowGroup.position.set(interpolatedX, interpolatedY + 0.01, interpolatedZ);
 
         this.shadowGroup.visible = true;
     }
 
     updateFirstPerson(player) {
-        // Make sure the model is created
         this.prepareModel(player);
 
-        // Make the group visible
         this.firstPersonGroup.visible = true;
     }
 
     renderRightHand(player, partialTicks) {
         this.updateFirstPerson(player);
 
-        // Set transform of renderer
         this.model.swingProgress = 0;
         this.model.hasItemInHand = false;
         this.model.isSneaking = false;
         this.model.setRotationAngles(player, 0, 0, 0, 0, 0, 0);
         this.handModel.copyTransformOf(this.model.rightArm);
 
-        // Render hand model
         this.handModel.render();
     }
 
@@ -397,16 +355,13 @@ export default class PlayerRenderer extends EntityRenderer {
     }
 
     renderNametag(entity, partialTicks) {
-        // Create or update nametag texture
         if (!this.nametagTexture || this.nametagUsername !== entity.username) {
             this.nametagUsername = entity.username;
 
-            // Create canvas for nametag
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             const fontRenderer = this.worldRenderer.minecraft.fontRenderer;
 
-            // Measure text - calculate width manually
             let textWidth = 0;
             for (let i = 0; i < entity.username.length; i++) {
                 textWidth += fontRenderer.charWidths[entity.username.charCodeAt(i)] || 6;
@@ -417,17 +372,13 @@ export default class PlayerRenderer extends EntityRenderer {
             canvas.width = textWidth + padX * 2;
             canvas.height = 8 + padY * 2;
 
-            // Disable smoothing for pixel-perfect text
             ctx.imageSmoothingEnabled = false;
 
-            // Draw semi-transparent black background
             ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Render text using font renderer's internal method
             fontRenderer.drawStringRaw(ctx, entity.username, padX, padY, 0xFFFFFF, false, "8", false);
 
-            // Create texture from canvas
             if (this.nametagTexture) {
                 this.nametagTexture.dispose();
             }
@@ -436,7 +387,6 @@ export default class PlayerRenderer extends EntityRenderer {
             this.nametagTexture.minFilter = THREE.NearestFilter;
         }
 
-        // Create or update sprite
         if (!this.nametagSprite) {
             const material = new THREE.SpriteMaterial({
                 map: this.nametagTexture,
@@ -447,18 +397,14 @@ export default class PlayerRenderer extends EntityRenderer {
             this.nametagGroup.add(this.nametagSprite);
         }
 
-        // Update sprite texture
         this.nametagSprite.material.map = this.nametagTexture;
 
-        // Interpolate entity position for smooth rendering
         let interpolatedX = entity.prevX + (entity.x - entity.prevX) * partialTicks;
         let interpolatedY = entity.prevY + (entity.y - entity.prevY) * partialTicks;
         let interpolatedZ = entity.prevZ + (entity.z - entity.prevZ) * partialTicks;
 
-        // Position nametag above player head in world space
         this.nametagGroup.position.set(interpolatedX, interpolatedY + 2.0, interpolatedZ);
 
-        // Scale sprite in world units
         const worldScale = 0.016;
         this.nametagSprite.scale.set(
             this.nametagTexture.image.width * worldScale,
@@ -466,7 +412,6 @@ export default class PlayerRenderer extends EntityRenderer {
             1
         );
 
-        // Make nametag visible and face camera
         this.nametagGroup.visible = true;
         this.nametagSprite.visible = true;
         this.nametagGroup.lookAt(this.worldRenderer.camera.position);

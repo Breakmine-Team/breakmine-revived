@@ -2,8 +2,8 @@ import Block from "../Block.js";
 import ShaftRenderer from "../../../render/ShaftRenderer.js";
 import ShaftDrive from "../ShaftDrive.js";
 
-// Player yaw index (0 south, 1 west, 2 north, 3 east) to the axle that points
-// at the player: looking north or south gives a Z axle, east or west an X axle.
+
+
 const YAW_TO_AXIS = [
     ShaftRenderer.AXIS.Z,
     ShaftRenderer.AXIS.X,
@@ -11,20 +11,6 @@ const YAW_TO_AXIS = [
     ShaftRenderer.AXIS.X
 ];
 
-/**
- * A block whose shape is built from shaft-renderer parts: shafts, half-shafts
- * and cogs.
- *
- * Subclasses choose the parts, the material and how they mesh; this class
- * turns those into multipart geometry for the axis it was placed with (the way
- * the player was looking, or upright when placed on a top or bottom face) and
- * reports the spin angle for the renderer's animation clock.
- *
- * A part does not turn by itself. Its speed and direction come from ShaftDrive:
- * with a motor somewhere in the assembly it turns at the motor's RPM (reversed
- * for each pair of cogs in mesh), and with nothing driving it the angle stays
- * at zero so the block sits still.
- */
 export default class BlockShaftPart extends Block {
 
     constructor(id, textureSlotId) {
@@ -33,12 +19,9 @@ export default class BlockShaftPart extends Block {
         this.hardness = 1.5;
         this.sound = Block.sounds.stone;
 
-        // Read by ShaftDrive to recognise parts that can carry rotation.
         this.isShaftPart = true;
     }
 
-    // Shaft parts are machinery rather than terrain: they keep flat lighting
-    // and cast no shading onto the blocks around them.
     getAmbientOcclusion() {
         return false;
     }
@@ -47,49 +30,42 @@ export default class BlockShaftPart extends Block {
         return false;
     }
 
-    /**
-     * The parts to draw, each `{part, texture, teethTexture, negative}`.
-     * See ShaftRenderer.PART for the available kinds.
-     */
+    
     getShaftParts() {
         return [{part: ShaftRenderer.PART.SHAFT, texture: this.getShaftTexture()}];
     }
 
-    /** Texture of the plain parts (shafts, half-shafts, cog casing). */
+    
     getShaftTexture() {
         return 'stone';
     }
 
-    /** Icon, break particles and any non-part rendering use the part texture. */
+    
     getTextureForFace(face) {
         return this.getShaftTexture();
     }
 
-    /** True for cogs, whose teeth mesh with a neighbouring cog's teeth. */
+    
     isCog() {
         return false;
     }
 
-    /**
-     * Radius of the cog wheel this part meshes with, in block units. Two cogs in
-     * mesh turn at speeds in inverse proportion to their radii, so this is what
-     * gives a gear ratio. The built-in cog's teeth reach 9px out from the axle.
-     */
+    
     getCogRadius() {
         return 9 / 16;
     }
 
-    /** What is turning this block right now: {rpm, direction}. */
+    
     getDrive(world, x, y, z, tick) {
         return ShaftDrive.resolve(world, x, y, z, tick);
     }
 
-    /** Revolutions per minute this block turns at. 0 when nothing drives it. */
+    
     getShaftRpm(world, x, y, z, tick) {
         return this.getDrive(world, x, y, z, tick).rpm;
     }
 
-    /** +1 or -1: which way this block turns. */
+    
     getShaftDirection(world, x, y, z, tick) {
         return this.getDrive(world, x, y, z, tick).direction;
     }
@@ -98,19 +74,12 @@ export default class BlockShaftPart extends Block {
         return ShaftRenderer.getAxis(data);
     }
 
-    /**
-     * A part with a vertical axle stands on the block below it rather than
-     * lying against a side, so it needs its own collision shape.
-     */
+    
     isUprightPart(data) {
         return this.getAxis(data) === ShaftRenderer.AXIS.Y;
     }
 
-    /**
-     * The axle runs along the way the player was looking, so the part faces
-     * them. Placing one on a block's top or bottom face stands it upright
-     * instead, which is the only way to build a vertical run.
-     */
+    
     getPlacementMetadata(world, x, y, z, face, yaw = 0) {
         const faceId = BlockShaftPart.getFaceId(face);
         if (faceId === 0 || faceId === 1) {
@@ -121,11 +90,7 @@ export default class BlockShaftPart extends Block {
         return YAW_TO_AXIS[dirIndex];
     }
 
-    /**
-     * The clicked face as the 0-5 id the rest of the game uses (0 bottom,
-     * 1 top, 2 north, 3 south, 4 west, 5 east). The client hands placement an
-     * EnumBlockFace, the server a number, so both are accepted.
-     */
+    
     static getFaceId(face) {
         if (typeof face === "number") {
             return face | 0;
@@ -157,9 +122,6 @@ export default class BlockShaftPart extends Block {
         );
     }
 
-    // The client places the block before the server sends its metadata back, so
-    // orientation is set here from the local player's yaw to avoid the part
-    // showing up on the wrong axis for a moment.
     onBlockPlaced(world, x, y, z, face) {
         const player = world && world.minecraft && world.minecraft.player;
         if (!player || world.getBlockAt(x, y, z) !== this.id) {
@@ -169,25 +131,15 @@ export default class BlockShaftPart extends Block {
         world.setBlockDataAt(x, y, z, this.getPlacementMetadata(world, x, y, z, face, player.rotationYaw));
     }
 
-    // Adding or removing a part changes which assembly is driven, so the
-    // surrounding cells need re-meshing (and this tick's drive results are
-    // stale).
     onBlockAdded(world, x, y, z) {
         ShaftDrive.refreshAround(world, x, y, z);
 
-        // Watch this part for two drives fighting over the run it belongs to.
         if (world && typeof world.scheduleBlockTick === 'function') {
             world.scheduleBlockTick(x, y, z, 20);
         }
     }
 
-    /**
-     * A shaft with two drives pulling it in opposite directions shears and
-     * breaks. The snap splits the run, so afterwards each source drives its own
-     * half and the conflict is gone. Two drives at different speeds but the
-     * same direction are not a conflict - the faster one wins (see
-     * ShaftDrive.compute), so they leave the run in one piece.
-     */
+    
     onBlockTick(world, x, y, z) {
         if (!world) {
             return;

@@ -20,7 +20,7 @@ function canSee(viewer, target) {
     return true;
 }
 
-// Send a chat message (packet 0x02) to a single player only.
+
 export function sendChatMessageToPlayer(player, message) {
     const chatJson = JSON.stringify({ text: message });
     const chatData = Buffer.alloc(Buffer.byteLength(chatJson) + 6);
@@ -48,8 +48,8 @@ function broadcastBlockChange(x, y, z, typeId) {
     }
 }
 
-// Snapshot of everything a command could mutate, taken right before it runs.
-// syncCommandState() diffs against it and pushes the needed packets.
+
+
 function snapshotState(player) {
     const healths = new Map();
     for (const [eid, p] of getPlayers()) {
@@ -64,9 +64,9 @@ function snapshotState(player) {
     };
 }
 
-// Wrap a raw server player so the client command classes can mutate it through
-// the same interface they use on the client (creative/spectator/flying flags,
-// setPosition, getBlockPos*, health, inventory.addItem, ...).
+
+
+
 function createPlayerAdapter(player) {
     const flags = {
         creative: player.gamemode === 1,
@@ -91,7 +91,6 @@ function createPlayerAdapter(player) {
             let remaining = amount;
             let changed = false;
 
-            // Stack onto existing non-full stacks of the same item first.
             for (let i = 0; i < inv.items.length && remaining > 0; i++) {
                 const slot = inv.items[i];
                 if (slot && slot.typeId === typeId && slot.count > 0 && slot.count < stackSize) {
@@ -102,7 +101,6 @@ function createPlayerAdapter(player) {
                 }
             }
 
-            // Then fill empty slots.
             for (let i = 0; i < inv.items.length && remaining > 0; i++) {
                 const slot = inv.items[i];
                 if (!slot || slot.typeId === 0 || slot.count === 0) {
@@ -199,8 +197,8 @@ function createPlayerAdapter(player) {
     return adapter;
 }
 
-// Adapt the server's shared world state (time, seed, block access) to the
-// interface the client commands expect from `minecraft.world`.
+
+
 function createWorldAdapter() {
     return {
         get time() {
@@ -226,9 +224,9 @@ function createWorldAdapter() {
     };
 }
 
-// Build a "minecraft"-like object for a player so the client command classes
-// can run against the server. Everything the commands read/mutate is either a
-// getter/setter into server state or a stub for client-only subsystems.
+
+
+
 export function createCommandContext(player, commandHandler) {
     const playerAdapter = createPlayerAdapter(player);
 
@@ -271,8 +269,8 @@ export function createCommandContext(player, commandHandler) {
     return context;
 }
 
-// Broadcast a game mode change to every client, handling player visibility
-// (spectators are hidden from non-spectators, and vice versa).
+
+
 function applyGamemodeChange(player, oldGamemode, gamemode) {
     if (player.ws.readyState === 1) {
         player.ws.send(JSON.stringify({ type: 'gamemode', gamemode, flying: player.isFlying }));
@@ -299,8 +297,8 @@ function applyGamemodeChange(player, oldGamemode, gamemode) {
     }
 }
 
-// Diff the player's state against the pre-command snapshot and push any
-// changes (position, game mode, health, inventory) out to the clients.
+
+
 export function syncCommandState(player, context) {
     const before = context._before;
     if (!before) {
@@ -309,8 +307,6 @@ export function syncCommandState(player, context) {
 
     let changed = false;
 
-    // Teleport: send the position update to the player and broadcast the new
-    // position to every other player that can see them.
     if (player.x !== before.x || player.y !== before.y || player.z !== before.z) {
         sendPlayerPositionLook(player);
         const packet = createEntityTeleportPacket(player);
@@ -322,14 +318,11 @@ export function syncCommandState(player, context) {
         changed = true;
     }
 
-    // Game mode: update the player list and spawn/destroy entities as needed.
     if (player.gamemode !== before.gamemode) {
         applyGamemodeChange(player, before.gamemode, player.gamemode);
         changed = true;
     }
 
-    // Health: a /heal can touch any player, so check everyone (players may
-    // have been added or removed since the snapshot).
     for (const [eid, p] of getPlayers()) {
         if (p.ws.readyState === 1 && p.health !== before.healths.get(eid)) {
             p.ws.send(JSON.stringify({ type: 'health', health: p.health }));
@@ -337,7 +330,6 @@ export function syncCommandState(player, context) {
         }
     }
 
-    // Inventory: /give mutates the raw player inventory, so push it back.
     if (context.player._inventoryChanged && player.ws.readyState === 1) {
         player.ws.send(JSON.stringify({ type: 'inventory', inventory: player.inventory }));
         changed = true;

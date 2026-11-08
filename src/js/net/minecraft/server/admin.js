@@ -1,5 +1,5 @@
-// Admin panel: passcode-protected HTTP endpoints (download/upload world_data.bin)
-// mounted on the same HTTP server the WebSocket multiplayer runs on.
+
+
 const nodeFs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -9,13 +9,13 @@ const Logger = require('./logger.js').default;
 
 const log = Logger;
 
-// Passcode comes from the environment. When it is not set the admin panel
-// stays disabled so a server is never accidentally left open.
+
+
 const ADMIN_PASSCODE = process.env.ADMIN_PASSCODE;
 
-// In-memory sessions: token -> expiry timestamp.
+
 const sessions = new Map();
-const SESSION_TTL = 12 * 60 * 60 * 1000; // 12 hours
+const SESSION_TTL = 12 * 60 * 60 * 1000; 
 
 function sanitizeWorldName(name) {
     return String(name || 'main').toLowerCase().replace(/[^a-z0-9_]/g, '') || 'main';
@@ -185,8 +185,6 @@ upBtn.addEventListener('click', async (e) => {
 </body></html>`;
 
 function handleFileDownload(req, res, worldName) {
-    // Make sure the in-memory world is flushed first so the download is fresh
-    // (and so a never-saved world still produces a valid file to download).
     try {
         saveWorld();
     } catch (e) {
@@ -219,8 +217,6 @@ async function handleFileUpload(req, res, worldName, backup) {
     nodeFs.mkdirSync(worldDir, { recursive: true });
     const worldFile = path.join(worldDir, 'world_data.bin');
 
-    // Stage to a temp file, optionally keep a .bak, then swap into place
-    // (same atomic-rename approach the server's own saveWorld uses).
     const tempFile = worldFile + '.upload';
     if (backup && nodeFs.existsSync(worldFile)) {
         nodeFs.copyFileSync(worldFile, worldFile + '.bak');
@@ -231,8 +227,8 @@ async function handleFileUpload(req, res, worldName, backup) {
     send(res, 200, 'World uploaded for "' + name + '". It will load on the next server start/world load.', 'text/plain');
 }
 
-// Attach to the given http/https server; WebSocket connections are unaffected
-// because we simply ignore non-/admin requests.
+
+
 function attachAdminPanel(server) {
     server.on('request', (req, res) => {
         handleAdminRequest(req, res).catch((e) => {

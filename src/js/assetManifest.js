@@ -74,9 +74,9 @@ export const uiTextures = [
     "gui/tabs.png",
 ];
 
-// ---------------------------------------------------------------------------
-// Texture atlas block/item textures (TextureAtlas.getTextureFiles)
-// ---------------------------------------------------------------------------
+
+
+
 export const atlasBlockTextures = [
     "stone.png", "dirt.png", "grass_top.png", "grass_side.png", "cobblestone.png",
     "oak_planks.png", "bedrock.png", "sand.png", "gravel.png", "log_oak.png",
@@ -196,8 +196,8 @@ export const atlasPaintingTextures = [
     "depth.png"
 ];
 
-// Model files and textures embedded by scripts/build-assets.js for the
-// client-side model renderers. They are not part of the block texture atlas.
+
+
 export const modelAssets = [
     "model/cone/model.obj",
     "model/cone/texture.png",
@@ -207,9 +207,9 @@ export const modelAssets = [
     "model/barrier/texture.png"
 ];
 
-// ---------------------------------------------------------------------------
-// Music tracks grouped by category (MusicManager.loadTracks)
-// ---------------------------------------------------------------------------
+
+
+
 export const musicTracks = {
     menu: [
         "sound/music/menu/menu1.ogg",
@@ -241,11 +241,11 @@ export const musicTracks = {
     ]
 };
 
-// ---------------------------------------------------------------------------
-// Sound pools (SoundManager loads `sound/<name.replace('.','/')><n>.ogg` for
-// n = 1..6 plus the unnumbered fallback). The `step.*` pools mirror
-// Block.sounds in BlockRegistry.create(); keep them in sync.
-// ---------------------------------------------------------------------------
+
+
+
+
+
 export const soundPools = [
     "step.stone",
     "step.wood",

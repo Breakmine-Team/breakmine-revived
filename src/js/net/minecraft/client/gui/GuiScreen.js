@@ -11,12 +11,7 @@ export default class GuiScreen extends Gui {
         this.selectedButtonIndex = -1;
     }
 
-    /**
-     * True when this screen draws items through the item renderer (container
-     * slots, the stack held on the cursor). Those screens need the item layers
-     * composited above them; every other screen is drawn over the HUD, so the
-     * hotbar's item models have to stay underneath it.
-     */
+    
     usesGuiItems() {
         return false;
     }
@@ -29,7 +24,6 @@ export default class GuiScreen extends Gui {
 
         this.init();
 
-        // TV mode: auto-select first enabled button
         this.selectFirstEnabledButton();
     }
 
@@ -83,7 +77,6 @@ export default class GuiScreen extends Gui {
     }
 
     keyTyped(key, character) {
-        // Escape cancels key listening before going back
         if (key === "Escape") {
             let focusedButton = this.selectedButtonIndex >= 0 ? this.buttonList[this.selectedButtonIndex] : null;
             if (focusedButton && focusedButton.listening) {
@@ -95,17 +88,14 @@ export default class GuiScreen extends Gui {
             return true;
         }
 
-        // TV mode: arrow key navigation between buttons
         if (this.minecraft && this.minecraft.settings.tvmode) {
             let focusedButton = this.selectedButtonIndex >= 0 ? this.buttonList[this.selectedButtonIndex] : null;
 
-            // If a key button is listening, forward all keys to it
             if (focusedButton && focusedButton.listening) {
                 focusedButton.keyTyped(key, character);
                 return true;
             }
 
-            // If a slider is focused and editing, let it handle arrows
             if (focusedButton && focusedButton.editing) {
                 focusedButton.keyTyped(key, character);
                 return true;
@@ -116,7 +106,6 @@ export default class GuiScreen extends Gui {
                 let startIndex = this.selectedButtonIndex;
                 let nextIndex = startIndex;
 
-                // Find next enabled button in the direction
                 for (let attempts = 0; attempts < this.buttonList.length; attempts++) {
                     nextIndex += direction;
                     if (nextIndex < 0) nextIndex = this.buttonList.length - 1;
@@ -134,7 +123,6 @@ export default class GuiScreen extends Gui {
                 if (this.selectedButtonIndex >= 0 && this.selectedButtonIndex < this.buttonList.length) {
                     let button = this.buttonList[this.selectedButtonIndex];
                     if (button.isSelectable()) {
-                        // Sliders: Enter toggles editing mode
                         if (typeof button.editing !== 'undefined') {
                             button.keyTyped(key, character);
                         } else {
@@ -192,20 +180,14 @@ export default class GuiScreen extends Gui {
         }
     }
 
-    // Default no-op. Subclasses (e.g. GuiWorldSlotContainer) override this to
-    // handle mouse wheel scrolling. `amount` is the wheel delta sign:
-    //   positive => scroll up (content moves down)
-    //   negative => scroll down (content moves up)
     mouseScrolled(mouseX, mouseY, amount) {
 
     }
 
     drawDefaultBackground(stack) {
         if (this.minecraft.isInGame()) {
-            // Render transparent background
             this.drawRect(stack, 0, 0, this.width, this.height, 'black', 0.6);
         } else {
-            // Render dirt background
             this.drawBackground(stack, this.textureBackground, this.width, this.height);
         }
     }

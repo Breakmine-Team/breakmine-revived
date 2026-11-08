@@ -11,7 +11,6 @@ export default class BlockStoneLike extends Block {
         this.drop = drop;
         this.minLevel = minLevel;
 
-        // Sound
         this.sound = Block.sounds.stone;
         this.inventoryTab = EnumCreativeInventoryTab.MATERIALS;
     }

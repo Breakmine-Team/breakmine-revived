@@ -51,7 +51,6 @@ export default class ItemStack {
     }
 
     getMaxStackSize() {
-        // Default max stack size for most items
         return 64;
     }
 

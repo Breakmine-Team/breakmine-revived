@@ -67,21 +67,17 @@ export default class ItemRenderer extends EntityRenderer {
             return;
         }
 
-        // Rebuild only when needed
         if (this.isRebuildRequired(entity)) {
             this.rebuild(entity);
         }
 
-        // Interpolate entity position
         let interpolatedX = entity.prevX + (entity.x - entity.prevX) * partialTicks;
         let interpolatedY = entity.prevY + (entity.y - entity.prevY) * partialTicks;
         let interpolatedZ = entity.prevZ + (entity.z - entity.prevZ) * partialTicks;
 
-        // Set group position to interpolated entity position
         this.group.position.set(interpolatedX, interpolatedY, interpolatedZ);
         this.group.updateMatrix();
 
-        // Set mesh transformations
         if (this.mesh) {
             this.mesh.position.set(0, 0.2, 0);
             if (entity.getBlock()?.getRenderType() === BlockRenderType.ITEM || entity.getBlock()?.getRenderType() === BlockRenderType.DECORATION) {

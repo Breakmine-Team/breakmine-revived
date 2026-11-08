@@ -37,11 +37,7 @@ export default class CommandHandler {
         this.commands.push(new OffGridClearShortcutCommand());
     }
 
-    /**
-     * Register a mod-provided command. Mods normally go through
-     * ModLoader.registerCommand(), which fills in the owning modId; this is
-     * the same entry point for anything else holding a CommandHandler.
-     */
+    
     registerCommand(descriptor) {
         return CommandRegistry.register(descriptor);
     }
@@ -50,12 +46,12 @@ export default class CommandHandler {
         return CommandRegistry.unregister(name);
     }
 
-    /** Built-in commands plus everything mods registered. */
+    
     getCommands() {
         return [...this.commands, ...CommandRegistry.getAll()];
     }
 
-    /** True when the command exists, either built-in or registered by a mod. */
+    
     hasCommand(name) {
         const key = typeof name === 'string' ? name.toLowerCase() : '';
         return this.commands.some(command => command.command === key) || CommandRegistry.has(key);
@@ -78,9 +74,6 @@ export default class CommandHandler {
             }
         }
 
-        // Mod commands live in the shared registry rather than in this list, so
-        // they also work on the server, where each CommandHandler is shared by
-        // every player and `minecraft` is the current player's adapter.
         const modCommand = CommandRegistry.get(command);
         if (modCommand) {
             let handled = false;

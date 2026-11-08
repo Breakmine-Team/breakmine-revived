@@ -40,8 +40,6 @@ export default function explodeCraterAt(world, x, y, z, radius, size) {
                             );
                         }
                         world.setBlockAt(x1, y1, z1, 0, true);
-                        //console.log(Math.trunc(world.minecraft.player.getBlockPosX()), Math.trunc(world.minecraft.player.getBlockPosY()), Math.trunc(world.minecraft.player.getBlockPosZ()));
-                        //console.log(x1, y1, z1);
                         if (Math.trunc(world.minecraft.player.getBlockPosX()) === x1 && Math.trunc(world.minecraft.player.getBlockPosY()) === y1 && Math.trunc(world.minecraft.player.getBlockPosZ()) === z1) {
                             if (!world.minecraft.player.creative) {
                                 if (gotType === 69 || gotType === 122) {

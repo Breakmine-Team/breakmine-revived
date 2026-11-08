@@ -52,17 +52,14 @@ export default class FlatWorldGenerator extends Generator {
         this.naturalize(chunkX, chunkZ, primer);
     }
 
-    // --- Population (No Structures) ---
 
     populateChunk(chunkX, chunkZ) {
         this.setChunkSeed(chunkX, chunkZ);
         return; 
     }
 
-    // --- Optimized Flat Layered Terrain Generation ---
 
     generateTerrain(chunkX, chunkZ, primer) {
-        // Use the instance property calculated in the constructor
         const columnData = this.precalculatedColumn; 
         const flatHeight = FlatWorldGenerator.FLAT_HEIGHT;
         const chunkSize = FlatWorldGenerator.CHUNK_SIZE;

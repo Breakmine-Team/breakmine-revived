@@ -29,10 +29,6 @@ export default class ItemBucketEmpty extends ItemGeneric {
         this.notifyServerRemoval(world, x, y, z);
     }
 
-    // Picking a liquid up *removes* the block. This used to send a placement
-    // packet carrying the liquid's id, which made the server put the very same
-    // liquid straight back, so an empty bucket could never scoop anything in
-    // multiplayer. A finished digging packet removes it authoritatively.
     notifyServerRemoval(world, x, y, z) {
         const minecraft = world.minecraft;
         if (!minecraft || !minecraft.playerController ||

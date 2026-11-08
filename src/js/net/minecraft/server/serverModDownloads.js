@@ -25,10 +25,6 @@ function getModUrls() {
         .filter(Boolean);
 }
 
-/**
- * Turn a mod page URL into the archive URL. A view page lists its versions,
- * and the first download link is the newest one the wiki offers.
- */
 async function resolveDownloadUrl(modUrl) {
     let pageUrl;
     try {
@@ -114,11 +110,6 @@ async function downloadModArchive(downloadUrl) {
     return bytes;
 }
 
-/**
- * Install one mod from a view or download URL into servermods/.
- * Existing copies installed by this function are replaced so a server
- * restart picks up the current version.
- */
 async function installMod(modUrl, modsDir) {
     const downloadUrl = await resolveDownloadUrl(modUrl);
     const bytes = await downloadModArchive(downloadUrl);
@@ -145,8 +136,6 @@ async function installMod(modUrl, modsDir) {
         throw new Error('ModData.js does not declare a usable static ID');
     }
 
-    // Archives often wrap their contents in one folder. Strip that folder so
-    // the installed layout always has ModData.js at the mod root.
     const rootPrefix = modDataEntry.name === 'ModData.js'
         ? ''
         : modDataEntry.name.slice(0, -'ModData.js'.length);
@@ -197,13 +186,6 @@ async function installMod(modUrl, modsDir) {
     }
 }
 
-/**
- * Download and install every mod listed in SERVER_MOD_URLS.
- *
- * The list may contain view pages or direct archive links, separated by
- * commas, semicolons or whitespace. Failures are logged and do not prevent
- * the server from starting with the mods that did install.
- */
 async function installServerModsFromEnv() {
     const urls = getModUrls();
     if (urls.length === 0) return [];
@@ -219,8 +201,6 @@ async function installServerModsFromEnv() {
     const modsDir = getServerModsDir();
     fs.mkdirSync(modsDir, { recursive: true });
 
-    // Download in parallel: a slow or unreachable wiki page used to serialize
-    // into one 30-second timeout after another before the server could listen.
     const results = await Promise.allSettled(urls.map(async (modUrl) => {
         try {
             return { modUrl, ...(await installMod(modUrl, modsDir)) };

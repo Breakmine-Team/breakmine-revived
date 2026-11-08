@@ -29,10 +29,6 @@ export default class Particle extends Entity {
         this.maxTicksExisted = Math.floor(4 / (this.random.nextFloat() * 0.9 + 0.1))
         this.color = -1;
 
-        // Never pay for the off-grid field's rotated-collision approximation
-        // here: 64 break particles issue three collision queries each per
-        // tick, which could stall a frame for close to a second. Particles
-        // still collide with ordinary terrain.
         this.collidesWithOffGridField = false;
 
         this.group = null;
@@ -64,7 +60,6 @@ export default class Particle extends Entity {
         let y = ((this.prevY + (this.y - this.prevY) * partialTicks));
         let z = ((this.prevZ + (this.z - this.prevZ) * partialTicks));
 
-        // Create mesh
         if (this.group === null) {
             this.rebuild();
         }
@@ -133,7 +128,6 @@ export default class Particle extends Entity {
         let minV = (Math.floor(this.textureIndex / 16) + this.randomX / 4) / 16.0;
         let maxV = minV + (16 / 256 / 4);
 
-        // Flip V
         minV = 1 - minV;
         maxV = 1 - maxV;
 
@@ -143,7 +137,6 @@ export default class Particle extends Entity {
 
         let brightness = this.getEntityBrightness();
 
-        // Render particle
         tessellator.startDrawing();
         tessellator.setColor(red * brightness, green * brightness, blue * brightness);
         tessellator.addVertexWithUV(0, 1, 0, minU, minV);

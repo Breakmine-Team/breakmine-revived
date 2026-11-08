@@ -41,10 +41,8 @@ export default class GuiWaitForCompletion extends GuiScreen {
     }
 
     drawScreen(stack, mouseX, mouseY, partialTicks) {
-        // Render dirt background
         this.drawBackground(stack, this.textureBackground, this.width, this.height);
 
-        // Render title
         this.drawCenteredString(stack, "Please wait...", this.width / 2, this.height / 2 - 20, 0x80FFFFFF);
 
         for(let i = 0; i < this.multilineMessage.length; i++) {

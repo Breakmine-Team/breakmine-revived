@@ -13,8 +13,6 @@ export default class ItemHoe extends ItemTool {
             return;
         }
 
-        // The click position is the block next to the hit face, so the block
-        // the player actually clicked sits one face behind it.
         const clickedX = x - hitFace.x;
         const clickedY = y - hitFace.y;
         const clickedZ = z - hitFace.z;
@@ -51,7 +49,6 @@ export default class ItemHoe extends ItemTool {
             return false;
         }
 
-        // Nothing can grow where the farmland is covered.
         return world.getBlockAt(x, y + 1, z) === 0;
     }
 

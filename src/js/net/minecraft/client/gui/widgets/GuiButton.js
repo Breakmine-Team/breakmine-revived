@@ -4,10 +4,7 @@ import GuiTooltip from "./GuiTooltip.js";
 export default class GuiButton extends Gui {
 
     constructor(minecraftOrString, stringOrX, xOrY, yOrWidth, widthOrHeight, heightOrCallback, callback) {
-        // Handle both old signature (string, x, y, width, height, callback) 
-        // and new signature (minecraft, string, x, y, width, height, callback)
         if (typeof minecraftOrString === 'string') {
-            // Old signature without minecraft
             super(null);
             this.string = minecraftOrString;
             this.x = stringOrX;
@@ -16,7 +13,6 @@ export default class GuiButton extends Gui {
             this.height = widthOrHeight;
             this.callback = heightOrCallback;
         } else {
-            // New signature with minecraft
             super(minecraftOrString);
             this.string = stringOrX;
             this.x = xOrY;
@@ -46,7 +42,6 @@ export default class GuiButton extends Gui {
 
     onPress() {
         if (this.enabled) {
-            // Play click sound
             if (this.minecraft && this.minecraft.soundManager) {
                 this.minecraft.soundManager.playGuiClick();
             }
@@ -86,9 +81,6 @@ export default class GuiButton extends Gui {
         let textureGui = this.getTexture("gui/gui.png");
         let spriteY = 66 + (enabled ? (mouseOver ? 20 : 0) : -20);
 
-        // Split the sprite into integer halves. Using width / 2 directly leaves
-        // the last pixel column unpainted on odd widths, because both halves
-        // round down when drawn.
         const leftWidth = Math.ceil(width / 2);
         const rightWidth = width - leftWidth;
 

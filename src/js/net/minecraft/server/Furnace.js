@@ -3,18 +3,18 @@ import { getPlayers } from './players.js';
 import { sendBlockChange } from './packets.js';
 import Block from '../client/world/block/Block.js';
 
-// Fuel values: typeId -> burn ticks
+
 const FUEL_VALUES = {
-    87: 1600,   // Coal
-    29: 16000   // Coal Block
+    87: 1600,   
+    29: 16000   
 };
 
-// Smelting recipes: inputTypeId -> { resultTypeId, resultCount }
+
 const RECIPES = {
-    24: { resultTypeId: 86, resultCount: 1 },  // Iron Ore -> Iron Ingot
-    21: { resultTypeId: 90, resultCount: 1 },  // Gold Ore -> Gold Ingot
-    12: { resultTypeId: 20, resultCount: 1 },  // Sand -> Glass
-    4:  { resultTypeId: 1,  resultCount: 1 }   // Cobblestone -> Stone
+    24: { resultTypeId: 86, resultCount: 1 },  
+    21: { resultTypeId: 90, resultCount: 1 },  
+    12: { resultTypeId: 20, resultCount: 1 },  
+    4:  { resultTypeId: 1,  resultCount: 1 }   
 };
 
 function isFuel(typeId) { return FUEL_VALUES[typeId] !== undefined; }
@@ -48,7 +48,6 @@ function tickFurnace(inv) {
 
     const hasFuel = fuel.typeId > 0 && isFuel(fuel.typeId);
 
-    // Reset cook progress if the input item changed
     const currentRecipeId = input.typeId > 0 ? (recipe ? recipe.resultTypeId : -1) : 0;
     if (currentRecipeId !== inv._lastRecipeId) {
         inv.cookTime = 0;

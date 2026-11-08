@@ -299,7 +299,6 @@ export default class GuiOptions extends GuiScreen {
             case "slider": {
                 const min = item.min !== undefined ? item.min : 0;
                 const max = item.max !== undefined ? item.max : 100;
-                // Items whose stored value is not a slider integer map both ways.
                 const toSlider = typeof item.toSlider === "function" ? item.toSlider : (value => value);
                 const fromSlider = typeof item.fromSlider === "function" ? item.fromSlider : (value => value);
                 const slider = new GuiSliderButton(item.name, toSlider(currentValue), min, max, x, y, width, height, newValue => {

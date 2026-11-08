@@ -27,7 +27,6 @@ export default class ChunkProviderGenerate extends ChunkProvider {
         let x = chunk.x;
         let z = chunk.z;
 
-        // Populate the chunk
         if (!chunk.isTerrainPopulated && this.chunkExists(x + 1, z + 1) && this.chunkExists(x, z + 1) && this.chunkExists(x + 1, z)) {
             this._populateChunkAt(x, z);
         }
@@ -47,7 +46,6 @@ export default class ChunkProviderGenerate extends ChunkProvider {
         if (!chunk.isTerrainPopulated) {
             chunk.isTerrainPopulated = true;
 
-            // Populate chunk
             this.generator.populateChunk(chunk.x, chunk.z);
         }
     }

@@ -23,9 +23,6 @@ export default class Entity {
         this.motionY = 0;
         this.motionZ = 0;
 
-        // Summoned off-grid blocks use a rotated-collision approximation that
-        // is far too expensive to evaluate for short-lived visual particles.
-        // They can opt out of that layer while still colliding with terrain.
         this.collidesWithOffGridField = true;
 
         this.stepHeight = 0.0;
@@ -68,12 +65,10 @@ export default class Entity {
     }
 
     setPosition(x, y, z) {
-        // Update position
         this.x = x;
         this.y = y;
         this.z = z;
 
-        // Update bounding box
         let width = this.width / 2;
         this.boundingBox = new BoundingBox(
             x - width,
@@ -146,7 +141,6 @@ export default class Entity {
     }
 
     moveCollide(targetX, targetY, targetZ) {
-        // Target position
         let originalTargetX = targetX;
         let originalTargetY = targetY;
         let originalTargetZ = targetZ;
@@ -195,16 +189,10 @@ export default class Entity {
             }
         }
 
-        // Move per axis so a diagonal move can't slip through the corner of a
-        // solid block: each axis only tests the blocks actually in that axis's
-        // sweep, and the working box is advanced between axes.
         let collisionBoxes = [];
         let movingBox = this.boundingBox.clone();
         let isClimbable = false;
 
-        // Calculate target Y. The downward flag lets blocks that are only solid
-        // from above (scaffolding) catch a landing without blocking a climb;
-        // sneaking lets the same blocks be passed through on the way down.
         let boundingBoxList = this.world.getCollisionBoxes(
             movingBox.expand(0.0, targetY, 0.0),
             includeOffGrid,
@@ -215,17 +203,13 @@ export default class Entity {
             targetY = aABB.clipYCollide(movingBox, targetY);
         }
 
-        // Check if on ground
         this.onGround = originalTargetY !== targetY && originalTargetY < 0.0;
 
-        // Move up or down before resolving horizontal movement
         movingBox.move(0.0, targetY, 0.0);
 
-        // Calculate target X
         boundingBoxList = this.world.getCollisionBoxes(movingBox.expand(targetX, 0.0, 0.0), includeOffGrid);
         collisionBoxes.push(...boundingBoxList);
         for (let aABB of boundingBoxList) {
-            // Skip collision check for half blocks on ground
             if ((aABB.maxY - movingBox.minY) <= 0.5 && (aABB.maxY - movingBox.minY) > 0 && this.onGround) {
                 if (targetX === originalTargetX && aABB.clipXCollide(movingBox, targetX) !== originalTargetX) {
                     isClimbable = true;
@@ -236,11 +220,9 @@ export default class Entity {
         }
         movingBox.move(targetX, 0.0, 0.0);
 
-        // Calculate target Z
         boundingBoxList = this.world.getCollisionBoxes(movingBox.expand(0.0, 0.0, targetZ), includeOffGrid);
         collisionBoxes.push(...boundingBoxList);
         for (let aABB of boundingBoxList) {
-            // Skip collision check for half blocks on ground
             if ((aABB.maxY - movingBox.minY) <= 0.5 && (aABB.maxY - movingBox.minY) > 0 && this.onGround) {
                 if (targetZ === originalTargetZ && aABB.clipZCollide(movingBox, targetZ) !== originalTargetZ) {
                     isClimbable = true;
@@ -251,16 +233,12 @@ export default class Entity {
         }
         movingBox.move(0.0, 0.0, targetZ);
 
-        // Attemp to climb
         if (isClimbable && this.onGround && (targetX === originalTargetX || targetZ === originalTargetZ)) {
-            // Remember the horizontal movement resolved at the current height
             let stepX = targetX;
             let stepZ = targetZ;
 
-            // Move bounding box up
             movingBox.move(0.0, 0.5, 0.0);
 
-            // Calculate collision
             let isColliding = false;
 
             if (targetX === originalTargetX) {
@@ -281,9 +259,7 @@ export default class Entity {
                 }
             }
 
-            // Climb if block is reachable
             if (!isColliding) {
-                // Recalculate target Y
                 for (let aABB of collisionBoxes) {
                     targetY = aABB.clipYCollide(movingBox, targetY);
                 }
@@ -295,29 +271,22 @@ export default class Entity {
             }
         }
 
-        // Commit the resulting position
         this.boundingBox = movingBox;
 
-        // Stop motion on collision
         if (originalTargetX !== targetX) {
             this.motionX = 0.0;
-            //console.log('stopX');
         }
         if (originalTargetY !== targetY) {
             this.motionY = 0.0;
-            //console.log('stopY');
         }
         if (originalTargetZ !== targetZ) {
             this.motionZ = 0.0;
-            //console.log('stopZ');
         }
 
-        // Update position
         this.x = (this.boundingBox.minX + this.boundingBox.maxX) / 2.0;
         this.y = this.boundingBox.minY;
         this.z = (this.boundingBox.minZ + this.boundingBox.maxZ) / 2.0;
 
-        // Horizontal collision?
         return originalTargetX !== targetX || originalTargetZ !== targetZ;
     }
 

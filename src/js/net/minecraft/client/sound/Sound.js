@@ -1,4 +1,4 @@
-// Patchwork Sound API - static; no 'this' allowed.
+
 export default class Sound {
     static minecraft = null;
     static _modUrlCache = new Map();
@@ -7,15 +7,7 @@ export default class Sound {
         Sound.minecraft = minecraft;
     }
 
-    /**
-     * Play a sound.
-     *   Sound.play('random.pop', 1.0)   - vanilla sound (by sound pool name)
-     *   Sound.play('mod:test.ogg', 1.0) - custom sound shipped by a mod
-     *
-     * @param {string} name
-     * @param {number} volume
-     * @param {number} pitch
-     */
+    
     static play(name, volume = 1.0, pitch = 1.0) {
         if (!Sound.minecraft || typeof name !== 'string') {
             return;
@@ -23,7 +15,6 @@ export default class Sound {
 
         const colonIndex = name.indexOf(':');
         if (colonIndex !== -1) {
-            // Mod sound: <modId>:<soundfile>
             Sound._playModSound(
                 name.substring(0, colonIndex),
                 name.substring(colonIndex + 1),
@@ -31,7 +22,6 @@ export default class Sound {
                 pitch
             );
         } else {
-            // Vanilla sound
             Sound.minecraft.soundManager.playSoundMono(name, volume, pitch);
         }
     }
@@ -45,7 +35,6 @@ export default class Sound {
             return;
         }
 
-        // Normalize to '.ogg' (mods may pass 'test' or 'test.ogg')
         if (!/\.(ogg|mp3|wav)$/i.test(soundName)) {
             soundName += '.ogg';
         }

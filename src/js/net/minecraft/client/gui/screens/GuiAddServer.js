@@ -4,10 +4,7 @@ import GuiTextField from "../widgets/GuiTextField.js";
 
 export default class GuiAddServer extends GuiScreen {
 
-    /**
-     * @param {GuiScreen} parentScreen 
-     * @param {{ name: string, host: string }} serverData 
-     */
+    
     constructor(parentScreen, serverData) {
         super();
         this.parentScreen = parentScreen;
@@ -20,11 +17,10 @@ export default class GuiAddServer extends GuiScreen {
 
         let baseButtonY = this.height / 4 + 96 + 12;
 
-        // Action Buttons
         this.btnSave = new GuiButton(this.minecraft, "Save", this.width / 2 - 100, baseButtonY, 200, 20, () => {
             this.serverData.name = this.txtServerName.getText();
             this.serverData.host = this.txtServerAddress.getText();
-            this.parentScreen.deleteWorld(true, 0); // Triggers callback to save state
+            this.parentScreen.deleteWorld(true, 0); 
         });
         this.buttonList.push(this.btnSave);
 
@@ -32,7 +28,6 @@ export default class GuiAddServer extends GuiScreen {
             this.parentScreen.deleteWorld(false, 0);
         }));
 
-        // Text Fields
         this.txtServerName = new GuiTextField(this.width / 2 - 100, 76, 200, 20);
         this.txtServerName.isFocused = true;
         this.txtServerName.setText(this.serverData.name);
@@ -51,7 +46,6 @@ export default class GuiAddServer extends GuiScreen {
         
         let isValid = nameLen > 0 && hostStr.length > 0;
         if (isValid) {
-            // Block validation if too many colons exist (invalid port format)
             if (hostStr.split(":").length > 2) {
                 isValid = false;
             }

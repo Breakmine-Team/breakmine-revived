@@ -18,7 +18,6 @@ export default class BlockBluestoneDust extends Block {
     }
 
     getDrop(world, x, y, z) {
-        // Breaking a dust wire yields the placeable dust item, not the wire block.
         return [BlockRegistry.ITEM_BLUESTONE_DUST_PLACER.getId(), 1];
     }
 
@@ -26,16 +25,11 @@ export default class BlockBluestoneDust extends Block {
         return !!(block && (block.isBluestoneDust || block.isBluestoneRod));
     }
 
-    // Dust conducts only horizontally; the rod overrides this to conduct in
-    // every direction (including up/down).
     canConductTo(world, x, y, z, dx, dy, dz) {
         if (dy !== 0) return false;
         return this._isBluestoneWire(Block.getById(world.getBlockAt(x + dx, y + dy, z + dz)));
     }
 
-    // Wires a dust can draw power from: horizontal wires on any axis, plus
-    // rods directly above or below (so a vertical rod run feeds the dust at
-    // its base).
     canReadFrom(world, x, y, z, dx, dy, dz) {
         const block = Block.getById(world.getBlockAt(x + dx, y + dy, z + dz));
         if (!this._isBluestoneWire(block)) return false;
@@ -51,9 +45,6 @@ export default class BlockBluestoneDust extends Block {
 
     shouldRenderFace(world, x, y, z, face) {
         if (face === EnumBlockFace.TOP) return true;
-        // The dust is a thin slab resting on the block below; its bottom face
-        // only exists when there is no block underneath (otherwise it would
-        // z-fight with the coplanar face of the block below).
         if (face === EnumBlockFace.BOTTOM) {
             return !world || world.getBlockAtFace(x, y, z, face) === 0;
         }
@@ -102,13 +93,6 @@ export default class BlockBluestoneDust extends Block {
     }
 
     calculatePower(world, x, y, z) {
-        // Corrected neighborFace values:
-        // +X (East block) -> Facing Dust via WEST face
-        // -X (West block) -> Facing Dust via EAST face
-        // +Z (South block) -> Facing Dust via NORTH face
-        // -Z (North block) -> Facing Dust via SOUTH face
-        // -Y (Bottom block) -> Facing Dust via TOP face
-        // +Y (Top block) -> Facing Dust via BOTTOM face
         const neighbors = [
             [x + 1, y, z, EnumBlockFace.WEST],
             [x - 1, y, z, EnumBlockFace.EAST],
@@ -128,9 +112,6 @@ export default class BlockBluestoneDust extends Block {
             if (!block) continue;
 
             if (this._isBluestoneWire(block)) {
-                // Wires only contribute through canReadFrom; a wire that isn't
-                // readable (e.g. dust above/below regular dust) must not fall
-                // through to the getPower branch or it would couple vertically.
                 if (!this.canReadFrom(world, x, y, z, nx - x, ny - y, nz - z)) continue;
                 const p = this.getPower(world, nx, ny, nz) - 1;
                 if (p > best) best = p;
@@ -168,16 +149,12 @@ export default class BlockBluestoneDust extends Block {
         world.onBlockChanged(x, y, z + 1);
         world.onBlockChanged(x, y, z - 1);
 
-        // Recalculate immediately so a freshly placed wire joins the network
-        // (and lights up / settles) in the same tick instead of after a delay.
         this.onBlockTick(world, x, y, z);
     }
 
     onBlockRemoved(world, x, y, z) {
         world.setBlockDataAt(x, y, z, 0);
 
-        // Recalculate connected wires immediately so the network settles to
-        // its new state in one tick rather than fading out block by block.
         for (const [dx, dy, dz] of this._neighborOffsets()) {
             if (this.canConductTo(world, x, y, z, dx, dy, dz)) {
                 this.onBlockTick(world, x + dx, y + dy, z + dz);
@@ -187,12 +164,6 @@ export default class BlockBluestoneDust extends Block {
         this._scheduleNeighbors(world, x, y, z);
     }
 
-    // Wire power is stored in this block's data nibble, so a dust block has to
-    // re-run its own propagation whenever something next to it changes state.
-    // Without this hook, neighbour notifications (ServerWorld's
-    // notifyNeighborBlockChange only calls blocks that implement it) silently
-    // skip every dust block, which is why a lever flip did not light the wire
-    // until the dust itself was replaced.
     onNeighborBlockChange(world, x, y, z) {
         this._scheduleNeighbors(world, x, y, z);
         this.onBlockTick(world, x, y, z);
@@ -203,12 +174,7 @@ export default class BlockBluestoneDust extends Block {
         this._propagate(world, x, y, z);
     }
 
-    /**
-     * Synchronously settle the connected wire network to its fixpoint so
-     * power changes take effect immediately (one tick) instead of trickling
-     * through one block per tick. Only dusts whose computed power changes are
-     * re-queued, so the cascade terminates once the network is stable.
-     */
+    
     _propagate(world, x, y, z) {
         const queue = [[x, y, z]];
         let steps = 0;
@@ -217,8 +183,6 @@ export default class BlockBluestoneDust extends Block {
             steps++;
             const [cx, cy, cz] = queue.pop();
 
-            // Use the wire's own block class so a rod reached through a dust
-            // cascade still computes power with its all-direction rules.
             const wireBlock = Block.getById(world.getBlockAt(cx, cy, cz));
             if (!wireBlock || !(wireBlock.isBluestoneDust || wireBlock.isBluestoneRod)) continue;
 
@@ -229,12 +193,8 @@ export default class BlockBluestoneDust extends Block {
             world.setBlockDataAt(cx, cy, cz, newPower);
             world.onBlockChanged(cx, cy, cz);
 
-            // Wake up adjacent consumers (lamps, repeaters, observers, ...)
-            // so they react to the change on the next scheduled tick.
             this._scheduleNeighbors(world, cx, cy, cz);
 
-            // Notify neighbors so blocks with onNeighborBlockChange (repeaters,
-            // observers, etc.) re-evaluate their input immediately.
             for (const [dx, dy, dz] of this._neighborOffsets()) {
                 world.notifyNeighborBlockChange(cx + dx, cy + dy, cz + dz);
             }
@@ -263,9 +223,6 @@ export default class BlockBluestoneDust extends Block {
         return (r << 16) | (g << 8) | b;
     }
 
-    // Bluestone wiring is a flat overlay on the block below and must not dim
-    // the light around it. 0 is the engine's "transparent to light" value, so
-    // the light flood treats the cell exactly like the air it displaces.
     getOpacity() {
         return 0;
     }

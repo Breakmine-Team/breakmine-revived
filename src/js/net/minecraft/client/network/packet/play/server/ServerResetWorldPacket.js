@@ -7,7 +7,6 @@ export default class ServerResetWorldPacket extends Packet {
     }
 
     read(buffer) {
-        // No data needed for reset world packet
     }
 
     handle(handler) {

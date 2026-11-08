@@ -18,9 +18,6 @@ export default class GuiDeath extends GuiScreen {
                 this.player.respawn();
                 this.minecraft.displayScreen(null);
             } else {
-                // Multiplayer respawn is server-authoritative: the server resets
-                // the position to spawn, pushes chunks, and the client stays on
-                // the loading screen until the terrain around the spawn loads.
                 this.player.requestRespawn();
             }
         }));
@@ -31,10 +28,8 @@ export default class GuiDeath extends GuiScreen {
     }
 
     drawScreen(stack, mouseX, mouseY, partialTicks) {
-        // Background
         this.drawRect(stack, 0, 0, this.width, this.height, 'red', 0.5);
 
-        // Title
         this.drawCenteredString(stack, "You Died!", this.width / 2, 40);
         this.drawCenteredString(stack, `${this.player.username} ${this.player.typeOfDeath}`, this.width / 2, 60);
 

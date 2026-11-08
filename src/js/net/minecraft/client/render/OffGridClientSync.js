@@ -16,12 +16,6 @@ function resolveBlock(typeId) {
     return Block.getById(typeId) || BlockRegistry.get(typeId);
 }
 
-/**
- * Route local field writes to the server. The field calls this after any
- * interactive edit (break, place, door/data update) and after the local
- * lifecycle writes that follow it, so every client converges on the server's
- * cell set. Server-originated writes pass fromNetwork=true and never echo.
- */
 function attachCellSync(minecraft, field) {
     if (field._offGridSyncAttached) return;
     field._offGridSyncAttached = true;
@@ -35,7 +29,6 @@ function attachCellSync(minecraft, field) {
     };
 }
 
-/** Get the field bound to the current world, recreating it after a switch. */
 function getOrBindField(minecraft) {
     if (!minecraft || !minecraft.world) return null;
 
@@ -57,7 +50,6 @@ function getOrBindField(minecraft) {
     return field;
 }
 
-/** Get the ghost-block renderer bound to the current world. */
 function getOrBindRenderer(minecraft) {
     if (!minecraft || !minecraft.world) return null;
 
@@ -72,7 +64,6 @@ function getOrBindRenderer(minecraft) {
     return renderer;
 }
 
-/** Apply a full server snapshot: replace the field and rebuild ghost meshes. */
 function applyOffGridState(minecraft, state) {
     if (!minecraft || !minecraft.world || !state) return;
 
@@ -97,7 +88,6 @@ function applyOffGridState(minecraft, state) {
     }
 }
 
-/** Apply one incremental server update (cell edit, pose, ghost render, ...). */
 function applyOffGridUpdate(minecraft, update) {
     if (!minecraft || !minecraft.world || !update) return;
 
@@ -108,8 +98,6 @@ function applyOffGridUpdate(minecraft, update) {
             if (!Number.isFinite(update.typeId) || update.typeId < 0) return;
             if (update.typeId !== 0 && !resolveBlock(update.typeId)) return;
             if (update.typeId === 0) {
-                // Removing a cell from an empty field is a no-op; don't create
-                // a field (and its scene group) just to delete nothing.
                 const field = minecraft.offGridBlockField;
                 if (!field || field.world !== minecraft.world) return;
                 field.applyRemoteWrite(update.x, update.y, update.z, 0, 0);

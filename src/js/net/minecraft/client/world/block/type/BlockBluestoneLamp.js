@@ -82,9 +82,6 @@ export default class BlockBluestoneLamp extends Block {
         world.scheduleBlockTick(x, y, z, 1);
     }
 
-    // A lamp has no onBlockPlaced, so without this hook the server's
-    // notifyNeighborBlockChange skips it and the lamp stays in its old state
-    // when the wire next to it is powered or unpowered.
     onNeighborBlockChange(world, x, y, z) {
         world.scheduleBlockTick(x, y, z, 1);
     }

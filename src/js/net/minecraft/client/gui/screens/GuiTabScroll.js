@@ -17,7 +17,7 @@ export default class GuiTabScroll {
         "give": "blocks"
     };
 
-    /** Built-in commands plus everything mods registered. */
+    
     static commandNames() {
         return [...new Set([
             ...GuiTabScroll.BASE_COMMANDS,
@@ -42,7 +42,6 @@ export default class GuiTabScroll {
             return;
         }
 
-        // Use text up to cursor position for autocomplete
         const cursorPos = this.inputField.cursorPosition;
         const textToCursor = text.substring(0, cursorPos);
         const parts = textToCursor.split(" ");
@@ -68,7 +67,6 @@ export default class GuiTabScroll {
         const cmd = parts[0].substring(1).toLowerCase();
         const cmdData = GuiTabScroll.COMMAND_TREE[cmd];
 
-        // Special handling for summon command (has x y z entity structure)
         if (cmd === "summon") {
             if (parts.length > 4) {
                 this._clear();
@@ -123,7 +121,6 @@ export default class GuiTabScroll {
                 const namePartial = parts[1].toLowerCase();
                 this.suggestions = this.suggestions.filter(n => {
                     const lower = n.toLowerCase();
-                    // Match if starts with partial, or if the name part (after colon) starts with partial
                     return lower.startsWith(namePartial) || lower.split(':')[1]?.startsWith(namePartial);
                 });
             }
@@ -228,9 +225,7 @@ export default class GuiTabScroll {
 
     _getBlockNames() {
         const names = [];
-        // Get all registered block identifiers with namespace
         for (const [key, block] of BlockRegistry.registry) {
-            // Include namespaced keys (e.g., "breakmine:tnt")
             if (key.includes(':')) {
                 names.push(key);
             }
@@ -239,7 +234,6 @@ export default class GuiTabScroll {
     }
 
     _getEntityNames() {
-        // Hardcoded list of summonable entities (matches SummonCommand.js)
         return ["creeper", "player"];
     }
 
@@ -286,19 +280,16 @@ export default class GuiTabScroll {
         const parts = textBeforeCursor.split(" ");
 
         if (parts.length === 1) {
-            // Replace command name
             const newText = "/" + selection + " " + textAfterCursor;
             this.inputField.setText(newText);
             this.inputField.cursorPosition = newText.length - textAfterCursor.length;
         } else {
-            // Special handling for summon command (entity is 4th argument)
             if (parts[0].toLowerCase() === "/summon" && parts.length === 4) {
                 parts[3] = selection;
                 const newText = parts.join(" ") + textAfterCursor;
                 this.inputField.setText(newText);
                 this.inputField.cursorPosition = newText.length - textAfterCursor.length;
             } else {
-                // For blocks with namespace, replace the last part with full selection
                 parts[parts.length - 1] = selection;
                 const newText = parts.join(" ") + " " + textAfterCursor;
                 this.inputField.setText(newText);
@@ -331,12 +322,10 @@ export default class GuiTabScroll {
 
     handleKey(key, character) {
         if (key === "Tab") {
-            // Show suggestions if not active
             if (!this.isActive) {
                 this.update(this.inputField.getText(), true);
                 return true;
             }
-            // Apply the selected suggestion if active
             const selection = this.confirm();
             if (selection !== null) {
                 this.applySuggestion(selection);
@@ -360,12 +349,11 @@ export default class GuiTabScroll {
         return false;
     }
 
-    /** Screen X where the suggestion list starts: the beginning of the word being typed, kept inside the field. */
+    
     _getBoxX() {
         const text = this.inputField.getText();
         const cursorPosition = Math.min(this.inputField.cursorPosition, text.length);
 
-        // Start of the word the caret sits in, so the list lines up with the argument being completed
         const wordStart = Math.min(text.lastIndexOf(" ", cursorPosition - 1) + 1, cursorPosition);
         const wordOffset = this.minecraft.fontRenderer.getStringWidth(null, text.substring(0, wordStart));
 
@@ -410,7 +398,6 @@ export default class GuiTabScroll {
         stack.fillStyle = '#000000';
         stack.fillRect(boxX, boxY, boxWidth, boxHeight);
 
-        // Render visible suggestions based on scroll offset
         for (let i = 0; i < visibleCount; i++) {
             const actualIndex = this.scrollOffset + i;
             if (actualIndex >= this.suggestions.length) break;
@@ -420,9 +407,7 @@ export default class GuiTabScroll {
             this.minecraft.fontRenderer.drawString(stack, this.suggestions[actualIndex], boxX + 4, y, color, false);
         }
 
-        // Draw scroll indicators (checkerboard pattern) if there are more items
         if (this.suggestions.length > this.maxVisible) {
-            // Top indicator (checkerboard pattern if can scroll up)
             if (this.scrollOffset > 0) {
                 for (let x = 0; x < boxWidth; x++) {
                     for (let y = 0; y < 1; y++) {
@@ -434,7 +419,6 @@ export default class GuiTabScroll {
                 }
             }
 
-            // Bottom indicator (checkerboard pattern if can scroll down)
             if (this.scrollOffset + this.maxVisible < this.suggestions.length) {
                 for (let x = 0; x < boxWidth; x++) {
                     for (let y = 0; y < 1; y++) {

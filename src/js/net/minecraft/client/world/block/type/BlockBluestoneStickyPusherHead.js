@@ -16,9 +16,7 @@ export default class BlockBluestoneStickyPusherHead extends BlockBluestonePusher
 
     getMultipart(world, x, y, z) {
         return [
-            // Head Plate: uses the sticky planks texture
             ["texture", null, { texture: 'oak_planks_sticky', bbox: new BoundingBox(0, 0.75, 0, 1, 1, 1) }],
-            // Shaft / Arm
             ["block", BlockRegistry.COBBLE_STONE.id, new BoundingBox(0.375, 0, 0.375, 0.625, 0.75, 0.625)]
         ];
     }

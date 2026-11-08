@@ -20,13 +20,10 @@ export default class CaveGenerator extends Generator {
         let offset = this.chunkRange;
         let {seedX, seedZ} = this.generateSeedOffset();
 
-        // Generate entire cave over 16x16 chunk area
         for (let chunkX = originChunkX - offset; chunkX <= originChunkX + offset; chunkX++) {
             for (let chunkZ = originChunkZ - offset; chunkZ <= originChunkZ + offset; chunkZ++) {
-                // Set seed for position
                 this.setSeedOffset(chunkX, chunkZ, seedX, seedZ);
 
-                // Generate entire cave
                 this.generateCave(chunkX, chunkZ, originChunkX, originChunkZ, primer);
             }
         }
@@ -43,7 +40,6 @@ export default class CaveGenerator extends Generator {
             let y = 8 + this.random.nextInt(200);
             let z = this.random.nextInt(16);
 
-            // Only replace stone
             if (primer.get(x, y, z) === this.STONE_ID) {
                 primer.set(x, y, z, this.SLIME_ID);
             }
@@ -56,7 +52,6 @@ export default class CaveGenerator extends Generator {
             num = 0;
         }
 
-        // Generate multiple caves in the given area
         for (let i = 0; i < num; i++) {
             let x = chunkX * 16 + this.random.nextInt(16);
             let y = this.random.nextInt(this.random.nextInt(240) + 8);
@@ -207,14 +202,12 @@ export default class CaveGenerator extends Generator {
             progressInvert = Math.max(progressInvert, 0);
             layerZ = Math.min(layerZ, 16);
 
-            // Skip if bounding box doesn't intersect the chunk
             if (distanceToCenterX >= layerX || progressInvert >= layerZ || distanceToCenterY >= layerY) {
                 continue;
             }
 
             let isWaterCave = false;
 
-            // Check for water
             for (let x = distanceToCenterX; !isWaterCave && x < layerX; x++) {
                 for (let z = progressInvert; !isWaterCave && z < layerZ; z++) {
                     for (let y = layerY + 1; !isWaterCave && y >= distanceToCenterY - 1; y--) {
@@ -238,41 +231,32 @@ export default class CaveGenerator extends Generator {
                 continue;
             }
 
-            // For each block on layer x
             for (let x = distanceToCenterX; x < layerX; x++) {
                 let offsetX = (((x + originChunkX * 16) + 0.5) - absoluteX) / value;
 
-                // For each block on layer z
                 for (let z = progressInvert; z < layerZ; z++) {
                     let offsetZ = (((z + originChunkZ * 16) + 0.5) - absoluteZ) / value;
 
                     let totalY = layerY;
                     let hasGrass = false;
 
-                    // For each block on layer y
                     for (let y = layerY - 1; y >= distanceToCenterY; y--) {
                         let offsetY = ((y + 0.5) - absoluteY) / valueWithStrength;
 
-                        // Check if the offset vector length is below 1
                         if (offsetY > -0.7 && offsetX * offsetX + offsetY * offsetY + offsetZ * offsetZ < 1.0) {
                             let typeId = primer.get(x, totalY, z)
 
-                            // We found grass
                             if (typeId === this.GRASS_ID) {
                                 hasGrass = true;
                             }
 
-                            // Check if we can create a cave here
                             if (typeId === this.STONE_ID || typeId === this.DIRT_ID || typeId === this.GRASS_ID) {
 
                                 if (y < 10) {
-                                    // Lava cave
                                     primer.set(x, totalY, z, this.LAVA_ID);
                                 } else {
-                                    // Normal cave
                                     primer.set(x, totalY, z, 0);
 
-                                    // Grow grass if we have dirt in here
                                     if (hasGrass && primer.get(x, totalY - 1, z) === this.DIRT_ID) {
                                         primer.set(x, totalY - 1, z, this.GRASS_ID);
                                     }
@@ -280,7 +264,6 @@ export default class CaveGenerator extends Generator {
                             }
                         }
 
-                        // Go further down
                         totalY--;
                     }
                 }

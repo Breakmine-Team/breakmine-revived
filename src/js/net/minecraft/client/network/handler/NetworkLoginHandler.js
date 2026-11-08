@@ -34,18 +34,14 @@ export default class NetworkLoginHandler extends PacketHandler {
     }
 
     handleEncryptionRequest(packet) {
-        // Create an AES key for the packet encryption
         let secretKey = CryptManager.createNewSharedKey();
 
-        // Send join server request to Mojang
         let session = this.networkManager.minecraft.getSession();
         let serverId = this.authentication.createServerHash(packet.serverId, secretKey, packet.publicKey);
         this.authentication.joinServer(session.getProfile(), session.getAccessToken(), serverId);
 
-        // Send encryption response
         this.networkManager.sendPacket(new EncryptionResponsePacket(secretKey, packet.publicKey, packet.verifyToken));
 
-        // Enable encryption
         this.networkManager.enableEncryption(secretKey);
     }
 
@@ -57,9 +53,6 @@ export default class NetworkLoginHandler extends PacketHandler {
         const modLoader = minecraft.modLoader;
         const disconnectScreen = new GuiDisconnected(this.disconnectReason);
 
-        // Offer a retry when the kick is about mods and the player is in fact
-        // running some. Confirming switches them off in memory only; the saved
-        // enabled set is untouched, so a reload brings them back.
         if (isModRejection(this.disconnectReason)
             && modLoader && typeof modLoader.getHandshakeMods === 'function'
             && typeof this.networkManager.reconnect === 'function'
@@ -72,8 +65,6 @@ export default class NetworkLoginHandler extends PacketHandler {
                 "Cancel",
                 () => {
                     if (modLoader.temporarilyDisableMods() > 0) {
-                        // GuiYesNo shows its parent screen right after this
-                        // callback, so reconnect after that happens.
                         queueMicrotask(() => this.networkManager.reconnect());
                     }
                 }

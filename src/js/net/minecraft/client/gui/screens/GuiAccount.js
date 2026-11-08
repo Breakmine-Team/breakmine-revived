@@ -106,7 +106,6 @@ export default class GuiAccount extends GuiScreen {
 
         this.playerPreview = new GuiPlayerPreview(this.minecraft);
         this.playerPreview.setAnimationMode(this.animationMode);
-        // Turn slightly so the cape is visible on the previewed character
         this.playerPreview.setBaseYaw(22);
         this.playerPreview.init();
     }
@@ -317,8 +316,6 @@ export default class GuiAccount extends GuiScreen {
                 this.minecraft.settings.loggedIn = true;
                 this.minecraft.settings.save();
 
-                // The account now has a cape; publish it for the session so it
-                // shows in-game without needing to rejoin.
                 this.minecraft.capeManager?.refreshOwnCape();
 
                 this.errorMessage = `Signed in as ${username}`;
@@ -345,7 +342,6 @@ export default class GuiAccount extends GuiScreen {
             this.minecraft.settings.save();
         }
 
-        // Drop the account cape locally and tell the server it is gone
         this.minecraft.capeManager?.clearOwnCape();
     }
 

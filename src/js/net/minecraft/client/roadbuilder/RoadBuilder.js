@@ -63,7 +63,7 @@ export default class RoadBuilder {
         return Block.getById(heldItem.getType())?.isRoadBuilder === true;
     }
 
-    /** + or - while the tool is held. */
+    
     adjustWidth(delta) {
         if (!delta) {
             return;
@@ -79,7 +79,7 @@ export default class RoadBuilder {
         this.minecraft.addMessageToChat(`§aRoad width: §f${this.width}`);
     }
 
-    /** R while the tool is held. */
+    
     cycleVariant() {
         const variants = this.variants;
         this.variantIndex = (this.variantIndex + 1) % variants.length;
@@ -164,16 +164,10 @@ export default class RoadBuilder {
             return false;
         }
 
-        // 45 degrees is the steepest road that can be built without holes.
         return Math.abs(end.y - start.y) <= horizontal + 1e-6;
     }
 
-    /**
-     * Sample the centre line and stamp a width-wide cross-section at every
-     * step. Each cell carries the interpolated top surface height, so both
-     * diagonal roads and roads that climb/descend are handled by the same
-     * pass.
-     */
+    
     getCells(start, end, width) {
         const x0 = start.x + 0.5;
         const z0 = start.z + 0.5;
@@ -219,11 +213,7 @@ export default class RoadBuilder {
         return cells;
     }
 
-    /**
-     * Resolve road cells into concrete block states. A full pavement block
-     * forms the base; a fractional surface height is filled with a pavement
-     * slope layer (1-8 layers) on top of it.
-     */
+    
     getPlacements(cells) {
         const variant = this.getVariant();
         const placements = new Map();
@@ -280,12 +270,7 @@ export default class RoadBuilder {
         return placed;
     }
 
-    /**
-     * The server only knows about the tool item, so each road block is sent as
-     * a normal block placement. The clicked cell is the one below the target
-     * and the top face selects the target Y. The optional trailing metadata
-     * byte preserves slope layer counts in multiplayer.
-     */
+    
     notifyServer(world, placement) {
         const minecraft = this.minecraft;
         if (!minecraft || minecraft.isSingleplayer()) {
@@ -334,8 +319,6 @@ export default class RoadBuilder {
             return;
         }
 
-        // Build into the selected block, not into the cell in front of its
-        // clicked face.
         const end = { x: hit.x, y: hit.y, z: hit.z };
 
         if (!this.isValidPath(this.start, end)) {
@@ -438,7 +421,6 @@ export default class RoadBuilder {
             this.previewMaterial = material;
         }
 
-        // The atlas texture can be rebound after a texture-pack change.
         const atlasTexture = worldRenderer.blockRenderer.tessellator.unlitMaterial.map;
         if (this.previewMaterial.map !== atlasTexture) {
             this.previewMaterial.map = atlasTexture;

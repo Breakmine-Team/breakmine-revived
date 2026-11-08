@@ -27,7 +27,6 @@ export default class NoiseGeneratorOctaves extends NoiseGenerator {
 
     generateNoiseOctaves(x1, y1, z1, x2, y2, z2, strengthX, strengthY, strengthZ) {
         let length = x2 * y2 * z2;
-        // Float64Array eliminates zero-loop allocation overhead and GC pressure
         let noise = new Float64Array(length);
 
         let frequency = 1.0;

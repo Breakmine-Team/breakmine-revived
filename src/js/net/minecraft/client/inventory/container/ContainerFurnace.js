@@ -43,13 +43,10 @@ export default class ContainerFurnace extends Container {
     static tickFurnace(inv, blockPosition, world) {
         if (!inv) return;
 
-        // Initialize timer fields if missing (first tick or upgrade)
         if (inv.burnTime === undefined) inv.burnTime = 0;
         if (inv.fuelBurnTime === undefined) inv.fuelBurnTime = 0;
         if (inv.cookTime === undefined) inv.cookTime = 0;
 
-        // Clean up if the furnace block was removed (furnaces and oven counters
-        // share this tile-entity tick).
         if (world && blockPosition) {
             const block = Block.getById(world.getBlockAt(blockPosition.x, blockPosition.y, blockPosition.z));
             if (!block || typeof block.isFurnace !== "function" || !block.isFurnace()) {
@@ -66,7 +63,6 @@ export default class ContainerFurnace extends Container {
 
         const canOutput = recipe && (output.isEmpty() || (output.getType() === recipe.getType() && output.getCount() + recipe.getCount() <= output.getMaxStackSize()));
 
-        // Reset cook progress if the input item changed (removed or replaced)
         const currentRecipeId = input.isEmpty() ? 0 : recipe ? recipe.getType() : -1;
         if (currentRecipeId !== inv._lastRecipeId) {
             inv.cookTime = 0;
@@ -75,8 +71,6 @@ export default class ContainerFurnace extends Container {
 
         const hasFuel = !fuel.isEmpty() && SmeltingRegistry.isFuel(fuel.getType());
 
-        // Pause burn when player removes all fuel from the slot;
-        // but NOT when the last item was consumed by the furnace (that keeps burning)
         const prevHasFuel = inv._prevHasFuel;
         inv._prevHasFuel = hasFuel;
 

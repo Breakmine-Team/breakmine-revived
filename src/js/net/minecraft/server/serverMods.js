@@ -6,8 +6,8 @@ import config from './config.js';
 
 const log = Logger;
 
-// Files the client mod loader stores as base64 (`textures/*.png.b64`,
-// `sounds/*.ogg.b64`, GUI backdrops). Anything else is sent as text.
+
+
 const BINARY_EXTENSIONS = new Set([
     '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp',
     '.ogg', '.wav', '.mp3'
@@ -15,19 +15,12 @@ const BINARY_EXTENSIONS = new Set([
 
 let cache = null;
 
-// Mods handed to an integrated (singleplayer) server by the client that owns
-// it. They are not written to disk: the client's installed mods stay the
-// source of truth, and uninstalling one takes effect on the next world load.
+
+
+
 let injectedMods = [];
 let injectedGeneration = 0;
 
-/**
- * Provide the local client's mods to an integrated server.
- *
- * The objects use the same shape as serverMods/ on disk (metadata plus a flat
- * file list), so the normal server-mod loader can register their commands and
- * authoritative hooks without knowing where they came from.
- */
 export function setInjectedServerMods(mods) {
     injectedMods = Array.isArray(mods)
         ? mods.filter((mod) => mod && typeof mod === 'object' && typeof mod.id === 'string')
@@ -36,18 +29,10 @@ export function setInjectedServerMods(mods) {
     cache = null;
 }
 
-/** Drop the local client mods when the integrated server stops. */
 export function clearInjectedServerMods() {
     setInjectedServerMods([]);
 }
 
-/**
- * Directory holding the active server's server-side mods.
- *
- * It is resolved inside the active server directory so each server in
- * `worlds/` owns its own set of mods, just like it owns its world data and
- * config. `serverModsDir` is configurable but may not escape that directory.
- */
 export function getServerModsDir() {
     const base = config.getServerDir(config.server);
     const configured = String(config.serverModsDir || 'servermods').replace(/\\/g, '/');
@@ -90,7 +75,6 @@ function collectFiles(dirAbs, prefix, out) {
     }
 
     for (const entry of entries) {
-        // A symlink inside a mod could point anywhere on the server's disk.
         if (entry.isSymbolicLink()) continue;
 
         const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
@@ -149,13 +133,6 @@ function readModDirectory(dirAbs, folderName) {
     };
 }
 
-/**
- * Read (and cache) every server-side mod for the active server.
- *
- * The returned shape is exactly what gets sent to clients: metadata plus a
- * flat file list. Text files carry text; PNG/OGG files carry base64, matching
- * the `.b64` layout the client mod loader already understands.
- */
 export function readServerMods() {
     const modsDir = getServerModsDir();
     const cacheKey = `${modsDir}|${config.serverMods !== false}|${injectedGeneration}`;
@@ -181,8 +158,6 @@ export function readServerMods() {
         }
     }
 
-    // A folder in this world's servermods/ wins over an injected copy of the
-    // same mod, so an operator/server config can always override it.
     const knownIds = new Set(mods.map((mod) => mod.id));
     for (const mod of injectedMods) {
         if (knownIds.has(mod.id)) continue;
@@ -197,7 +172,6 @@ export function readServerMods() {
     return mods;
 }
 
-/** Drop the cache after the operator adds or removes mods at runtime. */
 export function clearServerModsCache() {
     cache = null;
 }

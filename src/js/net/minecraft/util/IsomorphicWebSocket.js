@@ -17,17 +17,11 @@ if (isNode) {
     NativeWS = window.WebSocket;
 }
 
-/**
- * Normalize a tunnel URL/hostname into an absolute WebSocket URL.
- * Settings store the hostname form (e.g. "tunnel.breakmine.com"), so the
- * joiner must normalize it the same way the host does.
- */
 function normalizeTunnelServerUrl(serverUrl) {
     if (typeof serverUrl !== 'string' || serverUrl.trim() === '') return '';
 
     let url = serverUrl.trim();
 
-    // Accept an http(s) URL in the setting as well as a bare hostname.
     if (/^https?:\/\//i.test(url)) {
         url = url.replace(/^http(s?):\/\//i, (_match, secure) => secure ? 'wss://' : 'ws://');
     }
@@ -62,11 +56,6 @@ export class LoopbackServer {
         this.#listeners.delete(callback);
     }
 
-    // When an integrated-server worker is attached, new client connections
-    // are forwarded to it instead of being handled in-process: the server's
-    // connection handler runs inside the worker, and both sides of the socket
-    // traffic are relayed as socket-connect / socket-message / socket-close
-    // postMessages (see handleWorkerMessage and integrated.worker.js).
     attachWorker(worker) {
         this.#worker = worker;
     }
@@ -88,7 +77,6 @@ export class LoopbackServer {
             clientSocket._pair(serverSocket);
             serverSocket._pair(clientSocket);
 
-            // Client -> worker.
             serverSocket.onmessage = (event) => {
                 const data = event && event.data;
                 if (typeof data === 'string') {
@@ -135,7 +123,6 @@ export class LoopbackServer {
         }, 0);
     }
 
-    // Worker -> client: open/message/close events for relayed connections.
     handleWorkerMessage(msg) {
         if (!msg || typeof msg !== 'object') return;
 
@@ -248,18 +235,14 @@ export class LoopbackSocket extends EventTarget {
 }
 
 export class TunnelSocket extends EventTarget {
-    _readyState = 0; // CONNECTING
+    _readyState = 0; 
     binaryType = 'arraybuffer';
     onopen = null;
     onmessage = null;
     onerror = null;
     onclose = null;
 
-    /**
-     * @param {string} code       The tunnel join code (e.g. "AB3X9Z")
-     * @param {string} [serverUrl] Full ws:// URL of the tunnel server.
-     *                            Auto-detected when omitted.
-     */
+    
     constructor(code, serverUrl) {
         super();
 
@@ -267,12 +250,10 @@ export class TunnelSocket extends EventTarget {
         this._handshakeDone = false;
         this._code = String(code ?? '').trim().toUpperCase();
 
-        // Resolve server URL. The configured setting may be a bare hostname.
         const resolvedUrl = normalizeTunnelServerUrl(
             serverUrl || IsomorphicWebSocket.tunnelServerUrl || defaultTunnelServerUrl()
         );
 
-        // Always try wss:// first, then fall back to ws://
         const fallbacks = [];
         if (resolvedUrl.startsWith('wss://')) {
             fallbacks.push(resolvedUrl, resolvedUrl.replace('wss://', 'ws://'));
@@ -323,7 +304,6 @@ export class TunnelSocket extends EventTarget {
             this._ws = ws;
 
             ws.onopen = () => {
-                // Send join handshake
                 ws.send(JSON.stringify({ type: 'join', code: this._code }));
             };
 
@@ -364,7 +344,6 @@ export class TunnelSocket extends EventTarget {
                     return;
                 }
 
-                // Relay: forward as a normal message event
                 const messageEvent = new MessageEvent('message', { data: event.data });
                 if (typeof this.onmessage === 'function') this.onmessage(messageEvent);
                 this.dispatchEvent(messageEvent);
@@ -419,7 +398,7 @@ export class TunnelSocket extends EventTarget {
 export class IsomorphicWebSocket extends EventTarget {
     #socket = null;
     #binaryType = 'arraybuffer';
-    /** Global default tunnel server URL. Set once to override auto-detection. */
+    
     static tunnelServerUrl = null;
 
     #userOnOpen = null;
@@ -532,9 +511,6 @@ export class IsomorphicWebSocket extends EventTarget {
         }
     }
 
-    // Clone the event to avoid "The event is already being dispatched" errors.
-    // queueMicrotask can run before the native dispatch loop finishes, so
-    // deferring doesn't work reliably.
     #forwardEvent(e) {
         let clonedEvent;
 
@@ -563,7 +539,7 @@ export class IsomorphicWebSocket extends EventTarget {
         this.dispatchEvent(clonedEvent);
     }
 
-    /** Forward events from LoopbackSocket or TunnelSocket -> this (addEventListener). */
+    
     #setupInternalForwarding() {
         ['open', 'message', 'error', 'close'].forEach((event) => {
             this.#socket.addEventListener(event, (e) => this.#forwardEvent(e));

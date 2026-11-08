@@ -6,7 +6,7 @@ import GuiSwitchButton from "../widgets/GuiSwitchButton.js";
 import GuiTooltip from "../widgets/GuiTooltip.js";
 import GameSettings from "../../GameSettings.js";
 
-// Grouped the way Minecraft's own Controls screen groups its key binds.
+
 const KEY_BINDING_GROUPS = [
     {
         category: "Movement",
@@ -117,7 +117,6 @@ export default class GuiControls extends GuiScreen {
             y += row.height + (row.gap !== undefined ? row.gap : this.rowGap);
         };
 
-        // General controls stay at the top of the list.
         const sensitivity = new GuiSliderButton("Mouse Sensitivity", settings.getMouseSensitivity(), 50, 150, this.listX, 0, this.listWidth, this.rowHeight, value => {
             settings.sensitivity = value;
         });
@@ -129,7 +128,6 @@ export default class GuiControls extends GuiScreen {
         });
         addRow({ kind: "setting", height: this.rowHeight, button: tvMode, tooltip: TV_MODE_HINT });
 
-        // Key binds: click the key on the right to rebind it.
         for (const group of KEY_BINDING_GROUPS) {
             addRow({ kind: "header", height: this.headerHeight, label: group.category, gap: 2 });
 
@@ -142,8 +140,6 @@ export default class GuiControls extends GuiScreen {
                     this.keyButtonWidth,
                     this.rowHeight,
                     key => {
-                        // Write the pressed key back into the settings, otherwise the
-                        // button only shows the new bind and nothing gets saved.
                         settings[binding.setting] = key;
                         this.refreshConflicts();
                     },
@@ -161,9 +157,6 @@ export default class GuiControls extends GuiScreen {
             }
         }
 
-        // Mods register their own rebindable keys through ModAPI. Group them
-        // by category below the built-in bindings so users can change them
-        // alongside the normal controls.
         const modGroups = new Map();
         for (const keybind of this.minecraft.modLoader?.getKeybinds?.() || []) {
             const category = keybind.category || keybind.modName || keybind.modId || 'Mod';
@@ -219,7 +212,6 @@ export default class GuiControls extends GuiScreen {
             this.listButtons.push(row.button);
         }
 
-        // Footer: reset all binds, then leave.
         const footerWidth = Math.floor((this.listWidth - 4) / 2);
         this.buttonList.push(new GuiButton(this.minecraft, "Reset Keys", this.listX, this.footerY, footerWidth, 20, () => {
             this.resetAllKeys();
@@ -232,7 +224,6 @@ export default class GuiControls extends GuiScreen {
         this.refreshConflicts();
     }
 
-    // --- Layout / scroll math ----------------------------------------------
 
     rowY(row) {
         return Math.floor(this.top + row.offset - this.amountScrolled);
@@ -301,7 +292,6 @@ export default class GuiControls extends GuiScreen {
         this.amountScrolled = ratio * this.getMaxScroll();
     }
 
-    // Keep the TV-mode selection inside the visible part of the list.
     ensureFocusVisible() {
         const button = this.selectedButtonIndex >= 0 ? this.buttonList[this.selectedButtonIndex] : null;
         if (!button || !button.isListButton) {
@@ -325,7 +315,6 @@ export default class GuiControls extends GuiScreen {
         this.clampScroll();
     }
 
-    // --- Rendering ---------------------------------------------------------
 
     updateListPositions() {
         for (const row of this.rows) {
@@ -428,7 +417,6 @@ export default class GuiControls extends GuiScreen {
         this.drawRect(stack, sb.x, sb.y, sb.x + sb.width, sb.y + sb.height, thumbColor);
     }
 
-    // --- Key conflicts -----------------------------------------------------
 
     getBindingKey(binding) {
         if (binding.modKeybind) {
@@ -437,7 +425,6 @@ export default class GuiControls extends GuiScreen {
         return this.minecraft.settings[binding.setting];
     }
 
-    // Minecraft marks binds that share a key in red; do the same here.
     refreshConflicts() {
         const counts = new Map();
         for (const row of this.rows) {
@@ -486,7 +473,6 @@ export default class GuiControls extends GuiScreen {
         this.refreshConflicts();
     }
 
-    // --- Input -------------------------------------------------------------
 
     mouseClicked(mouseX, mouseY, mouseButton) {
         if (this.handleScrollBarClick(mouseX, mouseY)) {
@@ -499,7 +485,6 @@ export default class GuiControls extends GuiScreen {
             if (!button.isMouseOver(mouseX, mouseY)) {
                 continue;
             }
-            // List rows scrolled out of the viewport must not catch clicks.
             if (button.isListButton && !overList) {
                 continue;
             }
@@ -520,7 +505,6 @@ export default class GuiControls extends GuiScreen {
         }
 
         if (mouseY < sb.y || mouseY > sb.y + sb.height) {
-            // Click on the track: jump the thumb under the cursor, then drag.
             this.setScrollFromThumbY(mouseY - sb.height / 2, sb);
             this.dragOffsetY = mouseY - this.getScrollBarBounds().y;
         } else {
@@ -569,7 +553,6 @@ export default class GuiControls extends GuiScreen {
     }
 
     keyTyped(key, character) {
-        // A key bind button waiting for input swallows the next key press.
         for (const button of this.listButtons) {
             if (!button.listening) {
                 continue;
@@ -595,7 +578,6 @@ export default class GuiControls extends GuiScreen {
     }
 
     onClose() {
-        // Save settings
         this.minecraft.settings.save();
     }
 

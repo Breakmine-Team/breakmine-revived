@@ -35,15 +35,8 @@ export default class ItemBluestoneDustPlacer extends ItemGeneric {
         this.notifyServerPlacement(world, x, y, z, hitFace, BlockRegistry.BLUESTONE_DUST.getId());
     }
 
-    // The placer item is placed through onUse(), which the client runs on its
-    // own; without this packet the server never learns the dust exists, so it
-    // is never persisted, never ticked, and disappears on the next chunk load.
     notifyServerPlacement(world, x, y, z, hitFace, blockId) {
         if (world && world.isFieldLocalWorld) {
-            // Placement went into the summoned field through its local proxy
-            // world. The field mirrors that cell write to the server itself,
-            // in local-grid coordinates; a vanilla placement packet here would
-            // place a real block at unrelated world coordinates.
             return;
         }
         const minecraft = world.minecraft;

@@ -1,9 +1,9 @@
-// Integrated server worker. The singleplayer server (ServerRuntime plus the
-// server world/player/entity modules) runs here so world ticking, chunk
-// generation and save I/O never block the render thread. The browser page
-// talks to this worker over postMessage; socket traffic is forwarded through
-// the main thread's LoopbackServer (see IsomorphicWebSocket.js) as
-// socket-connect / socket-message / socket-close messages.
+
+
+
+
+
+
 import { Buffer } from '../../../../../../libraries/buffer.js';
 import { readLongBE } from '../../server/binary.js';
 import fs from '../fs/ServerFs.js';
@@ -17,13 +17,13 @@ import path from '../../util/path.js';
 import Long from '../../../../../../libraries/long.js';
 import { serverNameForKey, parseServerConfig, gamemodeName } from './shared.js';
 
-// worldKey is always 'w_<timestamp>_<random>'
+
 
 const MODULE_DIR = path.moduleDir();
 const PROJECT_ROOT = path.join(MODULE_DIR, '..', '..', '..', '..', '..');
 const WORLDS_DIR = path.join(PROJECT_ROOT, 'worlds');
 
-const sockets = new Map(); // socketId -> server-side socket
+const sockets = new Map(); 
 let running = false;
 let accepting = false;
 let currentServerName = null;
@@ -36,9 +36,9 @@ function post(message, transfer) {
     }
 }
 
-// Server-side socket exposing the subset of the ws API ServerRuntime uses
-// (on/off/send/close/readyState). All traffic is relayed over postMessage to
-// the client socket held by the main thread's LoopbackServer.
+
+
+
 function createServerSocket(socketId) {
     let readyState = 1;
     const listeners = {};
@@ -120,23 +120,12 @@ async function startServer(options) {
     fs.writeFileSync(confPath, confLines.join('\n'));
 
     config.reload(serverName);
-    // The client's installed mods are authoritative in singleplayer. Hand them
-    // to the server loader before it initialises so their commands and block
-    // hooks exist for this world, without copying them into the save.
     setInjectedServerMods(options.clientMods);
     serverWorld.initWorld(serverName);
 
-    // initServer() itself calls initWorld(), which clears the world-change map
-    // and re-reads world_data.bin. Migration must therefore run AFTER it, or
-    // the migrated changes are thrown away. The caller deletes the IndexedDB
-    // copy once the server is up, so anything dropped here is lost for good.
     initServer();
 
     if (options.migrateData) {
-        // Only import a legacy client save into a world the server has no data
-        // for. If world_data.bin already holds subchunks it is newer than the
-        // IndexedDB copy (which was only ever a partial, client-side view), and
-        // importing over it would silently discard those blocks.
         if (serverWorld.getSubChunkStore().size > 0) {
             console.log('[World] Server world already has saved data; discarding stale legacy save.');
         } else {
@@ -155,7 +144,6 @@ function stopServerInternal() {
     running = false;
     currentServerName = null;
 
-    // Close any sockets still open so the client gets a clean 'close' event.
     for (const [socketId, socket] of sockets) {
         sockets.delete(socketId);
         socket._terminate();
@@ -191,12 +179,9 @@ function listServerWorlds() {
                 seedLow = seedLong.low;
                 seedHigh = seedLong.high;
             } catch (e) {
-                // Unparseable seed; leave as zero.
             }
         }
 
-        // 256x256 preview written when the world was last left. Stored as a
-        // data URL so the world-select screen can hand it straight to an Image.
         let icon = null;
         const iconPath = path.join(dir, 'icon.png');
         if (fs.existsSync(iconPath)) {
@@ -229,8 +214,8 @@ function listServerWorlds() {
     return worlds;
 }
 
-// Remove a world's server files (world_data.bin, serverconfig.conf,
-// players/...). The browser fs has no rmSync, so walk and unlink instead.
+
+
 function deleteServerWorld(worldKey) {
     const serverName = serverNameForKey(worldKey);
     const dir = serverWorld.getWorldDir(serverName);
@@ -245,19 +230,17 @@ function deleteServerWorld(worldKey) {
     try {
         if (fs.existsSync(dir)) walk(dir);
     } catch (e) {
-        // Directory not readable; nothing to delete.
     }
     for (const file of files) {
         try {
             fs.unlinkSync(file);
         } catch (e) {
-            // Ignore individual file failures.
         }
     }
 }
 
-// Push a legacy IndexedDB save into the server modules so it is re-written to
-// the server's file layout on the next saveWorld().
+
+
 function migrateLegacySave(saveData, username) {
     const chunks = saveData.chunks || {};
     for (const key in chunks) {
@@ -284,7 +267,6 @@ function migrateLegacySave(saveData, username) {
         }
     }
 
-    // Block inventories (chests / furnaces / signs)
     if (Array.isArray(saveData.blockInventories)) {
         for (const entry of saveData.blockInventories) {
             if (!entry || !entry.key) continue;
@@ -292,12 +274,10 @@ function migrateLegacySave(saveData, username) {
         }
     }
 
-    // World time
     if (typeof saveData.time === 'number') {
         serverWorld.setWorldTime(saveData.time);
     }
 
-    // Dropped items (in-memory; regenerated from player drops if lost)
     if (Array.isArray(saveData.itemEntities)) {
         for (const item of saveData.itemEntities) {
             serverEntities.addItemEntity(
@@ -313,7 +293,6 @@ function migrateLegacySave(saveData, username) {
         }
     }
 
-    // Player state -> players/<username>.json so the login handler restores it
     const gm = saveData.playerGameMode || {};
     serverPlayers.savePlayerData({
         username: username || 'Player',
@@ -342,9 +321,6 @@ async function handleMessage(msg) {
 
             case 'stop':
                 stopServerInternal();
-                // saveWorld() persists with fire-and-forget IndexedDB writes;
-                // give them a beat to flush before the main thread reads the
-                // world files again (e.g. the world-select list, deleteWorld).
                 await new Promise((resolve) => setTimeout(resolve, 30));
                 post({ type: 'ack', reqId: msg.reqId });
                 break;

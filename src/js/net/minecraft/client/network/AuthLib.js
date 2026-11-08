@@ -34,14 +34,13 @@ export function isLocalNetwork() {
 let API_BASE_URL = 'https://api.breakmine.com';
 let API_WS_URL = null;
 
-// Transport that last worked, so a blocked transport is not retried on every
-// single call. null means "not decided yet": try the WebSocket first.
+
+
 let transportPreference = null;
 
 export function setApiBaseUrl(url) {
     if (typeof url !== 'string' || url.length === 0) return;
     API_BASE_URL = url.startsWith('http://') || url.startsWith('https://') ? url : 'https://' + url;
-    // The WebSocket endpoint follows the API host unless it was set explicitly.
     transportPreference = null;
 }
 
@@ -49,10 +48,10 @@ export function getApiBaseUrl() {
     return API_BASE_URL;
 }
 
-// The API is served over HTTP and over a WebSocket at /api-ws. School and
-// office filters often block plain HTTP to this host while letting WebSocket
-// traffic through, so the WebSocket is tried first and HTTP remains the
-// fallback for networks where the socket is blocked instead.
+
+
+
+
 function defaultApiWebSocketUrl() {
     try {
         const url = new URL(API_BASE_URL);
@@ -96,7 +95,6 @@ export class AuthLibInfo {
     static NAME = "AuthLib";
 
     constructor() {
-        //
     }
 }
 
@@ -112,9 +110,9 @@ export function clearAuthToken() {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
 }
 
-// Raised when a transport could not be used at all (connection refused,
-// filtered, malformed reply). API errors come back as a status instead, so a
-// 401 never makes the client retry over the other transport.
+
+
+
 class ApiTransportError extends Error {
     constructor(message) {
         super(message);
@@ -122,7 +120,7 @@ class ApiTransportError extends Error {
     }
 }
 
-// Transport helper state.
+
 let webSocketRequestId = 0;
 
 function bytesToBase64(bytes) {
@@ -145,8 +143,6 @@ async function requestOverHttp(method, endpoint, { headers = {}, body = null } =
 
     const contentType = response.headers.get('content-type') || '';
 
-    // An interception/proxy block page lands here too, so a non-JSON reply is
-    // treated as a transport failure and lets the caller try the other one.
     if (!contentType.includes('application/json')) {
         throw new ApiTransportError(`Unexpected response from server (${response.status})`);
     }
@@ -185,7 +181,7 @@ function requestOverWebSocket(method, endpoint, { headers = {}, body = null, tim
             settled = true;
             clearTimeout(connectTimer);
             clearTimeout(requestTimer);
-            try { socket.close(); } catch (e) { /* already closing */ }
+            try { socket.close(); } catch (e) {  }
             if (error) reject(error); else resolve(value);
         };
 
@@ -203,7 +199,6 @@ function requestOverWebSocket(method, endpoint, { headers = {}, body = null, tim
 
             const payload = { id, method, path: endpoint, headers };
             if (body === null || body === undefined) {
-                // nothing to send
             } else if (typeof body === 'string') {
                 payload.body = body;
             } else {
@@ -408,24 +403,14 @@ async function getProtectedRequest(endpoint) {
     return data;
 }
 
-/** Capes assigned to the signed-in account plus the saved choice. */
 export async function getCapes() {
     return getProtectedRequest('/api/capes');
 }
 
-/**
- * Save the account's cape choice: a cape id, '' for no cape, or null for the
- * server default cape.
- */
 export async function selectCape(capeId) {
     return postRequest('/api/cape/choice', { capeId: capeId === undefined ? null : capeId }, true);
 }
 
-/**
- * Build a cape URL that explicitly selects a specific owned cape by ID.
- * Used by the cape-picker GUI when the user picks a cape from their
- * owned list. The server validates that the user actually owns the cape.
- */
 export function getCapeUrlForId(username, capeId) {
     if (!capeId || capeId === 'common') {
         return `${API_BASE_URL}/cape/${username}?id=common`;
@@ -433,10 +418,10 @@ export function getCapeUrlForId(username, capeId) {
     return `${API_BASE_URL}/cape/${username}?id=${encodeURIComponent(capeId)}`;
 }
 
-// The skin upload route expects a multipart body with a single "file" part.
-// Building it by hand (instead of using FormData) keeps one code path for both
-// transports: the WebSocket carries the bytes as base64, HTTP sends the same
-// bytes directly.
+
+
+
+
 function buildSkinMultipart(fileBytes, boundary) {
     const encoder = new TextEncoder();
     const head = encoder.encode(

@@ -39,19 +39,7 @@ export default class ParticleRenderer {
         }
     }
 
-    /**
-     * Spawn the 4x4x4 break-particle cloud inside the block cell at (x,y,z).
-     *
-     * `pose` is optional: when the cell belongs to a posed summoned field it
-     * maps cell-local positions to world space (point) and rotates local
-     * directions (delta), so the cloud appears on the rendered block instead
-     * of at its grid key. Null/undefined = identity.
-     *
-     * `blockOverride` lets a caller pass the block already resolved for a
-     * summoned cell. Such a hit is addressed in the field's LOCAL coordinates,
-     * so reading the real world at (x,y,z) usually finds air and produced no
-     * particles at all.
-     */
+    
     spawnBlockBreakParticle(world, x, y, z, pose = null, blockOverride = null) {
         let block = blockOverride || Block.getById(world.getBlockAt(x, y, z));
         if (!block) {

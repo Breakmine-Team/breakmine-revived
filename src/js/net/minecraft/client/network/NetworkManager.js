@@ -32,14 +32,10 @@ export default class NetworkManager {
         this.pendingHealth = null;
         this.pendingGamemode = null;
 
-        // Set while server-supplied mods are being registered. Binary packets
-        // (join/chunks) wait for it so hash block ids are known when chunks
-        // are decoded.
         this._serverModsPromise = null;
 
-        // Throttle tracking for movement packets
         this.lastMovementPacketTime = 0;
-        this.movementThrottleCooldown = 50; // Minimum ms between movement updates
+        this.movementThrottleCooldown = 50; 
     }
 
     setNetworkHandler(networkHandler) {
@@ -58,7 +54,6 @@ export default class NetworkManager {
         this.address = address;
         this.port = port;
         this.useProxy = !!proxy;
-        // Tunnel joins use the same configurable relay as tunnel hosting.
         this.tunnelServerUrl = typeof address === 'string' && address.startsWith('tunnel://')
             ? (this.minecraft?.settings?.tunnelServer || null)
             : null;
@@ -149,7 +144,6 @@ export default class NetworkManager {
     }
 
     _sendPacketImmediately(packet) {
-        // Drop movement packets if they are firing too rapidly
         const packetName = packet.constructor.name;
         if (packetName === 'ClientPlayerPositionPacket' || 
             packetName === 'ClientPlayerLookPacket' || 
@@ -219,13 +213,9 @@ export default class NetworkManager {
                 return;
             }
 
-            // Give installed mods a chance to consume extension packets while
-            // retaining the built-in JSON handlers below.
             this.minecraft?.modLoader?.handleNetworkMessage(payload, this);
 
             if (payload.type === 'ping') {
-                // The server measures the round trip. Keep the payload small so
-                // the probe does not compete with movement/chunk traffic.
                 this.sendJson({ type: 'pong', id: payload.id });
             } else if (payload.type === 'serverRules') {
                 if (this.minecraft) {
@@ -242,7 +232,6 @@ export default class NetworkManager {
                     this._serverModsPromise = pending;
 
                     const finish = () => {
-                        // A newer serverMods payload owns the loading status now.
                         if (this._serverModsPromise !== pending) return;
                         this._serverModsPromise = null;
                         if (mods.length > 0) {
@@ -282,8 +271,6 @@ export default class NetworkManager {
                 } else {
                     this.pendingPlayerState = payload;
                 }
-                // Freeze the player and load chunks around the new spawn before
-                // letting them move again, so they can't spawn in mid-air.
                 if (this.minecraft) {
                     this.minecraft.showLoadingScreen("Respawning...");
                 }
@@ -345,7 +332,6 @@ export default class NetworkManager {
                     this.pendingGamemode = payload;
                 }
             } else if (payload.type === 'voice') {
-                // P2P voice chat peer discovery relay
                 if (this.minecraft?.voiceChat) {
                     this.minecraft.voiceChat.handleRelayMessage(payload);
                 }
@@ -397,7 +383,6 @@ export default class NetworkManager {
             player.health = state.health;
         }
 
-        // A restored or respawned player is always alive
         player.isDead = false;
 
         if (typeof state.gamemode === 'number') {
@@ -529,10 +514,8 @@ export default class NetworkManager {
 
         this.connected = false;
 
-        // Capes belong to the session that advertised them
         this.minecraft?.capeManager?.reset();
 
-        // Tear down the voice chat session when the connection drops.
         if (this.minecraft?.voiceChat) {
             this.minecraft.voiceChat.reset();
         }
@@ -540,11 +523,8 @@ export default class NetworkManager {
 
     close() {
         this.connected = false;
-        // The client asked for this (quitting to the title screen), so the
-        // disconnect must not put a kick/ban screen on top of the main menu.
         this.closedIntentionally = true;
 
-        // Tear down the voice chat session when leaving the server.
         if (this.minecraft?.voiceChat) {
             this.minecraft.voiceChat.reset();
         }

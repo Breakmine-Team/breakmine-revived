@@ -1,11 +1,5 @@
 import GuiButton from "./GuiButton.js";
 
-/**
- * One row in the Mods sidebar. Laid out like GuiWorldSlot: a 34x34 icon on the
- * left and three lines of text beside it, so installed mods read the same way
- * singleplayer worlds do. The icon comes from `icon.png` in the mod root,
- * which ModLoader hands over as a data URL.
- */
 export default class GuiModSlot extends GuiButton {
 
     static ICON_SIZE = 34;
@@ -19,7 +13,6 @@ export default class GuiModSlot extends GuiButton {
         this.modVersion = modData.version;
         this.modAuthor = modData.author;
 
-        // Loads asynchronously; the row draws a placeholder until it is ready.
         this.iconImage = null;
         if (modData.icon) {
             const image = new Image();
@@ -35,7 +28,6 @@ export default class GuiModSlot extends GuiButton {
     }
 
     isEnabled() {
-        // Default to true if undefined or null on initial boot, handle string "true"/"false"
         if (this.modData.enabled !== undefined && this.modData.enabled !== null) {
             return this.modData.enabled === true || this.modData.enabled === "true";
         }
@@ -80,7 +72,6 @@ export default class GuiModSlot extends GuiButton {
         const versionStr = `v${this.modVersion}`;
         this.drawString(stack, versionStr, textX, slotY + 22, GRAY, true, false);
 
-        // Status is right-aligned when the sidebar is wide enough for it.
         const statusStr = isEnabled ? "Enabled" : "Disabled";
         const statusColor = isEnabled ? 5635925 : 16733525;
         const statusX = slotX + slotW - 2 - this.getStringWidth(stack, statusStr);
@@ -95,14 +86,12 @@ export default class GuiModSlot extends GuiButton {
             return;
         }
 
-        // No icon.png: the shared placeholder icon.
         const placeholder = this.getTexture("gui/placeholder_mod.png");
         if (placeholder) {
             this.drawSprite(stack, placeholder, 0, 0, placeholder.width, placeholder.height, x, y, size, size);
             return;
         }
 
-        // Placeholder texture missing: a dim tile with the mod's initial.
         this.drawRect(stack, x, y, x + size, y + size, "rgba(0, 0, 0, 0.45)");
         this.drawRect(stack, x + 1, y + 1, x + size - 1, y + size - 1, "rgba(255, 255, 255, 0.08)");
 
@@ -110,7 +99,7 @@ export default class GuiModSlot extends GuiButton {
         this.drawCenteredString(stack, initial, x + size / 2, y + size / 2 - 4, 0xAAAAAA, false);
     }
 
-    /** Cut text to fit `maxWidth`, ending in an ellipsis. */
+    
     trimToWidth(stack, text, maxWidth) {
         const value = String(text ?? '');
         if (this.getStringWidth(stack, value, true) <= maxWidth) return value;

@@ -19,10 +19,7 @@ export default class GuiContainer extends GuiScreen {
         this.tooltip = null;
     }
 
-    /**
-     * Container screens place their slots' items (and the stack on the cursor)
-     * through the item renderer, so those layers belong on top of the screen.
-     */
+    
     usesGuiItems() {
         return true;
     }
@@ -38,20 +35,17 @@ export default class GuiContainer extends GuiScreen {
         this.drawDefaultBackground(stack);
         this.drawInventoryBackground(stack);
 
-        // Rebuild items
         if (this.container.dirty) {
             this.container.dirty = false;
             this.minecraft.itemRenderer.destroy("inventory");
             this.minecraft.itemRenderer.scheduleDirty("hotbar");
         }
 
-        // Draw slots
         this.hoverSlot = null;
         this.container.slots.forEach(slot => {
             this.drawSlot(stack, slot, mouseX, mouseY);
         });
 
-        // Draw item in cursor
         let inventoryPlayer = this.minecraft.player.inventory;
         let itemStack = inventoryPlayer.itemInCursor;
         if (!itemStack.isEmpty()) {
@@ -72,7 +66,6 @@ export default class GuiContainer extends GuiScreen {
             this.minecraft.itemRenderer.destroy("inventory", "cursor");
         }
 
-        // Draw title
         this.drawTitle(stack);
 
         super.drawScreen(stack, mouseX, mouseY, partialTicks);
@@ -96,11 +89,7 @@ export default class GuiContainer extends GuiScreen {
         }
     }
 
-    /**
-     * The shift part of a block's tooltip: its extra info while shift is
-     * held, otherwise a grey hint that there is some. Blocks without a
-     * shift description add nothing.
-     */
+    
     getShiftTooltipText(block) {
         const info = typeof block.getShiftDescription === "function" ? block.getShiftDescription() : null;
         if (!info || (Array.isArray(info) && info.length === 0)) {
@@ -116,7 +105,6 @@ export default class GuiContainer extends GuiScreen {
     }
 
     renderPostItem(stack, mouseX, mouseY, partialTicks) {
-        // draw item numbers
         for (const slot of this.container.slots) {
             let inventory = slot.inventory;
             let itemStack = inventory.getItemInSlot(slot.index);
@@ -161,7 +149,6 @@ export default class GuiContainer extends GuiScreen {
     }
 
     keyTyped(key, character) {
-        // Swap to slot
         for (let i = 1; i <= 9; i++) {
             if (key === this.minecraft.settings['keyHotbar' + i] && this.hoverSlot !== null) {
                 this.container.swapWithHotbar(this.hoverSlot, this.minecraft.player.inventory, i - 1);
@@ -179,7 +166,6 @@ export default class GuiContainer extends GuiScreen {
         let itemStack = inventory.getItemInSlot(slot.index);
         let isMouseOver = this.isMouseOverSlot(slot, mouseX, mouseY);
 
-        // Render item
         if (!itemStack.isEmpty()) {
             let typeId = itemStack.getType();
             let block = Block.getById(typeId);
@@ -195,7 +181,6 @@ export default class GuiContainer extends GuiScreen {
             }
         }
 
-        // Hover rectangle
         if (isMouseOver) {
             this.drawRect(stack, x, y, x + 16, y + 16, '#ffffff', 0.5);
 

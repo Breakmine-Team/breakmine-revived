@@ -26,7 +26,7 @@ export default class GuiMultiplayer extends GuiScreen {
         this.selectedWorld = index;
         const bool = (index >= 0 && index < this.saveList.length);
         this.buttonSelect.enabled = bool;
-        this.buttonRename.enabled = true; // TODO: Add rename function
+        this.buttonRename.enabled = true; 
         this.buttonDelete.enabled = bool;
     }
 
@@ -39,19 +39,18 @@ export default class GuiMultiplayer extends GuiScreen {
             const v2Component = v2Parts[i] || 0;
 
             if (v1Component < v2Component) {
-                return 2; //older
+                return 2; 
             }
             if (v1Component > v2Component) {
-                return 1; //newer
+                return 1; 
             }
         }
-        return 0; //same
+        return 0; 
     }
 
     init() {
         super.init();
 
-        // Only initialize saveList if it's empty (prevents duplicate loading on re-init)
         if (!this.saveList) {
             this.saveList = [];
         }
@@ -60,7 +59,6 @@ export default class GuiMultiplayer extends GuiScreen {
         this.beenAdded = [];
         this.lanBeenAdded = [];
 
-        // Update slot positions for current window size (fixes disappearing on resize)
         this.worldSlotContainer.slotList = this.saveList.map((data, index) => this.createServerSlot(data, index));
 
         const defaultServerFileName = "Nino_Creative.json";
@@ -82,14 +80,12 @@ export default class GuiMultiplayer extends GuiScreen {
         this.minecraft.fs.listDir(`servers/`).then(fileList => {
             if (fileList !== null) {
                 fileList.forEach(fileName => {
-                    // Skip the default server since we already added it
                     if (fileName === `servers/${defaultServerFileName}`) {
                         return;
                     }
                     this.minecraft.fs.loadFile(fileName).then(file => {
                         if (file !== null) {
                             let worldJson = JSON.parse(file);
-                            // Check if server already exists in saveList to prevent duplicates
                             const alreadyExists = this.saveList.some(server =>
                                 server.name === worldJson.name &&
                                 server.date === worldJson.address
@@ -104,7 +100,6 @@ export default class GuiMultiplayer extends GuiScreen {
                                     motd: worldJson.motd || ""
                                 })
 
-                                // Update slotList after adding each server
                                 this.worldSlotContainer.slotList = this.saveList.map((data, index) => this.createServerSlot(data, index));
                             }
                         }
@@ -129,9 +124,7 @@ export default class GuiMultiplayer extends GuiScreen {
             const serverName = selectedServer.worldName.replaceAll(' ', '_').replaceAll('/', '_');
             this.minecraft.displayScreen(new GuiYesNo(this, "Are you sure you want to remove this server?", `'${selectedServer.worldName ?? "New Server"}' will be lost forever! (A long time!)`, "Yes", "No", () => {
                 this.minecraft.fs.deleteFile(`servers/${serverName}.json`).then(() => {
-                    // Remove from saveList
                     this.saveList = this.saveList.filter(server => server.name !== selectedServer.worldName);
-                    // Update slotList
                     this.worldSlotContainer.slotList = this.saveList.map((data, index) =>
                         new GuiServerSlot(
                             data,
@@ -145,7 +138,6 @@ export default class GuiMultiplayer extends GuiScreen {
                             this.minecraft
                         )
                     );
-                    // Reset selection
                     this.selectedWorld = -1;
                     this.worldSlotContainer.selectedWorld = -1;
                     this.buttonSelect.enabled = false;
@@ -176,10 +168,7 @@ export default class GuiMultiplayer extends GuiScreen {
         this.buttonDelete.enabled = false;
     }
 
-    /**
-     * The slot list is rebuilt whenever servers are added or removed, so every
-     * slot is created here to keep click-to-join wired up in one place.
-     */
+    
     createServerSlot(data, index) {
         return new GuiServerSlot(
             data,
@@ -202,17 +191,14 @@ export default class GuiMultiplayer extends GuiScreen {
         const worldDetails = world.worldDetails;
         const worldDate = world.worldDate.replaceAll(' ', '_').replaceAll('/', '_');
 
-        // Use the proxy field as the WebSocket address
         let proxy = null;
         if (worldDetails && worldDetails.trim() !== '') {
             let proxyUrl = worldDetails.trim();
-            // If it has the "Proxy: " prefix, remove it
             if (proxyUrl.startsWith('Proxy: ')) {
                 proxyUrl = proxyUrl.replace('Proxy: ', '').trim();
             }
             proxy = { url: `ws://${proxyUrl}` };
         } else {
-            // Auto-detect: use proxy if not localhost or 10.0.0.213
             let address = worldDate.trim().toLowerCase();
             let isLocalhost = address === 'localhost' || address === '127.0.0.1' || address.startsWith('127.0.0.');
             let isAllowedHost = address === '10.0.0.213';
@@ -228,7 +214,6 @@ export default class GuiMultiplayer extends GuiScreen {
     drawScreen(stack, mouseX, mouseY, partialTicks) {
         this.worldSlotContainer.drawScreen(stack, mouseX, mouseY, partialTicks);
         this.drawCenteredString(stack, "Play Multiplayer", this.width / 2, 20);
-        //this.drawCenteredString(stack, "Multiplayer is still in development, expect bugs and breaking changes.", this.width / 2, 5, 0xFF6363);
         super.drawScreen(stack, mouseX, mouseY, partialTicks);
     }
     
@@ -237,7 +222,6 @@ export default class GuiMultiplayer extends GuiScreen {
         super.mouseClicked(mouseX, mouseY, mouseButton); 
     }
 
-    // Forward drag/release so the scrollbar thumb can be dragged.
     mouseDragged(mouseX, mouseY, mouseButton) {
         this.worldSlotContainer.mouseDragged(mouseX, mouseY, mouseButton);
         super.mouseDragged(mouseX, mouseY, mouseButton);
@@ -248,8 +232,6 @@ export default class GuiMultiplayer extends GuiScreen {
         super.mouseReleased(mouseX, mouseY, mouseButton);
     }
 
-    // Forward mouse wheel events to the list (handled by the container).
-    // `amount` is the raw wheel delta; sign indicates direction.
     mouseScrolled(mouseX, mouseY, amount) {
         this.worldSlotContainer.mouseScrolled(mouseX, mouseY, amount);
         super.mouseScrolled(mouseX, mouseY, amount);

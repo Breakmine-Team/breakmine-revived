@@ -14,8 +14,6 @@ export default class MetadataChunkBlock {
         this.y2 = y2;
         this.z2 = z2;
 
-        // Flood state. Kept between calls so a large region can be processed
-        // in slices instead of blocking a whole frame.
         this.stack = null;
         this.visited = 0;
     }
@@ -29,11 +27,6 @@ export default class MetadataChunkBlock {
             return true;
         }
 
-        // Seed the flood with every block in the region, then let light spread
-        // through the whole connected area (across section/chunk borders) in
-        // one pass. Each block is recomputed from its current neighbors, so
-        // light reaches its full range instantly instead of crawling one level
-        // per queue step.
         const isFullChunk =
             centerX === ChunkSection.SIZE &&
             centerY === World.TOTAL_HEIGHT &&
@@ -45,12 +38,6 @@ export default class MetadataChunkBlock {
             const stack = this.stack;
 
         if (isFullChunk && this.type === EnumSkyBlock.SKY) {
-            // Full-chunk recompute on load. The column pass in
-            // updateChunkSkyLight already produced correct vertical light, so
-            // the only blocks the flood can change are those that open onto a
-            // lower neighbor column (cave mouths, cliff faces, shorelines).
-            // Seeding just those instead of all 65k blocks keeps the flood
-            // proportional to the surface it actually lights.
             const stride = centerX + 2;
             const heights = new Int32Array(stride * stride);
             for (let lx = 0; lx < stride; lx++) {
@@ -81,10 +68,6 @@ export default class MetadataChunkBlock {
                 }
             }
         } else if (isFullChunk && this.type === EnumSkyBlock.BLOCK) {
-            // Block light sources are the only blocks a fresh chunk can light
-            // up, so seed just those. Walk the chunk's own section arrays
-            // instead of 65k world.getBlockAt() lookups: this scan used to be
-            // one of the most expensive parts of receiving a chunk.
             const chunk = world.getChunkAt(this.x1 >> 4, this.z1 >> 4);
             if (chunk && chunk.sections) {
                 for (let layer = 0; layer < chunk.sections.length; layer++) {
@@ -118,8 +101,6 @@ export default class MetadataChunkBlock {
                 }
             }
         } else {
-            // Small update regions (block place/remove): seed every block so
-            // light decreases propagate correctly.
             for (let x = this.x1; x <= this.x2; x++) {
                 for (let z = this.z1; z <= this.z2; z++) {
                     if (!world.blockExists(x, 0, z)) {
@@ -139,8 +120,6 @@ export default class MetadataChunkBlock {
 
         const stack = this.stack;
 
-        // Total visit cap for one update, and a per-call slice so a single
-        // lava-filled chunk cannot stall the main thread for seconds.
         const MAX_VISITS = 500000;
         const budget = Math.min(visitBudget, MAX_VISITS - this.visited);
         let processed = 0;
@@ -180,9 +159,6 @@ export default class MetadataChunkBlock {
             if (opacity >= 15 && level === 0) {
                 newLevel = 0;
             } else {
-                // Only loaded chunks contribute light. An unloaded neighbor is
-                // treated as 0; otherwise getSavedLightValue() would return 15
-                // for it and flood a bright border deep into loaded territory.
                 let neighborLevel = 0;
                 if (world.blockExists(x - 1, y, z)) neighborLevel = world.getSavedLightValue(this.type, x - 1, y, z);
                 let other = world.blockExists(x + 1, y, z) ? world.getSavedLightValue(this.type, x + 1, y, z) : 0;
@@ -210,8 +186,6 @@ export default class MetadataChunkBlock {
             }
             world.setLightAt(this.type, x, y, z, newLevel);
 
-            // Spread the change to every neighbor; blockExists() skips
-            // unloaded chunks, so the flood crosses chunk borders freely.
             stack.push(x - 1, y, z);
             stack.push(x + 1, y, z);
             stack.push(x, y - 1, z);
@@ -222,7 +196,6 @@ export default class MetadataChunkBlock {
 
         this.visited += processed;
 
-        // Budget exhausted: keep the stack and resume on the next call.
         if (stack.length > 0 && this.visited < MAX_VISITS) {
             return false;
         }
@@ -232,9 +205,6 @@ export default class MetadataChunkBlock {
     }
 
     isOutsideOf(x1, y1, z1, x2, y2, z2) {
-        // A partially processed region already has its seed set; merging new
-        // bounds into it would leave the new area unseeded. Let the caller
-        // queue a separate update instead.
         if (this.stack !== null) {
             return false;
         }

@@ -18,8 +18,6 @@ export default class BlockTrafficBarrier extends Block {
         this.noFaceCull = true;
     }
 
-    // The barrier model uses its own texture, so this is only used for
-    // breaking particles (the atlas has no traffic_barrier tile).
     getTextureForFace(face) {
         return 'white_concrete';
     }

@@ -14,7 +14,6 @@ export default class BlockFarmland extends Block {
         this.description = "Farmland";
         this.hardness = 0.6;
 
-        // Sound
         this.sound = Block.sounds.grass;
         this.boundingBox = new BoundingBox(0, 0, 0, 1, (1 / 16) * 15, 1);
 

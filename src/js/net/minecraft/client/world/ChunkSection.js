@@ -31,18 +31,8 @@ export default class ChunkSection {
         this.isModified = true;
         this.isDirty = false;
 
-        // One mesh per block that turns itself. They are rebuilt with the
-        // section and re-rotated every frame, so the turn is smooth.
         this.rotatingMeshes = [];
 
-        // Typed arrays: every get/set becomes a direct index read/write instead
-        // of a holey-array `in` operator probe (the single hottest path in both
-        // worldgen and meshing).
-        //
-        // Type ids are not bytes: the wire/disk block state packs the id into
-        // the upper 12 bits of a u16 (4 bits are metadata), so ids up to 4095
-        // are valid. A Uint8Array silently truncated ids above 255 into other
-        // blocks, so widen the store.
         this.blocks = new Uint16Array(4096);
         this.blocksData = new Uint8Array(4096);
         this.blockLight = [];
@@ -50,7 +40,6 @@ export default class ChunkSection {
         this.skyLight = [];
         this.empty = true;
         
-        // Store reference to translucent mesh for cross-chunk sorting
         this.translucentMesh = null;
     }
 
@@ -96,12 +85,6 @@ export default class ChunkSection {
     }
 
     rebuild(renderer) {
-        // Neighbor availability guard: meshing samples blocks one block past
-        // the section borders. If a neighboring chunk is not loaded yet, doing
-        // that sample would make the provider synchronously generate an entire
-        // chunk mid-mesh - the cause of the seconds-long spikes when moving.
-        // Instead, leave the section flagged (isModified) so WorldRenderer
-        // re-queues it once the neighbor chunk arrives.
         const wx = this.x << 4;
         const wz = this.z << 4;
 
@@ -118,15 +101,13 @@ export default class ChunkSection {
         this.isModified = false;
         this.group.clear();
         this.rotatingMeshes.length = 0;
-        this.translucentMesh = null; // Reset on rebuild
+        this.translucentMesh = null; 
 
         let ambientOcclusion = this.world.minecraft.settings.ambientOcclusion;
         let tessellator = renderer.blockRenderer.tessellator;
 
-        // Section origin world Y
         const wy = this.y << 4;
 
-        // Fetch adjacent sections using world block offsets
         const north = this.world.getChunkAtBlock(wx, wy, wz - 1);
         const south = this.world.getChunkAtBlock(wx, wy, wz + 16);
         const east  = this.world.getChunkAtBlock(wx + 16, wy, wz);
@@ -144,7 +125,6 @@ export default class ChunkSection {
             return;
         }
 
-        // Get camera position for translucent sorting
         let cameraPos = null;
         let player = this.world.minecraft.player;
         if (player) {
@@ -155,9 +135,6 @@ export default class ChunkSection {
             };
         }
 
-        // One scan feeds both render passes. The old code walked all 4,096
-        // cells twice and repeated block lookups, rotation checks and overlay
-        // coverage in each pass. Rotating blocks are resolved once here too.
         const animationTick = ChunkSection.animationTick();
         const overlay = this.world.offGridField;
         const checkOverlay = overlay !== null && !overlay.isPosed();
@@ -183,9 +160,6 @@ export default class ChunkSection {
 
                     const absoluteZ = sectionZ + z;
 
-                    // A flat summoned overlay living at this grid cell renders
-                    // instead of the real block; drawing both puts two coplanar
-                    // meshes at the same world coordinates (z-fighting).
                     if (checkOverlay && overlay.covers(absoluteX, absoluteY, absoluteZ)) {
                         continue;
                     }
@@ -201,8 +175,6 @@ export default class ChunkSection {
                     );
 
                     if (rotation !== null) {
-                        // Resolve the rotating group and static casing once;
-                        // both the opaque and translucent passes reuse them.
                         const entry = {
                             x, y, z,
                             block,
@@ -228,9 +200,6 @@ export default class ChunkSection {
             tessellator.setRenderingPass(isTranslucentRenderPhase);
             renderer.blockRenderer.beginModelPass();
 
-            // A block may spin only some of its parts: the still casing goes
-            // into the section mesh, and the moving parts become the block's
-            // own mesh.
             for (const blockData of rotatingBlocks) {
                 if (blockData.staticParts !== null) {
                     const absoluteX = sectionX + blockData.x;
@@ -243,7 +212,6 @@ export default class ChunkSection {
                 }
             }
 
-            // Sort translucent blocks back-to-front from camera for proper depth ordering
             if (isTranslucentRenderPhase && cameraPos) {
                 blocksToRender.sort((a, b) => {
                     const ax = sectionX + a.x + 0.5;
@@ -270,23 +238,17 @@ export default class ChunkSection {
                 const absoluteY = sectionY + blockData.y;
                 const absoluteZ = sectionZ + blockData.z;
 
-                // The scan already proved this block is static, so skip the
-                // second rotation lookup inside renderBlock.
                 renderer.blockRenderer.renderBlock(
                     this.world, blockData.block, ambientOcclusion,
                     absoluteX, absoluteY, absoluteZ, null
                 );
             }
 
-            // Each rotating block becomes a mesh of its own, centered on its
-            // cell so the object can spin around the block's middle.
             for (const blockData of rotatingBlocks) {
                 const absoluteX = sectionX + blockData.x;
                 const absoluteY = sectionY + blockData.y;
                 const absoluteZ = sectionZ + blockData.z;
 
-                // Parts that turn on different axles (a gearbox's crossed
-                // pairs) each become their own mesh; anything else is one mesh.
                 const groups = blockData.groups;
                 const partGroups = groups !== null ? groups.map((group) => group.parts) : [null];
 
@@ -303,12 +265,7 @@ export default class ChunkSection {
                     meshes.push(mesh);
                 }
 
-                // Non-finite geometry would make three.js drop the mesh (and
-                // log a NaN bounding-sphere error).
                 if (meshes.length === 0 || meshes.some((mesh) => !ChunkSection.hasFinitePositions(mesh))) {
-                    // Safety net: a rotating block must never disappear. If it
-                    // produced no usable geometry, bake it into the section
-                    // mesh like any other block.
                     if (meshes.length > 0) {
                         console.warn(
                             `[ChunkSection] Non-finite geometry for '${blockData.block?.identifier ?? blockData.block?.id}' at ${absoluteX},${absoluteY},${absoluteZ}; drawing it in the section mesh instead`
@@ -352,13 +309,10 @@ export default class ChunkSection {
                 if (isTranslucentRenderPhase) {
                     mesh.userData.isTranslucent = true;
 
-                    // CRITICAL: Hide it! The global batcher will draw it instead.
                     mesh.visible = false;
                 }
             }
 
-            // Custom-model blocks use their own textures, so each model type
-            // forms its own mesh next to the atlas mesh.
             renderer.blockRenderer.flushModelPasses(this.group);
         };
 
@@ -366,33 +320,25 @@ export default class ChunkSection {
         renderPass(translucentBlocks, translucentRotating, true);
     }
     
-    /**
-     * Updates the renderOrder of this section's translucent mesh based on camera position.
-     * This must be called every frame before rendering for proper cross-chunk sorting.
-     * @param {Object} cameraPos - Camera position {x, y, z}
-     */
+    
     updateTranslucentRenderOrder(cameraPos) {
         if (!this.translucentMesh || !cameraPos) {
             return;
         }
         
-        // Calculate center of this section in world coordinates
         let centerX = this.x * ChunkSection.SIZE + ChunkSection.SIZE * 0.5;
         let centerY = this.y * ChunkSection.SIZE + ChunkSection.SIZE * 0.5;
         let centerZ = this.z * ChunkSection.SIZE + ChunkSection.SIZE * 0.5;
         
-        // Calculate squared distance to camera
         let dx = centerX - cameraPos.x;
         let dy = centerY - cameraPos.y;
         let dz = centerZ - cameraPos.z;
         let distSq = dx * dx + dy * dy + dz * dz;
         
-        // Negative distance ensures farther chunks have LOWER renderOrder (render first)
-        // This achieves back-to-front rendering across chunks
         this.translucentMesh.renderOrder = -distSq;
     }
 
-    /** True when a built mesh has only usable vertex positions. */
+    
     static hasFinitePositions(mesh) {
         const array = mesh?.geometry?.attributes?.position?.array;
         if (!array) return false;
@@ -404,11 +350,7 @@ export default class ChunkSection {
         return true;
     }
 
-    /**
-     * 20 Hz animation clock for blocks that turn themselves, in game ticks.
-     * Wall-clock based so it advances whether or not the client world is
-     * ticking its own counter (it does not in multiplayer).
-     */
+    
     static animationTick() {
         const now = typeof performance !== 'undefined' && performance.now
             ? performance.now()
@@ -416,17 +358,13 @@ export default class ChunkSection {
         return Math.floor(now / 50);
     }
 
-    /** Blend two angles in degrees the short way round, for frame blending. */
+    
     static interpolateAngle(from, to, t) {
         const delta = ((to - from) % 360 + 540) % 360 - 180;
         return from + delta * t;
     }
 
-    /**
-     * Turn every rotating block mesh to the angle for this frame. Blocks move a
-     * tick at a time, so blend from the previous tick's angle to this tick's
-     * using the frame's partial ticks.
-     */
+    
     updateRotatingBlocks(renderer, tick, partialTicks) {
         if (this.rotatingMeshes.length === 0) {
             return;

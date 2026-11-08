@@ -53,10 +53,7 @@ export default class BlockFruit extends Block {
         return [item.getId(), count];
     }
 
-    /**
-     * When the fruit is removed, release the stem that grew it so it can
-     * flower again. The stem is always directly beside the fruit.
-     */
+    
     onBlockRemoved(world, x, y, z) {
         const stem = this.stemKey ? BlockRegistry[this.stemKey] : null;
         if (!stem) {

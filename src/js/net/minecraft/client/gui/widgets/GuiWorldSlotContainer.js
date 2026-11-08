@@ -35,23 +35,18 @@ export default class GuiWorldSlotContainer extends GuiScreen {
         this.bottom = parentGui.height - 64;
         this.amountScrolled = 0;
 
-        // Subclasses that use the list as a sidebar (the Mods screen) narrow
-        // these; the full-width screens keep the whole window as the viewport.
         this.viewLeft = 0;
         this.viewRight = parentGui.width;
         this.drawBackgroundTexture = true;
         this.alwaysShowScrollBar = false;
 
-        // Scrollbar geometry
         this.scrollBarWidth = 6;
         this.scrollBarX = parentGui.width - this.scrollBarWidth - 2;
         this.scrollBarMinThumb = 12;
 
-        // Scrollbar interaction state
         this.isDragging = false;
         this.dragOffsetY = 0;
 
-        // Wheel: how many pixels per notch. Reduced for smoother scrolling.
         this.scrollStep = (this.slotHeight + this.slotSpacing) / 6;
     }
 
@@ -60,10 +55,8 @@ export default class GuiWorldSlotContainer extends GuiScreen {
         this.parentGui.setSelectedWorld(index);
     }
 
-    // --- Scroll math -------------------------------------------------------
 
     getContentHeight() {
-        // top padding (7) + slots with spacing + bottom padding (4)
         return this.slotList.length * (this.slotHeight + this.slotSpacing) + 11;
     }
 
@@ -128,7 +121,6 @@ export default class GuiWorldSlotContainer extends GuiScreen {
         this.amountScrolled = ratio * this.getMaxScroll();
     }
 
-    // --- Rendering ---------------------------------------------------------
 
     drawScreen(stack, mouseX, mouseY, partialTicks) {
         this.clampScroll();
@@ -168,7 +160,6 @@ export default class GuiWorldSlotContainer extends GuiScreen {
                 slot.y = slotTop;
                 slot.width = slotWidth;
                 slot.height = slotHeight;
-                // Ensure minecraft instance is set for rendering
                 if (!slot.minecraft && this.parentGui.minecraft) {
                     slot.minecraft = this.parentGui.minecraft;
                 }
@@ -180,7 +171,6 @@ export default class GuiWorldSlotContainer extends GuiScreen {
 
         stack.restore();
 
-        // Scrollbar is drawn OUTSIDE the list clip so it is never cut off
         this.drawScrollBar(stack, mouseX, mouseY);
     }
 
@@ -188,7 +178,6 @@ export default class GuiWorldSlotContainer extends GuiScreen {
         const sb = this.getScrollBarBounds();
         if (!sb.visible) return;
 
-        // Track background
         this.parentGui.drawRect(
             stack,
             sb.x, sb.trackTop,
@@ -196,7 +185,6 @@ export default class GuiWorldSlotContainer extends GuiScreen {
             "rgba(0, 0, 0, 0.4)"
         );
 
-        // Nothing to scroll: dim, inert thumb rather than an interactive one.
         if (this.getMaxScroll() <= 0) {
             this.parentGui.drawRect(
                 stack,
@@ -207,7 +195,6 @@ export default class GuiWorldSlotContainer extends GuiScreen {
             return;
         }
 
-        // Thumb (highlight on hover or while dragging)
         const isHover =
             mouseX >= sb.x && mouseX <= sb.x + sb.width &&
             mouseY >= sb.y && mouseY <= sb.y + sb.height;
@@ -225,16 +212,11 @@ export default class GuiWorldSlotContainer extends GuiScreen {
         this.parentGui.drawRect(stack, this.viewLeft, top, this.viewRight, bottom, "rgba(0, 0, 0, 0.5)");
     }
 
-    /**
-     * Fade the list's top and bottom edges into the background, so rows that
-     * scroll past the viewport do not end on a hard line. Called from
-     * drawScreen while the list clip is still active.
-     */
+    
     drawOverlayFades(stack, top, bottom) {
         this.drawEdgeFades(stack, this.viewLeft, this.viewRight, top, bottom);
     }
 
-    // --- Hit testing -------------------------------------------------------
 
     getSlotIndexAt(mouseX, mouseY) {
         if (mouseY < this.top || mouseY > this.bottom) return -1;
@@ -253,31 +235,25 @@ export default class GuiWorldSlotContainer extends GuiScreen {
         return -1;
     }
 
-    // --- Mouse input -------------------------------------------------------
 
     mouseClicked(mouseX, mouseY, mouseButton) {
-        // 1. Scrollbar hit-test first (cursor drag target)
         const sb = this.getScrollBarBounds();
         if (sb.visible &&
             mouseX >= sb.x && mouseX <= sb.x + sb.width &&
             mouseY >= sb.trackTop && mouseY <= sb.trackBottom) {
 
             if (mouseY < sb.y || mouseY > sb.y + sb.height) {
-                // Click landed on the track (not the thumb): jump the thumb
-                // so its center sits under the cursor, then drag from there.
                 const targetThumbY = mouseY - sb.height / 2;
                 this.setScrollFromThumbY(targetThumbY, sb);
                 const newSb = this.getScrollBarBounds();
                 this.dragOffsetY = mouseY - newSb.y;
             } else {
-                // Click landed on the thumb: drag from its current position.
                 this.dragOffsetY = mouseY - sb.y;
             }
             this.isDragging = true;
             return;
         }
 
-        // 2. Slot hit-test
         if (mouseY >= this.top && mouseY <= this.bottom) {
             const clickedIndex = this.getSlotIndexAt(mouseX, mouseY);
             if (clickedIndex >= 0 && clickedIndex < this.slotList.length) {
@@ -299,19 +275,11 @@ export default class GuiWorldSlotContainer extends GuiScreen {
         this.dragOffsetY = 0;
     }
 
-    // Mouse wheel support. `amount` is the wheel delta:
-    //   positive => scroll up (content moves down, amountScrolled decreases)
-    //   negative => scroll down (content moves up, amountScrolled increases)
-    // Trackpads send smaller deltas than mouse wheels, so we use the actual value.
     mouseScrolled(mouseX, mouseY, amount) {
-        // Only scroll when the cursor is over the list viewport
-        // (includes the scrollbar column itself).
         if (mouseY < this.top || mouseY > this.bottom) return;
 
         if (amount === 0) return;
 
-        // Use actual delta for trackpad support, but clamp to reasonable limits
-        // More aggressive clamping for trackpad
         const delta = Math.max(Math.min(amount, 1), -1);
         this.amountScrolled += delta * this.scrollStep;
         this.clampScroll();

@@ -29,10 +29,10 @@ export default class UUID {
 
         let randomBytes = [];
         random.nextBytes(randomBytes, 16);
-        randomBytes[6] &= 0x0f;  /* clear version        */
-        randomBytes[6] |= 0x40;  /* set to version 4     */
-        randomBytes[8] &= 0x3f;  /* clear variant        */
-        randomBytes[8] |= 0x80;  /* set to IETF variant  */
+        randomBytes[6] &= 0x0f;  
+        randomBytes[6] |= 0x40;  
+        randomBytes[8] &= 0x3f;  
+        randomBytes[8] |= 0x80;  
         return UUID.fromBytes(randomBytes);
     }
 

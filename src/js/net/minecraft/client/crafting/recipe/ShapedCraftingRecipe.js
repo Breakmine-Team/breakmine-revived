@@ -11,12 +11,10 @@ export default class ShapedCraftingRecipe extends CraftingRecipe {
     matches(gridItems, width, height) {
         const normalized = (gridItems || []).map((item) => this.getItemTypeId(item));
         
-        // Recipe must fit in the grid
         if (this.width > width || this.height > height) {
             return false;
         }
 
-        // Try all possible positions in the grid
         for (let offsetY = 0; offsetY <= height - this.height; offsetY++) {
             for (let offsetX = 0; offsetX <= width - this.width; offsetX++) {
                 if (this.matchesAtPosition(normalized, width, offsetX, offsetY)) {
@@ -47,18 +45,15 @@ export default class ShapedCraftingRecipe extends CraftingRecipe {
             }
         }
         
-        // Check that all slots outside the recipe area are empty
         for (let gridY = 0; gridY < gridItems.length / gridWidth; gridY++) {
             for (let gridX = 0; gridX < gridWidth; gridX++) {
                 const gridIndex = gridY * gridWidth + gridX;
                 
-                // Skip if this slot is within the recipe area
                 if (gridX >= offsetX && gridX < offsetX + this.width &&
                     gridY >= offsetY && gridY < offsetY + this.height) {
                     continue;
                 }
                 
-                // Slot outside recipe area must be empty
                 if (gridItems[gridIndex] !== 0) {
                     return false;
                 }

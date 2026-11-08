@@ -233,35 +233,30 @@ export default class BlockStair extends Block {
     _getInnerCornerStepBoxes(facing, extraSide, y0, y1) {
         const mainStep = this._getStandardStepBox(facing, y0, y1);
         
-        // Place the 3rd quadrant on the FRONT side of the stair step
         let extraCorner = null;
         switch (facing) {
             case BlockStair.EAST:
-                // Main step is WEST (x: 0 - 0.5). Front extra quadrant is EAST (x: 0.5 - 1.0).
                 extraCorner = (extraSide === "left") 
-                    ? new BoundingBox(0.5, y0, 0, 1.0, y1, 0.5)     // North/Left front
-                    : new BoundingBox(0.5, y0, 0.5, 1.0, y1, 1.0);  // South/Right front
+                    ? new BoundingBox(0.5, y0, 0, 1.0, y1, 0.5)     
+                    : new BoundingBox(0.5, y0, 0.5, 1.0, y1, 1.0);  
                 break;
 
             case BlockStair.WEST:
-                // Main step is EAST (x: 0.5 - 1.0). Front extra quadrant is WEST (x: 0 - 0.5).
                 extraCorner = (extraSide === "left") 
-                    ? new BoundingBox(0, y0, 0.5, 0.5, y1, 1.0)     // South/Left front
-                    : new BoundingBox(0, y0, 0, 0.5, y1, 0.5);     // North/Right front
+                    ? new BoundingBox(0, y0, 0.5, 0.5, y1, 1.0)     
+                    : new BoundingBox(0, y0, 0, 0.5, y1, 0.5);     
                 break;
 
             case BlockStair.SOUTH:
-                // Main step is NORTH (z: 0 - 0.5). Front extra quadrant is SOUTH (z: 0.5 - 1.0).
                 extraCorner = (extraSide === "left") 
-                    ? new BoundingBox(0.5, y0, 0.5, 1.0, y1, 1.0)   // East/Left front
-                    : new BoundingBox(0, y0, 0.5, 0.5, y1, 1.0);   // West/Right front
+                    ? new BoundingBox(0.5, y0, 0.5, 1.0, y1, 1.0)   
+                    : new BoundingBox(0, y0, 0.5, 0.5, y1, 1.0);   
                 break;
 
             case BlockStair.NORTH:
-                // Main step is SOUTH (z: 0.5 - 1.0). Front extra quadrant is NORTH (z: 0 - 0.5).
                 extraCorner = (extraSide === "left") 
-                    ? new BoundingBox(0, y0, 0, 0.5, y1, 0.5)       // West/Left front
-                    : new BoundingBox(0.5, y0, 0, 1.0, y1, 0.5);   // East/Right front
+                    ? new BoundingBox(0, y0, 0, 0.5, y1, 0.5)       
+                    : new BoundingBox(0.5, y0, 0, 1.0, y1, 0.5);   
                 break;
         }
 

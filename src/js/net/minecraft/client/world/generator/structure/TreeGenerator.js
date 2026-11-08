@@ -78,7 +78,6 @@ export default class TreeGenerator extends Generator {
                     for (let totalZ = z - radius; totalZ <= z + radius; totalZ++) {
                         let offsetZ = totalZ - z;
                         
-                        // Unconditionally skip the 4 corners of the second-to-top layer
                         if (offsetY === -1 && Math.abs(offsetX) === radius && Math.abs(offsetZ) === radius) {
                             continue;
                         }

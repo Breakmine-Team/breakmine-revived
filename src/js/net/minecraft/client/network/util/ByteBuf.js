@@ -152,7 +152,6 @@ export default class ByteBuf {
 
             this.writeByte((value & ByteBuf.SEGMENT_BITS) | ByteBuf.CONTINUE_BIT);
 
-            // Note: >>> means that the sign bit is shifted with the rest of the number rather than being left alone
             value >>>= 7;
         }
     }
@@ -286,7 +285,6 @@ export default class ByteBuf {
             let b = this.readShort();
             let c = this.readNBT();
 
-            // TODO create item
             return item;
         }
     }
@@ -299,7 +297,7 @@ export default class ByteBuf {
             return null;
         } else {
             this.setPosition(position);
-            return NBTIO.readTag(this); // TODO
+            return NBTIO.readTag(this); 
         }
     }
 

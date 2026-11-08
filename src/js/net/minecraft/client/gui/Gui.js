@@ -4,8 +4,6 @@ import EnumBlockFace from "../../util/EnumBlockFace.js";
 
 export default class Gui {
 
-    // texture -> Map(colour key -> tinted canvas). Keyed by texture so that two
-    // sheets (font.png and accented.png, for instance) never share a tinted copy.
     static spriteCache = new WeakMap();
     static backgroundCache = null;
 
@@ -70,11 +68,7 @@ export default class Gui {
         stack.fillRect(left, top, right - left, bottom - top);
     }
 
-    /**
-     * Fade the top and bottom edges of a panel into its background, so content
-     * that is clipped by the edge does not end on a hard line. Alpha follows
-     * (1 - t)^2, peak `edgeAlpha` at the edge and 0 inside the panel.
-     */
+    
     drawEdgeFades(stack, left, right, top, bottom, height = 8, edgeAlpha = 0.45) {
         const fade = (fromY, toY, edgeAtStart) => {
             const gradient = stack.createLinearGradient(0, fromY, 0, toY);
@@ -118,7 +112,6 @@ export default class Gui {
 
             cacheCtx.save();
 
-            // Disable image smoothing for pixel-perfect dirt texture
             cacheCtx.imageSmoothingEnabled = false;
 
             let pattern = cacheCtx.createPattern(texture, "repeat");

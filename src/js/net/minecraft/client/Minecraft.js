@@ -69,16 +69,13 @@ export default class Minecraft {
     static TIMESTAMP = Version.TIMESTAMP;
     static PATCHWORK_VERSION = Version.PATCHWORK_VERSION;
     static URL_GITHUB = "https://codeberg.org/BreakmineDevelopers/breakmine_revived";
-    static PROTOCOL_VERSION = 47; //758;
+    static PROTOCOL_VERSION = 47; 
 
-    // TODO Add to settings
     static PROXY = {
         "url": "ws://127.0.0.1:25565"
     };
 
-    /**
-     * Create Minecraft instance and render it on a canvas
-     */
+    
     constructor(canvasWrapperId, resources) {
         this.resources = resources;
 
@@ -87,24 +84,13 @@ export default class Minecraft {
         this.world = null;
         this.player = null;
         this.currentWorldKey = null;
-        // 256x256 world-select screenshots are captured on exit and stored on
-        // the world's index entry (see _captureWorldIcon).
-        // Seed of the world handed to the in-page integrated server. Singleplayer
-        // runs through that server, so the client world is a WorldClient with a
-        // ChunkProviderClient that has no generator to read a seed from.
         this.currentWorldSeed = null;
-        // True while the client is connected to the in-page integrated server
-        // (loopback). isSingleplayer() is false there because singleplayer also
-        // uses PlayerControllerMultiplayer, so local sessions need their own flag.
         this.isConnectedToIntegratedServer = false;
         this.playerController = null;
-        // Gameplay rules pushed by a multiplayer server. Singleplayer and
-        // servers that do not send rules keep the normal behavior.
         this.serverRules = { allowTNT: true, allowLiquidFlow: true };
         this.fps = 0;
         this.maxFps = 0;
 
-        // Tick timer
         this.timer = new Timer(20);
 
         this.settings = new GameSettings();
@@ -113,7 +99,6 @@ export default class Minecraft {
 
         AuthLib.setApiBaseUrl(this.settings.apiUrl);
 
-        // Auto-detect Smart TV platform and enable TV mode on first visit
         if (!this.settings.tvmode && !document.cookie.includes('tvmode=')) {
             let ua = window.navigator.userAgent;
             if (/Tizen|SMART-TV|SmartTV/i.test(ua) && !/Mobile|Nexus|SM-/i.test(ua)) {
@@ -125,7 +110,6 @@ export default class Minecraft {
             }
         }
 
-        // Load session from settings
         if (this.settings.session === null) {
             if (!this.settings.username) this.loggedIn = false;
             let username = this.settings.username || generateUsername();
@@ -135,24 +119,19 @@ export default class Minecraft {
             this.setSession(Session.fromJson(this.settings.session));
         }
 
-        // Create window and world renderer
         this.window = new GameWindow(this, canvasWrapperId);
 
-        // Create renderers
         this.worldRenderer = new WorldRenderer(this, this.window);
         this.screenRenderer = new ScreenRenderer(this, this.window);
         this.itemRenderer = new ItemRenderer(this, this.window);
 
-        // Create current screen and overlay
         this.ingameOverlay = new IngameOverlay(this, this.window);
 
-        // Command handler
         this.commandHandler = new CommandHandler(this);
 
         this.frames = 0;
         this.lastTime = Date.now();
 
-        // Create all blocks
         BlockRegistry.create();
         BiomeRegistry.create();
         CraftingRegistry.reset();
@@ -161,56 +140,42 @@ export default class Minecraft {
         this.blockList = BlockRegistry.getAllBlocks();
         this.roadBuilder = new RoadBuilder(this);
 
-        // Expose Block class globally for mod sandboxing
         window.__ModBlockClass__ = Block;
 
-        // Expose live game state on window for external tooling/remote support
         this.initGameState();
 
-        // Mixin: allow mods to register custom blocks
         this.registerBlockClass = (id, name, blockClass) => {
             return BlockRegistry.registerBlockClass(id, name, blockClass);
         };
 
-        // Create mod loader and expose it
         this.modLoader = new ModLoader(this);
 
-        // Per-player capes advertised by the server (JSON channel)
         this.capeManager = new CapeManager(this);
 
         this.tunnelLib = new TunnelLib(this.settings.tunnelServer);
 
-        // Tools are registered in BlockRegistry.create() alongside blocks and items
 
         this.blockList = BlockRegistry.getAllBlocks();
 
         this.itemRenderer.initialize();
 
-        // Create font renderer
         this.fontRenderer = new FontRenderer(this);
 
-        // Grass colorizer
         this.grassColorizer = new GrassColorizer(this);
 
         this.particleRenderer = new ParticleRenderer(this);
 
-        // Update window size
         this.window.updateWindowSize();
 
-        // Create sound manager
         this.soundManager = new SoundManager();
         this.musicManager = new MusicManager();
 
-        // Create P2P voice chat (push-to-talk)
         this.voiceChat = new VoiceChatManager(this);
 
-        // Wire up the Patchwork Sound API
         Sound.init(this);
 
-        // Create filesystem for texture packs
         this.filesystem = new FileSystem('TexturePackDB', 'texture_packs');
 
-        // If in prelaunch mode; display the menu for it instead
         if (window.isPreLaunch) {
             console.log("Prelaunch mode; game won't start until menu is exited.");
             this.displayScreen(new GuiPrelaunch(this));
@@ -218,28 +183,22 @@ export default class Minecraft {
             this.displayScreen(new GuiMainMenu());
         }
 
-        // Create Filesystem
         this.fs = new FileSystem();
 
-        // World save state
         this.lastSaveTime = Date.now();
         this.saveInterval = 30000;
 
-        // Create various player properties
         this.miningTimer = 0;
         this.maxMiningTicks = 30;
         this.lastBlockPos = null;
         this.isMining = false;
         this.miningProgress = 0;
 
-        // Loading screen timeout tracking
         this.lastChunkCount = 0;
         this.lastChunkArrivalTime = 0;
 
-        // Initialize
         this.init();
 
-        // Mixins
         this.addMixinHandlers();
     }
 
@@ -249,9 +208,7 @@ export default class Minecraft {
     }
     
     addMixinHandlers() {
-        // src/js/net/minecraft/client/Minecraft.js
 
-        // src/js/net/minecraft/client/world/World.js
         Mixin.registerFunction('game:teleportEntityPos', (eid, x, y, z) => {
             if (this.world && this.world.getEntityById(eid)) {
                 this.world.getEntityById(eid).setPosition(x, y, z);
@@ -339,7 +296,6 @@ export default class Minecraft {
             }
         });
 
-        // Patchwork: info about the block under the crosshair
         Mixin.registerFunction('game:getLookedAtBlock', (reach = 5) => {
             if (!this.world || !this.player) {
                 return undefined;
@@ -350,7 +306,6 @@ export default class Minecraft {
                 return null;
             }
 
-            // Summoned off-grid structures are addressed with local coordinates.
             const field = hit.fieldCell && this.world.offGridField;
             const typeId = field
                 ? field.getBlockAt(hit.x, hit.y, hit.z)
@@ -377,7 +332,6 @@ export default class Minecraft {
             };
         });
 
-        // Mod loader mixin functions
         Mixin.registerFunction('mod:list', () => {
             if (this.modLoader) {
                 return [...this.modLoader.mods.keys()];
@@ -411,7 +365,6 @@ export default class Minecraft {
     }
 
     init() {
-        // Start render loop
         this.running = true;
         this.requestNextFrame();
     }
@@ -422,28 +375,17 @@ export default class Minecraft {
         this.musicManager.stopMusic();
 
         if (world === null) {
-            // Store a preview for the world-select list. This has to happen
-            // before the teardown below, while the world and its renderer are
-            // still alive, because the image is read from the rendered frame.
             if (this.world !== null && this.currentWorldKey && this.isLocalSession()) {
                 const icon = this._captureWorldIcon();
                 if (icon) {
-                    // Shown by the world-select list straight from the index.
                     await this._storeWorldIcon(this.currentWorldKey, icon);
-                    // Best effort: also keep a copy inside the world directory
-                    // so it travels with the save (export/import).
                     saveWorldIcon(this.currentWorldKey, Minecraft.pngBytesFromDataUrl(icon))
                         .catch((err) => console.error('Failed to save world icon:', err));
                 }
             }
 
-            // Mods supplied by the server belong to that connection only.
-            // Remove their blocks, textures, recipes and commands before the
-            // world is torn down so they cannot leak into another server or
-            // singleplayer.
             this.modLoader?.unloadServerMods?.();
             this.worldLoadPromise = Promise.resolve();
-            // Save world before quitting
             if (this.world !== null && this.isSingleplayer()) {
                 await this.saveWorld();
             }
@@ -455,20 +397,15 @@ export default class Minecraft {
             this.worldRenderer.reset();
             this.itemRenderer.reset();
 
-            // Disconnect from server
             if (this.playerController instanceof PlayerControllerMultiplayer) {
                 let networkHandler = this.playerController.getNetworkHandler();
                 if (networkHandler.getNetworkManager().isConnected()) {
                     networkHandler.getNetworkManager().close();
                 }
 
-                // Reset header and footer
                 this.ingameOverlay.playerListOverlay.setHeader(null);
                 this.ingameOverlay.playerListOverlay.setFooter(null);
 
-                // The loopback 'close' handler saves the player asynchronously;
-                // give it a beat, then shut the integrated server down and
-                // refresh the world index metadata (time / gamemode / lastPlayed).
                 await new Promise(resolve => setTimeout(resolve, 50));
                 stopIntegratedServer();
                 await this._updateWorldIndexOnQuit();
@@ -487,33 +424,22 @@ export default class Minecraft {
                 this.player = null;
                 this.loadingScreen = null;
 
-                // The hotbar/inventory overlay keeps rendering during the
-                // async teardown above (server shutdown awaits), re-adding
-                // item groups to the 3D scene after reset(); clear them now
-                // that the world is gone so they don't linger over the menu.
                 this.itemRenderer.reset();
             }
             this.displayScreen(new GuiMainMenu());
         } else {
-            // Singleplayer: show "Starting integrated server..." for 2 seconds
-            // before the regular terrain loading screen
             if (!(this.playerController instanceof PlayerControllerMultiplayer)) {
                 this.displayScreen(new GuiLoadingIntegratedServer(this.currentScreen));
                 await new Promise(resolve => setTimeout(resolve, 500));
             }
 
-            // Display loading screen. The terrain title stays until the chunk
-            // stream starts, then onTick/_loadWorldAsync switches to the
-            // building phase.
             this.loadingScreen = new GuiLoadingScreen();
             this.loadingScreen.setTitle("Loading terrain...");
             this.displayScreen(this.loadingScreen);
 
-            // Reset chunk timeout tracking for the new world
             this.lastChunkCount = 0;
             this.lastChunkArrivalTime = 0;
 
-            // Clear previous world
             if (this.world !== null) {
                 this.world.getChunkProvider().getChunks().clear();
                 this.world.clearEntities();
@@ -521,11 +447,9 @@ export default class Minecraft {
                 this.itemRenderer.reset();
             }
 
-            // Create world
             this.world = world;
             this.worldRenderer.scene.add(this.world.group);
 
-            // Reload texture atlas with selected pack if set
             if (this.settings.selectedTexturePack && this.worldRenderer.textureAtlas) {
                 this.setLoadingStatus("Loading textures...");
                 this.worldRenderer.textureAtlas.texturePath = `texture_packs/${this.settings.selectedTexturePack}/`;
@@ -533,7 +457,6 @@ export default class Minecraft {
                 this.setLoadingStatus("Loading terrain...");
             }
 
-            // Create player
             this.player = this.playerController.createPlayer(this.world);
             this.player.username = this.session.getProfile().getUsername();
             this.world.addEntity(this.player);
@@ -542,11 +465,9 @@ export default class Minecraft {
                 this.player.renderer.rebuild(this.player);
             }
 
-            // Load spawn chunks and respawn player
             if (this.world.getChunkProvider() instanceof ChunkProviderGenerateWorker) {
                 this._loadWorldAsync(world);
             } else {
-                // Sync path: progress is tracked in onTick; spawn loading happens when done
             }
         }
     }
@@ -554,7 +475,6 @@ export default class Minecraft {
     async _loadWorldAsync(world) {
         this.setLoadingStatus("Loading world data...");
 
-        // Load saved chunk data from IndexedDB before generating new chunks
         if (this.isSingleplayer()) {
             await this.loadWorldSave(world, this.currentWorldKey);
         }
@@ -592,9 +512,6 @@ export default class Minecraft {
             await new Promise(r => setTimeout(r, 0));
         }
 
-        // Light is part of loading: drain everything the chunk stream queued
-        // before the world is shown, in frame-sized slices so the loading bar
-        // keeps animating instead of freezing the tab.
         this.setLoadingStatus("Propagating Light");
 
         while (world.lightUpdateQueue.length > 0) {
@@ -605,7 +522,6 @@ export default class Minecraft {
         world.spawn.y = world.getHeightAt(world.spawn.x, world.spawn.z) + 1;
         this.player.respawn();
 
-        // Load sign text for all signs in the world
         if (this.worldRenderer.signTextRenderer) {
             this.worldRenderer.signTextRenderer.updateAllSigns(world);
         }
@@ -681,7 +597,6 @@ export default class Minecraft {
     async _loadWorldIndex() {
         const db = await this._getWorldDB();
 
-        // Check if index exists; if not, try migrating old save
         const checkTx = db.transaction('saves', 'readonly');
         const checkGet = await new Promise(r => {
             const req = checkTx.objectStore('saves').get('world_index');
@@ -736,9 +651,6 @@ export default class Minecraft {
         return list.length > 0;
     }
 
-    // List singleplayer worlds from the server-directory layout (the source of
-    // truth for world storage now), merged with the legacy IndexedDB index for
-    // metadata (last played, display name of not-yet-entered legacy worlds).
     async getWorldList() {
         const index = await this._loadWorldIndex();
         const byKey = new Map(index.map(e => [e.key, e]));
@@ -747,8 +659,6 @@ export default class Minecraft {
 
         const list = [];
         for (const sw of serverWorlds) {
-            // Skip pure multiplayer-style servers (no singleplayer world key
-            // and never indexed as a world).
             if (!sw.key.startsWith('w_') && !byKey.has(sw.key)) continue;
 
             const idx = byKey.get(sw.key);
@@ -765,16 +675,10 @@ export default class Minecraft {
                 spawnX: (idx && idx.spawnX) || 0,
                 spawnY: (idx && idx.spawnY) || 0,
                 spawnZ: (idx && idx.spawnZ) || 0,
-                // The index copy is written on every exit and is therefore
-                // the freshest; the file in the world directory is the fallback
-                // (e.g. for an imported world that has not been entered yet).
                 icon: (idx && idx.icon) || sw.icon || null,
             });
         }
 
-        // Legacy IndexedDB worlds that have not been entered since the switch
-        // to the integrated server have no server directory yet; they still
-        // show up and migrate on first load.
         for (const [key, idx] of byKey) {
             if (seen.has(key)) continue;
             list.push({
@@ -802,7 +706,6 @@ export default class Minecraft {
         this.currentWorldKey = worldKey;
         this.currentWorldSeed = seedLong || null;
 
-        // Add to world index
         const index = await this._loadWorldIndex();
         index.push({
             key: worldKey,
@@ -819,9 +722,6 @@ export default class Minecraft {
         });
         await this._saveWorldIndex(index);
 
-        // Start the in-page integrated server and connect as a client. The
-        // server owns the world (terrain + save files); the client renders
-        // whatever the server sends, exactly like multiplayer.
         this.displayScreen(new GuiLoadingIntegratedServer(this.currentScreen));
         this.setLoadingStatus("Loading world data...");
         await startIntegratedServer({
@@ -841,9 +741,6 @@ export default class Minecraft {
         return null;
     }
 
-    // Open a client connection to the running integrated server over the
-    // loopback transport. handleJoinGame() on the server side will then create
-    // the WorldClient + PlayerControllerMultiplayer and enter the world.
     connectToIntegratedServer() {
         const networkManager = new NetworkManager(this);
         networkManager.setNetworkHandler(new NetworkLoginHandler(networkManager));
@@ -856,22 +753,11 @@ export default class Minecraft {
     }
 
 
-    /**
-     * Render the world once and return a 256x256 PNG data URL of it, for the
-     * singleplayer world-select list. The WebGL drawing buffer is not
-     * preserved between tasks, so the frame is rendered and copied into a 2D
-     * canvas in this same synchronous call: no render-loop round trip, which
-     * keeps it working while paused (the frame is otherwise only drawn when
-     * unpaused) and in a throttled tab. Returns null when there is nothing to
-     * capture.
-     */
+    
     _captureWorldIcon() {
         if (!this.isInGame() || !this.worldRenderer) return null;
 
         try {
-            // Draw a fresh frame: the previous one is no longer in the drawing
-            // buffer. The pause menu is a separate 2D canvas, so the result is
-            // the world without any HUD or menu overlay.
             this.worldRenderer.render(this.timer ? this.timer.partialTicks : 0);
 
             const source = this.window.canvasWorld;
@@ -879,8 +765,6 @@ export default class Minecraft {
             const height = source.height;
             if (!width || !height) return null;
 
-            // Centre-crop the frame to a square so the icon is not distorted
-            // on wide or tall viewports.
             const side = Math.min(width, height);
             const sx = Math.floor((width - side) / 2);
             const sy = Math.floor((height - side) / 2);
@@ -900,9 +784,6 @@ export default class Minecraft {
         }
     }
 
-    // Store the screenshot on the world's index entry, which is what the
-    // world-select list reads. This does not depend on the integrated server
-    // (or its filesystem) still being around when the world is left.
     async _storeWorldIcon(worldKey, dataUrl) {
         try {
             const index = await this._loadWorldIndex();
@@ -918,8 +799,6 @@ export default class Minecraft {
         }
     }
 
-    // PNG bytes for a data URL, used to also store the icon inside the world
-    // directory (binary file) for export/import.
     static pngBytesFromDataUrl(dataUrl) {
         const text = String(dataUrl);
         const comma = text.indexOf(',');
@@ -947,13 +826,6 @@ export default class Minecraft {
             }
         }
 
-        // Once a world lives in the server's world_data.bin, the server owns the
-        // blocks. Writing a second copy of the chunks into IndexedDB here is what
-        // made worlds "randomly" lose builds: the client copy is a partial view
-        // (only chunks the client happened to have loaded and marked dirty), and
-        // loadSavedWorld() fed it back in as migrateData on the next launch, so
-        // it silently overwrote newer server-side edits. The server now stores
-        // whole modified subchunks, so it is the only writer.
         const isServerBacked = this._worldIsServerBacked;
 
         try {
@@ -1007,7 +879,6 @@ export default class Minecraft {
                 };
             }
 
-            // Save dropped items
             const itemEntities = [];
             if (this.world.entities) {
                 for (const entity of this.world.entities) {
@@ -1028,13 +899,10 @@ export default class Minecraft {
                 saveData.itemEntities = itemEntities;
             }
 
-            // A world the server already owns only needs its index metadata
-            // refreshed; the blocks go through the server's own save.
             if (!isServerBacked) {
                 await this._saveWorldToDB(this.currentWorldKey, saveData);
             }
 
-            // Update world index metadata
             const index = await this._loadWorldIndex();
             const entry = index.find(e => e.key === this.currentWorldKey);
             if (entry) {
@@ -1109,9 +977,6 @@ export default class Minecraft {
     async loadSavedWorld(worldKey) {
         this.currentWorldKey = worldKey;
 
-        // Prefer the world's own serverconfig.conf (the source of truth for
-        // re-entered worlds); fall back to the legacy IndexedDB index for
-        // worlds that have not been migrated to the server layout yet.
         const serverWorlds = await listServerWorlds();
         const serverEntry = serverWorlds.find(w => w.key === worldKey);
 
@@ -1123,12 +988,8 @@ export default class Minecraft {
             ? { low: seedSource.seedLow || 0, high: seedSource.seedHigh || 0 }
             : null;
 
-        // A world that already has server files is server-authoritative: the
-        // client must not write a competing chunk copy (see saveWorld).
         this._worldIsServerBacked = Boolean(serverEntry);
 
-        // A legacy IndexedDB save (from before the integrated server) is
-        // migrated into server files the first time the world is entered.
         const saveData = await this._loadWorldFromDB(worldKey);
 
         this.displayScreen(new GuiLoadingIntegratedServer(this.currentScreen));
@@ -1145,8 +1006,6 @@ export default class Minecraft {
             clientMods: this.modLoader ? await this.modLoader.getServerModPayload() : [],
         });
 
-        // Once migrated, drop the IndexedDB copy so it never overwrites the
-        // server's (newer) save files on a later entry.
         if (saveData) {
             await this._deleteWorldFromDB(worldKey);
         }
@@ -1166,22 +1025,15 @@ export default class Minecraft {
         }));
     }
 
-    // Refresh the world index metadata (time, spawn, gamemode, lastPlayed)
-    // when leaving a singleplayer integrated-server world. The server owns the
-    // actual save; this keeps the world-selection list up to date.
     async _updateWorldIndexOnQuit() {
         if (!this.currentWorldKey || !this.world || !this.player) return;
 
         const index = await this._loadWorldIndex();            let entry = index.find(e => e.key === this.currentWorldKey);
             if (!entry) {
-                // Newly created worlds may not have an index entry yet; create
-                // one so the screenshot taken on exit is not dropped.
                 entry = { key: this.currentWorldKey, name: '' };
                 index.push(entry);
             }
 
-            // Keep the icon stored on exit; _storeWorldIcon writes it while
-            // the world is still alive so it does not depend on this path.
             entry.lastPlayed = Date.now();
         entry.time = this.world.time || 0;
         entry.spawnX = this.world.spawn ? this.world.spawn.x : 0;
@@ -1194,11 +1046,9 @@ export default class Minecraft {
 
 
     async deleteWorld(worldKey) {
-        // Stop the integrated server if it is running this world
         if (isIntegratedRunning() && getIntegratedServerName() === serverNameForKey(worldKey)) {
             stopIntegratedServer();
         }
-        // Remove the server's save files for this world
         deleteServerWorld(worldKey);
 
         const db = await this._getWorldDB();
@@ -1225,24 +1075,17 @@ export default class Minecraft {
         return this.world !== null && this.worldRenderer !== null && this.player !== null;
     }
 
-    /**
-     * Publishes window.GAMESTATE: a single JSON-safe object describing what the
-     * game is currently doing, kept up to date once per frame by
-     * updateGameState(). Remote support / controller polyfills poll it to know
-     * whether they should drive a relative mouse (camera look) or an absolute
-     * on-screen cursor (menus).
-     */
+    
     initGameState() {
         this.gameState = {
-            // boot | menu | loading | gui | ingame | paused
             state: "boot",
             inGame: false,
             guiOpen: false,
-            screen: null,        // class name of the current screen, e.g. "GuiChat"
+            screen: null,        
             loading: false,
-            pointerLock: false,  // browser cursor is locked to the canvas
-            focusLocked: false, // game considers itself cursor-locked
-            hasFocus: false,    // player accepts mouse look / input
+            pointerLock: false,  
+            focusLocked: false, 
+            hasFocus: false,    
             paused: false,
             hudHidden: false,
             world: null,
@@ -1255,11 +1098,8 @@ export default class Minecraft {
             player: { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, health: 0 }
         };
 
-        // Live handle: always up to date, never stale.
         this.gameState.snapshot = () => JSON.parse(JSON.stringify(this.gameState));
 
-        // Signature of the last state pushed to the Electron host, so the
-        // per-frame update only forwards real transitions.
         this.lastPublishedGameState = null;
 
         if (typeof window !== "undefined") {
@@ -1317,15 +1157,7 @@ export default class Minecraft {
         this.publishGameStateToHost();
     }
 
-    /**
-     * Tell the Electron host what the game is doing, for the Discord Rich
-     * Presence. The host cannot read this state itself (the window is context
-     * isolated), so the renderer pushes it whenever it changes.
-     *
-     * `gs.singleplayer` is deliberately not used here: a singleplayer world is
-     * served by the in-page integrated server, so isSingleplayer() is false and
-     * only isLocalSession() tells a local world apart from a remote server.
-     */
+    
     publishGameStateToHost() {
         const bridge = typeof window !== "undefined" ? window.modsBridge : null;
         if (!bridge || typeof bridge.reportGameState !== "function") return;
@@ -1336,16 +1168,12 @@ export default class Minecraft {
 
         const state = {
             state: gs.state,
-            // An open screen still counts as being in the world (inventory,
-            // chat), so this must not be derived from `inGame`.
             singleplayer: this.isLocalSession(),
             paused: gs.paused,
             username: username,
             world: this.currentWorldKey || null
         };
 
-        // updateGameState() runs every frame; only forward real transitions so
-        // the host does not push a Discord update 60 times a second.
         const key = JSON.stringify(state);
         if (key === this.lastPublishedGameState) return;
         this.lastPublishedGameState = key;
@@ -1353,7 +1181,6 @@ export default class Minecraft {
         try {
             bridge.reportGameState(state);
         } catch {
-            // Host not listening (running in a plain browser) - ignore.
         }
     }
 
@@ -1371,7 +1198,6 @@ export default class Minecraft {
     }
 
     onLoop() {
-        // Update the timer
         if (this.isPaused() && this.isInGame()) {
             let prevPartialTicks = this.timer.partialTicks;
             this.timer.advanceTime();
@@ -1380,18 +1206,14 @@ export default class Minecraft {
             this.timer.advanceTime();
         }
 
-        // Call the tick to reach updates 20 per seconds
         for (let i = 0; i < this.timer.ticks; i++) {
             this.onTick();
         }
 
-        // Render the game
         this.onRender(this.timer.partialTicks);
 
-        // Increase rendered frame
         this.frames++;
 
-        // Loop if a second passed
         while (Date.now() >= this.lastTime + 1000) {
             this.fps = this.frames;
             this.maxFps = Math.max(this.maxFps, this.fps);
@@ -1399,13 +1221,11 @@ export default class Minecraft {
             this.frames = 0;
         }
 
-        // Publish window.GAMESTATE for external tooling (remote support)
         this.updateGameState();
     }
 
     onRender(partialTicks) {
         if (this.isInGame()) {
-            // Player rotation
             if (this.hasInGameFocus()) {
                 let deltaX = this.window.pullMouseMotionX();
                 let deltaY = this.window.pullMouseMotionY();
@@ -1413,7 +1233,6 @@ export default class Minecraft {
                     this.player.turn(deltaX, deltaY);
                 }
 
-                // Remotes (gamepad/TV) look with their own sensitivity.
                 let remoteX = this.window.pullRemoteMotionX();
                 let remoteY = this.window.pullRemoteMotionY();
                 if (remoteX !== 0 || remoteY !== 0) {
@@ -1421,7 +1240,6 @@ export default class Minecraft {
                 }
             }
 
-            // Update lights (limit iterations to prevent freezing)
             let lightIterations = 0;
             const lightDeadline = performance.now() + 6;
             while (this.world.updateLights() && lightIterations < 500 && performance.now() < lightDeadline) {
@@ -1432,35 +1250,29 @@ export default class Minecraft {
                 this.world.cloudTexture.offset.x =  this.player.x * 0.0001 + this.world.cloudOffset;
                 this.world.cloudTexture.offset.y = -this.player.z * 0.0001;
                 
-                this.world.clouds.position.x = this.player.x; // / 2 * 1.5;
-                this.world.clouds.position.z = this.player.z; // / 2 * 1.5;
+                this.world.clouds.position.x = this.player.x; 
+                this.world.clouds.position.z = this.player.z; 
             }
 
-            // Render the game
             if (!this.isPaused()) {
                 this.worldRenderer.render(partialTicks);
             }
         }
 
-        // Render items in GUI
         this.itemRenderer.render(partialTicks);
 
-        // Render current screen
         this.screenRenderer.render(partialTicks);
     }
 
     isElectron() {
-        // Renderer process
         if (typeof window !== 'undefined' && typeof window.process === 'object' && window.process.type === 'renderer') {
             return true;
         }
 
-        // Main process
         if (typeof process !== 'undefined' && typeof process.versions === 'object' && !!process.versions.electron) {
             return true;
         }
 
-        // Renderer process with nodeIntegration disabled
         if (typeof navigator === 'object' && typeof navigator.userAgent === 'string' && navigator.userAgent.indexOf('Electron') >= 0) {
             return true;
         }
@@ -1492,71 +1304,55 @@ export default class Minecraft {
             document.title = "Breakmine" + " (" + Version.VERSION + ", " + Version.TIMESTAMP + ")";
         }
 
-        // Fallback screen
         if (screen === null && !this.isInGame()) {
             screen = new GuiMainMenu();
         }
 
-        // Close previous screen
         if (this.currentScreen !== null) {
             this.currentScreen.onClose();
         }
 
-        // Switch screen
         this.currentScreen = screen;
 
-        // Update window size
         this.window.updateWindowSize();
 
-        // Initialize new screen
         if (screen === null) {
             this.window.updateFocusState(FocusStateType.REQUEST_LOCK);
         } else {
             this.window.updateFocusState(FocusStateType.REQUEST_EXIT);
             screen.setup(this, this.window.width, this.window.height);
 
-            // Play menu music when any screen is shown outside of a world
             if (!this.isInGame()) {
                 this.musicManager.playMusic('menu');
             }
         }
 
-        // Update items
         this.itemRenderer.rebuildAllItems();
 
-        // Publish window.GAMESTATE immediately so listeners see the new screen
         this.updateGameState();
     }
 
     onTick() {
         if (this.isInGame() && !this.isPaused()) {
-            // Tick mining
             this.handleMiningTicks();
 
-            // Tick overlay
             this.ingameOverlay.onTick();
 
-            // Tick world
             this.world.onTick();
 
-            // Tick renderer
             this.worldRenderer.onTick();
 
-            // Tick particle renderer
             this.particleRenderer.onTick();
 
-            // Tick voice chat (announce/prune/volume upkeep)
             if (this.voiceChat) {
                 this.voiceChat.onTick();
             }
         }
 
-        // Tick the screen
         if (this.currentScreen !== null) {
             this.currentScreen.updateScreen();
         }
 
-        // Update loading progress (sync provider only; worker uses _loadWorldAsync)
         if (this.loadingScreen !== null && this.isInGame()
             && !(this.world.getChunkProvider() instanceof ChunkProviderGenerateWorker)) {
             let cameraChunkX = Math.floor(this.player.x) >> 4;
@@ -1566,27 +1362,20 @@ export default class Minecraft {
             let requiredChunks = Math.pow(renderDistance * 2 - 1, 2);
             let loadedChunks = this.world.getChunkProvider().getChunks().size;
 
-            // Drain queued light before the world is shown: the queue refills
-            // as chunks arrive, so this runs on every loading tick and the
-            // screen only closes once it is empty.
             let pendingLight = this.propagateLight(this.world, 6);
             if (pendingLight > 0) {
                 this.loadingScreen.setTitle("Propagating Light");
             }
 
-            // Terrain chunks are arriving now: the stream/load phase is over
-            // and the client is building the visible world.
             if (loadedChunks > 0 && pendingLight === 0) {
                 this.loadingScreen.setTitle("Building terrain...");
             }
 
-            // Track chunk arrival for timeout detection
             if (loadedChunks !== this.lastChunkCount) {
                 this.lastChunkCount = loadedChunks;
                 this.lastChunkArrivalTime = Date.now();
             }
 
-            // Load chunks and count
             setTimeout(() => {
                 for (let x = -renderDistance + 1; x < renderDistance; x++) {
                     for (let z = -renderDistance + 1; z < renderDistance; z++) {
@@ -1595,32 +1384,20 @@ export default class Minecraft {
                 }
             }, 0);
 
-            // Update progress. Light propagation is part of loading, so the
-            // bar holds just below full while anything is still queued.
             let progress = 1 / requiredChunks * Math.max(0, loadedChunks - this.world.lightUpdateQueue.length / 1000);
             if (pendingLight > 0) {
                 progress = Math.min(progress, 0.98);
             }
             this.loadingScreen.setProgress(progress);
 
-            // The player must only become active once the terrain under and
-            // around them is actually loaded; the plain chunk count also
-            // includes spawn chunks elsewhere, so it can read "done" while the
-            // player's own column is still missing (and they fall through).
             let terrainReady = this._chunksLoadedAround(cameraChunkX, cameraChunkZ, 2);
 
-            // Finish loading when enough chunks are loaded, or fall back after a timeout
-            // to prevent getting stuck on slow connections
             let timeoutElapsed = this.lastChunkArrivalTime > 0
                 && Date.now() - this.lastChunkArrivalTime > 5000
                 && loadedChunks >= 9;
 
             if ((progress >= 0.99 || timeoutElapsed) && terrainReady && pendingLight === 0) {
                 this.world.loadSpawnChunks();
-                // In multiplayer the server already restored the player's saved
-                // position/health via the playerState packet; respawning here
-                // would reset health to 20 (and teleport to the world spawn),
-                // clobbering the restore and reporting full health to the server.
                 if (this.isSingleplayer()) {
                     this.player.respawn();
                 }
@@ -1630,7 +1407,6 @@ export default class Minecraft {
             }
         }
 
-        // Worker provider: request chunks around player during gameplay
         if (this.isInGame() && this.world !== null
             && this.world.getChunkProvider() instanceof ChunkProviderGenerateWorker
             && this.loadingScreen === null) {
@@ -1641,7 +1417,6 @@ export default class Minecraft {
             this.world.getChunkProvider().requestChunksInRadius(cameraChunkX, cameraChunkZ, renderDistance);
         }
 
-        // Auto-save world every 30 seconds
         if (this.isInGame() && this.isSingleplayer() && this.loadingScreen === null) {
             if (Date.now() - this.lastSaveTime > this.saveInterval) {
                 this.lastSaveTime = Date.now();
@@ -1650,11 +1425,7 @@ export default class Minecraft {
         }
     }
 
-    /**
-     * Drain queued light updates for at most budgetMs milliseconds. Each
-     * queued update is sliced internally, so this never blocks for long.
-     * Returns the number of updates still queued.
-     */
+    
     propagateLight(world, budgetMs = 8) {
         if (world === null || world.lightUpdateQueue === undefined) {
             return 0;
@@ -1672,11 +1443,7 @@ export default class Minecraft {
         return queue.length;
     }
 
-    /**
-     * Update the status line of whichever loading screen is visible. Used by
-     * the world loader, the chunk stream and the server-mod importer so the
-     * screen describes the phase that is actually running.
-     */
+    
     setLoadingStatus(status) {
         if (!status) return;
 
@@ -1705,10 +1472,6 @@ export default class Minecraft {
                 if (!provider.chunkExists(x, z)) {
                     return false;
                 }
-                // A worker-backed chunk exists as an empty shell before its
-                // packet has been decoded. Keep the loading screen up until
-                // the real terrain is installed so the player cannot fall
-                // through it.
                 if (typeof provider.isChunkReady === "function" && !provider.isChunkReady(x, z)) {
                     return false;
                 }
@@ -1748,9 +1511,6 @@ export default class Minecraft {
             this.lastBlockPos = { x: hitResult.x, y: hitResult.y, z: hitResult.z };
         }
 
-        // A hit on the summoned field addresses cells in the field's local
-        // space - read the cell from the field so hardness and drops follow
-        // the summoned block, not whatever real terrain sits at the grid key.
         let miningField = hitResult.fieldCell && this.world.offGridField
             ? this.world.offGridField : null;
         let typeId = miningField
@@ -1806,11 +1566,7 @@ export default class Minecraft {
         }
     }
 
-    /**
-     * Fire cancelable mod hooks for a player block action.
-     * `pos` is the block being changed (the destination for placement); the
-     * clicked block is exposed separately as `clickedPos`/`clickedBlock`.
-     */
+    
     isInteractiveBlock(block) {
         return !!block &&
             typeof block.onMouseButton === 'function' &&
@@ -1855,10 +1611,6 @@ export default class Minecraft {
     }
 
     breakTargetBlock(hitResult, typeId) {
-        // Summoned cells live in the field's local grid, not in server chunk
-        // storage: a dig/drop packet at those coordinates would make the
-        // server break real terrain (or spawn server items) there. The cell
-        // removal itself is synced by OffGridClientSync.
         let isFieldHit = !!(hitResult.fieldCell && this.world.offGridField);
         const actionWorld = isFieldHit ? this.world.offGridField.createLocalWorld() : this.world;
         const breakAction = this.emitBlockAction('break', hitResult.x, hitResult.y, hitResult.z, {
@@ -1901,18 +1653,14 @@ export default class Minecraft {
                 : null,
             isFieldHit ? block : null);
 
-        // Play drop sound
         this.soundManager.playSoundMono('random.pop', 1.0, 1.0);
 
         this.world.setBlockAt(hitResult.x, hitResult.y, hitResult.z, 0);
         for (const [dropId, dropCount] of drops) {
             for (let index = 0; index < dropCount; index++) {
                 if (this.isSingleplayer() || isFieldHit) {
-                    // Singleplayer or summoned cell: create entity locally
                     this.world.addEntity(new ItemEntity(this, this.world, dropId, hitResult.x, hitResult.y, hitResult.z));
                 } else {
-                    // Multiplayer: tell server to spawn item for all players at the
-                    // broken block's position
                     this.playerController.getNetworkHandler().sendPacket(new ClientDropItemPacket(dropId, hitResult.x, hitResult.y, hitResult.z));
                 }
             }
@@ -1928,11 +1676,8 @@ export default class Minecraft {
     }
 
     onKeyPressed(button) {
-        // Mod keybinds run before the built-in controls so they can react to
-        // the same key. A conflict is shown in the Controls screen.
         this.modLoader?.handleKeyPressed(button);
 
-        // TV mode: color button actions
         if (this.settings.tvmode && this.hasInGameFocus()) {
             if (button === 'ColorRed') {
                 this.onMouseClicked(0);
@@ -1948,14 +1693,12 @@ export default class Minecraft {
             }
         }
 
-        // Select hotbar slot
         for (let i = 1; i <= 9; i++) {
             if (button === this.settings['keyHotbar' + i]) {
                 this.player.inventory.selectedSlotIndex = i - 1;
             }
         }
 
-        // Road builder controls while its tool is held
         if (this.roadBuilder && this.roadBuilder.isToolSelected()) {
             if (button === "Equal" || button === "NumpadAdd") {
                 this.roadBuilder.adjustWidth(1);
@@ -1971,19 +1714,16 @@ export default class Minecraft {
             }
         }
 
-        // Toggle perspective
         if (button === this.settings.keyTogglePerspective) {
             this.settings.thirdPersonView = (this.settings.thirdPersonView + 1) % 3;
             this.settings.save();
         }
 
-        // Open chat
         if (button === this.settings.keyOpenChat) {
             this.displayScreen(new GuiChat(this));
             this.ingameOverlay.chatOverlay.setDirty();
         }
 
-        // Open chat commands
         if (button === this.settings.keyOpenCommands) {
             const chatScreen = new GuiChat(this);
             chatScreen.inputField.setText("/");
@@ -1991,25 +1731,21 @@ export default class Minecraft {
             this.ingameOverlay.chatOverlay.setDirty();
         }
 
-        // Toggle debug overlay
         if (button === this.settings.keyDebug) {
             this.settings.debugOverlay = !this.settings.debugOverlay;
             this.settings.save();
         }
 
-        // Toggle chunk boundaries with Debug + G
         if (button === "KeyG" && Keyboard.isKeyDown(this.settings.keyDebug)) {
             this.settings.showChunkBoundaries = !this.settings.showChunkBoundaries;
             this.settings.save();
         }
 
-        // Toggle entity bounding boxes with Debug + B
         if (button === "KeyB" && Keyboard.isKeyDown(this.settings.keyDebug)) {
             this.settings.showEntityBoundingBoxes = !this.settings.showEntityBoundingBoxes;
             this.settings.save();
         }
 
-        // Toggle GUI visibility - only in-game, not in menus
         if (button === this.settings.keyToggleGui) {
             if (this.currentScreen === null && this.isInGame()) {
                 GuiFunctions.toggleGui();
@@ -2019,33 +1755,25 @@ export default class Minecraft {
             }
         }
 
-        // Take screenshot
         if (button === this.settings.keyScreenshot) {
             GuiFunctions.takeScreenshot(this.window.canvas);
         }
 
-        // Drop held item
         if (button === this.settings.keyDrop) {
             if (this.player.spectator) return;
             if (this.player.inventory.getItemInSelectedSlot() !== 0 && this.player.inventory.getItemInSelectedSlot() !== null && this.player.inventory.getItemInSelectedSlot()?.isEmpty() === false) {
                 let itemStack = this.player.inventory.getItemInSelectedSlot();
 
                 if (this.isSingleplayer()) {
-                    // Singleplayer: create entity locally. Items dropped with Q
-                    // keep the pickup delay so they aren't instantly re-picked.
                     let itemEntity = new ItemEntity(this, this.world, itemStack.typeId, this.player.x, this.player.y, this.player.z);
                     itemEntity.hasPickupDelay = true;
                     this.world.addEntity(itemEntity);
                 } else {
-                    // Multiplayer: tell server to spawn item for all players at
-                    // the player's position
                     this.playerController.getNetworkHandler().sendPacket(new ClientDropItemPacket(itemStack.typeId, this.player.x, this.player.y, this.player.z, true));
                 }
 
-                // Play drop sound
                 this.soundManager.playSound('random.pop', this.player.x, this.player.y, this.player.z, 1.0, 1.0);
 
-                // Decrease stack count by 1, or clear if only 1 item
                 if (itemStack.count > 1) {
                     itemStack.count--;
                     this.player.inventory.setItemInSelectedSlot(itemStack);
@@ -2057,13 +1785,11 @@ export default class Minecraft {
             }
         }
 
-        // Open inventory
         if (button === this.settings.keyOpenInventory) {
             if (this.player.spectator) return;
             this.displayScreen(this.player.creative ? new GuiContainerCreative(this.player) : new GuiPlayerInventory(this.player));
         }
 
-        // Voice chat push-to-talk begins on key-down (ends on key-up)
         if (button === this.settings.keyVoiceChat) {
             if (this.voiceChat) {
                 this.voiceChat.onKeyPressed();
@@ -2071,7 +1797,7 @@ export default class Minecraft {
         }
     }
 
-    /** Key released while in game (no screen open). Used e.g. by push-to-talk. */
+    
     onKeyReleased(button) {
         this.modLoader?.handleKeyReleased(button);
 
@@ -2082,12 +1808,10 @@ export default class Minecraft {
 
     onMouseClicked(button) {
         if (this.window.isLocked()) {
-            // Spectators cannot interact with the world
             if (this.player.spectator) return;
 
             let hitResult = this.player.rayTrace(5, this.timer.partialTicks);
 
-            // Attack entity
             if (button === 0) {
                 let entity = this.rayTraceEntity(5, this.timer.partialTicks);
                 if (entity && entity !== this.player && entity instanceof PlayerEntity && !entity.creative && !entity.spectator) {
@@ -2110,10 +1834,6 @@ export default class Minecraft {
 
                 if (hitResult != null) {
                     if (this.player.creative) {
-                        // A hit on the posed summoned field addresses cells in
-                        // the field's local space: destroy the cell in the field
-                        // and never touch the real world grid. The field's own
-                        // cell-sync hook tells the server about the removal.
                         let field = hitResult.fieldCell && this.world.offGridField
                             ? this.world.offGridField : null;
 
@@ -2150,12 +1870,8 @@ export default class Minecraft {
                             return;
                         }
 
-                        // Get previous block
                         let typeId = this.world.getBlockAt(hitResult.x, hitResult.y, hitResult.z);
                         let block = Block.getById(typeId);
-                        // The type can read 0 (air) with a valid hit (e.g. field
-                        // edge cases or raced chunk updates) and unregisterd ids
-                        // resolve to null - guard the interaction call.
                         if (block != null && block.onMouseButton(this.world, hitResult.x, hitResult.y, hitResult.z, button)) return;
 
                         if (typeId !== 0 && block != null) {
@@ -2167,29 +1883,24 @@ export default class Minecraft {
 
                             let soundName = block.getSound().getBreakSound();
 
-                            // Play sound
                             this.soundManager.playSoundMono(soundName, 1.0, 1.0);
 
-                            // Get block ID before destroying
                             let blockId = this.world.getBlockAt(hitResult.x, hitResult.y, hitResult.z);
                             let droppedBlock = Block.getById(blockId).getDrop(this.world, hitResult.x, hitResult.y, hitResult.z)
 
                             this.particleRenderer.spawnBlockBreakParticle(this.world, hitResult.x, hitResult.y, hitResult.z, null);
 
-                            // Destroy block
                             this.world.setBlockAt(hitResult.x, hitResult.y, hitResult.z, 0);
 
-                            // Drop items (add to player inventory)
                             if (!this.player.creative) {
                                 for (const [dropId, dropCount] of Block.normalizeDrops(droppedBlock)) {
                                     this.player.inventory.addItem(dropId, dropCount);
                                 }
                             }
 
-                            // Send block digging packet in multiplayer
                             if (!this.isSingleplayer()) {
                                 let blockPos = new BlockPosition(hitResult.x, hitResult.y, hitResult.z);
-                                let face = 0; // Default face
+                                let face = 0; 
                                 this.playerController.sendBlockDiggingPacket(2, blockPos, face);
                             }
                         }
@@ -2198,12 +1909,8 @@ export default class Minecraft {
                 this.player.swingArm();
             }
 
-            // Pick block
             if (button === 1 && this.player.creative) {
                 if (hitResult != null) {
-                    // A summoned-cell hit is reported in the field's LOCAL
-                    // coordinates, so the real world usually reads air there.
-                    // Pick the cell's block instead.
                     let field = hitResult.fieldCell && this.world.offGridField
                         ? this.world.offGridField : null;
                     let typeId = field
@@ -2214,7 +1921,6 @@ export default class Minecraft {
                         if (block === null) return;
                         let pickedItemId = block.pickedItem();
                         if (pickedItemId === null) return;
-                        // Switch to slot if item is already in hotbar
                         for (let i = 0; i < 9; i++) {
                             let itemStack = this.player.inventory.getItemInSlot(i);
                             if (!itemStack.isEmpty() && itemStack.getType() === pickedItemId) {
@@ -2226,13 +1932,11 @@ export default class Minecraft {
                             }
                         }
 
-                        // Set item in hotbar
                         this.player.inventory.setItemInSelectedSlot(typeId);
                     }
                 }
             }
 
-            // Use item / eat
             if (button === 2) {
                 let heldItem = this.player.inventory.getItemInSelectedSlot();
 
@@ -2245,15 +1949,6 @@ export default class Minecraft {
                         y = hitResult.y + hitResult.face.y;
                         z = hitResult.z + hitResult.face.z;
                     }
-                    // hitResult can be null (using an item while aiming at the
-                    // sky): x/y/z are undefined then, and so is the face -
-                    // reading hitResult.face here crashed the click handler.
-                    // A hit on the summoned field addresses cells in the
-                    // field's LOCAL space, so placer items must read and
-                    // write through the field's proxy world instead of the
-                    // real one (which would write to the world grid at the
-                    // local coordinates and packet the server about a
-                    // placement that never rendered there).
                     let itemWorld = this.world;
                     if (hitResult != null && hitResult.fieldCell && this.world.offGridField) {
                         itemWorld = this.world.offGridField.createLocalWorld();
@@ -2281,9 +1976,6 @@ export default class Minecraft {
                     let y = hitResult.y + hitResult.face.y;
                     let z = hitResult.z + hitResult.face.z;
 
-                    // A hit on the posed summoned field addresses cells in the
-                    // field's local space - edit the field directly instead of
-                    // writing the real world at those (grid) coordinates.
                     let field = hitResult.fieldCell ? this.world.offGridField : null;
                     let queryWorld = field ? field.createLocalWorld() : this.world;
 
@@ -2298,11 +1990,6 @@ export default class Minecraft {
                         if (interactAction.canceled) return;
 
                         if (blockCheck.onMouseButton(queryWorld, hitResult.x, hitResult.y, hitResult.z, button)) {
-                            // In multiplayer, tell the server so the interaction
-                            // (e.g. door toggle) is applied authoritatively and
-                            // broadcast to all players. A summoned cell's data
-                            // write is synced through OffGridClientSync instead,
-                            // so the vanilla packet must not use local coordinates.
                             if (!field && !this.isSingleplayer()) {
                                 let blockPos = new BlockPosition(hitResult.x, hitResult.y, hitResult.z);
                                 this.playerController.sendBlockPlacementPacket(blockPos, 255, { id: -1 });
@@ -2313,8 +2000,6 @@ export default class Minecraft {
 
                     let blockedByPlayer;
                     if (field) {
-                        // Test against the cell's posed world bounds - local grid
-                        // coordinates say nothing about where the block sits.
                         let cellBounds = field.cellWorldBounds(x, y, z);
                         blockedByPlayer = !!cellBounds && cellBounds.intersects(this.player.boundingBox);
                     } else {
@@ -2322,25 +2007,16 @@ export default class Minecraft {
                         blockedByPlayer = placedBoundingBox.intersects(this.player.boundingBox);
                     }
 
-                    // Don't place blocks if the player is standing there
                     if (!blockedByPlayer) {
                         let typeId = this.player.inventory.getItemInSelectedSlot();
                         typeId = typeId.getType() || 0;
 
-                        // Get previous block
                         let prevTypeId = queryWorld.getBlockAt(x, y, z);
                         let prevBlock = Block.getById(prevTypeId);
                         let isReplaceable = (prevBlock && prevBlock.isReplaceable(queryWorld, x, y, z)) || prevTypeId === 0;
 
-                        // Only real blocks can be placed. An empty hand or a
-                        // non-block item (bucket, flint, ...) has no block to put
-                        // in the world, and guessing one here would push an id the
-                        // server cannot resolve into the save file.
                         let block = Block.getById(typeId);
 
-                        // Clicking the top of an existing pavement slope adds
-                        // a layer to it instead of placing a layer one cell
-                        // above, matching snow-layer behavior.
                         if (!field && block?.isPavementSlope === true && hitResult.face.y === 1) {
                             const clickedX = hitResult.x;
                             const clickedY = hitResult.y;
@@ -2382,31 +2058,27 @@ export default class Minecraft {
                                 block.canPlaceAt(queryWorld, x, y, z, hitResult.face));
 
                         if (placeable) {
-                            // Calculate block data for rotation
                             let blockData = 0;
 
-                            // Set rotation data for logs based on placement face
                             if (block.constructor.name === 'BlockLog') {
                                 if (hitResult.face.isXAxis()) {
-                                    blockData = 1; // East-west
+                                    blockData = 1; 
                                 } else if (hitResult.face.isZAxis()) {
-                                    blockData = 2; // North-south
+                                    blockData = 2; 
                                 }
                             }
 
-                            // Slab top/bottom based on placement face
                             if (block.constructor.name === 'BlockSlab') {
                                 if (hitResult.face.y === -1) {
-                                    blockData = 1; // Top slab
+                                    blockData = 1; 
                                 }
                             }
 
-                            // Chest/furnace facing based on player yaw
                             if (block.constructor.name === 'BlockChest' || block.constructor.name === 'BlockFurnace' ||
                                 block.constructor.name === 'BlockCounterDrawer' || block.constructor.name === 'BlockCounterOven' ||
                                 block.constructor.name === 'BlockTrafficBarrier') {
                                 let dirIndex = Math.floor((this.player.rotationYaw * 4 / 360) + 0.5) & 3;
-                                blockData = [2, 5, 3, 4][dirIndex]; // 2=N, 3=S, 4=W, 5=E - front faces player
+                                blockData = [2, 5, 3, 4][dirIndex]; 
                             }
 
                             let placeAction = this.emitBlockAction('place', x, y, z, {
@@ -2418,29 +2090,20 @@ export default class Minecraft {
                             });
                             if (placeAction.canceled) return;
 
-                            // Place block into the summoned field when the hit
-                            // was on it: its cells use their own coordinate
-                            // space and sync through the field's cell hook, so
-                            // the real world grid is never written here.
                             if (field) {
                                 field.applyWrite(x, y, z, typeId, blockData);
                             } else {
                                 this.world.setBlockAt(x, y, z, typeId, blockData);
                             }
 
-                            // Remove from inventory in survival mode
                             if (!this.player.creative) {
                                 this.player.inventory.removeItem(typeId, 1, this.player.inventory.selectedSlotIndex);
                             }
 
-                            // Swing player arm
                             this.player.swingArm();
 
-                            // Handle block abilities
                             block.onBlockPlaced(queryWorld, x, y, z, hitResult.face);
 
-                            // Play sound (at the posed world position of the
-                            // target cell when editing the summoned field)
                             let sound = block.getSound();
                             let soundName = sound.getStepSound();
                             let soundPos = field
@@ -2455,10 +2118,6 @@ export default class Minecraft {
                                 sound.getPitch() * 0.8
                             );
 
-                            // Send the vanilla placement packet only for real
-                            // world blocks. Field edits already went through
-                            // applyWrite(), whose cell-sync hook sends the
-                            // local-grid edit to the server.
                             if (!field && !this.isSingleplayer()) {
                                 let blockPos = new BlockPosition(hitResult.x, hitResult.y, hitResult.z);
                                 let direction = this.getFaceValue(hitResult.face);
@@ -2470,7 +2129,6 @@ export default class Minecraft {
                 }
             }
 
-            // Rebuild multiple chunk sections
             this.worldRenderer.flushRebuild = true;
         }
     }
@@ -2483,7 +2141,6 @@ export default class Minecraft {
 
     isPaused() {
         if (this.currentScreen) {
-            // In multiplayer, menus never pause the game
             if (!this.isSingleplayer()) {
                 return false;
             }
@@ -2507,7 +2164,6 @@ export default class Minecraft {
             this.settings.username = "";
         }
 
-        // Save session
         if (save) {
             this.settings.session = session ? session.toJson() : null;
             this.settings.save();
@@ -2527,20 +2183,12 @@ export default class Minecraft {
         return this.isInGame() && !(this.playerController instanceof PlayerControllerMultiplayer);
     }
 
-    /**
-     * True for a local (singleplayer) session. Singleplayer is served by the
-     * in-page integrated server over the loopback transport, so the client uses
-     * a PlayerControllerMultiplayer there too and isSingleplayer() is false.
-     */
+    
     isLocalSession() {
         return this.isInGame() && (this.isSingleplayer() || this.isConnectedToIntegratedServer);
     }
 
-    /**
-     * Seed of the local world, or null when unknown (e.g. a remote multiplayer
-     * server never discloses its seed). The value comes from the seed handed to
-     * the integrated server, since the client-side WorldClient has no generator.
-     */
+    
     getLocalSeed() {
         if (!this.isLocalSession()) return null;
         const seed = this.currentWorldSeed;
@@ -2654,15 +2302,13 @@ export default class Minecraft {
     }
 
     getFaceValue(face) {
-        // Minecraft protocol face values (version 47)
-        // 0: Bottom (Y-), 1: Top (Y+), 2: North (Z-), 3: South (Z+), 4: West (X-), 5: East (X+)
-        if (face.y === -1) return 0; // Bottom
-        if (face.y === 1) return 1;  // Top
-        if (face.z === -1) return 2; // North
-        if (face.z === 1) return 3;  // South
-        if (face.x === -1) return 4; // West
-        if (face.x === 1) return 5;  // East
-        return 0; // Default
+        if (face.y === -1) return 0; 
+        if (face.y === 1) return 1;  
+        if (face.z === -1) return 2; 
+        if (face.z === 1) return 3;  
+        if (face.x === -1) return 4; 
+        if (face.x === 1) return 5;  
+        return 0; 
     }
 
     getAttackDamage() {

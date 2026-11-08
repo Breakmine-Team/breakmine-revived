@@ -7,7 +7,6 @@ export default class BlockBeans extends Block {
         this.description = "Beans";
         this.hardness = 0.5;
 
-        // Sound
         this.sound = Block.sounds.gravel;
     }
 

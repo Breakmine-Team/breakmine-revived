@@ -1,7 +1,4 @@
-/**
- * Validate a mod data key. Keys are flat names, not paths, so a mod can never
- * escape its own data directory.
- */
+
 export function normalizeModDataKey(key) {
     if (typeof key !== 'string') {
         throw new Error('Mod data key must be a string.');

@@ -1,12 +1,12 @@
 export default class MixinEngine {
     constructor() {
         this.registry = new Map();
-        this.functions = new Map();            // Stores standalone global functions
+        this.functions = new Map();            
         this.listeners = new Map();
         this.guaranteedListeners = new Map();
         this.observers = new Map();
         this.lockedFunctions = new WeakMap();
-        this.lockedGlobalFunctions = new Set(); // Track locked global functions
+        this.lockedGlobalFunctions = new Set(); 
     }
 
     register(key, target) {
@@ -21,10 +21,7 @@ export default class MixinEngine {
         return this.registry.get(key);
     }
 
-    /**
-     * Registers a standalone global function under a namespaced key.
-     * Example: Mixin.registerFunction('game:getSpawnPoint', (biome) => ({ x: 0, y: 64, z: 0 }));
-     */
+    
     registerFunction(key, fn) {
         if (!key.includes(':')) {
             console.warn(`Function key '${key}' should follow 'namespace:name' format.`);
@@ -38,10 +35,7 @@ export default class MixinEngine {
         return (...args) => this.callFunction(key, ...args);
     }
 
-    /**
-     * Invokes a registered standalone global function (executing all applied mixin hooks).
-     * Example: Mixin.callFunction('game:getSpawnPoint', 'desert');
-     */
+    
     callFunction(key, ...args) {
         const fn = this.functions.get(key);
         if (!fn) {
@@ -52,13 +46,11 @@ export default class MixinEngine {
     }
 
     lockFunction(target, methodName) {
-        // If target is a string matching a registered global function
         if (typeof target === 'string' && this.functions.has(target)) {
             this.lockedGlobalFunctions.add(target);
             return;
         }
 
-        // Object instance method locking
         if (!target || typeof target[methodName] !== 'function') return;
         if (!this.lockedFunctions.has(target)) {
             this.lockedFunctions.set(target, new Set());
@@ -66,12 +58,8 @@ export default class MixinEngine {
         this.lockedFunctions.get(target).add(methodName);
     }
 
-    /**
-     * Applies hooks to either a target dictionary or a registered global function.
-     * Works with: Mixin.apply('game:getSpawnPoint', { around(...) { ... } });
-     */
+    
     apply(targetKey, mixinDef) {
-        // Case A: Patching a standalone global function registered via registerFunction
         if (typeof targetKey === 'string' && this.functions.has(targetKey)) {
             if (this.lockedGlobalFunctions.has(targetKey)) {
                 console.warn(`Cannot apply mixin to locked global function '${targetKey}'.`);
@@ -100,7 +88,6 @@ export default class MixinEngine {
             return wrappedFn;
         }
 
-        // Case B: Patching a target object or dictionary
         const target = typeof targetKey === 'string' ? this.registry.get(targetKey) : targetKey;
 
         if (!target || typeof target !== 'object') {
@@ -235,5 +222,5 @@ export default class MixinEngine {
     }
 }
 
-// Global instance
+
 globalThis.Mixin = new MixinEngine();

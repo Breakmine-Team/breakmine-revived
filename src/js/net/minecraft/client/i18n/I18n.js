@@ -5,14 +5,6 @@ import es from "./locales/es.js";
 const LOCALES = { en, hu, es };
 const FALLBACK_LANGUAGE = "en";
 
-/**
- * Small runtime translation layer.
- *
- * The game was written with English strings directly in the UI code. Instead of
- * rewriting every screen with translation keys, the renderer asks this service
- * to translate the finished string. Unknown strings simply fall back to the
- * original English text, which keeps mods and server-provided text readable.
- */
 class I18n {
 
     constructor() {
@@ -29,7 +21,7 @@ class I18n {
         }));
     }
 
-    /** Options for the language list button in the Options screen. */
+    
     getLanguageOptions() {
         return this.getLanguages().map(language => ({
             key: language.code,
@@ -66,10 +58,7 @@ class I18n {
         return () => this.listeners.delete(listener);
     }
 
-    /**
-     * Translate a finished display string. Formatting codes (§a, §7, ...) are
-     * preserved, as are leading/trailing whitespace and newlines.
-     */
+    
     t(text) {
         if (typeof text !== "string" || text.length === 0) return text;
         if (this.language === FALLBACK_LANGUAGE) return text;
@@ -88,8 +77,6 @@ class I18n {
 
         if (text.indexOf("\u00a7") !== -1) {
             const parts = text.split(/(\u00a7.)/);
-            // A lone section sign at the end of the string is not a formatting
-            // code; leave the whole string alone rather than recursing forever.
             if (parts.length > 1) {
                 return parts.map(part => {
                     if (part.length === 2 && part.charAt(0) === "\u00a7") return part;
@@ -118,7 +105,6 @@ class I18n {
             }
         }
 
-        // "Language: English" and every other "label: value" button.
         const separator = core.indexOf(": ");
         if (separator > 0) {
             const label = core.slice(0, separator);

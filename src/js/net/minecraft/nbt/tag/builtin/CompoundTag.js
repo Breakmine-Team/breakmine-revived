@@ -38,32 +38,22 @@ export default class CompoundTag extends Tag {
         }
     }
 
-    /**
-     * Whether a child tag with the given name exists.
-     */
+    
     has(name) {
         return this.value.has(name);
     }
 
-    /**
-     * Returns the child tag with the given name, or null when missing.
-     */
+    
     get(name) {
         return this.value.get(name) || null;
     }
 
-    /**
-     * Alias of get().
-     */
+    
     getTag(name) {
         return this.get(name);
     }
 
-    /**
-     * Returns the value of the named child tag, or `defaultValue` when the
-     * tag is absent. Calling without arguments returns the whole Map (legacy
-     * behavior).
-     */
+    
     getValue(name, defaultValue = null) {
         if (name === undefined) {
             return this.value;
@@ -79,10 +69,7 @@ export default class CompoundTag extends Tag {
         this.value = value;
     }
 
-    /**
-     * Convert this compound to a plain-JS object so it survives JSON /
-     * structured-clone serialization (e.g. IndexedDB world saves).
-     */
+    
     toObject() {
         let out = {};
         for (let [name, tag] of this.value) {
@@ -91,11 +78,7 @@ export default class CompoundTag extends Tag {
         return out;
     }
 
-    /**
-     * Rebuild a CompoundTag from a plain-JS object produced by toObject().
-     * Types are inferred from the JS values (string -> StringTag, number ->
-     * IntTag, boolean -> ByteTag, object -> CompoundTag, array -> ListTag).
-     */
+    
     static fromObject(obj) {
         let tag = new CompoundTag("");
         if (!obj || typeof obj !== "object") {
@@ -135,7 +118,7 @@ export default class CompoundTag extends Tag {
     }
 }
 
-// Self-register with the tag-id registry. Done here (after the class is
-// fully defined) instead of in TagRegistry's static block to break the
-// CompoundTag -> NBTIO -> TagRegistry -> CompoundTag import cycle.
+
+
+
 TagRegistry.register(10, CompoundTag);

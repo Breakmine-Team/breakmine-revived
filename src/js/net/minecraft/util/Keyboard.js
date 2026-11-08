@@ -3,19 +3,18 @@ export default class Keyboard {
     static state = {};
     static enabled = false;
 
-    // TV remote keycode -> standard event.code mapping
     static TV_KEY_MAP = {
-        4: 'Escape',        // Android TV / Fire TV Back
-        461: 'Escape',      // LG webOS Back
-        10009: 'Escape',    // Samsung Tizen Back
-        403: 'ColorRed',    // Red (HbbTV standard)
-        108: 'ColorRed',    // Red (legacy)
-        404: 'ColorGreen',  // Green (HbbTV standard)
-        20: 'ColorGreen',   // Green (legacy)
-        405: 'ColorYellow', // Yellow (HbbTV standard)
-        21: 'ColorYellow',  // Yellow (legacy)
-        406: 'ColorBlue',   // Blue (HbbTV standard)
-        22: 'ColorBlue',    // Blue (legacy)
+        4: 'Escape',        
+        461: 'Escape',      
+        10009: 'Escape',    
+        403: 'ColorRed',    
+        108: 'ColorRed',    
+        404: 'ColorGreen',  
+        20: 'ColorGreen',   
+        405: 'ColorYellow', 
+        21: 'ColorYellow',  
+        406: 'ColorBlue',   
+        22: 'ColorBlue',    
     };
 
     static TV_KEY_NAME_MAP = {
@@ -67,10 +66,7 @@ export default class Keyboard {
         return Keyboard.state[key] && Keyboard.enabled;
     }
 
-    /**
-     * True while either shift key is held, even when keyboard input is
-     * disabled for the game (menus still use it, e.g. for tooltip hints).
-     */
+    
     static isShiftDown() {
         return !!(Keyboard.state["ShiftLeft"] || Keyboard.state["ShiftRight"]);
     }

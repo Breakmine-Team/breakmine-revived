@@ -8,37 +8,6 @@ import Block from "../../world/block/Block.js";
 import World from "../../world/World.js";
 import { BlockRegistry } from "../../world/block/BlockRegistry.js";
 
-/**
- * Debug command for the off-grid block system.
- *
- *   /offgridrenderer <x> <y> <z> <rx> <ry> <rz> [block]
- *       Render the block stored at (x,y,z) floating at (rx,ry,rz) - works
- *       with an unloaded source when an explicit block is given.
- *
- *   /offgridrenderer fill <x> <y> <z> <w> <h> <d> <block> [data]
- *       Summon a whole range of blocks at the corner (x,y,z). Summoned
- *       blocks behave like real ones - collision, breaking, placement
- *       preview, AO - and can be edited in place. In a running game the
- *       server validates and owns the shared cells and pose.
- *
- *   /offgridrenderer move <dx> <dy> <dz>
- *       Move the whole summoned group. Decimals are allowed: whole blocks
- *       re-anchor onto the grid (collision/editing follow), the fractional
- *       remainder stays a visual offset.
- *
- *   /offgridrenderer rotate <degrees> [x|y|z]
- *       Rotate the summoned group around its own centre (default y).
- *       Collision, breaking and the placement ghost follow the pose.
- *
- *   /offgridrenderer clear
- *       Remove every summoned block and off-grid rendering.
- *
- * In a running game the server owns the shared off-grid state and runs the
- * authoritative version of this command (see server/offgridCommands.js), then
- * broadcasts the resulting state to every client through the off-grid
- * packets. This class remains the local path for a client with no server (and
- * the storage/interaction helpers used by the /ofr shortcuts).
- */
 export default class OffGridBlockRendererCommand extends Command {
 
     constructor() {
@@ -47,8 +16,6 @@ export default class OffGridBlockRendererCommand extends Command {
     }
 
     execute(minecraft, args) {
-        // Server contexts (integrated/standalone server adapters) share the
-        // CommandHandler but have no renderer - say so instead of pretending.
         if (!minecraft.worldRenderer) {
             minecraft.addMessageToChat("§c/offgridrenderer is a client-side rendering command.");
             return true;
@@ -76,7 +43,7 @@ export default class OffGridBlockRendererCommand extends Command {
         return this.executeSingle(minecraft, args);
     }
 
-    /** Render one block from a source position to a render position. */
+    
     executeSingle(minecraft, args) {
         if (args.length < 6) {
             return false;
@@ -101,8 +68,6 @@ export default class OffGridBlockRendererCommand extends Command {
 
         const renderer = this.getOrBindRenderer(minecraft);
 
-        // Optional 7th+ argument: explicit block (id or registry name). Lets
-        // you render a block whose source chunk is unloaded/unknown.
         let block = null;
         if (args.length >= 7) {
             block = this.resolveBlock(args.slice(6).join(" ").trim());
@@ -133,7 +98,7 @@ export default class OffGridBlockRendererCommand extends Command {
         return true;
     }
 
-    /** Summon a volume of one block type at (x,y,z). */
+    
     executeFill(minecraft, args) {
         if (args.length < 7) {
             return false;
@@ -181,10 +146,6 @@ export default class OffGridBlockRendererCommand extends Command {
             }
         }
 
-        // The field renders through the real renderer, which samples blocks
-        // one past the volume borders; a missing chunk there would make the
-        // singleplayer provider generate an entire chunk mid-mesh. Require
-        // the volume (plus a 1-block margin) to be inside loaded chunks.
         const world = minecraft.world;
         if (typeof world.chunkExists === "function") {
             for (let cx = (x - 1) >> 4; cx <= (x + w) >> 4; cx++) {
@@ -211,7 +172,7 @@ export default class OffGridBlockRendererCommand extends Command {
         return true;
     }
 
-    /** Move the summoned group by a (possibly fractional) world delta. */
+    
     executeMove(minecraft, args) {
         if (args.length < 3) {
             return false;
@@ -244,7 +205,7 @@ export default class OffGridBlockRendererCommand extends Command {
         return true;
     }
 
-    /** Rotate the summoned group around its own centre. */
+    
     executeRotate(minecraft, args) {
         if (args.length < 1) {
             return false;
@@ -275,7 +236,7 @@ export default class OffGridBlockRendererCommand extends Command {
         return true;
     }
 
-    /** Shared guard for move/rotate: the field with something in it. */
+    
     requireField(minecraft) {
         const field = minecraft.offGridBlockField;
         if (!field || field.cells.size === 0) {
@@ -289,7 +250,7 @@ export default class OffGridBlockRendererCommand extends Command {
         return field;
     }
 
-    /** Remove summoned blocks and every off-grid rendering. */
+    
     executeClear(minecraft) {
         let removed = 0;
 
@@ -308,7 +269,7 @@ export default class OffGridBlockRendererCommand extends Command {
         return true;
     }
 
-    /** Resolve a numeric id or registry name to a Block. */
+    
     resolveBlock(blockArg) {
         const blockIdNum = parseInt(blockArg);
         if (!isNaN(blockIdNum)) {
@@ -322,11 +283,7 @@ export default class OffGridBlockRendererCommand extends Command {
         return bindOffGridRenderer(minecraft);
     }
 
-    /**
-     * Fetch the field bound to the current world, creating or rebinding it
-     * as needed: worlds are recreated per load, so a stale field must be
-     * dropped together with its meshes instead of resurrected.
-     */
+    
     getOrBindField(minecraft) {
         return bindOffGridField(minecraft);
     }

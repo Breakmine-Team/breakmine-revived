@@ -4,11 +4,6 @@ import EnumBlockFace from "../../../../util/EnumBlockFace.js";
 import BlockPosition from "../../../../util/BlockPosition.js";
 import { BlockRegistry } from "../BlockRegistry.js";
 
-/**
- * Plantable item. Most crops plant a seed (healAmount 0), while carrots,
- * potatoes, beetroots, cabbages and tomatoes are planted with the vegetable
- * itself and remain edible when not used on farmland (healAmount > 0).
- */
 export default class ItemSeeds extends ItemEdible {
 
     constructor(id, textureName, description, cropKey = "WHEAT_CROP", healAmount = 0) {
@@ -46,7 +41,6 @@ export default class ItemSeeds extends ItemEdible {
             return false;
         }
 
-        // Seeds only go on top of farmland.
         if (hitFace !== EnumBlockFace.TOP || y < 1) {
             return false;
         }
@@ -82,8 +76,6 @@ export default class ItemSeeds extends ItemEdible {
             return;
         }
 
-        // Direction 255 tells the server this is an item interaction on the
-        // clicked block, so it runs the seed's authoritative planting hook.
         minecraft.playerController.sendBlockPlacementPacket(
             new BlockPosition(x, y, z),
             255,

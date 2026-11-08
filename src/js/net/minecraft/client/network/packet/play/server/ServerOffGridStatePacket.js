@@ -5,11 +5,6 @@ import {
     OFF_GRID_PROTOCOL_VERSION
 } from "../../../../../util/OffGridConstants.js";
 
-/**
- * Full server-authoritative off-grid state: summoned cells, the group pose
- * (rotation + fractional offset + pivot) and the ghost-block renders. Sent on
- * request (join / world switch) and after structural commands.
- */
 export default class ServerOffGridStatePacket extends Packet {
 
     constructor() {
@@ -34,13 +29,9 @@ export default class ServerOffGridStatePacket extends Packet {
             const x = buffer.readInt();
             const y = buffer.readVarInt();
             const z = buffer.readInt();
-            // readVarInt returns a signed 32-bit value; registry-hash block
-            // ids above 2^31 must be normalised back to unsigned.
             const typeId = buffer.readVarInt() >>> 0;
             const data = buffer.readUnsignedByte() & 0xF;
 
-            // Keep malformed entries out of the renderer instead of letting
-            // one bad cell abort the whole authoritative state.
             if (!Number.isInteger(x) || !Number.isInteger(y) || !Number.isInteger(z)) continue;
             if (y < 0 || y > 255 || typeId <= 0) continue;
             cells.push({ x, y, z, typeId, data });

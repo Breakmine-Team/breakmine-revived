@@ -16,7 +16,6 @@ export default class GuiWorldPresetSlotContainer extends GuiButton {
 
         this.drawButton = () => {}; 
         
-        // Ensure renderE is set to true
         this.renderE = true;
     }
 

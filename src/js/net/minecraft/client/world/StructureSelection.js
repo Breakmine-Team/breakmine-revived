@@ -1,10 +1,4 @@
-/**
- * The two corners of a structure selection made with /st p1 and /st p2.
- *
- * Lives on the Minecraft instance and is read by the world renderer, which
- * draws a box around whatever is selected. Corners are block positions; the
- * box max side is exclusive, so a 2x1x1 selection spans x..x+2.
- */
+
 export default class StructureSelection {
 
     constructor() {
@@ -12,7 +6,7 @@ export default class StructureSelection {
         this.p2 = null;
     }
 
-    /** Store corner 1 or 2 at a block position. */
+    
     setPoint(index, x, y, z) {
         const point = {x: Math.trunc(x), y: Math.trunc(y), z: Math.trunc(z)};
         if (index === 1) {
@@ -23,7 +17,7 @@ export default class StructureSelection {
         return point;
     }
 
-    /** The selected block box, or null until both corners exist. */
+    
     getBounds() {
         if (this.p1 === null || this.p2 === null) {
             return null;
@@ -39,7 +33,7 @@ export default class StructureSelection {
         };
     }
 
-    /** Width, height and depth in blocks, or null while a corner is missing. */
+    
     getSize() {
         const bounds = this.getBounds();
         if (bounds === null) {

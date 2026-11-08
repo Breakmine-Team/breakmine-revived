@@ -2,11 +2,6 @@ import Command from "../Command.js";
 import OffGridBlockRendererCommand from "./OffGridBlockRendererCommand.js";
 import { BlockRegistry } from "../../world/block/BlockRegistry.js";
 
-/**
- * Shortcut helpers for the off-grid block field. In a running game the server
- * handles /ofr and /ofrclear authoritatively (see server/offgridCommands.js);
- * this class keeps the direct local path and the shared field binding helpers.
- */
 class OffGridShortcutCommand extends Command {
 
     constructor() {
@@ -30,18 +25,11 @@ class OffGridShortcutCommand extends Command {
             return true;
         }
 
-        // Floor the player position: getBlockPosX()/Y()/Z() only truncate
-        // negative coordinates, so at a positive position they hand back the
-        // FRACTIONAL player position. fill() would then key its cells on
-        // non-integers, which renders fine but is invisible to every
-        // integer-keyed interaction seam (covers/raytrace/collision boxes).
         const x = Math.floor(minecraft.player.x);
         const y = Math.floor(minecraft.player.y);
         const z = Math.floor(minecraft.player.z);
         const block = BlockRegistry.STONE;
 
-        // Same loaded-chunk guard the /offgridrenderer fill path runs: the
-        // tessellator samples neighbours one block past the volume.
         const world = minecraft.world;
         if (typeof world.chunkExists === "function") {
             for (let cx = (x - 1) >> 4; cx <= (x + 8) >> 4; cx++) {

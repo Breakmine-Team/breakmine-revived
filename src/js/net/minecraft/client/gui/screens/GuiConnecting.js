@@ -16,7 +16,6 @@ export default class GuiConnecting extends GuiScreen {
         this.connecting = false;
         this.networkManager = null;
 
-        // Tunnel connections use a tunnel://<code> address and bypass proxies/ports
         if (typeof address === 'string' && address.startsWith('tunnel://')) {
             this.address = address;
             this.port = 0;
@@ -25,12 +24,10 @@ export default class GuiConnecting extends GuiScreen {
             this.proxy = proxy || Minecraft.PROXY;
             if (this.proxy != proxy) console.log("Using proxy: " + this.proxy.url + " instead of " + proxy.url);
 
-            // Use provided port or parse from address
             if (port !== undefined) {
                 this.address = address;
                 this.port = port;
             } else {
-                // Split up address into host and port
                 if (address.includes(":")) {
                     let parts = address.split(":");
                     this.address = parts[0];
@@ -46,8 +43,6 @@ export default class GuiConnecting extends GuiScreen {
     connect(address, port) {
         this.networkManager = new NetworkManager(this.minecraft);
         this.networkManager.setNetworkHandler(new NetworkLoginHandler(this.networkManager));
-        // A server may refuse the login because of mods. The disconnect handler
-        // uses this to offer a retry after switching mods off for the session.
         this.networkManager.reconnect = () => {
             this.minecraft.displayScreen(new GuiConnecting(this.previousScreen, this.address, this.port, this.proxy));
         };
@@ -66,7 +61,6 @@ export default class GuiConnecting extends GuiScreen {
             this.minecraft.displayScreen(this.previousScreen);
         }));
 
-        // Connect on first initialization
         if (!this.connecting) {
             this.connecting = true;
             this.connect(this.address, this.port);
@@ -74,10 +68,8 @@ export default class GuiConnecting extends GuiScreen {
     }
 
     drawScreen(stack, mouseX, mouseY, partialTicks) {
-        // Render dirt background
         this.drawBackground(stack, this.textureBackground, this.width, this.height);
 
-        // Render title
         this.drawCenteredString(stack, "Connecting to server...", this.width / 2, this.height / 2 - 20);
 
         super.drawScreen(stack, mouseX, mouseY, partialTicks);

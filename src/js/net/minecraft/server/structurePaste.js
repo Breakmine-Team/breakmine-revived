@@ -1,19 +1,19 @@
-// Server side of /st load.
-//
-// The structure tool is a client command: /st p1 needs the camera to find the
-// block in view, /st save writes a browser download, and the selection box is
-// rendered by the client. The one part the client cannot do is change the
-// world - a client-side write would only alter the local chunk mirror, and the
-// next chunk update would remove it (singleplayer has the same problem, since
-// it runs on the integrated server). So the client sends the structure here
-// and the server places the blocks, exactly like /setblock does.
+
+
+
+
+
+
+
+
+
 import Block from "../client/world/block/Block.js";
 import { addWorldChange } from "./world.js";
 import { getPlayers, isOp } from "./players.js";
 import { sendBlockChange } from "./packets.js";
 import { sendChatMessageToPlayer } from "./CommandContext.js";
 
-// Same limits the client tool enforces; a payload from a client is untrusted.
+
 const MAX_VOLUME = 262144;
 const MAX_SIDE = 128;
 const WORLD_HEIGHT = 256;
@@ -32,14 +32,6 @@ function isValidSize(size) {
     return size.x * size.y * size.z <= MAX_VOLUME;
 }
 
-/**
- * Place one client-supplied structure at an absolute origin.
- *
- * Every field is validated before it reaches the world store: positions must
- * lie inside the declared size, ids must resolve to real blocks (or air) and
- * data must fit a nibble. Anything else is skipped per entry, so one bad block
- * cannot reject an otherwise valid structure.
- */
 function handleStructurePaste(player, payload) {
     if (!player || !player.ws) {
         return;
@@ -107,8 +99,6 @@ function handleStructurePaste(player, payload) {
 
         addWorldChange(blockX, blockY, blockZ, id, metadata);
 
-        // Same state encoding the chunk packets use: id in the high bits,
-        // metadata in the low nibble.
         const blockState = (id << 4) | (metadata & 15);
         for (const other of players) {
             if (other.ws && other.ws.readyState === 1) {

@@ -7,35 +7,22 @@ import NoiseGeneratorPerlin from "./noise/NoiseGeneratorPerlin.js";
 const BEDROCK_Y = 0;
 const AIR_ID = 0;
 
-// Density field resolution. One noise sample every GRID_STEP blocks, then
-// trilinearly interpolated to every block, exactly like the overworld
-// generator's coarse noise grid.
-const GRID_STEP = 4;
-const GRID_X = 5;   // 0..16
-const GRID_Z = 5;   // 0..16
-const GRID_Y = 29;  // 0..112
 
-/**
- * Hellish world: a Nether-like dimension built from a 3D perlin density field.
- *
- * There is no heightmap: whether a block is hellstone or air comes from
- * interpolated 3D noise, so the world is made of overhangs, caverns and
- * floating chunks rather than a surface with things on top. The bottom of the
- * world is a large lava sea (y 1..32) with hellstone pillars poking out of it,
- * and a bedrock ceiling closes the dimension at y 112..127.
- */
+
+
+const GRID_STEP = 4;
+const GRID_X = 5;   
+const GRID_Z = 5;   
+const GRID_Y = 29;  
+
 export default class HellWorldGenerator extends Generator {
 
     static LAVA_LEVEL = 32;
 
-    // Bedrock ceiling: jagged underside between ROOF_MIN and ROOF_MAX, solid up
-    // to ROOF_TOP, and open air above it.
     static ROOF_TOP = 127;
     static ROOF_MIN = 112;
     static ROOF_MAX = 120;
 
-    // The server's spawn search scans down from here so it lands on the
-    // walkable terrain body, not on a floating chunk or a stalactite.
     static SPAWN_SCAN_TOP = 72;
 
     static PILLAR_THRESHOLD = 0.22;
@@ -54,12 +41,8 @@ export default class HellWorldGenerator extends Generator {
         this.lavaLevel = HellWorldGenerator.LAVA_LEVEL;
         this.shoreTop = this.lavaLevel + 8;
 
-        // A couple of blocks above the lava sea, so ChunkProviderGenerate's
-        // findSpawn() never mistakes the lava surface for solid ground.
         this.seaLevel = this.lavaLevel + 2;
 
-        // The density field: one perlin stream is the base shape, a second one
-        // bends it so the caverns are not aligned in obvious sheets.
         this.densityGenerator = new NoiseGeneratorPerlin(this.random);
         this.warpGenerator = new NoiseGeneratorPerlin(this.random);
         this.roofGenerator = new NoiseGeneratorOctaves(this.random, 3);
@@ -84,18 +67,14 @@ export default class HellWorldGenerator extends Generator {
         this.naturalize(chunkX, chunkZ, primer);
     }
 
-    /** Horizontal warp for a world column. Sampled once per column, not per block. */
+    
     getWarpAt(worldX, worldZ, warpOut) {
         warpOut.x = this.warpGenerator.perlinXYZ(worldX * 0.011, 0, worldZ * 0.011) * 6;
         warpOut.z = this.warpGenerator.perlinXYZ(worldX * 0.011 + 31.7, 0, worldZ * 0.011 + 17.3) * 6;
         return warpOut;
     }
 
-    /**
-     * 3D perlin fBm, roughly in [-1, 1]. Sampled on the coarse grid and
-     * interpolated by generateTerrain(), so this is only called a few hundred
-     * times per chunk rather than once per block.
-     */
+    
     sampleDensity(worldX, y, worldZ, warpX, warpZ) {
         if (warpX === undefined) {
             const warp = this.getWarpAt(worldX, worldZ, { x: 0, z: 0 });
@@ -121,30 +100,24 @@ export default class HellWorldGenerator extends Generator {
         return total / norm;
     }
 
-    /** Density threshold that turns the field into hellstone at a given height. */
+    
     isSolidAt(y, density) {
         if (y <= BEDROCK_Y) return true;
 
-        // Inside the lava sea only sparse pillars and islands survive; a
-        // higher threshold here keeps the lakes large and open.
         if (y <= this.lavaLevel) {
             return density > HellWorldGenerator.PILLAR_THRESHOLD;
         }
 
-        // Just above the lava sea: a thin broken crust, so the lakes stay
-        // visible instead of being sealed under rock.
         if (y <= this.shoreTop) {
             return density > HellWorldGenerator.SHORE_THRESHOLD;
         }
 
-        // Solid mass in the lower middle, thinning out into floating chunks
-        // toward the roof.
         const bias = HellWorldGenerator.TERRAIN_BIAS
             - (y - 50) * HellWorldGenerator.TERRAIN_FALLOFF;
         return density + bias > 0;
     }
 
-    /** Lowest bedrock block of the roof over a world column. */
+    
     getRoofBottomAt(worldX, worldZ) {
         const noise = this.roofGenerator.perlin(worldX * 0.05, worldZ * 0.05);
         const norm = Math.max(0, Math.min(1, noise * 0.5 + 0.5));
@@ -153,11 +126,7 @@ export default class HellWorldGenerator extends Generator {
         return HellWorldGenerator.ROOF_MIN + Math.min(span, Math.floor(norm * (span + 1)));
     }
 
-    /**
-     * Top of the solid column at a world position, or 1 when the column is all
-     * lava/air. Used by world features (entity placement); terrain generation
-     * itself never calls it.
-     */
+    
     getHeightAt(worldX, worldZ) {
         const warp = this.getWarpAt(worldX, worldZ, { x: 0, z: 0 });
 
@@ -181,9 +150,6 @@ export default class HellWorldGenerator extends Generator {
 
         const warp = { x: 0, z: 0 };
 
-        // Coarse 3D density grid for this chunk and one block of its neighbour
-        // border: the last sample of a chunk is the first sample of the next
-        // one, so terrain lines up across chunk borders.
         const grid = new Float64Array(GRID_X * GRID_Z * GRID_Y);
         let index = 0;
 
@@ -201,9 +167,6 @@ export default class HellWorldGenerator extends Generator {
             }
         }
 
-        // Roof height for this chunk plus a one-block border. A column's
-        // bedrock is exposed sideways wherever a neighbour's roof starts
-        // higher, so the plating pass needs to see across the chunk edge.
         const ROOF_STRIDE = 18;
         const roofBottoms = new Int32Array(ROOF_STRIDE * ROOF_STRIDE);
         for (let gx = 0; gx < ROOF_STRIDE; gx++) {
@@ -217,8 +180,6 @@ export default class HellWorldGenerator extends Generator {
             const gridX = x >> 2;
             const fracX = (x & 3) / GRID_STEP;
 
-            // Base offsets of this column's grid corners, computed once per
-            // column instead of eight times per block.
             const baseX0 = gridX * GRID_Z * GRID_Y;
             const baseX1 = (gridX + 1) * GRID_Z * GRID_Y;
 
@@ -232,8 +193,6 @@ export default class HellWorldGenerator extends Generator {
                 const roofIndex = (z + 1) * ROOF_STRIDE + (x + 1);
                 const roofBottom = roofBottoms[roofIndex];
 
-                // Plate down to the lowest neighbouring roof height, so the
-                // vertical faces of roof steps are covered as well.
                 let highestNeighbour = roofBottoms[roofIndex - 1];
                 if (roofBottoms[roofIndex + 1] > highestNeighbour) highestNeighbour = roofBottoms[roofIndex + 1];
                 if (roofBottoms[roofIndex - ROOF_STRIDE] > highestNeighbour) highestNeighbour = roofBottoms[roofIndex - ROOF_STRIDE];
@@ -252,7 +211,6 @@ export default class HellWorldGenerator extends Generator {
                     const gridY = Math.min(y >> 2, GRID_Y - 2);
                     const fracY = (y & 3) / GRID_STEP;
 
-                    // Trilinear interpolation of the eight surrounding samples.
                     const i000 = corner00 + gridY;
                     const i100 = corner10 + gridY;
                     const i010 = corner01 + gridY;
@@ -272,8 +230,6 @@ export default class HellWorldGenerator extends Generator {
 
                     const density = d0 + (d1 - d0) * fracY;
 
-                    // Same thresholds as isSolidAt(), inlined because this loop
-                    // runs once per block.
                     let solid;
                     if (y <= lavaLevel) {
                         solid = density > pillarThreshold;
@@ -286,17 +242,10 @@ export default class HellWorldGenerator extends Generator {
                     if (solid) {
                         primer.set(x, y, z, this.HELLSTONE_ID);
                     } else if (y <= lavaLevel) {
-                        // The bottom of the dimension is one large lava sea;
-                        // the 3D field only leaves pillars and islands in it.
                         primer.set(x, y, z, this.LAVA_ID);
                     }
-                    // Air above the lava is left untouched: generated chunks
-                    // start empty, so writing 0 here is wasted work.
                 }
 
-                // Hellstone-plated underside: looking up from inside the
-                // dimension shows netherrack instead of the bare bedrock roof,
-                // including the exposed sides of the jagged roof steps.
                 for (let y = roofBottom; y <= plateTop; y++) {
                     primer.set(x, y, z, this.HELLSTONE_ID);
                 }
@@ -307,17 +256,14 @@ export default class HellWorldGenerator extends Generator {
         }
     }
 
-    /**
-     * Decoration pass. Runs after generateTerrain() from the chunk seed alone,
-     * so the server's probe pass (terrain + naturalize) matches full chunks.
-     */
+    
     naturalize(chunkX, chunkZ, primer) {
         this.generateStalactites(chunkX, chunkZ, primer);
         this.generateCeilingGlowstone(chunkX, chunkZ, primer);
         this.generateGroundGlowstone(chunkX, chunkZ, primer);
     }
 
-    /** Hellstone spikes hanging from the roof, some tipped with glowstone. */
+    
     generateStalactites(chunkX, chunkZ, primer) {
         const stalactites = 1 + this.random.nextInt(3);
 
@@ -355,7 +301,7 @@ export default class HellWorldGenerator extends Generator {
         }
     }
 
-    /** Glowstone clusters growing out of the underside of the roof. */
+    
     generateCeilingGlowstone(chunkX, chunkZ, primer) {
         const clusters = 2 + this.random.nextInt(2);
 
@@ -378,9 +324,6 @@ export default class HellWorldGenerator extends Generator {
                         if (dx * dx + dy * dy + dz * dz > radius * radius + 0.5) continue;
 
                         const current = primer.get(blockX, y, blockZ);
-                        // Only the roof itself (bedrock or its hellstone
-                        // plating) and the open air under it, so a cluster
-                        // never eats into a stalactite or the terrain.
                         if (current !== this.BEDROCK_ID && current !== this.HELLSTONE_ID && current !== AIR_ID) continue;
                         primer.set(blockX, y, blockZ, this.GLOWSTONE_ID);
                     }
@@ -389,7 +332,7 @@ export default class HellWorldGenerator extends Generator {
         }
     }
 
-    /** Glowstone embedded in the hellstone, mostly on cave and chunk surfaces. */
+    
     generateGroundGlowstone(chunkX, chunkZ, primer) {
         const clusters = 2 + this.random.nextInt(2);
 
@@ -397,7 +340,6 @@ export default class HellWorldGenerator extends Generator {
             const x = this.random.nextInt(16);
             const z = this.random.nextInt(16);
 
-            // Find the top of this column's solid mass.
             let surface = -1;
             for (let y = HellWorldGenerator.SPAWN_SCAN_TOP + 30; y > this.lavaLevel; y--) {
                 if (primer.get(x, y, z) === this.HELLSTONE_ID) {
@@ -432,7 +374,6 @@ export default class HellWorldGenerator extends Generator {
         }
     }
 
-    // No structures: nothing to place after terrain generation.
     populateChunk(chunkX, chunkZ) {
         this.setChunkSeed(chunkX, chunkZ);
     }

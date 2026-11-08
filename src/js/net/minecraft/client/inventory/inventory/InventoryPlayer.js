@@ -96,7 +96,6 @@ export default class InventoryPlayer extends Inventory {
         let itemStack = new ItemStack(typeId, count);
         let changed = false;
         
-        // First try to stack with existing items
         for (let i = 0; i < 36; i++) {
             if (this.items[i] && !this.items[i].isEmpty() && this.items[i].isItemEqual(itemStack)) {
                 let canAdd = itemStack.getMaxStackSize() - this.items[i].getCount();
@@ -121,7 +120,6 @@ export default class InventoryPlayer extends Inventory {
             }
         }
         
-        // Then try to find empty slots
         for (let i = 0; i < 36; i++) {
             if (!this.items[i] || this.items[i].isEmpty()) {
                 this.items[i] = itemStack;

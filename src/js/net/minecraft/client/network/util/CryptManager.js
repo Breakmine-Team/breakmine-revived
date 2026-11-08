@@ -11,15 +11,12 @@ export default class CryptManager {
     }
 
     static encryptRSA(publicKey, data) {
-        // Parse asn1 public key
         let asn1 = require("ASN1").parse(new Uint8Array(publicKey))
         let bigintModArith = require("bigint-mod-arith");
 
-        // Extract n and e of the public key
         let n = bigintModArith.bytesToBigInt(asn1.children[1].children[0].children[0].value);
         let e = bigintModArith.bytesToBigInt(asn1.children[1].children[0].children[1].value);
 
-        // Check length of public key
         let length = (n.toString(2).length + 7) >> 3;
         if (length < data.length + 11) {
             throw new Error("Data is too long to encrypt");
@@ -28,7 +25,6 @@ export default class CryptManager {
         let buffer = new ByteBuf(new Uint8Array(data).reverse());
         buffer.setPosition(buffer.length());
 
-        // Add padding
         buffer.writeByte(0x0);
         let random = new Random();
         let x = [];
@@ -40,16 +36,12 @@ export default class CryptManager {
         buffer.writeByte(0x2);
         buffer.writeByte(0x0);
 
-        // Reverse data
         let reversed = buffer.getArray().reverse();
 
-        // Convert to bigint
         let bigInt = bigintModArith.bytesToBigInt(reversed);
 
-        // Encrypt
         bigInt = bigintModArith.modPow(bigInt, e, n);
 
-        // Convert to bytes
         return bigintModArith.bigIntToBytes(bigInt);
     }
 

@@ -56,10 +56,10 @@ function broadcastCapeState(player) {
     }
 }
 
-// Measure application-level round trips over the same socket the game uses.
-// Binary keepalives are not sent by this server, and the tab list needs a
-// per-player number, so the probe travels as a tiny JSON message: the client
-// echoes the id and the server computes the elapsed time.
+
+
+
+
 function probeLatency(player) {
     if (!player?.ws || player.ws.readyState !== 1) return;
 
@@ -75,9 +75,9 @@ function probeLatency(player) {
     }
 }
 
-// Initialize the world: pick the server (CLI flag wins, else last used),
-// load its config + world data, register game blocks and seed pending block
-// ticks. Safe to call once; subsequent calls are no-ops until stopServer().
+
+
+
 export function initServer() {
     if (started) {
         return;
@@ -88,19 +88,14 @@ export function initServer() {
     config.reload(currentWorld);
     log.info('Server', `TNT ${config.allowTNT !== false ? 'enabled' : 'disabled'}, liquid flow ${config.allowLiquidFlow !== false ? 'enabled' : 'disabled'}`);
     initWorld(currentWorld);
-    BlockRegistry.create(); // Initialize block registry from game code
-    loadServerSideMods(); // Register content shipped by this server's mods
-    const serverWorld = getServerWorld(); // Initialize server world for block ticking
+    BlockRegistry.create(); 
+    loadServerSideMods(); 
+    const serverWorld = getServerWorld(); 
 
-    // Seed block ticks for any saved bluestone components so loaded networks
-    // (dust, lamps, repeaters, doors) settle to their correct state.
     serverWorld.seedScheduledTicks(getSubChunkStore());
 
-    // Start server tick loop for block ticking and world time synchronization
     tickInterval = setInterval(() => {
         try {
-            // Block simulation runs against the overworld; packets scope their
-            // own dimension while they are being handled.
             setActiveDimension(0);
             serverWorld.onTick();
             tickWorldTime();
@@ -115,17 +110,14 @@ export function initServer() {
                 }
             }
         } catch (e) {
-            // A single bad tick must never take down the whole server.
             log.error('Server', 'Error during server tick: ' + e.message);
         }
-    }, 1000 / 20); // Tick every 1/20th second
+    }, 1000 / 20); 
 
-    // Save world time and world state every 15 seconds.
     autosaveInterval = setInterval(() => {
         saveWorld();
     }, 15 * 1000);
 
-    // Periodically save player positions (every 15 seconds) for crash resilience
     playerSaveInterval = setInterval(() => {
         const players = getPlayers();
         for (const player of players.values()) {
@@ -135,8 +127,6 @@ export function initServer() {
         }
     }, 15 * 1000);
 
-    // Keep the tab-list latency current. One probe is outstanding at a time;
-    // the 5 second guard above avoids piling up probes on a slow connection.
     latencyInterval = setInterval(() => {
         for (const player of getPlayers().values()) {
             probeLatency(player);
@@ -146,15 +136,15 @@ export function initServer() {
     log.info('Server', `Minecraft server started (world: ${getCurrentWorldName()})`);
 }
 
-// Handle an incoming connection. `ws` is any object exposing the subset of the
-// ws API the server uses (on/send/close/readyState): a native ws socket in
-// Node.js, or a LoopbackSocket adapter in the browser.
+
+
+
 export function onConnection(ws, req) {
     const player = {
         ws,
         eid: null,
         username: null,
-        protocolState: 'handshake', // Start in handshake state
+        protocolState: 'handshake', 
         x: 0.0,
         y: 64.0,
         z: 0.0,
@@ -164,17 +154,12 @@ export function onConnection(ws, req) {
         isSneaking: false
     };
 
-    // Flood protection and VPN screening apply to real multiplayer sockets
-    // only; the integrated singleplayer server has no request/socket and gets
-    // a null gate.
     const gate = createConnectionGate(req, ws);
     if (gate) {
         player.ip = gate.ip;
         player.gate = gate;
     }
 
-    // A socket that opens and never logs in would otherwise hold its flood
-    // budget forever. Refuse anyone who is not in game after a minute.
     let loginTimer = null;
     if (gate) {
         loginTimer = setTimeout(() => {
@@ -182,7 +167,6 @@ export function onConnection(ws, req) {
                 try {
                     ws.close();
                 } catch (e) {
-                    // Socket already gone.
                 }
             }
         }, 60 * 1000);
@@ -223,8 +207,6 @@ export function onConnection(ws, req) {
                 player.inventory = normalizeInventoryState(payload.inventory);
                 savePlayerData(player);
             } else if (payload && payload.type === 'structurePaste') {
-                // /st load: the client owns the tool and the file, the server
-                // owns the blocks. See structurePaste.js.
                 handleStructurePaste(player, payload);
             } else if (payload && payload.type === 'modMessage') {
                 if (player.username && typeof payload.modId === 'string' && payload.modId.length <= 64) {
@@ -233,8 +215,6 @@ export function onConnection(ws, req) {
             } else if (payload && payload.type === 'cape:request') {
                 sendCapeStates(player);
             } else if (payload && payload.type === 'cape:update') {
-                // The username is taken from the authenticated login state;
-                // clients cannot update another player's cape.
                 if (!player.username || payload.username !== player.username) {
                     return;
                 }
@@ -286,9 +266,6 @@ export function onConnection(ws, req) {
                     }
                 }
             } else if (payload && payload.type === 'voice' && player) {
-                // P2P voice chat peer discovery relay: forward announce payloads
-                // to every other player. Only tiny ID announcements pass through
-                // here; the actual audio flows directly between clients (WebRTC).
                 if (payload.action === 'announce') {
                     const relay = JSON.stringify({
                         type: 'voice',
@@ -304,16 +281,12 @@ export function onConnection(ws, req) {
                 }
             }
         } catch (err) {
-            // Malformed packets and non-JSON text messages are handled here so
-            // a single bad connection can never crash the whole server.
             log.warn('Server', 'Rejected bad message from client: ' + (err && err.message));
         }
     };
 
     ws.on('message', (message, isBinary) => {
         if (gate) {
-            // Messages that arrive while a VPN verdict is still pending are
-            // buffered by the gate and replayed through handleMessage below.
             const action = gate.beforeMessage(message, isBinary);
             if (action !== 'ok') return;
         }
@@ -324,10 +297,7 @@ export function onConnection(ws, req) {
         gate.onFlush = (message, isBinary) => handleMessage(message, isBinary);
     }
 
-    // Abrupt disconnects emit 'error' on the socket; without a listener that
-    // unhandled 'error' event would crash the entire server process.
     ws.on('error', () => {
-        // The 'close' handler does the actual cleanup.
     });
 
     ws.on('close', () => {
@@ -343,8 +313,8 @@ export function onConnection(ws, req) {
     });
 }
 
-// Stop the tick/autosave loops and persist the world. Used when the integrated
-// server is shut down (e.g. returning to the main menu in singleplayer).
+
+
 export function stopServer() {
     if (!started) {
         return;
@@ -360,10 +330,6 @@ export function stopServer() {
     playerSaveInterval = null;
     latencyInterval = null;
 
-    // Block edits are persisted by a debounced save; if one is still queued it
-    // has to be written now or the last couple of seconds of changes are lost.
-    // If nothing was pending, fall through to the full save so anything the
-    // tick loop changed (time, entities) is still flushed.
     if (flushSaveWorld()) return;
 
     try {

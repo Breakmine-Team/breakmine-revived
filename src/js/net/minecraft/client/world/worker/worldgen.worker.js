@@ -25,23 +25,23 @@ class BlockStub {
 
 const BLOCK_STUBS = {
     0: null,
-    1: new BlockStub(1),                           // STONE
-    2: new BlockStub(2),                           // GRASS
-    3: new BlockStub(3),                           // DIRT
-    7: new BlockStub(7),                           // BEDROCK
-    9: new BlockStub(9, { opacity: 0.01, solid: false }), // WATER
-    12: new BlockStub(12),                         // SAND
-    13: new BlockStub(13),                         // GRAVEL
-    17: new BlockStub(17),                         // LOG
-    18: new BlockStub(18),                         // LEAVE
-    20: new BlockStub(20, { opacity: 0 }),         // GLASS
-    21: new BlockStub(21),                         // GOLD_ORE
-    22: new BlockStub(22),                         // DIAMOND_ORE
-    23: new BlockStub(23),                         // COAL_ORE
-    24: new BlockStub(24),                         // IRON_ORE
-    30: new BlockStub(30),                         // EMERALD_ORE
-    55: new BlockStub(55, { opacity: 0.01, lightValue: 15, solid: false }), // LAVA
-    234: new BlockStub(234),                       // SNOW
+    1: new BlockStub(1),                           
+    2: new BlockStub(2),                           
+    3: new BlockStub(3),                           
+    7: new BlockStub(7),                           
+    9: new BlockStub(9, { opacity: 0.01, solid: false }), 
+    12: new BlockStub(12),                         
+    13: new BlockStub(13),                         
+    17: new BlockStub(17),                         
+    18: new BlockStub(18),                         
+    20: new BlockStub(20, { opacity: 0 }),         
+    21: new BlockStub(21),                         
+    22: new BlockStub(22),                         
+    23: new BlockStub(23),                         
+    24: new BlockStub(24),                         
+    30: new BlockStub(30),                         
+    55: new BlockStub(55, { opacity: 0.01, lightValue: 15, solid: false }), 
+    234: new BlockStub(234),                       
 };
 
 const _defaultBlock = new BlockStub(0);
@@ -65,7 +65,6 @@ class ChunkSectionStub {
         this.x = x;
         this.y = y;
         this.z = z;
-        // Matches ChunkSection: block ids exceed 255, so widen the store.
         this.blocks = new Uint16Array(4096);
         this.blocksData = new Uint8Array(4096);
         this.blockLight = [];
@@ -360,7 +359,6 @@ class WorldStub {
     }
 
     updateLight() {
-        // Cross-chunk light propagation is handled by the main thread
     }
 
     onBlockChanged() {}
@@ -438,7 +436,6 @@ function generateChunks(chunkCoords, seedData, worldType, onProgress) {
             ? new HellWorldGenerator(world, seed)
             : new WorldGenerator(world, seed, worldType);
 
-    // Collect all chunk coordinates that need to be populated (requested + 1-ring neighbors)
     const populateKeys = new Set();
     const populateCoords = [];
     for (const [cx, cz] of chunkCoords) {
@@ -455,7 +452,6 @@ function generateChunks(chunkCoords, seedData, worldType, onProgress) {
         }
     }
 
-    // Collect base-terrain chunks (populated chunks + their 1-ring neighbors), deduped
     const generateKeys = new Set();
     const toGenerate = [];
     for (const [px, pz] of populateCoords) {
@@ -478,7 +474,6 @@ function generateChunks(chunkCoords, seedData, worldType, onProgress) {
         if (onProgress) onProgress(workDone, totalWork);
     };
 
-    // 1. Generate base terrain for populated chunks and their 1-ring neighbors
     for (const [tx, tz] of toGenerate) {
         const chunk = generator.newChunk(world, tx, tz, ChunkStub);
         world.addChunk(chunk);
@@ -486,14 +481,12 @@ function generateChunks(chunkCoords, seedData, worldType, onProgress) {
         reportProgress();
     }
 
-    // 2. Populate target chunks AND neighbors so cross-chunk structures (trees) spill correctly
     for (const [px, pz] of populateCoords) {
         generator.populateChunk(px, pz);
         workDone++;
         reportProgress();
     }
 
-    // 3. Serialize and return requested chunks
     const requested = [];
     for (const [cx, cz] of chunkCoords) {
         const chunk = world.getChunkAt(cx, cz);
