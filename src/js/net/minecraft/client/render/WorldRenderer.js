@@ -389,6 +389,22 @@ export default class WorldRenderer {
         this.chunkSectionLines.renderOrder = 9999;
         this.overlay.add(this.chunkSectionLines);
 
+        // Structure selection box (/st). The geometry is rewritten only when a
+        // corner moves, so a still selection costs one comparison per frame.
+        this.structureSelectionMaterial = new THREE.LineBasicMaterial({
+            color: 0x00ffff,
+            linewidth: 2,
+            depthTest: false,
+            transparent: true,
+            opacity: 0.85
+        });
+        this.structureSelectionLines = new THREE.LineSegments(new THREE.BufferGeometry(), this.structureSelectionMaterial);
+        this.structureSelectionLines.frustumCulled = false;
+        this.structureSelectionLines.renderOrder = 9999;
+        this.structureSelectionLines.visible = false;
+        this.overlay.add(this.structureSelectionLines);
+        this.structureSelectionKey = null;
+
         // Create entity bounding box helper
         this.entityBBoxMaterial = new THREE.LineBasicMaterial({
             color: 0x00ffff,
@@ -555,6 +571,9 @@ export default class WorldRenderer {
         // Render target block
         this.emitRenderHook('renderBlockHitBox', { partialTicks, player });
         this.renderBlockHitBox(player, partialTicks);
+
+        // Render the /st structure selection box
+        this.updateStructureSelectionOutline();
 
         // Render placement preview ghost block
         this.updateBlockPlacePreview(partialTicks);
@@ -1864,6 +1883,72 @@ export default class WorldRenderer {
         }
     }
 
+    /**
+     * Draw the set /st corners and, once both exist, the box of the area they
+     * select. The corners are drawn even before the second one is set, so the
+     * first click is visible.
+     */
+    updateStructureSelectionOutline() {
+        const selection = this.minecraft.structureSelection;
+        const lines = this.structureSelectionLines;
+
+        if (!selection || (selection.p1 === null && selection.p2 === null)) {
+            lines.visible = false;
+            this.structureSelectionKey = null;
+            return;
+        }
+
+        lines.visible = true;
+
+        const key = this.structureSelectionKeyFor(selection);
+        if (key === this.structureSelectionKey) {
+            return;
+        }
+        this.structureSelectionKey = key;
+
+        const positions = [];
+        const addBox = (minX, minY, minZ, maxX, maxY, maxZ) => {
+            const corners = [
+                [minX, minY, minZ], [maxX, minY, minZ], [maxX, minY, maxZ], [minX, minY, maxZ],
+                [minX, maxY, minZ], [maxX, maxY, minZ], [maxX, maxY, maxZ], [minX, maxY, maxZ]
+            ];
+            const edges = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]];
+            for (const [from, to] of edges) {
+                positions.push(...corners[from], ...corners[to]);
+            }
+        };
+
+        const bounds = selection.getBounds();
+        if (bounds !== null) {
+            // Keep the box off the block faces it wraps so they do not z-fight.
+            const expansion = 0.002;
+            addBox(bounds.minX - expansion, bounds.minY - expansion, bounds.minZ - expansion,
+                bounds.maxX + expansion, bounds.maxY + expansion, bounds.maxZ + expansion);
+        }
+
+        if (selection.p1 !== null) {
+            addBox(selection.p1.x, selection.p1.y, selection.p1.z,
+                selection.p1.x + 1, selection.p1.y + 1, selection.p1.z + 1);
+        }
+        if (selection.p2 !== null) {
+            addBox(selection.p2.x, selection.p2.y, selection.p2.z,
+                selection.p2.x + 1, selection.p2.y + 1, selection.p2.z + 1);
+        }
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+
+        if (lines.geometry) {
+            lines.geometry.dispose();
+        }
+        lines.geometry = geometry;
+    }
+
+    structureSelectionKeyFor(selection) {
+        const point = (corner) => corner === null ? '-' : corner.x + ',' + corner.y + ',' + corner.z;
+        return point(selection.p1) + '|' + point(selection.p2);
+    }
+
     renderBlockHitBox(player, partialTicks) {
         let hitResult = player.rayTrace(5, partialTicks);
         let hitBoxVisible = !(hitResult === null);
@@ -2494,7 +2579,8 @@ export default class WorldRenderer {
         }
         for (let i = this.overlay.children.length - 1; i >= 0; i--) {
             const child = this.overlay.children[i];
-            if (child !== this.chunkBoundaryLines && child !== this.chunkSectionLines && child !== this.blockBreakMesh) {
+            if (child !== this.chunkBoundaryLines && child !== this.chunkSectionLines
+                && child !== this.structureSelectionLines && child !== this.blockBreakMesh) {
                 this.overlay.remove(child);
             }
         }

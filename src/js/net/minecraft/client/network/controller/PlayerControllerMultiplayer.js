@@ -95,6 +95,21 @@ export default class PlayerControllerMultiplayer extends PlayerController {
         return this.networkHandler;
     }
 
+    /**
+     * Send a raw JSON message on the same channel capes, pings and mod
+     * messages use. Returns false when the socket is gone, so callers can fall
+     * back to acting locally.
+     */
+    sendJson(payload) {
+        const networkManager = this.networkHandler?.getNetworkManager?.();
+        if (!networkManager || typeof networkManager.sendJson !== "function") {
+            return false;
+        }
+
+        networkManager.sendJson(payload);
+        return true;
+    }
+
     sendBlockDiggingPacket(status, blockPosition, face) {
         this.networkHandler.sendPacket(new ClientPlayerDiggingPacket(status, blockPosition, face));
     }

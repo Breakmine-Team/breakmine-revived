@@ -48,6 +48,7 @@ import BlockDebugSpinner from "./type/BlockDebugSpinner.js";
 import SoundGrass from "./sound/SoundGrass.js";
 import BlockWool from "./type/BlockWool.js";
 import BlockConcrete from "./type/BlockConcrete.js";
+import BlockStructureMarker from "./type/BlockStructureMarker.js";
 import BlockConcretePowder from "./type/BlockConcretePowder.js";
 import BlockClay from "./type/BlockClay.js";
 import BlockTerracotta from "./type/BlockTerracotta.js";
@@ -716,6 +717,14 @@ export class BlockRegistry {
         // Nether portal sheet: walk-through, 2px thick, hidden from the palette.
         // Ignited by flint and steel on obsidian; the server owns placement.
         BlockRegistry.PORTAL = new BlockPortal(356, 0);
+
+        // --- STRUCTURE MARKERS (flat coloured blocks for marking areas) ---
+        BlockRegistry.STRUCTURE_MARKER_1 = new BlockStructureMarker(400, 0, "red_concrete", "Structure Marker #1");
+        BlockRegistry.STRUCTURE_MARKER_2 = new BlockStructureMarker(401, 0, "orange_concrete", "Structure Marker #2");
+        BlockRegistry.STRUCTURE_MARKER_3 = new BlockStructureMarker(402, 0, "yellow_concrete", "Structure Marker #3");
+        BlockRegistry.STRUCTURE_MARKER_4 = new BlockStructureMarker(403, 0, "lime_concrete", "Structure Marker #4");
+        BlockRegistry.STRUCTURE_MARKER_5 = new BlockStructureMarker(404, 0, "light_blue_concrete", "Structure Marker #5");
+        BlockRegistry.STRUCTURE_MARKER_6 = new BlockStructureMarker(405, 0, "magenta_concrete", "Structure Marker #6");
 
         for (const [key, val] of Object.entries(BlockRegistry)) {
             if (val && typeof val === "object" && val.id !== undefined) {

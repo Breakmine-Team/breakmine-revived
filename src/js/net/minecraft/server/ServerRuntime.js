@@ -10,6 +10,7 @@ import { addPlayer, removePlayer, getPlayerCount, getPlayers, savePlayerData, no
 import Logger from './logger.js';
 import { BlockRegistry } from '../client/world/block/BlockRegistry.js';
 import { handleModMessage, loadServerSideMods } from './ServerModLoader.js';
+import { handleStructurePaste } from './structurePaste.js';
 import getServerWorld from './World.js';
 import config from './config.js';
 import * as protocol from './protocol.js';
@@ -221,6 +222,10 @@ export function onConnection(ws, req) {
             } else if (payload && payload.type === 'inventory') {
                 player.inventory = normalizeInventoryState(payload.inventory);
                 savePlayerData(player);
+            } else if (payload && payload.type === 'structurePaste') {
+                // /st load: the client owns the tool and the file, the server
+                // owns the blocks. See structurePaste.js.
+                handleStructurePaste(player, payload);
             } else if (payload && payload.type === 'modMessage') {
                 if (player.username && typeof payload.modId === 'string' && payload.modId.length <= 64) {
                     handleModMessage(player, payload.modId, payload.payload);
