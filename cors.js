@@ -607,6 +607,24 @@ const ADMIN_COOKIE = 'breakmine_admin';
 const ADMIN_SESSION_SECONDS = 12 * 60 * 60;
 const CAPE_NAME_MAX = 40;
 
+// Matches the names produced by UsernameGenerator.js exactly:
+// Capitalized action + capitalized object + a two-digit number.
+const SPAM_USERNAME_ACTIONS = [
+    'Jumping', 'Crawling', 'Running', 'Sleeping', 'Waving',
+    'Smiling', 'Singing', 'Coding', 'Reading', 'Inventive',
+    'Energetic', 'Swift', 'Dancing', 'Frozen', 'Woven',
+    'Crimson', 'Shadowy', 'Electric', 'Ransacked', 'Mystic',
+];
+const SPAM_USERNAME_OBJECTS = [
+    'Potato', 'Dolphin', 'Rocket', 'Anchor', 'Planet',
+    'Noodle', 'Kraken', 'Vortex', 'Castle', 'Quasar',
+    'Pencil', 'Lantern', 'Walrus', 'Comet', 'Pixel',
+    'Goblin', 'Phantom', 'Tsunami', 'Phoenix', 'Sprocket',
+];
+const SPAM_USERNAME_PATTERN = new RegExp(
+    `^(?:${SPAM_USERNAME_ACTIONS.join('|')})(?:${SPAM_USERNAME_OBJECTS.join('|')})[1-9][0-9]$`
+);
+
 function getAdminPassword() {
     return process.env.ADMIN_PASSWORD || secrets.adminPassword;
 }
@@ -696,6 +714,10 @@ function adminStyles() {
         .topbar form { margin: 0; }
         .upload { background: #1c2026; border: 1px solid #2c323a; border-radius: 10px; padding: 16px; margin-bottom: 20px; display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
         .upload label { margin: 0; flex: 1 1 220px; }
+        .purge { background: #1c2026; border: 1px solid #2c323a; border-radius: 10px; padding: 12px 16px; margin-bottom: 12px; display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .purge-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .purge-actions form { display: flex; gap: 6px; align-items: center; }
+        button:disabled { opacity: 0.45; cursor: not-allowed; }
     `;
 }
 
@@ -717,6 +739,10 @@ function renderAdminLogin(res, error = '', status = 200) {
 function renderAdminPanel(req, res) {
     const capes = capeStmts.listCapes.all();
     const users = stmts.listUsers.all();
+    const spamCount = users.filter((user) => SPAM_USERNAME_PATTERN.test(user.username)).length;
+    const neverLoggedInSpamCount = users.filter(
+        (user) => SPAM_USERNAME_PATTERN.test(user.username) && user.last_login == null
+    ).length;
     const message = typeof req.query.msg === 'string' ? req.query.msg : '';
     const error = typeof req.query.err === 'string' ? req.query.err : '';
 
@@ -787,6 +813,24 @@ function renderAdminPanel(req, res) {
         </tr>`;
     }).join('');
 
+    const purgeBar = `
+    <div class="purge">
+        <div>
+            <strong>Spam cleanup</strong>
+            <div class="muted">Matches auto-generated usernames such as JumpingPotato42.</div>
+        </div>
+        <div class="purge-actions">
+            <form method="post" action="/admin/users/purge-spam" onsubmit="return confirm('Delete all ${spamCount} auto-generated spam accounts? This cannot be undone.')">
+                <button class="danger" type="submit"${spamCount === 0 ? ' disabled' : ''}>Purge Spam</button>
+                <span class="muted">${spamCount} account${spamCount === 1 ? '' : 's'}</span>
+            </form>
+            <form method="post" action="/admin/users/purge-spam-never-logged-in" onsubmit="return confirm('Delete ${neverLoggedInSpamCount} auto-generated accounts that never logged in? This cannot be undone.')">
+                <button class="danger" type="submit"${neverLoggedInSpamCount === 0 ? ' disabled' : ''}>Purge Spam (Never logged in)</button>
+                <span class="muted">${neverLoggedInSpamCount} account${neverLoggedInSpamCount === 1 ? '' : 's'}</span>
+            </form>
+        </div>
+    </div>`;
+
     res.type('html').send(`<!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Breakmine Admin</title><style>${adminStyles()}</style></head>
@@ -799,12 +843,6 @@ function renderAdminPanel(req, res) {
     ${message ? `<div class="msg">${escapeHtml(message)}</div>` : ''}
     ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
 
-    <h2>Players</h2>
-    <table>
-        <thead><tr><th>Player</th><th>Created</th><th>Last login</th><th>Skin</th><th>Cape</th><th>Password</th><th></th></tr></thead>
-        <tbody>${userRows || '<tr><td colspan="7" class="muted">No players registered yet.</td></tr>'}</tbody>
-    </table>
-
     <h2>Capes</h2>
     <form class="upload" method="post" action="/admin/capes" enctype="multipart/form-data">
         <label>Cape name<input type="text" name="name" maxlength="${CAPE_NAME_MAX}" placeholder="e.g. Founder Cape" required></label>
@@ -815,6 +853,13 @@ function renderAdminPanel(req, res) {
     <table>
         <thead><tr><th></th><th>Name</th><th>Assigned players</th><th></th></tr></thead>
         <tbody>${capeRows || '<tr><td colspan="4" class="muted">No capes uploaded yet.</td></tr>'}</tbody>
+    </table>
+
+    <h2>Players</h2>
+    ${purgeBar}
+    <table>
+        <thead><tr><th>Player</th><th>Created</th><th>Last login</th><th>Skin</th><th>Cape</th><th>Password</th><th></th></tr></thead>
+        <tbody>${userRows || '<tr><td colspan="7" class="muted">No players registered yet.</td></tr>'}</tbody>
     </table>
 </body>
 </html>`);
@@ -884,6 +929,42 @@ app.post('/api/cape/choice', authenticateToken, (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
+
+function purgeSpamAccounts(res, neverLoggedInOnly) {
+    try {
+        const accounts = stmts.listUsers.all().filter((user) =>
+            SPAM_USERNAME_PATTERN.test(user.username) &&
+            (!neverLoggedInOnly || user.last_login == null)
+        );
+
+        const deleteAccounts = db.transaction((usersToDelete) => {
+            for (const user of usersToDelete) {
+                capeStmts.deleteUserAssignments.run(user.id);
+                capeStmts.clearChoice.run(user.id);
+                stmts.deleteUser.run(user.id);
+            }
+        });
+        deleteAccounts(accounts);
+
+        for (const user of accounts) {
+            try { removeSkinFile(user.skin_path); } catch (error) {
+                Logger.warn('Admin', `Could not delete skin for purged account ${user.username}: ${error.message}`);
+            }
+        }
+
+        const noun = neverLoggedInOnly ? 'never-logged-in spam account' : 'spam account';
+        if (accounts.length === 0) {
+            return res.redirect('/admin?msg=' + encodeURIComponent(`No ${noun}s found.`));
+        }
+
+        const label = `${accounts.length} ${accounts.length === 1 ? noun : `${noun}s`}`;
+        Logger.info('Admin', `Purged ${label}`);
+        res.redirect('/admin?msg=' + encodeURIComponent(`Purged ${label}.`));
+    } catch (error) {
+        Logger.error('Admin', `Spam purge failed: ${error.message}`);
+        res.redirect('/admin?err=' + encodeURIComponent('Could not purge spam accounts.'));
+    }
+}
 
 app.get('/admin', (req, res) => {
     if (!getAdminSession(req)) return renderAdminLogin(res);
@@ -1122,6 +1203,14 @@ app.post('/admin/users/:id/password', requireAdmin, async (req, res) => {
         Logger.error('Admin', `Could not change password for ${user.username}: ${error.message}`);
         res.redirect('/admin?err=' + encodeURIComponent('Could not change that password.'));
     }
+});
+
+app.post('/admin/users/purge-spam', requireAdmin, (req, res) => {
+    purgeSpamAccounts(res, false);
+});
+
+app.post('/admin/users/purge-spam-never-logged-in', requireAdmin, (req, res) => {
+    purgeSpamAccounts(res, true);
 });
 
 app.post('/admin/users/:id/delete', requireAdmin, (req, res) => {
