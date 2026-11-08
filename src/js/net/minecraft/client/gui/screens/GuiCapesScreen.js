@@ -2,13 +2,14 @@ import GuiScreen from "../GuiScreen.js";
 import GuiButton from "../widgets/GuiButton.js";
 import GuiPlayerPreview from "../widgets/GuiPlayerPreview.js";
 import GuiWorldSlotContainer from "../widgets/GuiWorldSlotContainer.js";
+import { getCapeTextureRect } from "../../render/CapeTextureLayout.js";
 
 const SLOT_HEIGHT = 36;
 const SLOT_SPACING = 2;
 
 /**
- * One row in the cape sidebar: a thumbnail of the cape artwork (top-left
- * 10x16 region of a 64x32 sheet) and its name, laid out like the Mods rows.
+ * One row in the cape sidebar: a thumbnail of the cape artwork (the 10x16
+ * face at (1, 1) of a 64x32 sheet) and its name, laid out like the Mods rows.
  */
 class GuiCapeSlot extends GuiButton {
 
@@ -30,19 +31,20 @@ class GuiCapeSlot extends GuiButton {
     }
 
     render(stack, mouseX, mouseY, partialTicks) {
-        const thumbX = this.x + 3;
-        const thumbY = this.y + 3;
+        const thumbX = this.x + 4;
+        const thumbY = this.y + 2;
         const thumbWidth = 18;
         const thumbHeight = 28;
 
         if (this.image && this.image.complete && this.image.naturalWidth > 0) {
+            const rect = getCapeTextureRect(this.image.naturalWidth, this.image.naturalHeight);
             stack.save();
             stack.imageSmoothingEnabled = false;
-            stack.drawImage(this.image, 0, 0, 10, 16, thumbX, thumbY, thumbWidth, thumbHeight);
+            stack.drawImage(this.image, rect.x, rect.y, rect.width, rect.height, thumbX, thumbY, thumbWidth, thumbHeight);
             stack.restore();
         } else {
             this.drawRect(stack, thumbX, thumbY, thumbX + thumbWidth, thumbY + thumbHeight, "rgba(255, 255, 255, 0.06)");
-            const label = this.cape.kind === "none" ? "×" : this.cape.kind === "default" ? "D" : "?";
+            const label = this.cape.kind === "none" ? "×" : "?";
             this.drawCenteredString(stack, label, thumbX + thumbWidth / 2, thumbY + thumbHeight / 2 - 4, 0xFF777777);
         }
 
@@ -51,11 +53,7 @@ class GuiCapeSlot extends GuiButton {
 
         this.drawString(stack, this.trimToWidth(stack, this.cape.name, textWidth), textX, this.y + 5, 0xFFFFFFFF, true, false);
 
-        const subtitle = this.cape.kind === "default"
-            ? "Server default"
-            : this.cape.kind === "none"
-                ? "No cape"
-                : "Assigned cape";
+        const subtitle = this.cape.kind === "none" ? "No cape" : "Assigned cape";
         this.drawString(stack, this.trimToWidth(stack, subtitle, textWidth), textX, this.y + 17, 0xFF9A9A9A, true, false);
     }
 
@@ -82,7 +80,8 @@ class GuiCapeSlotContainer extends GuiWorldSlotContainer {
         this.slotX = parentGui.layout.sidebarX + 4;
         this.slotWidth = parentGui.layout.sidebarWidth - 16;
         this.top = parentGui.layout.top;
-        this.bottom = parentGui.layout.bottom;
+        // Extend to the bottom edge of the Done button (height - 30 + 20)
+        this.bottom = parentGui.height - 10;
         this.viewLeft = parentGui.layout.sidebarX;
         this.viewRight = parentGui.layout.sidebarX + parentGui.layout.sidebarWidth;
         this.scrollBarX = parentGui.layout.sidebarX + parentGui.layout.sidebarWidth - 8;
@@ -114,7 +113,7 @@ export default class GuiCapesScreen extends GuiScreen {
         this.parentScreen = parentScreen;
         this.previousScreen = parentScreen;
 
-        this.status = "Choose the cape you want to wear.";
+        this.status = "";
         this.preview = null;
         this.capeSlotContainer = null;
         this.entries = [];
@@ -145,11 +144,11 @@ export default class GuiCapesScreen extends GuiScreen {
         this.rebuildList();
 
         if (!signedIn) {
-            this.status = "Sign in to choose a cape.";
+            this.status = "You must be signed in to use capes!";
         } else if (manager?.getCatalogError?.()) {
             this.status = manager.getCatalogError();
         } else if (this.entries.length <= 2) {
-            this.status = "No capes have been assigned to you yet.";
+            this.status = "No capes have been assigned to you yet!";
         }
 
         this.buttonList.push(new GuiButton(
@@ -190,9 +189,7 @@ export default class GuiCapesScreen extends GuiScreen {
     }
 
     buildEntries(manager) {
-        const entries = [
-            { kind: "default", id: null, name: "Default cape", texture: null }
-        ];
+        const entries = [];
 
         for (const cape of manager?.getCatalog?.() || []) {
             entries.push({ kind: "cape", id: cape.id, name: cape.name, texture: cape.texture });

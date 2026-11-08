@@ -215,8 +215,19 @@ export default class PlayerRenderer extends EntityRenderer {
 
         const userData = texture.userData || {};
         const geometry = createCapeGeometry(userData.capeWidth || 64, userData.capeHeight || 32);
+
+        // The player model bakes its light level into vertex colors, but the
+        // cape is a separate unlit quad. Give it the same brightness so it
+        // darkens at night instead of staying fully lit.
+        const rawBrightness = entity?.getEntityBrightness?.();
+        const brightness = Number.isFinite(rawBrightness) ? Math.max(0, Math.min(1, rawBrightness)) : 1;
+        const vertexCount = geometry.getAttribute('position').count;
+        const colors = new Float32Array(vertexCount * 3).fill(brightness);
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
         const material = new THREE.MeshBasicMaterial({
             map: texture,
+            vertexColors: true,
             transparent: true,
             alphaTest: 0.5,
             side: THREE.DoubleSide,

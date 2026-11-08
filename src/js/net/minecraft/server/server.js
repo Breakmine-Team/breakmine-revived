@@ -24,6 +24,8 @@ if (process.env.DATA_DIR) {
 let wss = null;
 
 async function main() {
+    const startupStartedAt = Date.now();
+
     // Install SERVER_MOD_URLS before initServer() so downloaded mods are part
     // of the first load and get sent to players on join.
     try {
@@ -31,9 +33,7 @@ async function main() {
     } catch (e) {
         log.warn('Server', `Could not install startup mods: ${e.message}`);
     }
-
-    // Initialize the world (loads config, world data, block registry, tick loop).
-    initServer();
+    log.info('Server', `Startup mods finished in ${Date.now() - startupStartedAt}ms`);
 
     // Load SSL certificate and key if available
     let server = null;
@@ -76,7 +76,28 @@ async function main() {
             callback(false, verdict.code || 403, verdict.message || 'Connection refused');
         }
     });
-    server.listen(PORT, config.host);
+    wss.on('connection', (ws, req) => onConnection(ws, req));
+
+    // Open the port before the synchronous world load. Traefik and clients can
+    // establish a connection immediately; Node does not run the connection
+    // callbacks until initServer() returns, so no player sees a half-loaded
+    // world. Keep the header timeout high enough for that initial load.
+    server.headersTimeout = 5 * 60 * 1000;
+    server.requestTimeout = 5 * 60 * 1000;
+    server.on('error', (e) => {
+        log.error('Server', `Listener failed: ${e.message}`);
+        process.exit(1);
+    });
+    server.listen(PORT, config.host, () => {
+        log.info('Server', `Socket listening on ${config.host}:${PORT}`);
+    });
+    log.info('Server', `Socket open on ${config.host}:${PORT}; loading world...`);
+
+    // Initialize the world (loads config, world data, block registry, tick loop).
+    const initStartedAt = Date.now();
+    initServer();
+    log.info('Server', `World initialized in ${Date.now() - initStartedAt}ms`);
+
     log.info('Server', `Minecraft server running!!! (v47)`);
     log.info('Server', `Listening on ${server ? 'wss' : 'ws'}://${config.host}:${PORT}`);
     log.info('Security', security.describeSettings());
@@ -86,7 +107,6 @@ async function main() {
         log.warn('Server', 'Admin panel disabled (set ADMIN_PASSCODE env variable to enable it)');
     }
 
-    wss.on('connection', (ws, req) => onConnection(ws, req));
 }
 
 main().catch((e) => {

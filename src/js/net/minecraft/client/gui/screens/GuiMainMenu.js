@@ -17,6 +17,7 @@ import { Version } from "../../../../../../resources/version.js";
 import GuiTooltip from "../widgets/GuiTooltip.js";
 import { checkForUpdate, isElectronApp } from "../../VersionChecker.js";
 import GuiNewVersion from "./GuiNewVersion.js";
+import GuiLoadingIntegratedServer from "./GuiLoadingIntegratedServer.js";
 import GuiPlayerPreview from "../widgets/GuiPlayerPreview.js";
 
 export default class GuiMainMenu extends GuiScreen {
@@ -51,7 +52,12 @@ export default class GuiMainMenu extends GuiScreen {
         let y = this.height / 4 + 36;
 
         this.buttonList.push(new GuiButton(this.minecraft, "Singleplayer", this.width / 2 - 100, y, 200, 20, async () => {
+            const loadingScreen = new GuiLoadingIntegratedServer(this);
+            loadingScreen.setStatus("Initializing singleplayer server...");
+            this.minecraft.displayScreen(loadingScreen);
+
             const hasSave = await this.minecraft.hasSaveData();
+            if (this.minecraft.currentScreen !== loadingScreen) return;
             if (hasSave) {
                 this.minecraft.displayScreen(new GuiSelectWorld(this));
             } else {

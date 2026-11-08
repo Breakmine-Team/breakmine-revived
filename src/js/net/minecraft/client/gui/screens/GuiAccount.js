@@ -121,6 +121,11 @@ export default class GuiAccount extends GuiScreen {
         });
         this.buttonList.push(this.uploadSkinButton);
 
+        this.capesButton = new GuiButton(this.minecraft, "Capes", layout.rightX + size + gap, layout.controlsY, 44, size, () => {
+            this.minecraft.displayScreen(new GuiCapesScreen(this.minecraft, this));
+        }).setTooltip("Change your cape");
+        this.buttonList.push(this.capesButton);
+
         const totalWidth = ANIMATION_MODES.length * size + (ANIMATION_MODES.length - 1) * gap;
         const startX = layout.rightX + layout.rightWidth - totalWidth;
         this.animationButtons = [];
@@ -151,10 +156,6 @@ export default class GuiAccount extends GuiScreen {
         const gap = 4;
         const signOutWidth = Math.floor((layout.leftWidth - gap) / 2);
         const backWidth = layout.leftWidth - gap - signOutWidth;
-
-        this.buttonList.push(new GuiButton(this.minecraft, "Capes", layout.leftX, layout.panelTop + 64, 90, 20, () => {
-            this.minecraft.displayScreen(new GuiCapesScreen(this.minecraft, this));
-        }).setTooltip("Change your cape"));
 
         this.buttonList.push(new GuiButton(this.minecraft, "Logout", layout.leftX, layout.signOutY, signOutWidth, 20, () => {
             this.confirmSignOut();
@@ -225,6 +226,11 @@ export default class GuiAccount extends GuiScreen {
         const loggedIn = Boolean(this.minecraft?.settings?.loggedIn);
         this.uploadSkinButton.enabled = loggedIn;
         this.uploadSkinButton.setTooltip(loggedIn ? "Upload skin" : "Sign in to upload a skin");
+
+        if (this.capesButton) {
+            this.capesButton.enabled = loggedIn;
+            this.capesButton.setTooltip(loggedIn ? "Change your cape" : "Sign in to use capes");
+        }
     }
 
     updateAnimationButtons() {

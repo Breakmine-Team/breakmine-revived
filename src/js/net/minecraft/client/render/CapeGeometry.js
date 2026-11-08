@@ -27,8 +27,10 @@ export function createCapeGeometry(textureWidth = 64, textureHeight = 32) {
         const y = position.getY(i);
 
         // Cape bottom (largest Y in this Y-down rig) samples the bottom of the
-        // artwork; the shoulder edge samples its top row.
-        uv.setXY(i, x < 0 ? u0 : u1, y > 0.001 ? vBottom : vTop);
+        // artwork; the shoulder edge samples its top row. The rig is mirrored
+        // on X by its negative scale, so U must run the other way or the
+        // artwork appears backwards.
+        uv.setXY(i, x < 0 ? u1 : u0, y > 0.001 ? vBottom : vTop);
     }
     uv.needsUpdate = true;
 

@@ -219,17 +219,29 @@ async function installServerModsFromEnv() {
     const modsDir = getServerModsDir();
     fs.mkdirSync(modsDir, { recursive: true });
 
-    const installed = [];
-    for (const modUrl of urls) {
+    // Download in parallel: a slow or unreachable wiki page used to serialize
+    // into one 30-second timeout after another before the server could listen.
+    const results = await Promise.allSettled(urls.map(async (modUrl) => {
         try {
-            const result = await installMod(modUrl, modsDir);
+            return { modUrl, ...(await installMod(modUrl, modsDir)) };
+        } catch (error) {
+            error.modUrl = modUrl;
+            throw error;
+        }
+    }));
+
+    const installed = [];
+    for (const outcome of results) {
+        if (outcome.status === 'fulfilled') {
+            const result = outcome.value;
             installed.push(result);
             log.info(
                 'ServerMods',
                 `${result.replaced ? 'Updated' : 'Installed'} '${result.name}' (${result.modId}, ${result.files} files) from ${result.downloadUrl}`
             );
-        } catch (error) {
-            log.warn('ServerMods', `Could not install mod from '${modUrl}': ${error.message}`);
+        } else {
+            const modUrl = outcome.reason?.modUrl || 'unknown URL';
+            log.warn('ServerMods', `Could not install mod from '${modUrl}': ${outcome.reason?.message || outcome.reason}`);
         }
     }
 

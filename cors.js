@@ -180,6 +180,9 @@ const stmts = {
     updateLastLogin: db.prepare('UPDATE users SET last_login = ? WHERE id = ?'),
     updateSkinPath: db.prepare('UPDATE users SET skin_path = ? WHERE id = ?'),
     updateCapePath: db.prepare('UPDATE users SET cape_path = ? WHERE id = ?'),
+    updatePasswordHash: db.prepare('UPDATE users SET password_hash = ? WHERE id = ?'),
+    deleteUser: db.prepare('DELETE FROM users WHERE id = ?'),
+    listUsers: db.prepare('SELECT id, username, created_at, last_login, skin_path FROM users ORDER BY username COLLATE NOCASE'),
     revokeToken: db.prepare('INSERT OR IGNORE INTO revoked_tokens (token_jti, revoked_at, expires_at) VALUES (?, ?, ?)'),
     isTokenRevoked: db.prepare('SELECT 1 FROM revoked_tokens WHERE token_jti = ? AND expires_at > ?'),
     cleanExpiredTokens: db.prepare('DELETE FROM revoked_tokens WHERE expires_at <= ?'),
@@ -200,6 +203,7 @@ const capeStmts = {
     getChoice: db.prepare('SELECT cape_id FROM cape_choices WHERE user_id = ?'),
     setChoice: db.prepare('INSERT INTO cape_choices (user_id, cape_id) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET cape_id = excluded.cape_id'),
     clearChoice: db.prepare('DELETE FROM cape_choices WHERE user_id = ?'),
+    deleteUserAssignments: db.prepare('DELETE FROM cape_assignments WHERE user_id = ?'),
     clearChoiceForCape: db.prepare('DELETE FROM cape_choices WHERE user_id = ? AND cape_id = ?'),
 };
 
@@ -228,6 +232,22 @@ async function sendSkinFile(res, filename) {
 }
 
 const app = express();
+
+// Traefik is the only hop in front of this container, so trust its
+// X-Forwarded-For header. Without this, express-rate-limit rejects requests
+// with ERR_ERL_UNEXPECTED_X_FORWARDED_FOR instead of limiting by client IP.
+// Override TRUST_PROXY if another proxy (for example Cloudflare) is in front.
+const trustProxyEnv = String(process.env.TRUST_PROXY ?? '1').trim();
+const trustProxy = trustProxyEnv === ''
+    ? 1
+    : /^\d+$/.test(trustProxyEnv)
+        ? Number(trustProxyEnv)
+        : trustProxyEnv === 'false'
+            ? false
+            : trustProxyEnv === 'true'
+                ? true
+                : trustProxyEnv;
+app.set('trust proxy', trustProxy);
 
 const CORS_ALLOWLIST = new Set(
     (process.env.CORS_ORIGINS || '')
@@ -319,11 +339,6 @@ app.get('/sitemap.xml', (req, res) => {
     }
 });
 
-app.use(rateLimit({
-    windowMs: 900000,
-    max: 100,
-    skip: (req) => isWsReplay(req) || req.path.startsWith('/admin'),
-}));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false }));
 
@@ -360,6 +375,9 @@ function authenticateToken(req, res, next) {
         const decoded = jwt.verify(authHeader.slice(7), secrets.jwtSecret, { algorithms: ['HS256'] });
         if (stmts.isTokenRevoked.get(decoded.jti, Date.now())) {
             return res.status(401).json({ error: 'Token has been revoked' });
+        }
+        if (!stmts.findById.get(decoded.sub)) {
+            return res.status(401).json({ error: 'Account no longer exists' });
         }
         req.user = decoded;
         next();
@@ -656,7 +674,7 @@ function adminStyles() {
         a { color: #7fb8ff; }
         .card { max-width: 420px; margin: 60px auto; background: #1c2026; border: 1px solid #2c323a; border-radius: 10px; padding: 20px; }
         label { display: block; margin-bottom: 12px; font-size: 13px; color: #b9c0c9; }
-        input[type=text], input[type=password], input[type=file] { width: 100%; margin-top: 4px; padding: 8px; background: #12151a; border: 1px solid #303742; border-radius: 6px; color: inherit; }
+        input[type=text], input[type=password], input[type=file], select { width: 100%; margin-top: 4px; padding: 8px; background: #12151a; border: 1px solid #303742; border-radius: 6px; color: inherit; }
         button { padding: 6px 12px; background: #2f6fed; color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
         button.danger { background: #a83232; }
         table { width: 100%; border-collapse: collapse; }
@@ -668,6 +686,10 @@ function adminStyles() {
         form.inline { display: inline; }
         .assign { margin-top: 6px; display: flex; gap: 6px; }
         .assign input { width: 180px; }
+        .actions { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+        .actions input[type=file] { width: 180px; }
+        .actions input[type=password] { width: 170px; }
+        .actions select { width: 190px; }
         .msg { padding: 8px 10px; border-radius: 6px; background: #1d3a26; color: #9fe0b1; margin-bottom: 12px; }
         .error { padding: 8px 10px; border-radius: 6px; background: #3a1d1d; color: #ffb4b4; margin-bottom: 12px; }
         .topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 18px; }
@@ -680,10 +702,10 @@ function adminStyles() {
 function renderAdminLogin(res, error = '', status = 200) {
     res.status(status).type('html').send(`<!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cape Admin</title><style>${adminStyles()}</style></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Breakmine Admin</title><style>${adminStyles()}</style></head>
 <body>
     <form class="card" method="post" action="/admin/login">
-        <h1>Cape Admin</h1>
+        <h1>Breakmine Admin</h1>
         ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
         <label>Admin password<input type="password" name="password" autofocus required></label>
         <button type="submit">Sign in</button>
@@ -694,10 +716,13 @@ function renderAdminLogin(res, error = '', status = 200) {
 
 function renderAdminPanel(req, res) {
     const capes = capeStmts.listCapes.all();
+    const users = stmts.listUsers.all();
     const message = typeof req.query.msg === 'string' ? req.query.msg : '';
     const error = typeof req.query.err === 'string' ? req.query.err : '';
 
-    const rows = capes.map((cape) => {
+    const formatDate = (value, fallback) => value ? new Date(value).toLocaleString() : fallback;
+
+    const capeRows = capes.map((cape) => {
         const assigned = capeStmts.assignmentsForCape.all(cape.id).map((row) => row.username);
         const id = encodeURIComponent(cape.id);
         const pills = assigned.length === 0
@@ -722,18 +747,65 @@ function renderAdminPanel(req, res) {
         </tr>`;
     }).join('');
 
+    const userRows = users.map((user) => {
+        const choice = capeStmts.getChoice.get(user.id);
+        const selectedCape = choice ? choice.cape_id : null;
+        const userId = encodeURIComponent(user.id);
+        const capeOptions = [
+            `<option value="default"${selectedCape === null ? ' selected' : ''}>Server default</option>`,
+            `<option value="none"${selectedCape === '' ? ' selected' : ''}>No cape</option>`,
+            ...capes.map((cape) => `<option value="${escapeHtml(cape.id)}"${selectedCape === cape.id ? ' selected' : ''}>${escapeHtml(cape.name)}</option>`)
+        ].join('');
+
+        return `<tr>
+            <td><strong>${escapeHtml(user.username)}</strong><div class="muted">${escapeHtml(user.id)}</div></td>
+            <td>${formatDate(user.created_at, '—')}</td>
+            <td>${formatDate(user.last_login, 'Never')}</td>
+            <td>
+                <div class="muted">${user.skin_path ? 'Custom skin' : 'Default skin'}</div>
+                <form class="actions" method="post" action="/admin/users/${userId}/skin" enctype="multipart/form-data">
+                    <input type="file" name="file" accept="image/png" required>
+                    <button type="submit">Upload</button>
+                </form>
+                ${user.skin_path ? `<form method="post" action="/admin/users/${userId}/skin/reset"><button type="submit">Reset skin</button></form>` : ''}
+            </td>
+            <td>
+                <form class="actions" method="post" action="/admin/users/${userId}/cape">
+                    <select name="capeId">${capeOptions}</select>
+                    <button type="submit">Apply</button>
+                </form>
+            </td>
+            <td>
+                <form class="actions" method="post" action="/admin/users/${userId}/password">
+                    <input type="password" name="password" minlength="6" maxlength="128" placeholder="New password" autocomplete="new-password" required>
+                    <button type="submit">Set</button>
+                </form>
+            </td>
+            <td><form method="post" action="/admin/users/${userId}/delete" onsubmit="return confirm('Delete this player and all their account data?')">
+                <button class="danger" type="submit">Delete</button>
+            </form></td>
+        </tr>`;
+    }).join('');
+
     res.type('html').send(`<!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cape Admin</title><style>${adminStyles()}</style></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Breakmine Admin</title><style>${adminStyles()}</style></head>
 <body>
     <div class="topbar">
-        <h1>Cape Admin</h1>
+        <h1>Breakmine Admin</h1>
         <form method="post" action="/admin/logout"><button type="submit">Sign out</button></form>
     </div>
 
     ${message ? `<div class="msg">${escapeHtml(message)}</div>` : ''}
     ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
 
+    <h2>Players</h2>
+    <table>
+        <thead><tr><th>Player</th><th>Created</th><th>Last login</th><th>Skin</th><th>Cape</th><th>Password</th><th></th></tr></thead>
+        <tbody>${userRows || '<tr><td colspan="7" class="muted">No players registered yet.</td></tr>'}</tbody>
+    </table>
+
+    <h2>Capes</h2>
     <form class="upload" method="post" action="/admin/capes" enctype="multipart/form-data">
         <label>Cape name<input type="text" name="name" maxlength="${CAPE_NAME_MAX}" placeholder="e.g. Founder Cape" required></label>
         <label>Cape PNG (64×32)<input type="file" name="file" accept="image/png" required></label>
@@ -742,7 +814,7 @@ function renderAdminPanel(req, res) {
 
     <table>
         <thead><tr><th></th><th>Name</th><th>Assigned players</th><th></th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="4" class="muted">No capes uploaded yet.</td></tr>'}</tbody>
+        <tbody>${capeRows || '<tr><td colspan="4" class="muted">No capes uploaded yet.</td></tr>'}</tbody>
     </table>
 </body>
 </html>`);
@@ -946,6 +1018,130 @@ app.get('/admin/capes/:id/thumb', requireAdmin, (req, res) => {
     const cape = capeStmts.getCape.get(req.params.id);
     if (!cape || !sendCapeFile(res, cape.filename)) {
         if (!res.headersSent) res.status(404).end();
+    }
+});
+
+app.post('/admin/users/:id/skin', requireAdmin, (req, res) => {
+    upload.single('file')(req, res, async (err) => {
+        const user = stmts.findById.get(req.params.id);
+        const file = req.file;
+
+        const fail = (message) => {
+            if (file) {
+                try { fs.unlinkSync(file.path); } catch (removeError) { /* already gone */ }
+            }
+            res.redirect('/admin?err=' + encodeURIComponent(message));
+        };
+
+        if (err) return fail(err.message || 'Upload failed.');
+        if (!user) return fail('Player not found.');
+        if (!file) return fail('Choose a PNG file.');
+
+        try {
+            const metadata = await sharp(file.path).metadata();
+            const validSize = metadata.width === 64 && (metadata.height === 32 || metadata.height === 64);
+            if (metadata.format !== 'png' || !validSize) {
+                return fail('Skin PNG must be 64×64 or 64×32 pixels.');
+            }
+
+            const previousSkin = user.skin_path;
+            stmts.updateSkinPath.run(file.filename, user.id);
+            if (previousSkin && previousSkin !== file.filename) {
+                try { removeSkinFile(previousSkin); } catch (error) {
+                    Logger.warn('Admin', `Could not delete previous skin for ${user.username}: ${error.message}`);
+                }
+            }
+
+            Logger.info('Admin', `Changed skin for ${user.username}`);
+            res.redirect('/admin?msg=' + encodeURIComponent(`Changed skin for ${user.username}.`));
+        } catch (error) {
+            fail('Could not read the uploaded PNG.');
+        }
+    });
+});
+
+app.post('/admin/users/:id/skin/reset', requireAdmin, (req, res) => {
+    const user = stmts.findById.get(req.params.id);
+    if (!user) return res.redirect('/admin?err=' + encodeURIComponent('Player not found.'));
+
+    const previousSkin = user.skin_path;
+    stmts.updateSkinPath.run(null, user.id);
+    if (previousSkin) {
+        try { removeSkinFile(previousSkin); } catch (error) {
+            Logger.warn('Admin', `Could not delete skin for ${user.username}: ${error.message}`);
+        }
+    }
+
+    Logger.info('Admin', `Reset skin for ${user.username}`);
+    res.redirect('/admin?msg=' + encodeURIComponent(`Reset skin for ${user.username}.`));
+});
+
+app.post('/admin/users/:id/cape', requireAdmin, (req, res) => {
+    const user = stmts.findById.get(req.params.id);
+    if (!user) return res.redirect('/admin?err=' + encodeURIComponent('Player not found.'));
+
+    const raw = typeof req.body?.capeId === 'string' ? req.body.capeId : 'default';
+
+    if (raw === 'default') {
+        capeStmts.clearChoice.run(user.id);
+        return res.redirect('/admin?msg=' + encodeURIComponent(`Reset ${user.username} to the server default cape.`));
+    }
+
+    if (raw === 'none') {
+        capeStmts.setChoice.run(user.id, '');
+        return res.redirect('/admin?msg=' + encodeURIComponent(`Removed the cape from ${user.username}.`));
+    }
+
+    const cape = capeStmts.getCape.get(raw);
+    if (!cape) return res.redirect('/admin?err=' + encodeURIComponent('Cape not found.'));
+
+    // Assigning through the player row lets the admin change the worn cape
+    // directly, without first using the separate cape-assignment form.
+    capeStmts.assignCape.run(cape.id, user.id, Date.now());
+    capeStmts.setChoice.run(user.id, cape.id);
+
+    Logger.info('Admin', `Set cape "${cape.name}" for ${user.username}`);
+    res.redirect('/admin?msg=' + encodeURIComponent(`Set ${user.username}'s cape to ${cape.name}.`));
+});
+
+app.post('/admin/users/:id/password', requireAdmin, async (req, res) => {
+    const user = stmts.findById.get(req.params.id);
+    if (!user) return res.redirect('/admin?err=' + encodeURIComponent('Player not found.'));
+
+    const passwordVal = validatePassword(req.body?.password);
+    if (!passwordVal.valid) {
+        return res.redirect('/admin?err=' + encodeURIComponent(passwordVal.error));
+    }
+
+    try {
+        const hash = await bcrypt.hash(passwordVal.value, BCRYPT_ROUNDS);
+        stmts.updatePasswordHash.run(hash, user.id);
+        Logger.info('Admin', `Changed password for ${user.username}`);
+        res.redirect('/admin?msg=' + encodeURIComponent(`Changed password for ${user.username}.`));
+    } catch (error) {
+        Logger.error('Admin', `Could not change password for ${user.username}: ${error.message}`);
+        res.redirect('/admin?err=' + encodeURIComponent('Could not change that password.'));
+    }
+});
+
+app.post('/admin/users/:id/delete', requireAdmin, (req, res) => {
+    const user = stmts.findById.get(req.params.id);
+    if (!user) return res.redirect('/admin?err=' + encodeURIComponent('Player not found.'));
+
+    try {
+        capeStmts.deleteUserAssignments.run(user.id);
+        capeStmts.clearChoice.run(user.id);
+        stmts.deleteUser.run(user.id);
+
+        try { removeSkinFile(user.skin_path); } catch (error) {
+            Logger.warn('Admin', `Could not delete skin for ${user.username}: ${error.message}`);
+        }
+
+        Logger.info('Admin', `Deleted account: ${user.username}`);
+        res.redirect('/admin?msg=' + encodeURIComponent(`Deleted ${user.username}.`));
+    } catch (error) {
+        Logger.error('Admin', `Could not delete ${user.username}: ${error.message}`);
+        res.redirect('/admin?err=' + encodeURIComponent('Could not delete that account.'));
     }
 });
 

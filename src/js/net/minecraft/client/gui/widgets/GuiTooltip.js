@@ -2,6 +2,10 @@ import Gui from "../Gui.js";
 
 export default class GuiTooltip extends Gui {
 
+    // Tooltips are queued during the frame and painted by ScreenRenderer after
+    // every screen element, so they always appear above other widgets.
+    static pending = [];
+
     constructor(minecraft, string, x, y, width, height) {
         super(minecraft);
 
@@ -19,6 +23,19 @@ export default class GuiTooltip extends Gui {
             return;
         }
 
+        GuiTooltip.pending.push({ tooltip: this, stack, mouseX, mouseY });
+    }
+
+    static flush() {
+        const pending = GuiTooltip.pending;
+        GuiTooltip.pending = [];
+
+        for (const entry of pending) {
+            entry.tooltip.drawTooltip(entry.stack, entry.mouseX, entry.mouseY);
+        }
+    }
+
+    drawTooltip(stack, mouseX, mouseY) {
         const lines = this.string.split('\n');
         
         let maxWidth = 0;

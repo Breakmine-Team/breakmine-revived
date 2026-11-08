@@ -1,3 +1,5 @@
+import GuiTooltip from "../../gui/widgets/GuiTooltip.js";
+
 export default class ScreenRenderer {
 
     constructor(minecraft, window) {
@@ -83,6 +85,9 @@ export default class ScreenRenderer {
         if (screen !== null && screen.renderPostScreen) {
             screen.renderPostScreen(this.stack2d, mouseX, mouseY, partialTicks);
         }
+
+        // Tooltips queued while drawing always composite above everything else
+        GuiTooltip.flush();
 
         this.stack2d.restore();
     }
