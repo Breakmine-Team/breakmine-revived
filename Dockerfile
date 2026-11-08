@@ -25,7 +25,7 @@ FROM node:24-slim
 # better-sqlite3, bcrypt and discord-rpc have prebuilt binaries for linux, but
 # fall back to compiling from source when none matches, so keep a toolchain.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3 make g++ ca-certificates \
+        python3 make g++ ca-certificates util-linux findutils \
     && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production \
@@ -85,7 +85,12 @@ COPY server.js ./
 # Named volume target. secrets.json is generated here on first boot, so it is
 # never baked into the image; persisting /data keeps logins valid across rebuilds.
 RUN mkdir -p /data && chown -R node:node /data /app
-USER node
+
+# Start as root only long enough to repair the ownership of an existing volume
+# (older deployments and bind mounts are root-owned), then run as `node`.
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 VOLUME ["/data"]
 EXPOSE 6006 6007 6008
