@@ -196,6 +196,8 @@ const capeStmts = {
     deleteCapeAssignments: db.prepare('DELETE FROM cape_assignments WHERE cape_id = ?'),
     deleteCapeChoices: db.prepare('DELETE FROM cape_choices WHERE cape_id = ?'),
     assignCape: db.prepare('INSERT OR IGNORE INTO cape_assignments (cape_id, user_id, assigned_at) VALUES (?, ?, ?)'),
+    assignCapeToAll: db.prepare('INSERT OR IGNORE INTO cape_assignments (cape_id, user_id, assigned_at) SELECT ?, id, ? FROM users'),
+    countCapeAssignments: db.prepare('SELECT COUNT(*) AS count FROM cape_assignments WHERE cape_id = ?'),
     unassignCape: db.prepare('DELETE FROM cape_assignments WHERE cape_id = ? AND user_id = ?'),
     assignmentsForCape: db.prepare('SELECT u.username FROM cape_assignments a JOIN users u ON u.id = a.user_id WHERE a.cape_id = ? ORDER BY u.username COLLATE NOCASE'),
     capesForUser: db.prepare('SELECT c.* FROM capes c JOIN cape_assignments a ON a.cape_id = c.id WHERE a.user_id = ? ORDER BY c.name COLLATE NOCASE'),
@@ -767,9 +769,19 @@ function renderAdminPanel(req, res) {
                     <button type="submit">Assign</button>
                 </form>
             </td>
-            <td><form method="post" action="/admin/capes/${id}/delete" onsubmit="return confirm('Delete this cape and unassign it from everyone?')">
-                <button class="danger" type="submit">Delete</button>
-            </form></td>
+            <td>
+                <div class="actions">
+                    <form method="post" action="/admin/capes/${id}/assign-all" onsubmit="return confirm('Gift this cape to all ${users.length} registered players?')">
+                        <button type="submit"${users.length === 0 ? ' disabled' : ''}>Gift All</button>
+                    </form>
+                    <form method="post" action="/admin/capes/${id}/unassign-all" onsubmit="return confirm('Remove this cape from all ${assigned.length} assigned players?')">
+                        <button class="danger" type="submit"${assigned.length === 0 ? ' disabled' : ''}>Remove All</button>
+                    </form>
+                    <form method="post" action="/admin/capes/${id}/delete" onsubmit="return confirm('Delete this cape and unassign it from everyone?')">
+                        <button class="danger" type="submit">Delete</button>
+                    </form>
+                </div>
+            </td>
         </tr>`;
     }).join('');
 
@@ -1062,6 +1074,49 @@ app.post('/admin/capes/:id/assign', requireAdmin, (req, res) => {
     }
 
     res.redirect('/admin?msg=' + encodeURIComponent(message));
+});
+
+app.post('/admin/capes/:id/assign-all', requireAdmin, (req, res) => {
+    const cape = capeStmts.getCape.get(req.params.id);
+    if (!cape) return res.redirect('/admin?err=' + encodeURIComponent('Cape not found.'));
+
+    try {
+        const added = capeStmts.assignCapeToAll.run(cape.id, Date.now()).changes;
+        const total = capeStmts.countCapeAssignments.get(cape.id).count;
+        Logger.info('Admin', `Gifted cape "${cape.name}" to all players (${added} new assignments)`);
+
+        const message = total === 0
+            ? `There are no players to assign "${cape.name}" to.`
+            : added === 0
+                ? `"${cape.name}" is already assigned to all ${total} player${total === 1 ? '' : 's'}.`
+                : `Gifted "${cape.name}" to ${added} player${added === 1 ? '' : 's'} (${total} total).`;
+        res.redirect('/admin?msg=' + encodeURIComponent(message));
+    } catch (error) {
+        Logger.error('Admin', `Gift all cape failed: ${error.message}`);
+        res.redirect('/admin?err=' + encodeURIComponent('Could not assign that cape to all players.'));
+    }
+});
+
+app.post('/admin/capes/:id/unassign-all', requireAdmin, (req, res) => {
+    const cape = capeStmts.getCape.get(req.params.id);
+    if (!cape) return res.redirect('/admin?err=' + encodeURIComponent('Cape not found.'));
+
+    try {
+        const removed = db.transaction(() => {
+            const result = capeStmts.deleteCapeAssignments.run(cape.id);
+            capeStmts.deleteCapeChoices.run(cape.id);
+            return result.changes;
+        })();
+        Logger.info('Admin', `Removed cape "${cape.name}" from all players (${removed} assignments)`);
+
+        const message = removed === 0
+            ? `"${cape.name}" was not assigned to any players.`
+            : `Removed "${cape.name}" from ${removed} player${removed === 1 ? '' : 's'}.`;
+        res.redirect('/admin?msg=' + encodeURIComponent(message));
+    } catch (error) {
+        Logger.error('Admin', `Remove all cape failed: ${error.message}`);
+        res.redirect('/admin?err=' + encodeURIComponent('Could not remove that cape from all players.'));
+    }
 });
 
 app.post('/admin/capes/:id/unassign', requireAdmin, (req, res) => {

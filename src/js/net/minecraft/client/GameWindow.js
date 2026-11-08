@@ -172,6 +172,7 @@ export default class GameWindow {
         });
         this.registerListener(this.wrapper, 'mouseleave', event => {
             Keyboard.setEnabled(false);
+            this.minecraft.modLoader?.clearKeybindStates?.();
             this.mouseInsideWindow = false;
             this.requestCursorUpdate();
         });

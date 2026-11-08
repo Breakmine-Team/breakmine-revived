@@ -29,6 +29,9 @@ export default class GameSettings {
         this.keyPlayerList = 'Tab';
         this.keyVoiceChat = 'KeyO';
 
+        // Rebindable keybinds registered by mods, keyed by "modId:keybindId".
+        this.modKeybinds = {};
+
         this.clouds = 'fancy';
 
         this.session = null;
@@ -112,6 +115,26 @@ export default class GameSettings {
         if (!saved) return;
         const data = JSON.parse(saved);
         Object.assign(this, data);
+
+        if (!this.modKeybinds || typeof this.modKeybinds !== 'object' || Array.isArray(this.modKeybinds)) {
+            this.modKeybinds = {};
+        }
+    }
+
+    /** Read a mod keybind, falling back to the keybind's registered default. */
+    getModKeybind(setting, fallback = null) {
+        const map = this.modKeybinds;
+        return map && Object.prototype.hasOwnProperty.call(map, setting)
+            ? map[setting]
+            : fallback;
+    }
+
+    /** Store a mod keybind in memory; GameSettings.save() persists it. */
+    setModKeybind(setting, key) {
+        if (!this.modKeybinds || typeof this.modKeybinds !== 'object' || Array.isArray(this.modKeybinds)) {
+            this.modKeybinds = {};
+        }
+        this.modKeybinds[setting] = key;
     }
 
     save() {

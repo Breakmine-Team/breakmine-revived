@@ -1928,6 +1928,10 @@ export default class Minecraft {
     }
 
     onKeyPressed(button) {
+        // Mod keybinds run before the built-in controls so they can react to
+        // the same key. A conflict is shown in the Controls screen.
+        this.modLoader?.handleKeyPressed(button);
+
         // TV mode: color button actions
         if (this.settings.tvmode && this.hasInGameFocus()) {
             if (button === 'ColorRed') {
@@ -2069,6 +2073,8 @@ export default class Minecraft {
 
     /** Key released while in game (no screen open). Used e.g. by push-to-talk. */
     onKeyReleased(button) {
+        this.modLoader?.handleKeyReleased(button);
+
         if (this.voiceChat && button === this.settings.keyVoiceChat) {
             this.voiceChat.onKeyReleased();
         }

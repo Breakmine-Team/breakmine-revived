@@ -96,6 +96,14 @@ function normalizeOverlayCanvasColor(value) {
  *   ModAPI.registerOverlayText(fn, { priority })  // fn(textContext)
  *       text(value, x, y, { color, shadow, align, background, padding,
  *       scale, noColor }) draws HUD text anywhere on screen. Newlines work.
+ *   ModAPI.registerKeybind(id, name, defaultKey, onPress, { category, onRelease, allowRepeat })
+ *       or registerKeybind({ id, name, defaultKey, onPress, ... }). The bind
+ *       appears in Options > Controls and is saved with the game settings.
+ *       onPress({ key, keybind, minecraft }) runs while in game; onRelease
+ *       runs on key-up. Use null for an unbound default. Key ids must be
+ *       unique within the mod; allowRepeat defaults to false.
+ *   ModAPI.unregisterKeybind(id), ModAPI.getKeybind(id),
+ *       ModAPI.getKeybindKey(id), ModAPI.getKeybinds()
  *   ModAPI.saveJson(key, value), ModAPI.loadJson(key, fallback),
  *       ModAPI.deleteJson(key), ModAPI.listJson()
  *       Persistent per-mod JSON under mod_data/<modId>/, never inside the
@@ -107,9 +115,9 @@ function normalizeOverlayCanvasColor(value) {
  *       null when nothing is targeted, undefined when no world is loaded.
  *   ModAPI.registerService(id, service), ModAPI.getService(id),
  *       ModAPI.resolveTexture('modid:name'), ModAPI.log(...), ModAPI.warn(...)
- * Commands, render hooks, block-action hooks, overlay text and registered
- * services are dropped when the mod is disabled or uninstalled; its JSON data
- * and block registrations are kept.
+ * Commands, render hooks, block-action hooks, overlay text, keybinds and
+ * registered services are dropped when the mod is disabled or uninstalled;
+ * its JSON data and block registrations are kept.
  * AuthLib is the account module: getAuthToken(), getUserInfo(username),
  * userExists(username), getSkinUrl(username) and getCapeUrl(username). Mods read
  * it rather than calling fetch, so they inherit the API base URL and the auth
@@ -160,6 +168,8 @@ export default class ModLoader {
         this._activeModId = null;       // mod currently being loaded (attributes registrations)
         this._modApis = new Map();      // modId -> ModAPI facade handed to mod sandboxes
         this.customTabs = [];           // Array of custom tabs from mods: { modId, name, iconBlockId }
+        this.keybinds = new Map();      // "modId:keybindId" -> registered keybind entry
+        this._pressedKeybinds = new Map(); // keybind setting -> key currently held
     }
 
     /* ------------------------------------------------------------------
@@ -316,6 +326,204 @@ export default class ModLoader {
     /** Every command mods registered, in registration order. */
     getModCommands() {
         return CommandRegistry.getAll();
+    }
+
+    /* ----------------------------- keybinds --------------------------- */
+
+    /**
+     * Register a rebindable keybind for a mod.
+     *
+     *   registerKeybind("toggle_overlay", "Toggle Overlay", "KeyU", (event) => ...)
+     *   registerKeybind({
+     *       id: "toggle_overlay",
+     *       name: "Toggle Overlay",
+     *       defaultKey: "KeyU",
+     *       category: "My Mod",
+     *       onPress({ key, keybind, minecraft }) { ... },
+     *       onRelease({ key, keybind, minecraft }) { ... }
+     *   })
+     *
+     * The binding is stored in GameSettings and appears in Options > Controls
+     * below the built-in bindings. `allowRepeat` defaults to false, so holding
+     * a key only fires onPress once until it is released.
+     */
+    registerKeybind(id, name, defaultKey, onPress, options = {}) {
+        const descriptor = typeof id === 'object' && id !== null
+            ? { ...id }
+            : { id, name, defaultKey, onPress, ...options };
+        const modId = descriptor.modId || options.modId || this._activeModId || null;
+        const keybindId = String(descriptor.id ?? '').trim();
+        if (!/^[A-Za-z0-9_-]{1,64}$/.test(keybindId)) {
+            throw new Error('A keybind id (1-64 letters, numbers, _ or -) is required.');
+        }
+
+        const label = String(descriptor.name || descriptor.label || keybindId).trim();
+        const defaultBinding = descriptor.defaultKey !== undefined
+            ? descriptor.defaultKey
+            : (descriptor.key ?? null);
+        if (defaultBinding !== null && typeof defaultBinding !== 'string') {
+            throw new Error(`Keybind '${keybindId}' defaultKey must be a string or null.`);
+        }
+
+        const press = descriptor.onPress || descriptor.callback || descriptor.execute || null;
+        const release = descriptor.onRelease || null;
+        if (press !== null && typeof press !== 'function') {
+            throw new Error(`Keybind '${keybindId}' onPress must be a function.`);
+        }
+        if (release !== null && typeof release !== 'function') {
+            throw new Error(`Keybind '${keybindId}' onRelease must be a function.`);
+        }
+
+        const modName = this.mods.get(modId)?.name || modId || 'Mods';
+        const setting = `${modId || 'mod'}:${keybindId}`;
+        const entry = {
+            id: keybindId,
+            setting,
+            name: label || keybindId,
+            defaultKey: defaultBinding,
+            onPress: press,
+            onRelease: release,
+            allowRepeat: descriptor.allowRepeat === true,
+            category: String(descriptor.category || modName),
+            modId,
+            modName
+        };
+        Object.defineProperty(entry, 'key', {
+            enumerable: true,
+            get: () => this.getKeybindKey(entry)
+        });
+
+        const previous = this.keybinds.get(setting);
+        if (previous) this._removeKeybindEntry(previous);
+        this.keybinds.set(setting, entry);
+        if (modId) this._trackRegistration(modId).keybinds.add(entry);
+        return entry;
+    }
+
+    unregisterKeybind(keybindId, modId = this._activeModId) {
+        const entry = typeof keybindId === 'object' && keybindId !== null
+            ? keybindId
+            : this._resolveKeybind(keybindId, modId);
+        return entry ? this._removeKeybindEntry(entry) : false;
+    }
+
+    getKeybind(keybindId, modId = this._activeModId) {
+        return this._resolveKeybind(keybindId, modId);
+    }
+
+    /** The currently bound key for a keybind, or null when it is unbound/missing. */
+    getKeybindKey(keybindId, modId = this._activeModId) {
+        const entry = this._resolveKeybind(keybindId, modId);
+        if (!entry) return null;
+
+        const settings = this.minecraft?.settings;
+        if (settings && typeof settings.getModKeybind === 'function') {
+            return settings.getModKeybind(entry.setting, entry.defaultKey);
+        }
+        const map = settings?.modKeybinds;
+        return map && Object.prototype.hasOwnProperty.call(map, entry.setting)
+            ? map[entry.setting]
+            : entry.defaultKey;
+    }
+
+    /** All registered mod keybinds, with their current key, for the Controls screen. */
+    getKeybinds() {
+        return [...this.keybinds.values()]
+            .map((entry) => ({
+                id: entry.id,
+                setting: entry.setting,
+                name: entry.name,
+                category: entry.category,
+                modId: entry.modId,
+                modName: entry.modName,
+                defaultKey: entry.defaultKey,
+                key: this.getKeybindKey(entry),
+                allowRepeat: entry.allowRepeat
+            }))
+            .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+    }
+
+    /** Internal: invoke matching mod keybind callbacks on a key-down. */
+    handleKeyPressed(key) {
+        if (!key) return;
+
+        for (const entry of [...this.keybinds.values()]) {
+            if (this.getKeybindKey(entry) !== key) continue;
+            if (!entry.allowRepeat && this._pressedKeybinds.has(entry.setting)) continue;
+
+            this._pressedKeybinds.set(entry.setting, key);
+            if (!entry.onPress) continue;
+
+            try {
+                entry.onPress({ key, keybind: entry, minecraft: this.minecraft });
+            } catch (error) {
+                console.warn(`[Patchwork] Keybind '${entry.name}' onPress failed:`, error);
+            }
+        }
+    }
+
+    /** Internal: release callbacks and repeat state for a key-up. */
+    handleKeyReleased(key) {
+        for (const entry of [...this.keybinds.values()]) {
+            if (this._pressedKeybinds.get(entry.setting) !== key) continue;
+
+            this._pressedKeybinds.delete(entry.setting);
+            if (!entry.onRelease) continue;
+
+            try {
+                entry.onRelease({ key, keybind: entry, minecraft: this.minecraft });
+            } catch (error) {
+                console.warn(`[Patchwork] Keybind '${entry.name}' onRelease failed:`, error);
+            }
+        }
+    }
+
+    /** Release keybind state when keyboard focus is lost, without waiting for key-up. */
+    clearKeybindStates() {
+        const pressed = [...this._pressedKeybinds.entries()];
+        this._pressedKeybinds.clear();
+
+        for (const [setting, key] of pressed) {
+            const entry = this.keybinds.get(setting);
+            if (!entry?.onRelease) continue;
+            try {
+                entry.onRelease({ key, keybind: entry, minecraft: this.minecraft });
+            } catch (error) {
+                console.warn(`[Patchwork] Keybind '${entry.name}' onRelease failed:`, error);
+            }
+        }
+    }
+
+    _resolveKeybind(keybindId, modId = this._activeModId) {
+        if (keybindId && typeof keybindId === 'object') {
+            return this.keybinds.get(keybindId.setting) === keybindId ? keybindId : null;
+        }
+
+        const raw = String(keybindId ?? '');
+        if (!raw) return null;
+
+        const direct = this.keybinds.get(raw);
+        if (direct) return direct;
+
+        if (modId) {
+            const scoped = this.keybinds.get(`${modId}:${raw}`);
+            if (scoped) return scoped;
+        }
+
+        for (const entry of this.keybinds.values()) {
+            if (entry.id === raw) return entry;
+        }
+        return null;
+    }
+
+    _removeKeybindEntry(entry) {
+        if (!entry) return false;
+        if (this.keybinds.get(entry.setting) === entry) this.keybinds.delete(entry.setting);
+        this._pressedKeybinds.delete(entry.setting);
+        for (const record of this._modRegistrations.values()) {
+            record.keybinds.delete(entry);
+        }
+        return true;
     }
 
     /* ---------------------------- render hooks ------------------------ */
@@ -791,6 +999,7 @@ export default class ModLoader {
                 hooks: new Set(),
                 blockActions: new Set(),
                 overlayText: new Set(),
+                keybinds: new Set(),
                 services: new Map()
             };
             this._modRegistrations.set(modId, record);
@@ -817,6 +1026,10 @@ export default class ModLoader {
             const index = this.overlayTextHooks.indexOf(entry);
             if (index !== -1) this.overlayTextHooks.splice(index, 1);
         }
+        for (const entry of record.keybinds) {
+            if (this.keybinds.get(entry.setting) === entry) this.keybinds.delete(entry.setting);
+            this._pressedKeybinds.delete(entry.setting);
+        }
         for (const [serviceId, service] of record.services) {
             // Only remove the service this mod registered; another mod may have
             // taken over the same id since it was added.
@@ -825,8 +1038,8 @@ export default class ModLoader {
             }
         }
         this.clearCustomTabs(modId);
-        return record.commands.size + record.hooks.size +
-            record.blockActions.size + record.overlayText.size + record.services.size;
+        return record.commands.size + record.hooks.size + record.blockActions.size +
+            record.overlayText.size + record.keybinds.size + record.services.size;
     }
 
     /**
@@ -854,6 +1067,12 @@ export default class ModLoader {
             registerOverlayText: (fn, options = {}) => loader.registerOverlayText(fn, { modId, ...options }),
             onOverlayText: (fn, options = {}) => loader.registerOverlayText(fn, { modId, ...options }),
             unregisterOverlayText: (handle) => loader.unregisterOverlayText(handle),
+            registerKeybind: (id, name, defaultKey, onPress, options = {}) =>
+                loader.registerKeybind(id, name, defaultKey, onPress, { modId, ...options }),
+            unregisterKeybind: (id) => loader.unregisterKeybind(id, modId),
+            getKeybind: (id) => loader.getKeybind(id, modId),
+            getKeybindKey: (id) => loader.getKeybindKey(id, modId),
+            getKeybinds: () => loader.getKeybinds(),
             saveJson: (key, value) => loader.saveJson(key, value, modId),
             loadJson: (key, fallback = null) => loader.loadJson(key, fallback, modId),
             deleteJson: (key) => loader.deleteJson(key, modId),

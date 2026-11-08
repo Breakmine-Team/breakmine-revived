@@ -161,6 +161,51 @@ export default class GuiControls extends GuiScreen {
             }
         }
 
+        // Mods register their own rebindable keys through ModAPI. Group them
+        // by category below the built-in bindings so users can change them
+        // alongside the normal controls.
+        const modGroups = new Map();
+        for (const keybind of this.minecraft.modLoader?.getKeybinds?.() || []) {
+            const category = keybind.category || keybind.modName || keybind.modId || 'Mod';
+            if (!modGroups.has(category)) modGroups.set(category, []);
+            modGroups.get(category).push(keybind);
+        }
+
+        for (const [category, keybinds] of modGroups) {
+            addRow({ kind: "header", height: this.headerHeight, label: `Mods: ${category}`, gap: 2 });
+
+            for (const keybind of keybinds) {
+                const key = settings.getModKeybind(keybind.setting, keybind.defaultKey);
+                const binding = {
+                    name: keybind.name,
+                    modKeybind: keybind.setting,
+                    defaultKey: keybind.defaultKey
+                };
+                const keyButton = new GuiKeyButton(
+                    keybind.name,
+                    key,
+                    this.listX + this.listWidth - this.keyButtonWidth,
+                    0,
+                    this.keyButtonWidth,
+                    this.rowHeight,
+                    newKey => {
+                        settings.setModKeybind(keybind.setting, newKey);
+                        this.refreshConflicts();
+                    },
+                    keybind.defaultKey
+                );
+
+                addRow({
+                    kind: "binding",
+                    height: this.rowHeight,
+                    button: keyButton,
+                    label: keybind.name,
+                    binding: binding,
+                    tooltip: KEY_BUTTON_HINT
+                });
+            }
+        }
+
         this.rows = rows;
         this.contentHeight = y + 4;
 
@@ -385,16 +430,21 @@ export default class GuiControls extends GuiScreen {
 
     // --- Key conflicts -----------------------------------------------------
 
+    getBindingKey(binding) {
+        if (binding.modKeybind) {
+            return this.minecraft.settings.getModKeybind(binding.modKeybind, binding.defaultKey);
+        }
+        return this.minecraft.settings[binding.setting];
+    }
+
     // Minecraft marks binds that share a key in red; do the same here.
     refreshConflicts() {
-        const settings = this.minecraft.settings;
-
         const counts = new Map();
         for (const row of this.rows) {
             if (!row.binding) {
                 continue;
             }
-            const key = settings[row.binding.setting];
+            const key = this.getBindingKey(row.binding);
             if (!key) {
                 continue;
             }
@@ -405,7 +455,7 @@ export default class GuiControls extends GuiScreen {
             if (!row.binding) {
                 continue;
             }
-            const key = settings[row.binding.setting];
+            const key = this.getBindingKey(row.binding);
             row.button.conflict = !!key && (counts.get(key) || 0) > 1;
         }
     }
@@ -418,9 +468,18 @@ export default class GuiControls extends GuiScreen {
             if (!row.binding) {
                 continue;
             }
-            settings[row.binding.setting] = defaults[row.binding.setting];
+
+            const defaultValue = row.binding.modKeybind
+                ? row.binding.defaultKey
+                : defaults[row.binding.setting];
+            if (row.binding.modKeybind) {
+                settings.setModKeybind(row.binding.modKeybind, defaultValue);
+            } else {
+                settings[row.binding.setting] = defaultValue;
+            }
+
             row.button.listening = false;
-            row.button.key = defaults[row.binding.setting];
+            row.button.key = defaultValue;
             row.button.updateString();
         }
 
