@@ -36,6 +36,8 @@ ENV NODE_ENV=production \
     DATA_DIR=/data \
     PORT=6006 \
     TUNNEL_PORT=6007 \
+    SERVER_PORT=6008 \
+    SITE_PORT=8000 \
     SITE_DIR=/app/public \
     SITE_HOSTNAMES=breakmine.com
 
@@ -55,6 +57,8 @@ RUN if [ -f package-lock.json ]; then \
 # scripts/build-site.js assembles exactly the tree the Nixpacks deployment
 # served (index.html, src/, libraries/, loading.gif, CNAME, ...).
 COPY --from=assets /app/public/ /app/public/
+COPY serve.json ./serve.json
+COPY serve.json ./public/serve.json
 
 # API discovery (RFC 9727). The catalog is copied in twice on purpose:
 # .well-known/api-catalog is the well-known URI, catalog.json is the document
@@ -80,6 +84,7 @@ COPY catalog.json openapi.json api-docs.html ./
 COPY libraries/ ./libraries/
 COPY --from=assets /app/src/js/ ./src/js/
 COPY server.js ./
+COPY backup-server.js ./
 
 # Named volume target. secrets.json is generated here on first boot, so it is
 # never baked into the image; persisting /data keeps logins valid across rebuilds.
@@ -92,18 +97,18 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 VOLUME ["/data"]
-EXPOSE 6006 6007 6008
+EXPOSE 6006 6007 6008 8000
 
-# The image runs either the HTTP API (cors.js, PORT) or the multiplayer server
-# (server.js, SERVER_PORT), so probe whichever one the container is running.
-# The server speaks WebSocket only, so a TCP connect is the right check there.
+# The container runs the whole game stack, so the site on 8000 is the check.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=5 \
-    CMD if [ -n "$SERVER_PORT" ]; then node -e "const net=require('net');const s=net.connect(+process.env.SERVER_PORT,'127.0.0.1');s.on('connect',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1))"; else node -e "fetch('http://127.0.0.1:'+(process.env.PORT||6006)+'/',{headers:{host:process.env.SITE_HOSTNAMES?.split(',')[0]||'breakmine.com'}}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; fi
+    CMD node -e "fetch('http://127.0.0.1:'+(process.env.SITE_PORT||8000)+'/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-# Run the API and the tunnel relay together. `kill 0` forwards SIGTERM/SIGINT
-# to the whole process group so both children shut down gracefully.
-# If SERVER_PORT is set, run the multiplayer server instead.
-# `exec` matters for the multiplayer server: it makes node PID 1 so Docker's
-# SIGTERM reaches its shutdown handler directly instead of orphaning it behind
-# bash, which is what left the old instance running on redeploy.
-CMD ["bash", "-c", "if [ -n \"$SERVER_PORT\" ]; then exec node /app/server.js; else trap 'kill 0' SIGTERM SIGINT; node cors.js & node tunnel.js & wait; fi"]
+# Dokploy deploys this image as ONE application and routes every domain to the
+# same container (see the Traefik service URLs); it does not run the separate
+# compose services. Run the identical process set Nixpacks ran, in one
+# container: static site on 8000, API on 6006, tunnel on 6007, game on 6008,
+# and the world backup endpoint on 8081. Ports are pinned so a platform-injected
+# PORT cannot move the API off the port Traefik expects.
+# `kill 0` forwards SIGTERM/SIGINT to the whole group so the server saves the
+# world before the container exits.
+CMD ["bash", "-c", "trap 'kill 0' SIGTERM SIGINT; node_modules/.bin/serve -s public -l tcp://0.0.0.0:${SITE_PORT:-8000} & PORT=6006 node cors.js & TUNNEL_PORT=6007 node tunnel.js & SERVER_PORT=6008 node server.js & node backup-server.js & wait"]

@@ -5,10 +5,12 @@
 #         :6007  tunnel.js, the WebSocket game-traffic relay
 #   server:6008  the multiplayer game server
 #
-# No traefik labels on purpose -- both Dokploy and Coolify route by domain, so
-# point each domain at the container port and let the panel own TLS:
-#   breakmine.com     -> 8000
-#   api.breakmine.com -> 6006
+# Traefik only sees containers attached to dokploy-network. Point each domain
+# at the container port and let the panel own TLS:
+#   breakmine.com     -> web:8000
+#   api.breakmine.com -> auth:6006
+#   tunnel.breakmine.com -> auth:6007
+#   play.breakmine.com   -> server:6008
 #
 name: breakmine
 
@@ -32,6 +34,11 @@ services:
       dockerfile: Dockerfile
     image: breakmine-auth:latest
     restart: unless-stopped
+    # The image defaults to the all-in-one Dokploy application command; this
+    # service only runs the API and tunnel.
+    command: ["bash", "-c", "trap 'kill 0' SIGTERM SIGINT; PORT=6006 node cors.js & TUNNEL_PORT=6007 node tunnel.js & wait"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:6006/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
     environment:
       DATA_DIR: /data
       PORT: "6006"
@@ -54,6 +61,11 @@ services:
       dockerfile: Dockerfile
     image: breakmine-server:latest
     restart: unless-stopped
+    # The image defaults to the all-in-one Dokploy application command; this
+    # service only runs the multiplayer server.
+    command: ["node", "server.js"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "const net=require('net');const s=net.connect(6008,'127.0.0.1');s.on('connect',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1))"]
     # Saving a large world on SIGTERM can take a few seconds; Docker's 10s
     # default used to force-kill it, and Dokploy then saw a stuck old instance.
     stop_grace_period: 30s

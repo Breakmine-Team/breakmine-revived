@@ -15,7 +15,7 @@ nixPkgs = ["nodejs_22", "python3", "gcc", "gnumake"]
 cmds = ["node scripts/build-assets.js", "node scripts/build-site.js"]
 
 [start]
-cmd = "npx concurrently \"node cors.js\" \"node tunnel.js\" \"npx serve -s public -l 3000\" \"node server.js\" \"node backup-server.js\""
+cmd = "npx concurrently \"PORT=6006 node cors.js\" \"TUNNEL_PORT=6007 node tunnel.js\" \"npx serve -s public -l tcp://0.0.0.0:8000\" \"SERVER_PORT=6008 node server.js\" \"node backup-server.js\""
 
 [mounts]
 data = "/data"
