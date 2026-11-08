@@ -1,15 +1,17 @@
 import { Buffer } from '../../../../../libraries/buffer.js';
 import config from './config.js';
 import WorldGenerator from '../client/world/generator/WorldGenerator.js';
+import HellWorldGenerator from '../client/world/generator/HellWorldGenerator.js';
 import Primer from '../client/world/generator/Primer.js';
 import Random from '../util/Random.js';
 import Long from '../../../../../libraries/long.js';
 
 let WorldGeneratorClass = WorldGenerator;
+let HellWorldGeneratorClass = HellWorldGenerator;
 let PrimerClass = Primer;
 let RandomClass = Random;
 
-const VALID_TYPES = ['flat', 'normal', 'amplified'];
+const VALID_TYPES = ['flat', 'normal', 'amplified', 'hellish'];
 
 const SECTION_COUNT = 16;
 const BLOCK_STATE_SIZE = 4096 * 2;
@@ -40,6 +42,13 @@ function seedToLong(seedText) {
     return Long.fromString(seed);
 }
 
+function createGenerator(world, seedLong, worldType) {
+    if (worldType === 'hellish' && HellWorldGeneratorClass) {
+        return new HellWorldGeneratorClass(world, seedLong);
+    }
+    return new WorldGeneratorClass(world, seedLong, worldType);
+}
+
 let cachedGenerator = null;
 let cachedGeneratorKey = null;
 
@@ -61,14 +70,17 @@ function getGenerator() {
     // The generator only uses the world for population (trees/houses) which the
     // server does not run; a stub is enough for terrain generation.
     const world = { seed: seedLong, getBlockAt: () => 0 };
-    cachedGenerator = new WorldGeneratorClass(world, seedLong, worldType);
+    cachedGenerator = createGenerator(world, seedLong, worldType);
     cachedGeneratorKey = key;
     return cachedGenerator;
 }
 
+// Block ids share the 12-bit id / 4-bit data packing used on the wire, so they
+// go up to 4095. A Uint8Array silently truncated any generated id above 255
+// into a different block, so keep the generated column at 16 bits.
 class ServerChunk {
     constructor() {
-        this.blocks = new Uint8Array(16 * 256 * 16);
+        this.blocks = new Uint16Array(16 * 256 * 16);
     }
 
     getBlockAt(x, y, z) {
@@ -168,7 +180,7 @@ function getPopulateGenerator() {
     }
 
     const world = { seed: seedLong, getBlockAt: () => 0 };
-    cachedPopulateGenerator = new WorldGeneratorClass(world, seedLong, worldType);
+    cachedPopulateGenerator = createGenerator(world, seedLong, worldType);
     cachedPopulateGeneratorKey = key;
     return cachedPopulateGenerator;
 }
@@ -182,7 +194,7 @@ function generateBlocks(chunkX, chunkZ) {
     // Copy the base terrain before population writes into it: the base cache
     // must stay pure so re-running a neighbor's population (for cross-chunk
     // tree spill) always sees the same terrain, regardless of generation order.
-    const blocks = new Uint8Array(base);
+    const blocks = new Uint16Array(base);
 
     const populateGenerator = getPopulateGenerator();
     if (!populateGenerator) return blocks;
@@ -319,7 +331,14 @@ const SPAWN_SEARCH_RADII = [16, 32, 64, 96];
 function getSurfaceTop(x, z, blocks) {
     const lx = x & 15;
     const lz = z & 15;
-    for (let y = 255; y >= 0; y--) {
+
+    // The hellish world has a bedrock roof and floating islands above the
+    // ground, so the scan stops below both; otherwise spawn lands on the roof.
+    const topY = getWorldType() === 'hellish' && HellWorldGeneratorClass
+        ? HellWorldGeneratorClass.SPAWN_SCAN_TOP
+        : 255;
+
+    for (let y = topY; y >= 0; y--) {
         const id = blocks[(y << 8) | (lz << 4) | lx];
         if (id !== 0 && !NON_SURFACE_IDS.has(id)) return y;
     }
@@ -406,7 +425,14 @@ function getProbeBlocks(chunkX, chunkZ) {
     // Same per-chunk seed the full generator uses.
     generator.random.setSeed(chunkX * 0x4f9939f508 + chunkZ * 0x1ef1565bd5);
     generator.generateTerrain(chunkX, chunkZ, primer);
-    generator.naturalize(chunkX, chunkZ, primer);
+
+    // Hellish decoration (glowstone, roof stalactites) never changes the
+    // walkable surface, and the spawn scan only reads up to SPAWN_SCAN_TOP,
+    // so the probe pass skips it. That roughly halves the cost of the wide
+    // spawn search on lava-heavy worlds.
+    if (getWorldType() !== 'hellish') {
+        generator.naturalize(chunkX, chunkZ, primer);
+    }
 
     probeCache.set(key, chunk.blocks);
     if (probeCache.size > PROBE_CACHE_MAX) {

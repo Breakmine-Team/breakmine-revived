@@ -583,7 +583,15 @@ function deleteBlockInventory(key) {
     blockInventories.delete(key);
 }
 
+// The hellish world has no day/night cycle: its clock is pinned so the sky,
+// fog and light never cycle. Other worlds tick normally.
+const HELLISH_TIME = 6000;
+
 function tickWorldTime() {
+    if (worldGen.getWorldType() === 'hellish') {
+        worldTime = HELLISH_TIME;
+        return;
+    }
     worldTime = (worldTime + 1) % 24000;
 }
 

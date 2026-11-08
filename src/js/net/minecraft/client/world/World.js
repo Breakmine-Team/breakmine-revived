@@ -37,6 +37,7 @@ export default class World {
         this.chunkProvider = null;
 
         this.time = 0;
+        this.worldType = "normal";
         this.spawn = new Vector3(0, 0, 0);
 
         // Block tick system
@@ -106,7 +107,13 @@ export default class World {
         this.lightUpdateInterval = setInterval(function () {
             const deadline = performance.now() + 8;
             while (scope.lightUpdateQueue.length > 0 && performance.now() < deadline) {
-                scope.lightUpdateQueue.shift().updateBlockLightning(scope);
+                const update = scope.lightUpdateQueue[0];
+                if (update.updateBlockLightning(scope, 8000)) {
+                    scope.lightUpdateQueue.shift();
+                } else {
+                    // Slice budget spent; resume this update on the next tick.
+                    break;
+                }
             }
         }, 50);
 
@@ -194,11 +201,22 @@ export default class World {
 
         this.updateClouds();
 
-        // Update world time
-        this.time++;
+        // Update world time. The hellish world is timeless: the server keeps
+        // its clock pinned, so the client must not drift away from it either.
+        if (this.worldType !== "hellish") {
+            this.time++;
+        }
     }
 
     updateClouds() {
+        // The hellish dimension has no clouds. Keep them hidden even when the
+        // cloud setting is turned on while inside it (including on the roof).
+        if (this.worldType === "hellish") {
+            if (this.clouds) this.clouds.visible = false;
+            if (this.fancyClouds) this.fancyClouds.visible = false;
+            return;
+        }
+
         const player = this.minecraft.player;
         if (player && Number.isFinite(player.x) && Number.isFinite(player.z)) {
             // Keep the large cloud sheet centered on the player and scroll its
@@ -228,8 +246,11 @@ export default class World {
     setCloudMode(mode) {
         if (!['off', 'fast', 'fancy'].includes(mode)) mode = 'fast';
         this.minecraft.settings.clouds = mode;
-        this.clouds.visible = mode === 'fast';
-        if (this.fancyClouds) this.fancyClouds.visible = mode === 'fancy';
+
+        // Clouds never render in the hellish dimension, whatever the setting.
+        const hellish = this.worldType === "hellish";
+        this.clouds.visible = mode === 'fast' && !hellish;
+        if (this.fancyClouds) this.fancyClouds.visible = mode === 'fancy' && !hellish;
         else if (mode === 'fancy' && this.cloudTexture?.image) this.buildFancyClouds(this.cloudTexture.image);
         this.minecraft.settings.save?.();
     }
@@ -274,7 +295,7 @@ export default class World {
         const material = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.82, depthWrite: true, side: THREE.DoubleSide });
         this.fancyClouds = new THREE.Mesh(geometry, material);
         this.fancyClouds.position.y = 192;
-        this.fancyClouds.visible = this.minecraft.settings.clouds === 'fancy';
+        this.fancyClouds.visible = this.minecraft.settings.clouds === 'fancy' && this.worldType !== "hellish";
         this.group.add(this.fancyClouds);
         this.updateClouds();
     }
@@ -507,10 +528,15 @@ export default class World {
     updateLights() {
         // Drain a bounded slice of the queue per call so onRender can pace the
         // work across frames; returns true while more light updates remain.
-        let processed = 0;
-        while (this.lightUpdateQueue.length > 0 && processed < 4) {
-            processed++;
-            this.lightUpdateQueue.shift().updateBlockLightning(this);
+        const deadline = performance.now() + 6;
+        while (this.lightUpdateQueue.length > 0 && performance.now() < deadline) {
+            const update = this.lightUpdateQueue[0];
+            if (update.updateBlockLightning(this, 4000)) {
+                this.lightUpdateQueue.shift();
+            } else {
+                // Slice budget spent; resume this update next frame.
+                break;
+            }
         }
         return this.lightUpdateQueue.length > 0;
     }
@@ -1454,6 +1480,23 @@ export default class World {
         return MathHelper.calculateCelestialAngle(this.time, partialTicks);
     }
 
+    /**
+     * The dimension type comes from the server's join packet. The hellish world
+     * has no sky of its own: it is lit by lava and glowstone under a bedrock
+     * roof, so it gets red haze instead of a blue sky and no clouds.
+     */
+    setWorldType(worldType) {
+        this.worldType = worldType || "normal";
+
+        const hellish = this.worldType === "hellish";
+        if (this.clouds) {
+            this.clouds.visible = !hellish && this.minecraft.settings.clouds === 'fast';
+        }
+        if (this.fancyClouds) {
+            this.fancyClouds.visible = !hellish && this.minecraft.settings.clouds === 'fancy';
+        }
+    }
+
     getTemperature(x, y, z) {
         let chunk = this.getChunkAtBlock(x, z);
         if (!chunk) return 0.75;
@@ -1495,6 +1538,10 @@ export default class World {
     }
 
     getSkyColor(x, z, partialTicks) {
+        if (this.worldType === "hellish") {
+            return new Vector3(0.35, 0.05, 0.03);
+        }
+
         let angle = this.getCelestialAngle(partialTicks);
         let brightness = Math.cos(angle * 3.141593 * 2.0) * 2.0 + 0.5;
 
@@ -1520,6 +1567,10 @@ export default class World {
     }
 
     getFogColor(partialTicks) {
+        if (this.worldType === "hellish") {
+            return new Vector3(0.55, 0.09, 0.05);
+        }
+
         let angle = this.getCelestialAngle(partialTicks);
         let rotation = Math.cos(angle * Math.PI * 2.0) * 2.0 + 0.5;
         rotation = MathHelper.clamp(rotation, 0.0, 1.0);
@@ -1560,6 +1611,10 @@ export default class World {
     }
 
     getStarBrightness(partialTicks) {
+        if (this.worldType === "hellish") {
+            return 0;
+        }
+
         let angle = this.getCelestialAngle(partialTicks);
         let rotation = 1.0 - (Math.cos(angle * Math.PI * 2.0) * 2.0 + 0.75);
         rotation = MathHelper.clamp(rotation, 0.0, 1.0);

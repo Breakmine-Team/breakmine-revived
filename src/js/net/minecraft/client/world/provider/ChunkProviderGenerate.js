@@ -1,6 +1,7 @@
 import ChunkProvider from "./ChunkProvider.js";
 import WorldGenerator from "../generator/WorldGenerator.js";
 import FlatWorldGenerator from "../generator/FlatWorldGenerator.js";
+import HellWorldGenerator from "../generator/HellWorldGenerator.js";
 import Random from "../../../util/Random.js";
 import Chunk from "../Chunk.js";
 
@@ -11,6 +12,8 @@ export default class ChunkProviderGenerate extends ChunkProvider {
 
         if (worldType === "flat") {
             this.generator = new FlatWorldGenerator(world, seed);
+        } else if (worldType === "hellish") {
+            this.generator = new HellWorldGenerator(world, seed);
         } else {
             this.generator = new WorldGenerator(world, seed, worldType);
         }

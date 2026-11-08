@@ -85,7 +85,7 @@ export const atlasBlockTextures = [
     "iron_ore.png", "diamond_ore.png", "emerald_ore.png", "gold_ore.png",
     "iron_block.png", "gold_block.png", "diamond_block.png", "emerald_block.png",
     "coal_block.png", "crafting_table_top.png", "crafting_table_side.png",
-    "crafting_table_front.png", "chest_bottom.png", "chest_side.png",
+    "crafting_table_front.png", "bookshelf.png", "netherrack.png", "glowstone.png", "chest_bottom.png", "chest_side.png",
     "chest_front.png", "missing.png", "brick.png", "furnace_front.png",
     "furnace_front_on.png", "furnace_side.png", "furnace_top.png", "bush.png",
     "bush2.png", "bush3.png", "destroy_stage_0.png", "destroy_stage_1.png",

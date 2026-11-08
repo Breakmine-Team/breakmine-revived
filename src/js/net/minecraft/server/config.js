@@ -80,7 +80,7 @@ function applyEnvOverrides(config) {
 }
 
 // World types supported by the server generator.
-const WORLD_TYPES = ['flat', 'normal', 'amplified'];
+const WORLD_TYPES = ['flat', 'normal', 'amplified', 'hellish'];
 
 function sanitizeServerName(name) {
     return String(name || 'main').toLowerCase().replace(/[^a-z0-9_]/g, '') || 'main';

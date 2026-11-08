@@ -113,9 +113,12 @@ export default class EntityLiving extends Entity {
             this.motionZ = 0.0;
         }
 
-        // Jump
+        // Jump / swim
         if (this.jumping) {
-            if (this.isInWater()) {
+            if (this.isInLava && this.isInLava()) {
+                // Lava is much thicker than water: a weaker upstroke.
+                this.motionY += 0.06;
+            } else if (this.isInWater()) {
                 this.motionY += 0.04;
             } else if (this.onGround && this.jumpTicks === 0) {
                 this.jump();
@@ -134,14 +137,17 @@ export default class EntityLiving extends Entity {
     moveEntityWithHeading(moveForward, moveStrafing) {
         if (this.flying) {
             this.travelFlying(moveForward, 0, moveStrafing);
+        } else if (this.isInLava && this.isInLava() && !this.spectator
+            && typeof this.travelInLava === "function") {
+            // Swim through lava instead of walking on its floor. Only entities
+            // that implement lava movement (the player) take this path.
+            this.travelInLava(moveForward, 0, moveStrafing);
+        } else if (this.isInWater()) {
+            // Is inside of water
+            this.travelInWater(moveForward, 0, moveStrafing);
         } else {
-            if (this.isInWater()) {
-                // Is inside of water
-                this.travelInWater(moveForward, 0, moveStrafing);
-            } else {
-                // Is on land
-                this.travel(moveForward, 0, moveStrafing);
-            }
+            // Is on land
+            this.travel(moveForward, 0, moveStrafing);
         }
 
         this.prevLimbSwingStrength = this.limbSwingStrength;

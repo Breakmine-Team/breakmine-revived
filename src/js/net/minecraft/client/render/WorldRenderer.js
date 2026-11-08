@@ -23,6 +23,10 @@ import SignTextRenderer from "./SignTextRenderer.js";
 const OUTLINE_MERGE_EPSILON = 0.011;
 const BLOCK_OUTLINE_EXPANSION = 0.005;
 
+// The hellish dimension's bedrock ceiling ends at y=127. Above it the red
+// dimension haze and sky no longer apply, so the renderer falls back to grey.
+const NETHER_ROOF_Y = 128;
+
 // Target cell and its six neighbours: the blocks a placement ghost's shape can
 // depend on (stairs, fences, panes, torches). Stored in the preview key so the
 // ghost is rebuilt when the terrain around the target changes.
@@ -1325,8 +1329,13 @@ export default class WorldRenderer {
         } else if (inLava) {
             this.background.background = this.backgroundColor.setRGB(0.6, 0.1, 0.0);
             this.applyLinearFog(0.6, 0.1, 0.0, 0.0025, 3);
+            // The sky dome is drawn with fog disabled, so it needs its own
+            // colour update: otherwise it keeps showing whatever sky colour it
+            // had before the player went under the lava surface.
+            this.listSky.children[0].material.color.setRGB(0.6, 0.1, 0.0);
         } else {
             let world = this.minecraft.world;
+            const hellish = world.worldType === 'hellish';
 
             let viewDistance = this.minecraft.settings.viewDistance * ChunkSection.SIZE;
             let viewFactor = 1.0 - Math.pow(0.25 + 0.75 * this.minecraft.settings.viewDistance / 32.0, 0.25);
@@ -1336,6 +1345,16 @@ export default class WorldRenderer {
             let skyColor = world.getSkyColor(x, z, partialTicks);
             let fogColor = world.getFogColor(partialTicks);
             let sunsetColor = world.getSunriseSunsetColor(partialTicks);
+
+            // Above the bedrock roof the nether's custom red haze does not
+            // apply, so fall back to a neutral grey and no sunset.
+            const player = this.minecraft.player;
+            if (hellish && player !== null && player !== undefined
+                && player.y >= NETHER_ROOF_Y) {
+                skyColor.x = 0.6; skyColor.y = 0.6; skyColor.z = 0.6;
+                fogColor.x = 0.6; fogColor.y = 0.6; fogColor.z = 0.6;
+                sunsetColor = null;
+            }
 
             let starBrightness = world.getStarBrightness(partialTicks);
             let brightness = this.prevFogBrightness + (this.fogBrightness - this.prevFogBrightness) * partialTicks;
@@ -1351,10 +1370,11 @@ export default class WorldRenderer {
             if (this.minecraft.settings.fogType === 'classic') {
                 // Classic fog: exponential fog that completely obscures past render distance
                 // Using higher density to ensure complete obscurity at render distance
-                this.applyExp2Fog(red, green, blue, 2.0 / viewDistance);
+                this.applyExp2Fog(red, green, blue, (hellish ? 3.4 : 2.0) / viewDistance);
             } else {
-                // Modern fog: linear fog with gradual fade
-                this.applyLinearFog(red, green, blue, 0.0025, viewDistance * 2);
+                // Modern fog: linear fog with gradual fade. The hellish world's
+                // haze is thicker, closing in well before the render distance.
+                this.applyLinearFog(red, green, blue, 0.0025, viewDistance * (hellish ? 1.25 : 2));
             }
 
             let skyMesh = this.listSky.children[0];

@@ -313,15 +313,17 @@ export default class PlayerEntity extends EntityLiving {
     }
 
     travelInLava(forward, vertical, strafe) {
-        let slipperiness = 0.8;
         let friction = 0.02;
 
         this.moveRelative(forward, vertical, strafe, friction);
         this.collision = this.moveCollide(-this.motionX, this.motionY, -this.motionZ);
 
-        this.motionX *= slipperiness;
-        this.motionY *= 0.8;
-        this.motionZ *= slipperiness;
+        // Lava is thicker than water: stronger drag on every axis, so the body
+        // sinks slowly and horizontal swimming is slower. The swim-up stroke
+        // lives in EntityLiving.onLivingUpdate().
+        this.motionX *= 0.5;
+        this.motionY *= 0.5;
+        this.motionZ *= 0.5;
         this.motionY -= 0.02;
 
         // Reset fall distance while in lava

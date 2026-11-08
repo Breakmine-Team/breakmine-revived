@@ -143,9 +143,11 @@ export default class Chunk {
                     let opacity = typeId === 0 ? 0 : block.getOpacity(this.world, x + this.x * 16, y, z + this.z * 16, block);
                     let blockLight = typeId === 0 ? 0 : block.getLightValue(this.world, x + this.x * 16, y, z + this.z * 16);
 
-                    if (opacity === 0) {
-                        opacity = 1;
-                    }
+                    // Always lose at least one level per block. Liquid opacity
+                    // is 0.01, which used to leave the level untouched forever
+                    // in a lava sea: the scan then walked every column to the
+                    // build limit, resetting to 15 on every lava block.
+                    opacity = Math.max(opacity, 1);
 
                     level -= opacity;
 
@@ -157,7 +159,13 @@ export default class Chunk {
                         level = 0;
                     }
 
-                    section.setLightAt(EnumSkyBlock.BLOCK, x, y & 15, z, blockLight);
+                    // ChunkSection.setLightAt() always marks the section dirty,
+                    // so writing values the new chunk already has (0 almost
+                    // everywhere) would force every section to remesh for no
+                    // visible change.
+                    if (section.getLightAt(EnumSkyBlock.BLOCK, x, y & 15, z) !== blockLight) {
+                        section.setLightAt(EnumSkyBlock.BLOCK, x, y & 15, z, blockLight);
+                    }
                 }
             }
         }

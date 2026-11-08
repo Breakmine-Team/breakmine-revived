@@ -13,15 +13,20 @@ export default class MetadataChunkBlock {
         this.x2 = x2;
         this.y2 = y2;
         this.z2 = z2;
+
+        // Flood state. Kept between calls so a large region can be processed
+        // in slices instead of blocking a whole frame.
+        this.stack = null;
+        this.visited = 0;
     }
 
-    updateBlockLightning(world) {
+    updateBlockLightning(world, visitBudget = 1000000) {
         let centerX = (this.x2 - this.x1) + 1;
         let centerY = (this.y2 - this.y1) + 1;
         let centerZ = (this.z2 - this.z1) + 1;
         let index = centerX * centerY * centerZ;
         if (index > 70000) {
-            return;
+            return true;
         }
 
         // Seed the flood with every block in the region, then let light spread
@@ -29,11 +34,15 @@ export default class MetadataChunkBlock {
         // one pass. Each block is recomputed from its current neighbors, so
         // light reaches its full range instantly instead of crawling one level
         // per queue step.
-        const stack = [];
         const isFullChunk =
             centerX === ChunkSection.SIZE &&
             centerY === World.TOTAL_HEIGHT &&
             centerZ === ChunkSection.SIZE;
+
+        if (this.stack === null) {
+            this.stack = [];
+            this.visited = 0;
+            const stack = this.stack;
 
         if (isFullChunk && this.type === EnumSkyBlock.SKY) {
             // Full-chunk recompute on load. The column pass in
@@ -72,22 +81,37 @@ export default class MetadataChunkBlock {
                 }
             }
         } else if (isFullChunk && this.type === EnumSkyBlock.BLOCK) {
-            // Block light sources are rare (torches, glowstone) and a freshly
-            // filled chunk has block light zeroed by resetChunkBlockLight, so
-            // only emissive blocks can change; the flood spreads from there on
-            // its own once the first source is recomputed.
-            for (let x = this.x1; x <= this.x2; x++) {
-                for (let z = this.z1; z <= this.z2; z++) {
-                    if (!world.blockExists(x, 0, z)) {
+            // Block light sources are the only blocks a fresh chunk can light
+            // up, so seed just those. Walk the chunk's own section arrays
+            // instead of 65k world.getBlockAt() lookups: this scan used to be
+            // one of the most expensive parts of receiving a chunk.
+            const chunk = world.getChunkAt(this.x1 >> 4, this.z1 >> 4);
+            if (chunk && chunk.sections) {
+                for (let layer = 0; layer < chunk.sections.length; layer++) {
+                    const section = chunk.sections[layer];
+                    if (!section || section.isEmpty()) {
                         continue;
                     }
-                    for (let y = this.y1; y <= this.y2; y++) {
-                        if (y < 0 || y >= World.TOTAL_HEIGHT) {
+
+                    const blocks = section.blocks;
+                    const baseY = layer * ChunkSection.SIZE;
+
+                    for (let i = 0; i < blocks.length; i++) {
+                        const typeId = blocks[i];
+                        if (typeId === 0) {
                             continue;
                         }
-                        const typeId = world.getBlockAt(x, y, z);
+
                         const block = Block.getById(typeId);
-                        if (block !== null && block.getLightValue(world, x, y, z) > 0) {
+                        if (block === null) {
+                            continue;
+                        }
+
+                        const x = this.x1 + (i & 15);
+                        const z = this.z1 + ((i >> 4) & 15);
+                        const y = baseY + (i >> 8);
+
+                        if (block.getLightValue(world, x, y, z) > 0) {
                             stack.push(x, y, z);
                         }
                     }
@@ -111,12 +135,17 @@ export default class MetadataChunkBlock {
             }
         }
 
-        // Hard cap so a pathological region can never stall the game loop;
-        // light simply stops spreading once the budget runs out.
-        let visited = 0;
+        }
+
+        const stack = this.stack;
+
+        // Total visit cap for one update, and a per-call slice so a single
+        // lava-filled chunk cannot stall the main thread for seconds.
         const MAX_VISITS = 500000;
-        while (stack.length > 0 && visited < MAX_VISITS) {
-            visited++;
+        const budget = Math.min(visitBudget, MAX_VISITS - this.visited);
+        let processed = 0;
+        while (stack.length > 0 && processed < budget) {
+            processed++;
             const z = stack.pop();
             const y = stack.pop();
             const x = stack.pop();
@@ -190,9 +219,26 @@ export default class MetadataChunkBlock {
             stack.push(x, y, z - 1);
             stack.push(x, y, z + 1);
         }
+
+        this.visited += processed;
+
+        // Budget exhausted: keep the stack and resume on the next call.
+        if (stack.length > 0 && this.visited < MAX_VISITS) {
+            return false;
+        }
+
+        this.stack = null;
+        return true;
     }
 
     isOutsideOf(x1, y1, z1, x2, y2, z2) {
+        // A partially processed region already has its seed set; merging new
+        // bounds into it would leave the new area unseeded. Let the caller
+        // queue a separate update instead.
+        if (this.stack !== null) {
+            return false;
+        }
+
         if (x1 >= this.x1 && y1 >= this.y1 && z1 >= this.z1 && x2 <= this.x2 && y2 <= this.y2 && z2 <= this.z2) {
             return true;
         }

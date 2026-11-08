@@ -118,6 +118,9 @@ export default class GuiCreateWorld extends GuiScreen {
             this.btnMapType.string = "World Type: Flat";
             this.worldType = "flat";
         } else if (this.worldType === "flat") {
+            this.btnMapType.string = "World Type: Hellish";
+            this.worldType = "hellish";
+        } else if (this.worldType === "hellish") {
             this.btnMapType.string = "World Type: Preset";
             this.worldType = "preset";
         } else {

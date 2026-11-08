@@ -2,6 +2,7 @@ import Random from "../../../util/Random.js";
 import Long from "../../../../../../../libraries/long.js";
 import WorldGenerator from "../generator/WorldGenerator.js";
 import FlatWorldGenerator from "../generator/FlatWorldGenerator.js";
+import HellWorldGenerator from "../generator/HellWorldGenerator.js";
 import {BlockRegistry} from "../block/BlockRegistry.js";
 import {BiomeRegistry} from "../biome/BiomeRegistry.js";
 
@@ -433,7 +434,9 @@ function generateChunks(chunkCoords, seedData, worldType, onProgress) {
     const world = new WorldStub();
     const generator = worldType === "flat"
         ? new FlatWorldGenerator(world, seed)
-        : new WorldGenerator(world, seed, worldType);
+        : worldType === "hellish"
+            ? new HellWorldGenerator(world, seed)
+            : new WorldGenerator(world, seed, worldType);
 
     // Collect all chunk coordinates that need to be populated (requested + 1-ring neighbors)
     const populateKeys = new Set();

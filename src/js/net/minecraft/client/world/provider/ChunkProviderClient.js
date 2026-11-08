@@ -268,7 +268,8 @@ export default class ChunkProviderClient extends ChunkProvider {
             this.world.updateChunkLight(chunk);
         } else {
             // The worker already produced the per-column sky light and zeroed
-            // block light; only the border flood remains.
+            // block light; only the flood that fixes chunk borders (and lights
+            // up emitters) remains.
             this.world.queueChunkLight(chunk);
         }
     }

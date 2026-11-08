@@ -19,6 +19,9 @@ import BlockCobblestone from "./type/BlockCobblestone.js";
 import BlockGrassPath from "./type/BlockGrassPath.js";
 import BlockStoneLike from "./type/BlockStoneLike.js";
 import BlockCraftingTable from "./type/BlockCraftingTable.js";
+import BlockBookshelf from "./type/BlockBookshelf.js";
+import BlockHellstone from "./type/BlockHellstone.js";
+import BlockGlowstone from "./type/BlockGlowstone.js";
 import BlockClock from "./type/BlockClock.js";
 import BlockChest from "./type/BlockChest.js";
 import BlockMissing from "./type/BlockMissing.js";
@@ -440,6 +443,9 @@ export class BlockRegistry {
 
         // --- FUNCTIONAL / MISC BLOCKS ---
         BlockRegistry.CRAFTING_TABLE = new BlockCraftingTable(31, 0);
+        BlockRegistry.BOOKSHELF = new BlockBookshelf(353, 0);
+        BlockRegistry.HELLSTONE = new BlockHellstone(354, 0);
+        BlockRegistry.GLOWSTONE = new BlockGlowstone(355, 0);
         BlockRegistry.CLOCK = new BlockClock(352, 0);
         BlockRegistry.CHEST = new BlockChest(32, 0);
         BlockRegistry.FURNACE = new BlockFurnace(34, 0);

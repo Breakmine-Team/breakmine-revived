@@ -30,6 +30,7 @@ export default class NetworkPlayHandler extends PacketHandler {
     handleJoinGame(packet) {
         this.minecraft.playerController = new PlayerControllerMultiplayer(this.minecraft, this, packet.entityId);
         let world = new WorldClient(this.minecraft);
+        world.setWorldType(packet.worldType);
         // Server mods arrive right after this packet; they wait for the world
         // (and any texture-atlas rebuild) before registering their content.
         this.minecraft.worldLoadPromise = this.minecraft.loadWorld(world);

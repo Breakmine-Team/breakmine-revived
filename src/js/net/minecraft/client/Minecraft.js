@@ -588,6 +588,16 @@ export default class Minecraft {
             await new Promise(r => setTimeout(r, 0));
         }
 
+        // Light is part of loading: drain everything the chunk stream queued
+        // before the world is shown, in frame-sized slices so the loading bar
+        // keeps animating instead of freezing the tab.
+        this.setLoadingStatus("Propagating Light");
+
+        while (world.lightUpdateQueue.length > 0) {
+            this.propagateLight(world, 12);
+            await new Promise(r => setTimeout(r, 0));
+        }
+
         world.spawn.y = world.getHeightAt(world.spawn.x, world.spawn.z) + 1;
         this.player.respawn();
 
@@ -1552,9 +1562,17 @@ export default class Minecraft {
             let requiredChunks = Math.pow(renderDistance * 2 - 1, 2);
             let loadedChunks = this.world.getChunkProvider().getChunks().size;
 
+            // Drain queued light before the world is shown: the queue refills
+            // as chunks arrive, so this runs on every loading tick and the
+            // screen only closes once it is empty.
+            let pendingLight = this.propagateLight(this.world, 6);
+            if (pendingLight > 0) {
+                this.loadingScreen.setTitle("Propagating Light");
+            }
+
             // Terrain chunks are arriving now: the stream/load phase is over
             // and the client is building the visible world.
-            if (loadedChunks > 0) {
+            if (loadedChunks > 0 && pendingLight === 0) {
                 this.loadingScreen.setTitle("Building terrain...");
             }
 
@@ -1573,8 +1591,12 @@ export default class Minecraft {
                 }
             }, 0);
 
-            // Update progress
+            // Update progress. Light propagation is part of loading, so the
+            // bar holds just below full while anything is still queued.
             let progress = 1 / requiredChunks * Math.max(0, loadedChunks - this.world.lightUpdateQueue.length / 1000);
+            if (pendingLight > 0) {
+                progress = Math.min(progress, 0.98);
+            }
             this.loadingScreen.setProgress(progress);
 
             // The player must only become active once the terrain under and
@@ -1589,7 +1611,7 @@ export default class Minecraft {
                 && Date.now() - this.lastChunkArrivalTime > 5000
                 && loadedChunks >= 9;
 
-            if ((progress >= 0.99 || timeoutElapsed) && terrainReady) {
+            if ((progress >= 0.99 || timeoutElapsed) && terrainReady && pendingLight === 0) {
                 this.world.loadSpawnChunks();
                 // In multiplayer the server already restored the player's saved
                 // position/health via the playerState packet; respawning here
@@ -1622,6 +1644,28 @@ export default class Minecraft {
                 this.saveWorld();
             }
         }
+    }
+
+    /**
+     * Drain queued light updates for at most budgetMs milliseconds. Each
+     * queued update is sliced internally, so this never blocks for long.
+     * Returns the number of updates still queued.
+     */
+    propagateLight(world, budgetMs = 8) {
+        if (world === null || world.lightUpdateQueue === undefined) {
+            return 0;
+        }
+
+        const queue = world.lightUpdateQueue;
+        const deadline = performance.now() + budgetMs;
+
+        while (queue.length > 0 && performance.now() < deadline) {
+            if (queue[0].updateBlockLightning(world, 4000)) {
+                queue.shift();
+            }
+        }
+
+        return queue.length;
     }
 
     /**
