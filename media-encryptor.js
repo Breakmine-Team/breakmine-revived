@@ -81,3 +81,7 @@ const MediaEncryptor = {
     }
   }
 };
+
+// Classic script tag in enc.html, bundled module in the game build: expose the
+// same object either way so index.html's easter egg can always reach it.
+globalThis.MediaEncryptor = MediaEncryptor;

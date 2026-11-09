@@ -36,6 +36,34 @@ function forceBrowserFsPlugin() {
     };
 }
 
+/**
+ * The single-file build is published as just index.html (see
+ * scripts/publish-single.js), so nothing in src/resources travels with it. The
+ * easter egg's encrypted clip is embedded as base64 instead of being fetched;
+ * index.html reads window.__mysteryClip when it exists.
+ */
+function inlineMysteryClipPlugin() {
+    return {
+        name: "inline-mystery-clip",
+        transformIndexHtml(html) {
+            const clipPath = path.resolve(__dirname, "src/resources/mystery.enc");
+            if (!fs.existsSync(clipPath)) return html;
+
+            const base64 = fs.readFileSync(clipPath).toString("base64");
+            return {
+                html,
+                tags: [
+                    {
+                        tag: "script",
+                        injectTo: "head-prepend",
+                        children: `window.__mysteryClip = "${base64}";`,
+                    },
+                ],
+            };
+        },
+    };
+}
+
 function inlineFaviconPlugin() {
     return {
         name: "inline-favicon",
@@ -200,6 +228,7 @@ export default defineConfig({
             useRecommendedBuildConfig: true,
         }),
         inlineFaviconPlugin(),
+        inlineMysteryClipPlugin(),
         inlineWorkerPlugin(),
     ],
     build: {

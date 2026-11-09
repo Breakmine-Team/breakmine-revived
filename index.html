@@ -2822,7 +2822,6 @@ document.addEventListener('logOccured', (event) => {
 </script>
 
 <!-- Easter egg: tap right Alt five times to unlock the encrypted clip -->
-<script src="media-encryptor.js"></script>
 <script>
 (function () {
   'use strict';
@@ -2847,6 +2846,24 @@ document.addEventListener('logOccured', (event) => {
       URL.revokeObjectURL(clipUrl);
       clipUrl = null;
     }
+  }
+
+  // The single-file build may be opened on its own, with no resources folder
+  // beside it, so it embeds the clip as base64 (see vite.singlehtml.config.js).
+  async function readEncryptedClip() {
+    const embedded = window.__mysteryClip;
+    if (embedded) {
+      const binary = atob(embedded);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return bytes.buffer;
+    }
+
+    const response = await fetch(CLIP_PATH, { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error('Could not load the encrypted clip (' + response.status + ').');
+    }
+    return response.arrayBuffer();
   }
 
   function openSecretWindow() {
@@ -2919,15 +2936,10 @@ document.addEventListener('logOccured', (event) => {
 
       try {
         if (typeof MediaEncryptor === 'undefined') {
-          throw new Error('media-encryptor.js did not load.');
+          throw new Error('MediaEncryptor is unavailable.');
         }
 
-        const response = await fetch(CLIP_PATH, { cache: 'no-store' });
-        if (!response.ok) {
-          throw new Error('Could not load the encrypted clip (' + response.status + ').');
-        }
-
-        const encrypted = await response.arrayBuffer();
+        const encrypted = await readEncryptedClip();
         const decrypted = await MediaEncryptor.decrypt(encrypted, password);
 
         dropClipUrl();

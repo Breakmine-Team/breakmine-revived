@@ -4,6 +4,10 @@ import MixinEngine from './net/minecraft/client/mixin/MixinEngine.js';
 import { base64Assets } from '../resources.js';
 import { uiTextures } from './assetManifest.js';
 import { Version } from '../resources/version.js';
+// Side effect: exposes window.MediaEncryptor for the index.html easter egg.
+// Imported here so the single-file build bundles it instead of leaving a
+// <script src> tag that has nothing next to it.
+import '../../media-encryptor.js';
 
 
 
