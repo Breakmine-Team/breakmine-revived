@@ -1142,6 +1142,625 @@ if (isSinglefile) {
   });
 }
 
+// --- Breakmine admin panel (devtools) ---------------------------------------
+// Run `admin()` in the TinyTools console (Ctrl+`) to open it. The rendered
+// api.breakmine.com/admin page cannot be embedded here: it is served with
+// X-Frame-Options: SAMEORIGIN and a SameSite=Strict cookie, so a cross-origin
+// frame could neither display it nor keep its session. This window talks to the
+// JSON admin API (/api/admin/*) instead, using the same admin password.
+(function setupAdminPanel() {
+  const TOKEN_KEY = 'breakmine_admin_token';
+  const API_KEY = 'breakmine_admin_api';
+  const LOCAL_API = 'http://localhost:6006';
+  const PROD_API = 'https://api.breakmine.com';
+  const MAX_PLAYER_ROWS = 500;
+
+  let panelWindow = null;
+  let viewEl = null;
+  let state = null;
+  let tab = 'capes';
+  let notice = null;
+  let busy = false;
+  let token = '';
+  let socket = null;
+  let socketPromise = null;
+  let socketRequestId = 0;
+  const pending = new Map();
+
+  function apiBase() {
+    const override = window.ADMIN_API_BASE || readStorage(localStorage, API_KEY);
+    if (override) return String(override).replace(/\/+$/, '');
+
+    const host = window.location.hostname;
+    const localHost = host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local');
+    return localHost ? LOCAL_API : PROD_API;
+  }
+
+  // The panel talks to the API over the WebSocket transport (/api-ws). The
+  // server replays each frame against the same HTTP routes, so validation and
+  // error shapes are identical, and filtered networks that block plain HTTP
+  // still reach it.
+  function wsUrl() {
+    try {
+      const url = new URL(apiBase());
+      url.protocol = url.protocol === 'http:' ? 'ws:' : 'wss:';
+      url.pathname = '/api-ws';
+      url.search = '';
+      url.hash = '';
+      return url.toString();
+    } catch (err) {
+      return '';
+    }
+  }
+
+  function failPending(message) {
+    for (const entry of pending.values()) {
+      clearTimeout(entry.timer);
+      entry.reject(new Error(message));
+    }
+    pending.clear();
+  }
+
+  function ensureSocket() {
+    if (socket && socket.readyState === WebSocket.OPEN) return Promise.resolve(socket);
+    if (socketPromise) return socketPromise;
+
+    socketPromise = new Promise((resolve, reject) => {
+      let ws;
+      try {
+        ws = new WebSocket(wsUrl());
+      } catch (err) {
+        socketPromise = null;
+        reject(new Error('Cannot open ' + wsUrl()));
+        return;
+      }
+
+      const timer = setTimeout(() => {
+        socketPromise = null;
+        try { ws.close(); } catch (err) { /* ignore */ }
+        reject(new Error('Admin socket timed out'));
+      }, 10000);
+
+      ws.onopen = () => {
+        clearTimeout(timer);
+        socket = ws;
+        socketPromise = null;
+        resolve(ws);
+      };
+
+      ws.onerror = () => {
+        clearTimeout(timer);
+        socketPromise = null;
+        reject(new Error('Cannot reach ' + wsUrl()));
+      };
+
+      ws.onclose = () => {
+        socket = null;
+        socketPromise = null;
+        failPending('Admin socket closed');
+      };
+
+      ws.onmessage = (event) => {
+        let message;
+        try {
+          message = JSON.parse(event.data);
+        } catch (err) {
+          return;
+        }
+        const entry = pending.get(String(message.id));
+        if (!entry) return;
+        pending.delete(String(message.id));
+        clearTimeout(entry.timer);
+        entry.resolve(message);
+      };
+    });
+
+    return socketPromise;
+  }
+
+  function readStorage(store, key) {
+    try {
+      return store.getItem(key) || '';
+    } catch (err) {
+      return '';
+    }
+  }
+
+  function writeStorage(store, key, value) {
+    try {
+      if (value) store.setItem(key, value);
+      else store.removeItem(key);
+    } catch (err) {
+      // Storage can be unavailable (private mode, file:// sandboxes).
+    }
+  }
+
+  function storeToken(value) {
+    token = value || '';
+    writeStorage(sessionStorage, TOKEN_KEY, token);
+  }
+
+  function esc(value) {
+    return String(value === null || value === undefined ? '' : value).replace(/[&<>"']/g, (ch) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+  }
+
+  function formatDate(value, fallback) {
+    if (!value) return fallback;
+    try {
+      return new Date(value).toLocaleString();
+    } catch (err) {
+      return fallback;
+    }
+  }
+
+  async function request(path, options) {
+    const method = (options && options.method) || 'GET';
+    const headers = {};
+    let body;
+
+    if (options && options.body !== undefined) {
+      headers['content-type'] = 'application/json';
+      body = JSON.stringify(options.body);
+    }
+    if (token) headers.authorization = 'Bearer ' + token;
+
+    const ws = await ensureSocket();
+    const id = String(++socketRequestId);
+
+    const reply = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        reject(new Error('Admin request timed out'));
+      }, 20000);
+
+      pending.set(id, { resolve, reject, timer });
+      try {
+        ws.send(JSON.stringify({ id, method, path, headers, body }));
+      } catch (err) {
+        clearTimeout(timer);
+        pending.delete(id);
+        reject(new Error('Could not send the admin request'));
+      }
+    });
+
+    if (reply.error) throw new Error(reply.error);
+    if (reply.status >= 400) {
+      const error = new Error((reply.json && reply.json.error) || reply.error || 'Request failed (' + reply.status + ')');
+      error.status = reply.status;
+      throw error;
+    }
+
+    return reply.json || {};
+  }
+
+  function fileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      if (!file || !file.size) {
+        reject(new Error('Choose a PNG file.'));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('Could not read that file.'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function messageHtml() {
+    return notice
+      ? '<div class="bmadmin-msg ' + (notice.kind || 'ok') + '">' + esc(notice.text) + '</div>'
+      : '';
+  }
+
+  function renderLogin() {
+    return `<div class="bmadmin">
+      <form class="bmadmin-card" data-act="login">
+        <h2>Breakmine Admin</h2>
+        <p class="bmadmin-note">Sign in with the admin password to manage capes and players.</p>
+        ${messageHtml()}
+        <label>Admin password
+          <input type="password" name="password" autocomplete="current-password" required>
+        </label>
+        <button type="submit">Sign in</button>
+        <p class="bmadmin-note">Socket: ${esc(wsUrl())}</p>
+      </form>
+    </div>`;
+  }
+
+  function render() {
+    if (!viewEl) return;
+    viewEl.innerHTML = token ? renderPanel() : renderLogin();
+  }
+
+  function renderPanel() {
+    return `<div class="bmadmin">
+      <div class="bmadmin-bar">
+        <div class="bmadmin-tabs">
+          <button type="button" data-tab="capes" class="${tab === 'capes' ? 'on' : ''}">Capes</button>
+          <button type="button" data-tab="players" class="${tab === 'players' ? 'on' : ''}">Players</button>
+        </div>
+        <div class="bmadmin-actions">
+          <form data-act="refresh"><button type="submit">Refresh</button></form>
+          <form data-act="signout"><button type="submit">Sign out</button></form>
+        </div>
+      </div>
+      ${messageHtml()}
+      ${state
+        ? (tab === 'capes' ? renderCapes() : renderPlayers())
+        : '<p class="bmadmin-note">Loading…</p>'}
+      <p class="bmadmin-note">Socket: ${esc(wsUrl())}</p>
+    </div>`;
+  }
+
+  function renderCapes() {
+    const capes = state.capes || [];
+    const upload = `<form class="bmadmin-upload" data-act="cape-upload">
+      <label>Cape name<input type="text" name="name" maxlength="40" placeholder="e.g. Founder Cape" required></label>
+      <label>Cape PNG (64×32)<input type="file" name="file" accept="image/png" required></label>
+      <button type="submit">Upload cape</button>
+    </form>`;
+
+    if (capes.length === 0) {
+      return upload + '<p class="bmadmin-note">No capes uploaded yet.</p>';
+    }
+
+    return upload + `<table class="bmadmin-table">
+      <thead><tr><th></th><th>Cape</th><th>Assigned players</th><th></th></tr></thead>
+      <tbody>${capes.map(renderCapeRow).join('')}</tbody>
+    </table>`;
+  }
+
+  function renderCapeRow(cape) {
+    const id = esc(cape.id);
+    const pills = cape.assigned.length === 0
+      ? '<span class="bmadmin-note">Not assigned to anyone</span>'
+      : cape.assigned.map((username) => `<form class="bmadmin-inline" data-act="cape-unassign" data-id="${id}" data-username="${esc(username)}">
+          <span class="bmadmin-pill">${esc(username)}<button type="submit" title="Unassign">×</button></span>
+        </form>`).join(' ');
+
+    const thumb = cape.texture
+      ? `<img class="bmadmin-thumb" src="${esc(cape.texture)}" alt="">`
+      : '<span class="bmadmin-note">—</span>';
+
+    return `<tr>
+      <td>${thumb}</td>
+      <td><strong>${esc(cape.name)}</strong><div class="bmadmin-sub">${id}</div></td>
+      <td>
+        <div class="bmadmin-pills">${pills}</div>
+        <form class="bmadmin-inline" data-act="cape-assign" data-id="${id}">
+          <input type="text" name="usernames" placeholder="username, othername" required>
+          <button type="submit">Assign</button>
+        </form>
+      </td>
+      <td>
+        <div class="bmadmin-actions">
+          <form data-act="cape-assign-all" data-id="${id}"><button type="submit">Gift all</button></form>
+          <form data-act="cape-unassign-all" data-id="${id}"><button type="submit">Remove all</button></form>
+          <form data-act="cape-delete" data-id="${id}"><button type="submit" class="bmadmin-danger">Delete</button></form>
+        </div>
+      </td>
+    </tr>`;
+  }
+
+  function capeOptions(user) {
+    const options = [
+      `<option value="default"${user.capeId === null ? ' selected' : ''}>Server default</option>`,
+      `<option value="none"${user.capeId === '' ? ' selected' : ''}>No cape</option>`
+    ];
+
+    for (const cape of state.capes || []) {
+      options.push(`<option value="${esc(cape.id)}"${user.capeId === cape.id ? ' selected' : ''}>${esc(cape.name)}</option>`);
+    }
+
+    return options.join('');
+  }
+
+  function renderPlayers() {
+    const users = state.users || [];
+    const spam = state.spam || { count: 0, neverLoggedInCount: 0 };
+    const purge = `<div class="bmadmin-purge">
+      <div>
+        <strong>Spam cleanup</strong>
+        <div class="bmadmin-note">Matches auto-generated usernames such as JumpingPotato42.</div>
+      </div>
+      <div class="bmadmin-actions">
+        <form data-act="purge-spam" data-never="0">
+          <button type="submit" class="bmadmin-danger"${spam.count === 0 ? ' disabled' : ''}>Purge spam</button>
+          <span class="bmadmin-note">${spam.count} account${spam.count === 1 ? '' : 's'}</span>
+        </form>
+        <form data-act="purge-spam" data-never="1">
+          <button type="submit" class="bmadmin-danger"${spam.neverLoggedInCount === 0 ? ' disabled' : ''}>Purge never logged in</button>
+          <span class="bmadmin-note">${spam.neverLoggedInCount} account${spam.neverLoggedInCount === 1 ? '' : 's'}</span>
+        </form>
+      </div>
+    </div>`;
+
+    if (users.length === 0) {
+      return purge + '<p class="bmadmin-note">No players registered yet.</p>';
+    }
+
+    const shown = users.slice(0, MAX_PLAYER_ROWS);
+    const more = users.length > shown.length
+      ? `<p class="bmadmin-note">Showing ${shown.length} of ${users.length} players. Purge spam to shorten the list.</p>`
+      : '';
+
+    return purge + `<table class="bmadmin-table">
+      <thead><tr><th>Player</th><th>Created</th><th>Last login</th><th>Skin</th><th>Cape</th><th>Password</th><th></th></tr></thead>
+      <tbody>${shown.map(renderPlayerRow).join('')}</tbody>
+    </table>` + more;
+  }
+
+  function renderPlayerRow(user) {
+    const id = esc(user.id);
+    const name = esc(user.username);
+
+    return `<tr>
+      <td><strong>${name}</strong><div class="bmadmin-sub">${id}</div></td>
+      <td>${esc(formatDate(user.createdAt, '—'))}</td>
+      <td>${esc(formatDate(user.lastLogin, 'Never'))}</td>
+      <td>
+        <div class="bmadmin-sub">${user.hasSkin ? 'Custom skin' : 'Default skin'}</div>
+        <form class="bmadmin-inline" data-act="user-skin" data-id="${id}">
+          <input type="file" name="file" accept="image/png" required>
+          <button type="submit">Upload</button>
+        </form>
+        ${user.hasSkin ? `<form data-act="user-skin-reset" data-id="${id}"><button type="submit">Reset skin</button></form>` : ''}
+      </td>
+      <td>
+        <form class="bmadmin-inline" data-act="user-cape" data-id="${id}">
+          <select name="capeId">${capeOptions(user)}</select>
+          <button type="submit">Apply</button>
+        </form>
+      </td>
+      <td>
+        <form class="bmadmin-inline" data-act="user-password" data-id="${id}">
+          <input type="password" name="password" minlength="6" maxlength="128" placeholder="New password" autocomplete="new-password" required>
+          <button type="submit">Set</button>
+        </form>
+      </td>
+      <td><form data-act="user-delete" data-id="${id}" data-username="${name}"><button type="submit" class="bmadmin-danger">Delete</button></form></td>
+    </tr>`;
+  }
+
+  async function loadState() {
+    state = await request('/api/admin/state');
+    render();
+  }
+
+  async function mutate(run) {
+    try {
+      const result = await run();
+      notice = { kind: 'ok', text: (result && result.message) || 'Done.' };
+      await loadState();
+    } catch (err) {
+      handleError(err);
+    }
+  }
+
+  function handleError(err) {
+    if (err && (err.status === 401 || err.status === 403)) {
+      storeToken('');
+      state = null;
+      notice = { kind: 'error', text: 'Admin session expired. Sign in again.' };
+      render();
+      return;
+    }
+
+    notice = { kind: 'error', text: (err && err.message) || 'Something went wrong.' };
+    render();
+  }
+
+  async function handleForm(form) {
+    if (busy) return;
+
+    const act = form.dataset.act || '';
+    const id = encodeURIComponent(form.dataset.id || '');
+    const field = (name) => {
+      const input = form.querySelector('[name="' + name + '"]');
+      return input ? String(input.value || '').trim() : '';
+    };
+    const file = () => {
+      const input = form.querySelector('input[type="file"]');
+      return input && input.files ? input.files[0] : null;
+    };
+
+    if (act === 'signout') {
+      storeToken('');
+      state = null;
+      tab = 'capes';
+      notice = { kind: 'ok', text: 'Signed out.' };
+      render();
+      return;
+    }
+
+    busy = true;
+    try {
+      switch (act) {
+        case 'login': {
+          const password = field('password');
+          if (!password) return;
+          const result = await request('/api/admin/login', { method: 'POST', body: { password } });
+          storeToken(result.token);
+          notice = { kind: 'ok', text: 'Signed in.' };
+          await loadState();
+          return;
+        }
+
+        case 'refresh':
+          notice = null;
+          await loadState();
+          return;
+
+        case 'cape-upload':
+          await mutate(async () => {
+            const png = await fileToDataUrl(file());
+            return request('/api/admin/capes', { method: 'POST', body: { name: field('name'), png } });
+          });
+          return;
+
+        case 'cape-assign':
+          await mutate(() => request('/api/admin/capes/' + id + '/assign', {
+            method: 'POST', body: { usernames: field('usernames') }
+          }));
+          return;
+
+        case 'cape-unassign':
+          await mutate(() => request('/api/admin/capes/' + id + '/unassign', {
+            method: 'POST', body: { username: form.dataset.username || '' }
+          }));
+          return;
+
+        case 'cape-assign-all':
+          if (!confirm('Gift this cape to every registered player?')) return;
+          await mutate(() => request('/api/admin/capes/' + id + '/assign-all', { method: 'POST', body: {} }));
+          return;
+
+        case 'cape-unassign-all':
+          if (!confirm('Remove this cape from every player it is assigned to?')) return;
+          await mutate(() => request('/api/admin/capes/' + id + '/unassign-all', { method: 'POST', body: {} }));
+          return;
+
+        case 'cape-delete':
+          if (!confirm('Delete this cape and unassign it from everyone?')) return;
+          await mutate(() => request('/api/admin/capes/' + id, { method: 'DELETE' }));
+          return;
+
+        case 'user-cape':
+          await mutate(() => request('/api/admin/users/' + id + '/cape', {
+            method: 'POST', body: { capeId: field('capeId') }
+          }));
+          return;
+
+        case 'user-password':
+          await mutate(() => request('/api/admin/users/' + id + '/password', {
+            method: 'POST', body: { password: field('password') }
+          }));
+          return;
+
+        case 'user-skin':
+          await mutate(async () => {
+            const png = await fileToDataUrl(file());
+            return request('/api/admin/users/' + id + '/skin', { method: 'POST', body: { png } });
+          });
+          return;
+
+        case 'user-skin-reset':
+          await mutate(() => request('/api/admin/users/' + id + '/skin/reset', { method: 'POST', body: {} }));
+          return;
+
+        case 'user-delete':
+          if (!confirm('Delete ' + (form.dataset.username || 'this player') + ' and all their account data?')) return;
+          await mutate(() => request('/api/admin/users/' + id, { method: 'DELETE' }));
+          return;
+
+        case 'purge-spam':
+          if (!confirm('Delete these spam accounts? This cannot be undone.')) return;
+          await mutate(() => request('/api/admin/users/purge-spam', {
+            method: 'POST', body: { neverLoggedIn: form.dataset.never === '1' }
+          }));
+          return;
+
+        default:
+          return;
+      }
+    } catch (err) {
+      handleError(err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  function installStyles() {
+    if (document.getElementById('bmadmin-style')) return;
+
+    const style = document.createElement('style');
+    style.id = 'bmadmin-style';
+    style.textContent = `
+      .bmadmin { display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: #333; user-select: text; }
+      .bmadmin h2 { margin: 0 0 4px; font-size: 15px; }
+      .bmadmin label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: #666; }
+      .bmadmin input[type=text], .bmadmin input[type=password], .bmadmin select {
+        padding: 3px 5px; border: 1px solid #b5b5b5; border-radius: 3px; font: inherit; color: #333; background: #fff;
+      }
+      .bmadmin input[type=file] { font-size: 11px; }
+      .bmadmin-card { display: flex; flex-direction: column; gap: 10px; max-width: 320px; margin: 40px auto 0; }
+      .bmadmin-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid #d5d5d5; padding-bottom: 6px; }
+      .bmadmin-tabs button.on { background: linear-gradient(to bottom, #c9c9c9 0%, #bcbcbc 100%); }
+      .bmadmin-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+      .bmadmin-actions form { margin: 0; }
+      .bmadmin-inline { display: inline-flex; gap: 4px; align-items: center; margin: 0; }
+      .bmadmin-msg { padding: 6px 8px; border-radius: 4px; }
+      .bmadmin-msg.ok { background: #dff3e4; color: #1d6b36; }
+      .bmadmin-msg.error { background: #fbe0e0; color: #8f1e1e; }
+      .bmadmin-note { color: #777; font-size: 11px; margin: 0; }
+      .bmadmin-sub { color: #888; font-size: 10px; word-break: break-all; }
+      .bmadmin-table { width: 100%; border-collapse: collapse; }
+      .bmadmin-table th, .bmadmin-table td { text-align: left; padding: 6px; border-bottom: 1px solid #eee; vertical-align: top; }
+      .bmadmin-table th { font-size: 11px; color: #666; }
+      .bmadmin-thumb { width: 40px; height: 20px; image-rendering: pixelated; background: #111; border-radius: 3px; }
+      .bmadmin-upload { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 6px; }
+      .bmadmin-upload label { flex: 1 1 180px; }
+      .bmadmin-purge { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; padding: 8px; background: #f5f5f5; border-radius: 4px; margin-bottom: 8px; }
+      .bmadmin-pills { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 4px; }
+      .bmadmin-pill { display: inline-flex; align-items: center; gap: 3px; background: #ececec; border-radius: 999px; padding: 1px 2px 1px 7px; }
+      .bmadmin-pill button { padding: 0 4px; font-size: 12px; border: 0; background: transparent; }
+      .bmadmin-danger { color: #8f1e1e; }
+      .bmadmin button:disabled { opacity: 0.5; cursor: not-allowed; }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function openAdmin() {
+    if (panelWindow) {
+      panelWindow.setHidden(false);
+      panelWindow.bringToFront();
+      if (token) loadState().catch(handleError);
+      return panelWindow;
+    }
+
+    installStyles();
+
+    panelWindow = WindowManager.create({
+      title: 'Breakmine Admin',
+      x: 110,
+      y: 50,
+      width: 840,
+      height: 560,
+      hideOnClose: true,
+      content: '<div data-role="admin-root" class="bmadmin"></div>'
+    });
+
+    viewEl = panelWindow.bodyEl.querySelector('[data-role="admin-root"]');
+    viewEl.addEventListener('submit', (event) => {
+      event.preventDefault();
+      handleForm(event.target);
+    });
+    viewEl.addEventListener('click', (event) => {
+      const tabButton = event.target.closest('[data-tab]');
+      if (!tabButton) return;
+      tab = tabButton.dataset.tab;
+      render();
+    });
+    ['keydown', 'keyup', 'keypress'].forEach((type) => {
+      viewEl.addEventListener(type, (event) => {
+        if (window.isDevtoolsShortcut && window.isDevtoolsShortcut(event)) return;
+        event.stopPropagation();
+      });
+    });
+
+    storeToken(readStorage(sessionStorage, TOKEN_KEY));
+    render();
+    if (token) loadState().catch(handleError);
+
+    return panelWindow;
+  }
+
+  window.admin = openAdmin;
+  window.adminPanel = { open: openAdmin, apiBase, wsUrl };
+})();
+
 window.openTinyToolsAbout = () => {
   // Prefer the inlined asset: the singlefile build has no separate image files.
   const logoSrc = (window.base64Assets && window.base64Assets['tinytoollogo.png'])

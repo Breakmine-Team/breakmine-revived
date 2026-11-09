@@ -1296,6 +1296,394 @@ app.post('/admin/users/:id/delete', requireAdmin, (req, res) => {
     }
 });
 
+// --- JSON admin API ---------------------------------------------------------
+// The in-game devtools window (admin() in index.html) talks to these routes.
+// The server-rendered /admin panel cannot be embedded: it sends
+// X-Frame-Options: SAMEORIGIN and its session cookie is SameSite=Strict, so a
+// cross-origin frame could neither render nor keep the session. Every route
+// below expects `Authorization: Bearer <admin token>` and returns JSON.
+
+// No isWsReplay skip here: the in-game panel logs in over the WebSocket relay,
+// and every relayed request arrives from loopback, so a shared bucket is
+// better than no limit on admin password attempts.
+const adminApiLimiter = rateLimit({ windowMs: 900000, max: 30 });
+
+function requireAdminToken(req, res, next) {
+    const header = req.headers['authorization'];
+    if (!header || !header.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Missing admin token' });
+    }
+
+    try {
+        const decoded = jwt.verify(header.slice(7), secrets.jwtSecret, { algorithms: ['HS256'] });
+        if (!decoded || decoded.admin !== true) {
+            return res.status(403).json({ error: 'Not an admin token' });
+        }
+        req.admin = decoded;
+        next();
+    } catch (err) {
+        return res.status(401).json({
+            error: err.name === 'TokenExpiredError' ? 'Admin session expired' : 'Invalid admin token',
+        });
+    }
+}
+
+function decodePngPayload(payload, maxBytes) {
+    if (typeof payload !== 'string' || payload.length === 0) return { error: 'Choose a PNG file.' };
+
+    const comma = payload.indexOf(',');
+    const base64 = payload.startsWith('data:') && comma !== -1 ? payload.slice(comma + 1) : payload;
+
+    let buffer;
+    try {
+        buffer = Buffer.from(base64, 'base64');
+    } catch (err) {
+        return { error: 'Could not read that file.' };
+    }
+
+    if (buffer.length === 0) return { error: 'Choose a PNG file.' };
+    if (buffer.length > maxBytes) return { error: `File too large. Max ${maxBytes / 1024}KB` };
+    return { buffer };
+}
+
+function writePngFile(directory, buffer) {
+    const filename = crypto.randomBytes(16).toString('hex') + '.png';
+    fs.writeFileSync(path.join(directory, filename), buffer);
+    return filename;
+}
+
+function spamAccountCounts() {
+    const users = stmts.listUsers.all();
+    return {
+        count: users.filter((user) => SPAM_USERNAME_PATTERN.test(user.username)).length,
+        neverLoggedInCount: users.filter((user) =>
+            SPAM_USERNAME_PATTERN.test(user.username) && user.last_login == null).length,
+    };
+}
+
+function setUserCape(user, raw) {
+    if (raw === 'default') {
+        capeStmts.clearChoice.run(user.id);
+        return { message: `Reset ${user.username} to the server default cape.` };
+    }
+
+    if (raw === 'none') {
+        capeStmts.setChoice.run(user.id, '');
+        return { message: `Removed the cape from ${user.username}.` };
+    }
+
+    const cape = capeStmts.getCape.get(String(raw));
+    if (!cape) return { error: 'Cape not found.' };
+
+    capeStmts.assignCape.run(cape.id, user.id, Date.now());
+    capeStmts.setChoice.run(user.id, cape.id);
+    return { message: `Set ${user.username}'s cape to ${cape.name}.` };
+}
+
+app.post('/api/admin/login', adminApiLimiter, (req, res) => {
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
+    const expected = getAdminPassword();
+
+    if (!expected || !constantTimeEquals(password, expected)) {
+        Logger.warn('Admin', 'Failed admin API login');
+        return res.status(401).json({ error: 'Incorrect password' });
+    }
+
+    const token = jwt.sign({ admin: true }, secrets.jwtSecret, { expiresIn: '12h', algorithm: 'HS256' });
+    res.json({ token, expiresIn: '12h' });
+});
+
+app.get('/api/admin/state', requireAdminToken, (req, res) => {
+    try {
+        const capes = capeStmts.listCapes.all().map((cape) => ({
+            id: cape.id,
+            name: cape.name,
+            createdAt: cape.created_at,
+            texture: capeDataUrl(cape.filename),
+            assigned: capeStmts.assignmentsForCape.all(cape.id).map((row) => row.username),
+        }));
+
+        const users = stmts.listUsers.all().map((user) => {
+            const choice = capeStmts.getChoice.get(user.id);
+            return {
+                id: user.id,
+                username: user.username,
+                createdAt: user.created_at,
+                lastLogin: user.last_login,
+                hasSkin: !!user.skin_path,
+                capeId: choice ? choice.cape_id : null,
+            };
+        });
+
+        res.json({ capes, users, spam: spamAccountCounts(), now: Date.now() });
+    } catch (err) {
+        Logger.error('Admin', `Admin state failed: ${err.message}`);
+        res.status(500).json({ error: 'Could not load the admin state.' });
+    }
+});
+
+app.post('/api/admin/capes', requireAdminToken, async (req, res) => {
+    const name = String(req.body?.name || '').trim();
+    if (name.length < 1 || name.length > CAPE_NAME_MAX) {
+        return res.status(400).json({ error: `Cape name must be 1-${CAPE_NAME_MAX} characters.` });
+    }
+
+    const decoded = decodePngPayload(req.body?.png, MAX_CAPE_SIZE);
+    if (decoded.error) return res.status(400).json({ error: decoded.error });
+
+    try {
+        const metadata = await sharp(decoded.buffer).metadata();
+        if (metadata.format !== 'png' || metadata.width !== CAPE_WIDTH || metadata.height !== CAPE_HEIGHT) {
+            return res.status(400).json({ error: 'Cape PNG must be 64×32 pixels.' });
+        }
+
+        const filename = writePngFile(CAPE_UPLOAD_DIR, decoded.buffer);
+        const id = uuidv4();
+        capeStmts.insertCape.run(id, name, filename, Date.now());
+        Logger.info('Cape', `Uploaded cape "${name}" (${id}) via admin API`);
+        res.status(201).json({ message: `Uploaded cape "${name}".`, cape: { id, name } });
+    } catch (err) {
+        Logger.error('Cape', `Admin cape upload failed: ${err.message}`);
+        res.status(400).json({ error: 'Could not read the uploaded PNG.' });
+    }
+});
+
+app.post('/api/admin/capes/:id/assign', requireAdminToken, (req, res) => {
+    const cape = capeStmts.getCape.get(req.params.id);
+    if (!cape) return res.status(404).json({ error: 'Cape not found.' });
+
+    const requested = String(req.body?.usernames || '').split(/[,\s]+/).filter(Boolean);
+    if (requested.length === 0) return res.status(400).json({ error: 'Enter a username.' });
+
+    const assigned = [];
+    const unknown = [];
+
+    for (const name of requested) {
+        const usernameVal = validateUsername(name);
+        const user = usernameVal.valid ? stmts.findByUsername.get(usernameVal.value) : null;
+        if (!user) {
+            unknown.push(name);
+            continue;
+        }
+        capeStmts.assignCape.run(cape.id, user.id, Date.now());
+        assigned.push(user.username);
+    }
+
+    Logger.info('Admin', `Assigned cape "${cape.name}" to ${assigned.join(', ') || 'nobody'}`);
+    res.json({
+        assigned,
+        unknown,
+        message: assigned.length > 0
+            ? `Assigned "${cape.name}" to ${assigned.join(', ')}.`
+            : `No matching players for ${unknown.join(', ')}.`,
+    });
+});
+
+app.post('/api/admin/capes/:id/unassign', requireAdminToken, (req, res) => {
+    const cape = capeStmts.getCape.get(req.params.id);
+    const usernameVal = validateUsername(String(req.body?.username || ''));
+    const user = cape && usernameVal.valid ? stmts.findByUsername.get(usernameVal.value) : null;
+
+    if (!cape || !user) return res.status(404).json({ error: 'User or cape not found.' });
+
+    capeStmts.unassignCape.run(cape.id, user.id);
+    capeStmts.clearChoiceForCape.run(user.id, cape.id);
+    Logger.info('Admin', `Unassigned cape "${cape.name}" from ${user.username}`);
+    res.json({ message: `Unassigned "${cape.name}" from ${user.username}.` });
+});
+
+app.post('/api/admin/capes/:id/assign-all', requireAdminToken, (req, res) => {
+    const cape = capeStmts.getCape.get(req.params.id);
+    if (!cape) return res.status(404).json({ error: 'Cape not found.' });
+
+    try {
+        const added = capeStmts.assignCapeToAll.run(cape.id, Date.now()).changes;
+        const total = capeStmts.countCapeAssignments.get(cape.id).count;
+        Logger.info('Admin', `Gifted cape "${cape.name}" to all players (${added} new assignments)`);
+        res.json({
+            message: total === 0
+                ? `There are no players to assign "${cape.name}" to.`
+                : added === 0
+                    ? `"${cape.name}" is already assigned to all ${total} player${total === 1 ? '' : 's'}.`
+                    : `Gifted "${cape.name}" to ${added} player${added === 1 ? '' : 's'} (${total} total).`,
+        });
+    } catch (err) {
+        Logger.error('Admin', `Gift all cape failed: ${err.message}`);
+        res.status(500).json({ error: 'Could not assign that cape to all players.' });
+    }
+});
+
+app.post('/api/admin/capes/:id/unassign-all', requireAdminToken, (req, res) => {
+    const cape = capeStmts.getCape.get(req.params.id);
+    if (!cape) return res.status(404).json({ error: 'Cape not found.' });
+
+    try {
+        const removed = db.transaction(() => {
+            const result = capeStmts.deleteCapeAssignments.run(cape.id);
+            capeStmts.deleteCapeChoices.run(cape.id);
+            return result.changes;
+        })();
+        Logger.info('Admin', `Removed cape "${cape.name}" from all players (${removed} assignments)`);
+        res.json({
+            message: removed === 0
+                ? `"${cape.name}" was not assigned to any players.`
+                : `Removed "${cape.name}" from ${removed} player${removed === 1 ? '' : 's'}.`,
+        });
+    } catch (err) {
+        Logger.error('Admin', `Remove all cape failed: ${err.message}`);
+        res.status(500).json({ error: 'Could not remove that cape from all players.' });
+    }
+});
+
+app.delete('/api/admin/capes/:id', requireAdminToken, (req, res) => {
+    const cape = capeStmts.getCape.get(req.params.id);
+    if (!cape) return res.status(404).json({ error: 'Cape not found.' });
+
+    capeStmts.deleteCapeAssignments.run(cape.id);
+    capeStmts.deleteCapeChoices.run(cape.id);
+    capeStmts.deleteCape.run(cape.id);
+
+    try {
+        const capePath = path.resolve(CAPE_UPLOAD_DIR, cape.filename);
+        if (fs.existsSync(capePath)) fs.unlinkSync(capePath);
+    } catch (err) {
+        Logger.warn('Cape', `Could not delete cape file: ${err.message}`);
+    }
+
+    Logger.info('Cape', `Deleted cape "${cape.name}"`);
+    res.json({ message: `Deleted cape "${cape.name}".` });
+});
+
+app.post('/api/admin/users/purge-spam', requireAdminToken, (req, res) => {
+    const neverLoggedInOnly = req.body?.neverLoggedIn === true || req.body?.neverLoggedIn === 'true';
+
+    try {
+        const accounts = stmts.listUsers.all().filter((user) =>
+            SPAM_USERNAME_PATTERN.test(user.username) &&
+            (!neverLoggedInOnly || user.last_login == null)
+        );
+
+        const removeAccounts = db.transaction((list) => {
+            for (const user of list) {
+                capeStmts.deleteUserAssignments.run(user.id);
+                capeStmts.clearChoice.run(user.id);
+                stmts.deleteUser.run(user.id);
+            }
+        });
+        removeAccounts(accounts);
+
+        for (const user of accounts) {
+            try { removeSkinFile(user.skin_path); } catch (err) { /* already gone */ }
+        }
+
+        const noun = neverLoggedInOnly ? 'never-logged-in spam account' : 'spam account';
+        const message = accounts.length === 0
+            ? `No ${noun}s found.`
+            : `Purged ${accounts.length} ${accounts.length === 1 ? noun : noun + 's'}.`;
+        Logger.info('Admin', message);
+        res.json({ message, purged: accounts.length });
+    } catch (err) {
+        Logger.error('Admin', `Spam purge failed: ${err.message}`);
+        res.status(500).json({ error: 'Could not purge spam accounts.' });
+    }
+});
+
+app.post('/api/admin/users/:id/skin', requireAdminToken, async (req, res) => {
+    const user = stmts.findById.get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'Player not found.' });
+
+    const decoded = decodePngPayload(req.body?.png, MAX_SKIN_SIZE);
+    if (decoded.error) return res.status(400).json({ error: decoded.error });
+
+    try {
+        const metadata = await sharp(decoded.buffer).metadata();
+        if (metadata.format !== 'png' || !isSupportedSkinSize(metadata.width, metadata.height)) {
+            return res.status(400).json({ error: 'Skin PNG must be 64×64, 64×32, or a larger HD skin.' });
+        }
+
+        const previousSkin = user.skin_path;
+        const filename = writePngFile(SKIN_UPLOAD_DIR, decoded.buffer);
+        stmts.updateSkinPath.run(filename, user.id);
+        if (previousSkin && previousSkin !== filename) {
+            try { removeSkinFile(previousSkin); } catch (err) {
+                Logger.warn('Admin', `Could not delete previous skin for ${user.username}: ${err.message}`);
+            }
+        }
+
+        Logger.info('Admin', `Changed skin for ${user.username}`);
+        res.json({ message: `Changed skin for ${user.username}.` });
+    } catch (err) {
+        res.status(400).json({ error: 'Could not read the uploaded PNG.' });
+    }
+});
+
+app.post('/api/admin/users/:id/skin/reset', requireAdminToken, (req, res) => {
+    const user = stmts.findById.get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'Player not found.' });
+
+    const previousSkin = user.skin_path;
+    stmts.updateSkinPath.run(null, user.id);
+    if (previousSkin) {
+        try { removeSkinFile(previousSkin); } catch (err) {
+            Logger.warn('Admin', `Could not delete skin for ${user.username}: ${err.message}`);
+        }
+    }
+
+    Logger.info('Admin', `Reset skin for ${user.username}`);
+    res.json({ message: `Reset skin for ${user.username}.` });
+});
+
+app.post('/api/admin/users/:id/cape', requireAdminToken, (req, res) => {
+    const user = stmts.findById.get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'Player not found.' });
+
+    const raw = typeof req.body?.capeId === 'string' ? req.body.capeId : 'default';
+    const result = setUserCape(user, raw);
+    if (result.error) return res.status(404).json({ error: result.error });
+
+    Logger.info('Admin', result.message);
+    res.json({ message: result.message });
+});
+
+app.post('/api/admin/users/:id/password', requireAdminToken, async (req, res) => {
+    const user = stmts.findById.get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'Player not found.' });
+
+    const passwordVal = validatePassword(req.body?.password);
+    if (!passwordVal.valid) return res.status(400).json({ error: passwordVal.error });
+
+    try {
+        const hash = await bcrypt.hash(passwordVal.value, BCRYPT_ROUNDS);
+        stmts.updatePasswordHash.run(hash, user.id);
+        Logger.info('Admin', `Changed password for ${user.username}`);
+        res.json({ message: `Changed password for ${user.username}.` });
+    } catch (err) {
+        Logger.error('Admin', `Could not change password for ${user.username}: ${err.message}`);
+        res.status(500).json({ error: 'Could not change that password.' });
+    }
+});
+
+app.delete('/api/admin/users/:id', requireAdminToken, (req, res) => {
+    const user = stmts.findById.get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'Player not found.' });
+
+    try {
+        capeStmts.deleteUserAssignments.run(user.id);
+        capeStmts.clearChoice.run(user.id);
+        stmts.deleteUser.run(user.id);
+
+        try { removeSkinFile(user.skin_path); } catch (err) {
+            Logger.warn('Admin', `Could not delete skin for ${user.username}: ${err.message}`);
+        }
+
+        Logger.info('Admin', `Deleted account: ${user.username}`);
+        res.json({ message: `Deleted ${user.username}.` });
+    } catch (err) {
+        Logger.error('Admin', `Could not delete ${user.username}: ${err.message}`);
+        res.status(500).json({ error: 'Could not delete that account.' });
+    }
+});
+
 app.use((err, req, res, next) => {
     if (err instanceof multer.MulterError) {
         const isCapeUpload = req.originalUrl.startsWith('/api/upload_cape') || req.originalUrl.startsWith('/admin/capes');
