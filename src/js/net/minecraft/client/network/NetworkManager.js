@@ -246,6 +246,8 @@ export default class NetworkManager {
                 }
             } else if (payload.type === 'cape:state') {
                 this.minecraft?.capeManager?.handleState(payload.username, payload.cape);
+            } else if (payload.type === 'cctv:state') {
+                this.minecraft?.cctvManager?.handleState(payload.camera);
             } else if (payload.type === 'dimension') {
                 const world = this.minecraft?.world;
                 if (world) {

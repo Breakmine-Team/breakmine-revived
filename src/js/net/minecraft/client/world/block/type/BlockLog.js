@@ -22,6 +22,22 @@ export default class BlockLog extends Block {
         return 'axe';
     }
 
+    getRotationForFace(face, data = 0) {
+        if (data !== 1 && data !== 2) {
+            return 0;
+        }
+
+        if (face.isYAxis()) {
+            return data === 1 ? 1 : 0;
+        }
+
+        if (data === 1) {
+            return face === EnumBlockFace.NORTH || face === EnumBlockFace.SOUTH ? 1 : 0;
+        }
+
+        return face === EnumBlockFace.EAST || face === EnumBlockFace.WEST ? 1 : 0;
+    }
+
     getTextureForFace(face, data = 0) {
         if (face.isYAxis() && data === 0) {
             return `${this.woodType}_log_top`;

@@ -19,6 +19,7 @@ import FontRenderer from "./render/gui/FontRenderer.js";
 import GrassColorizer from "./render/GrassColorizer.js";
 import ModLoader from "./ModLoader.js";
 import CapeManager from "./render/CapeManager.js";
+import CctvManager from "./CctvManager.js";
 import GuiMainMenu from "./gui/screens/GuiMainMenu.js";
 import GuiLoadingScreen from "./gui/screens/GuiLoadingScreen.js";
 import GuiLoadingIntegratedServer from "./gui/screens/GuiLoadingIntegratedServer.js";
@@ -151,6 +152,9 @@ export default class Minecraft {
         this.modLoader = new ModLoader(this);
 
         this.capeManager = new CapeManager(this);
+        this.cctvManager = new CctvManager(this);
+
+        this.movementLocks = new Set();
 
         this.tunnelLib = new TunnelLib(this.settings.tunnelServer);
 
@@ -1332,11 +1336,36 @@ export default class Minecraft {
         this.updateGameState();
     }
 
+    
+    prohibitMovement(source = "default") {
+        this.movementLocks.add(String(source));
+        this.player?.clearMovementInput?.();
+    }
+
+    allowMovement(source = "default") {
+        this.movementLocks.delete(String(source));
+    }
+
+    isMovementProhibited() {
+        return this.movementLocks.size > 0;
+    }
+
+    
+    setStatusText(text, durationMs = 0) {
+        this.ingameOverlay?.setStatusText(text, durationMs);
+    }
+
+    clearStatusText() {
+        this.ingameOverlay?.clearStatusText();
+    }
+
     onTick() {
         if (this.isInGame() && !this.isPaused()) {
             this.handleMiningTicks();
 
             this.ingameOverlay.onTick();
+
+            this.cctvManager.onTick();
 
             this.world.onTick();
 
@@ -1415,6 +1444,17 @@ export default class Minecraft {
             let renderDistance = this.settings.viewDistance;
 
             this.world.getChunkProvider().requestChunksInRadius(cameraChunkX, cameraChunkZ, renderDistance);
+
+            const cctvPos = this.cctvManager?.isViewing()
+                ? this.cctvManager.getViewPosition()
+                : null;
+            if (cctvPos) {
+                this.world.getChunkProvider().requestChunksInRadius(
+                    Math.floor(cctvPos.x) >> 4,
+                    Math.floor(cctvPos.z) >> 4,
+                    renderDistance
+                );
+            }
         }
 
         if (this.isInGame() && this.isSingleplayer() && this.loadingScreen === null) {

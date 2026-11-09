@@ -492,10 +492,12 @@ export default class WorldRenderer {
             }
         }
 
+        const viewingCamera = this.minecraft.cctvManager?.isViewing() === true;
+
         for (let entity of this.minecraft.world.entities) {
             if (!entity || !entity.renderer) continue;
-            
-            if (entity === player && this.minecraft.settings.thirdPersonView === 0) {
+
+            if (entity === player && (viewingCamera || this.minecraft.settings.thirdPersonView === 0)) {
                 continue;
             }
 
@@ -834,7 +836,16 @@ export default class WorldRenderer {
         let yaw = player.prevRotationYaw + (player.rotationYaw - player.prevRotationYaw) * partialTicks;
         let pitch = player.prevRotationPitch + (player.rotationPitch - player.prevRotationPitch) * partialTicks;
 
-        let mode = this.minecraft.settings.thirdPersonView;
+        const cctvView = this.minecraft.cctvManager?.isViewing()
+            ? this.minecraft.cctvManager.getViewPosition()
+            : null;
+        if (cctvView) {
+            x = cctvView.x;
+            y = cctvView.y;
+            z = cctvView.z;
+        }
+
+        let mode = cctvView ? 0 : this.minecraft.settings.thirdPersonView;
         if (mode !== 0) {
             let distance = WorldRenderer.THIRD_PERSON_DISTANCE;
             let frontView = mode === 2;
@@ -883,7 +894,7 @@ export default class WorldRenderer {
 
         stack.position.set(x, y, z);
 
-        if (mode === 0 && this.minecraft.settings.viewBobbing) {
+        if (mode === 0 && !cctvView && this.minecraft.settings.viewBobbing) {
             this.bobbingAnimation(player, stack, partialTicks);
         }
 
@@ -1478,6 +1489,8 @@ export default class WorldRenderer {
         stack.visible = false;
         this.firstPersonItemRenderer.cameraGroup.visible = false;
 
+        if (this.minecraft.cctvManager?.isViewing()) return;
+
         if (GuiFunctions.isGuiHidden()) return;
 
         if (player.spectator) return;
@@ -2024,11 +2037,12 @@ export default class WorldRenderer {
 
         let entities = this.minecraft.world.entities;
         let player = this.minecraft.player;
+        const viewingCamera = this.minecraft.cctvManager?.isViewing() === true;
 
         for (let entity of entities) {
             if (!entity) continue;
 
-            if (entity === player && this.minecraft.settings.thirdPersonView === 0) {
+            if (entity === player && (viewingCamera || this.minecraft.settings.thirdPersonView === 0)) {
                 continue;
             }
 

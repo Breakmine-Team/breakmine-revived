@@ -167,7 +167,8 @@ export const atlasBlockTextures = [
     "flint_cardoor.png", "counter_side.png", "counter_top.png",
     "counter_side_drawer.png", "counter_stove_side.png", "counter_stove_side_on.png",
     "scaffolding_top.png", "scaffolding_side.png", "scaffolding_bottom.png",
-    "shaft_enterance.png", "clock.png"
+    "shaft_enterance.png", "clock.png",
+    "gearshift_on.png", "gearshift_off.png", "clutch_on.png", "clutch_off.png"
 ];
 
 const toolMaterials = ['wooden', 'stone', 'iron', 'diamond', 'golden'];

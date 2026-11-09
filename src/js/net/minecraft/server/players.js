@@ -194,6 +194,7 @@ function savePlayerData(player) {
         dimension: player.dimension ?? 0,
         health: player.health,
         cape: player.cape || null,
+        cctvCamera: player.cctvCamera || null,
         inventory: normalizeInventoryState(player.inventory)
     };
     fs.writeFileSync(playerFile, JSON.stringify(data, null, 2));

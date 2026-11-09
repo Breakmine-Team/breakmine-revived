@@ -487,6 +487,13 @@ export default class PlayerEntity extends EntityLiving {
         }
     }
 
+    clearMovementInput() {
+        this.moveForward = 0;
+        this.moveStrafing = 0;
+        this.jumping = false;
+        this.sprinting = false;
+    }
+
     updateKeyboardInput() {
         let moveForward = 0.0;
         let moveStrafe = 0.0;
@@ -494,7 +501,9 @@ export default class PlayerEntity extends EntityLiving {
         let jumping = false;
         let sneaking = false;
 
-        if (this.minecraft.hasInGameFocus()) {
+        const movementLocked = this.minecraft.isMovementProhibited?.() === true;
+
+        if (this.minecraft.hasInGameFocus() && !movementLocked) {
             if (this.minecraft.settings.tvmode) {
                 let looking = Keyboard.isKeyDown("Enter");
 

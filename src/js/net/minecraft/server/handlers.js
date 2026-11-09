@@ -296,6 +296,11 @@ function handleLoginPacket(player, packetId, buffer, offset) {
             player.health = typeof playerData.health === 'number' && playerData.health > 0 ? playerData.health : 20;
             player.inventory = normalizeInventoryState(playerData.inventory);
             player.cape = typeof playerData.cape === 'string' ? playerData.cape : null;
+            const savedCamera = playerData.cctvCamera;
+            player.cctvCamera = savedCamera
+                && Number.isFinite(savedCamera.x) && Number.isFinite(savedCamera.y) && Number.isFinite(savedCamera.z)
+                ? { x: Math.floor(savedCamera.x), y: Math.floor(savedCamera.y), z: Math.floor(savedCamera.z) }
+                : null;
 
             const px = Math.floor(player.x);
             const py = Math.floor(player.y);
@@ -314,6 +319,7 @@ function handleLoginPacket(player, packetId, buffer, offset) {
             player.isFlying = false;
             player.inventory = normalizeInventoryState([]);
             player.cape = null;
+            player.cctvCamera = null;
         }
 
         addPlayer(player);
@@ -373,6 +379,11 @@ function handleLoginPacket(player, packetId, buffer, offset) {
             player.ws.send(JSON.stringify({
                 type: 'blockInventories',
                 inventories: getAllBlockInventoriesState()
+            }));
+
+            player.ws.send(JSON.stringify({
+                type: 'cctv:state',
+                camera: player.cctvCamera || null
             }));
 
             const inventories = getBlockInventories();
@@ -792,9 +803,6 @@ function handleBlockPlacement(player, buffer, offset) {
             }
 
             try {
-                // The held item decides whether the click acts (TNT only lights
-                // from flint and steel). Server worlds have no local player to
-                // read it from, so pass it explicitly.
                 targetBlock.onMouseButton(serverWorld, x, y, z, 2, heldItemId);
             } catch (e) {
                 log.error('Server', `onMouseButton error at ${x},${y},${z}: ${e.message}`);

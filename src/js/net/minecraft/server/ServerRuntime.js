@@ -1,4 +1,4 @@
-import { initWorld, saveWorld, getSubChunkStore, loadCurrentWorld, getWorldTime, tickWorldTime, setBlockInventory, getBlockInventories, getCurrentWorldName, setActiveDimension } from './world.js';
+import { initWorld, saveWorld, getSubChunkStore, loadCurrentWorld, getWorldTime, tickWorldTime, setBlockInventory, getBlockInventories, getCurrentWorldName, setActiveDimension, getBlockAt } from './world.js';
 import { tickAllFurnaces, broadcastFurnaceChanges } from './Furnace.js';
 import { sendTimeUpdate, sendChatMessage, sendPlayerListEntry } from './packets.js';
 import { handlePacket, cleanupPlayerChunks, respawnPlayer, flushSaveWorld } from './handlers.js';
@@ -54,6 +54,35 @@ function broadcastCapeState(player) {
     for (const peer of getPlayers().values()) {
         if (peer.ws.readyState === 1) peer.ws.send(message);
     }
+}
+
+function sendCctvState(target) {
+    if (!target?.ws || target.ws.readyState !== 1) return;
+    target.ws.send(JSON.stringify({
+        type: 'cctv:state',
+        camera: target.cctvCamera || null
+    }));
+}
+
+const MAX_WORLD_COORD = 30000000;
+
+function handleCctvPair(player, payload) {
+    if (!player.username) return;
+
+    const x = Math.floor(Number(payload.x));
+    const y = Math.floor(Number(payload.y));
+    const z = Math.floor(Number(payload.z));
+
+    const inBounds = [x, y, z].every((v) => Number.isFinite(v) && Math.abs(v) <= MAX_WORLD_COORD);
+    const cameraBlock = BlockRegistry.CCTV_CAMERA;
+    const isCamera = inBounds && cameraBlock && getBlockAt(x, y, z, player.dimension ?? 0) === cameraBlock.id;
+
+    if (isCamera) {
+        player.cctvCamera = { x, y, z };
+        savePlayerData(player);
+    }
+
+    sendCctvState(player);
 }
 
 
@@ -225,6 +254,10 @@ export function onConnection(ws, req) {
                 player.cape = payload.cape;
                 savePlayerData(player);
                 broadcastCapeState(player);
+            } else if (payload && payload.type === 'cctv:request' && player) {
+                sendCctvState(player);
+            } else if (payload && payload.type === 'cctv:pair' && player) {
+                handleCctvPair(player, payload);
             } else if (payload && payload.type === 'health') {
                 if (typeof payload.health === 'number') {
                     player.health = Math.max(0, Math.min(20, payload.health));

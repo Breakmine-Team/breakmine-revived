@@ -157,8 +157,9 @@ export default class ShaftDrive {
                 }
 
                 const neighbourAxis = ShaftDrive.axisOf(world, nx, ny, nz, neighbour);
+                const link = ShaftDrive.link(member.block, member.axis, neighbour, neighbourAxis, step.axis);
                 visit(nx, ny, nz, neighbour, neighbourAxis,
-                    ShaftDrive.link(member.block, member.axis, neighbour, neighbourAxis, step.axis));
+                    ShaftDrive.passThrough(member.block, world, member.x, member.y, member.z, link));
             }
 
             if (ShaftDrive.isCog(member.block)) {
@@ -320,6 +321,26 @@ export default class ShaftDrive {
         }
 
         return 0;
+    }
+
+    
+    static passThrough(block, world, x, y, z, link) {
+        if (link === 0 || !block || typeof block.getRotationPassThrough !== "function") {
+            return link;
+        }
+
+        const data = world && typeof world.getBlockDataAt === "function" ? world.getBlockDataAt(x, y, z) : 0;
+        const multiplier = Number(block.getRotationPassThrough(world, x, y, z, data));
+
+        if (!Number.isFinite(multiplier) || multiplier === 1) {
+            return link;
+        }
+
+        if (multiplier === 0) {
+            return 0;
+        }
+
+        return multiplier < 0 ? -link : link;
     }
 
     static blockAt(world, x, y, z) {

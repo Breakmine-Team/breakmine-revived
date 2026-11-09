@@ -288,11 +288,12 @@ export default class BlockRenderer {
     }
 
     static DummyBlock = class extends Block {
-        constructor(id, texId, texName, texFaces = null) {
+        constructor(id, texId, texName, texFaces = null, texRotations = null) {
             super(id, texId);
             this.inventoryTab = EnumCreativeInventoryTab.NOTLISTED;
             this.texName = texName;
             this.texFaces = texFaces;
+            this.texRotations = texRotations;
         }
         
         getTextureForFace(face) {
@@ -303,6 +304,14 @@ export default class BlockRenderer {
                 }
             }
             return this.texName;
+        }
+
+        getRotationForFace(face) {
+            if (!this.texRotations || !face || typeof face.getName !== 'function') {
+                return 0;
+            }
+
+            return this.texRotations[face.getName()] || 0;
         }
     };
 
@@ -391,7 +400,7 @@ export default class BlockRenderer {
                 partBlock = parts[i][2]['block'];
                 bbox = parts[i][2]['bbox'];
             } else if (parts[i][0] === 'texture') {
-                partBlock = new this.constructor.DummyBlock(999, 0, parts[i][2]['texture'], parts[i][2]['faces'] ?? null);
+                partBlock = new this.constructor.DummyBlock(999, 0, parts[i][2]['texture'], parts[i][2]['faces'] ?? null, parts[i][2]['uvRotation'] ?? null);
                 bbox = parts[i][2]['bbox'];
             }
             
@@ -897,7 +906,8 @@ export default class BlockRenderer {
             ? {face: face, x: x, y: y, z: z, bbox: boundingBox}
             : null;
 
-        this.addFace(world, face, ao, chunkX, chunkY, chunkZ, minX, minY, minZ, maxX, maxY, maxZ, minU, minV, maxU, maxV, red, green, blue, rotation, uSlideOffset, wrapRect);
+        this.addFace(world, face, ao, chunkX, chunkY, chunkZ, minX, minY, minZ, maxX, maxY, maxZ, minU, minV, maxU, maxV, red, green, blue, rotation, uSlideOffset, wrapRect,
+            tileMinU, 1 - tileMinV - vSpan, uSpan, vSpan);
     }
 
     renderDecoration(world, block, x, y, z) {
@@ -958,25 +968,28 @@ export default class BlockRenderer {
         this.tessellator.addVertexWithUV(maxX - cx, minY - cy, maxZ - cz, maxU, maxV);
     }
 
-    addFace(world, face, ambientOcclusion, chunkX, chunkY, chunkZ, minX, minY, minZ, maxX, maxY, maxZ, minU, minV, maxU, maxV, red = 1, green = 1, blue = 1, rotation = 0, uOffset = 0, wrapRect = null) {
+    addFace(world, face, ambientOcclusion, chunkX, chunkY, chunkZ, minX, minY, minZ, maxX, maxY, maxZ, minU, minV, maxU, maxV, red = 1, green = 1, blue = 1, rotation = 0, uOffset = 0, wrapRect = null, tileU = null, tileV = null, tileURange = null, tileVRange = null) {
         this.tessellator.setTileWrap(wrapRect);
+
+        const spinU = tileU === null ? minU : tileU;
+        const spinV = tileV === null ? minV : tileV;
+        const spinURange = tileURange === null ? maxU - minU : tileURange;
+        const spinVRange = tileVRange === null ? maxV - minV : tileVRange;
 
         const addCorner = (x, y, z, u, v) => {
             let r = ((rotation % 4) + 4) % 4;
             if (r !== 0) {
-                let uRange = maxU - minU;
-                let vRange = maxV - minV;
-                let localU = (u - minU) / uRange;
-                let localV = (v - minV) / vRange;
+                let localU = (u - spinU) / spinURange;
+                let localV = (v - spinV) / spinVRange;
                 if (r === 1) {
-                    u = minU + localV * uRange;
-                    v = minV + (1 - localU) * vRange;
+                    u = spinU + localV * spinURange;
+                    v = spinV + (1 - localU) * spinVRange;
                 } else if (r === 2) {
-                    u = minU + (1 - localU) * uRange;
-                    v = minV + (1 - localV) * vRange;
+                    u = spinU + (1 - localU) * spinURange;
+                    v = spinV + (1 - localV) * spinVRange;
                 } else {
-                    u = minU + (1 - localV) * uRange;
-                    v = minV + localU * vRange;
+                    u = spinU + (1 - localV) * spinURange;
+                    v = spinV + localU * spinVRange;
                 }
             }
             this.addBlockCorner(world, face, ambientOcclusion, chunkX, chunkY, chunkZ, x, y, z, u + uOffset, v, red, green, blue);

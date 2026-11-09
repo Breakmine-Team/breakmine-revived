@@ -38,10 +38,6 @@ export default class ItemFlint extends Item {
             minecraft.player.swingArm();
         }
 
-        // TNT is ignited by the tool itself: holding an item sends the click
-        // down this path instead of the block's onMouseButton, so without this
-        // a flint and steel would never light TNT locally. The packet below
-        // still tells the server (see handleBlockPlacement).
         const clickedBlock = Block.getById(world.getBlockAt(clickedX, clickedY, clickedZ));
         if (clickedBlock && typeof clickedBlock.ignite === "function") {
             clickedBlock.ignite(world, clickedX, clickedY, clickedZ);

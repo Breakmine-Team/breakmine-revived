@@ -274,7 +274,10 @@ export default class PlayerRenderer extends EntityRenderer {
         this.renderShadow(entity, partialTicks);
 
         let isThirdPerson = this.worldRenderer.minecraft.settings.thirdPersonView !== 0;
-        if ((entity !== this.worldRenderer.minecraft.player || isThirdPerson) && entity.username && !entity.isSneaking()) {
+        const isSelf = entity === this.worldRenderer.minecraft.player;
+        const viewingCamera = this.worldRenderer.minecraft.cctvManager?.isViewing() === true;
+
+        if ((!isSelf || (isThirdPerson && !viewingCamera)) && entity.username && !entity.isSneaking()) {
             this.renderNametag(entity, partialTicks);
         } else {
             this.nametagGroup.visible = false;

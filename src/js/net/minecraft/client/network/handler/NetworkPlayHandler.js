@@ -37,6 +37,7 @@ export default class NetworkPlayHandler extends PacketHandler {
         this.networkManager.sendPacket(new ClientOffGridRequestPacket());
 
         this.minecraft.capeManager?.onJoin(this.networkManager);
+        this.minecraft.cctvManager?.onJoin(this.networkManager);
     }
 
     handleServerChat(packet) {

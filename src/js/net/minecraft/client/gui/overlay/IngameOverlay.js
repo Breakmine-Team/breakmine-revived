@@ -32,6 +32,9 @@ export default class IngameOverlay extends Gui {
         this.lastSelectedTypeId = 0;
         this.selectedItemName = "";
         this.selectedItemNameUntil = 0;
+
+        this.statusText = "";
+        this.statusTextUntil = 0;
     }
 
     render(stack, mouseX, mouseY, partialTicks) {
@@ -63,15 +66,25 @@ export default class IngameOverlay extends Gui {
             }
         }
 
+        const cameraView = this.minecraft.cctvManager?.isViewing() === true;
+
+        if (cameraView) {
+            this.hideHudItemLayers();
+        }
+
         if (!this.minecraft.player.spectator) {
-            this.renderHotbar(stack, this.window.width / 2 - 91, this.window.height - 22);
+            if (!cameraView) {
+                this.renderHotbar(stack, this.window.width / 2 - 91, this.window.height - 22);
+            }
             this.updateSelectedItemName();
             this.renderSelectedItemName(stack);
         }
 
-        if (!this.minecraft.player.creative && !this.minecraft.player.spectator) {
+        if (!this.minecraft.player.creative && !this.minecraft.player.spectator && !cameraView) {
             this.renderHealth(stack, this.window.width / 2 - 91, this.window.height - 22 - 11)
         }
+
+        this.renderStatusText(stack);
 
         this.renderVoiceIndicator(stack);
 
@@ -272,7 +285,47 @@ export default class IngameOverlay extends Gui {
         this.selectedItemNameUntil = performance.now() + 2000;
     }
 
+    setStatusText(text, durationMs = 0) {
+        const value = text === null || text === undefined ? "" : String(text).split(/\r?\n/)[0].trim();
+        this.statusText = value;
+        this.statusTextUntil = value && durationMs > 0 ? performance.now() + durationMs : 0;
+    }
+
+    clearStatusText() {
+        this.setStatusText("");
+    }
+
+    getStatusText() {
+        if (!this.statusText) {
+            return "";
+        }
+
+        if (this.statusTextUntil !== 0 && performance.now() > this.statusTextUntil) {
+            this.statusText = "";
+            this.statusTextUntil = 0;
+            return "";
+        }
+
+        return this.statusText;
+    }
+
+    renderStatusText(stack) {
+        const text = this.getStatusText();
+        if (!text) {
+            return;
+        }
+
+        const textWidth = this.getStringWidth(stack, text, true);
+        const x = Math.floor(this.window.width / 2 - textWidth / 2);
+
+        this.drawString(stack, text, x, this.window.height - 44, 0xFFFFFFFF, true, false);
+    }
+
     renderSelectedItemName(stack) {
+        if (this.getStatusText()) {
+            return;
+        }
+
         if (!this.selectedItemName || performance.now() > this.selectedItemNameUntil) {
             return;
         }
@@ -283,6 +336,18 @@ export default class IngameOverlay extends Gui {
         const y = this.window.height - (healthVisible ? 44 : 44);
 
         this.drawString(stack, this.selectedItemName, x, y, 0xFFFFFFFF, true, false);
+    }
+
+    hideHudItemLayers() {
+        this.minecraft.itemRenderer?.destroy("hotbar");
+
+        const canvas = this.window.canvasGuiItemCount;
+        if (canvas && this.itemCountsDrawn) {
+            canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        this.itemCountsDrawn = false;
+        this.itemCountsFresh = false;
     }
 
     renderHotbar(stack, x, y) {
@@ -316,6 +381,7 @@ export default class IngameOverlay extends Gui {
     renderPostItem(stack, mouseX, mouseY, partialTicks) {
         if (this.minecraft.player.spectator) return;
         if (GuiFunctions.isGuiHidden()) return;
+        if (this.minecraft.cctvManager?.isViewing()) return;
 
         const x = this.window.width / 2 - 91;
         const y = this.window.height - 22;

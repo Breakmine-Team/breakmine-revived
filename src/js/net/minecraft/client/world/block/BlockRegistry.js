@@ -88,6 +88,8 @@ import BlockBluestoneMemoryCell from "./type/BlockBluestoneMemoryCell.js";
 import BlockBluestoneObserver from "./type/BlockBluestoneObserver.js";
 import BlockBluestoneAdjustingLamp from "./type/BlockBluestoneAdjustingLamp.js";
 import BlockBluestoneBulb from "./type/BlockBluestoneBulb.js";
+import BlockGearshift from "./type/BlockGearshift.js";
+import BlockClutch from "./type/BlockClutch.js";
 import BlockBluestoneRod from "./type/BlockBluestoneRod.js";
 import BlockBluestoneRodPillar from "./type/BlockBluestoneRodPillar.js";
 import BlockSlime from "./type/BlockSlime.js";
@@ -123,6 +125,8 @@ import BlockLargeCog from "./type/BlockLargeCog.js";
 import BlockMechanicalBearing from "./type/BlockMechanicalBearing.js";
 import BlockBluestoneTorch from "./type/BlockBluestoneTorch.js";
 import BlockTurntable from "./type/BlockTurntable.js";
+import BlockCctvCamera from "./type/BlockCctvCamera.js";
+import ItemCctvViewer from "./type/ItemCctvViewer.js";
 
 export class BlockRegistry {
 
@@ -655,6 +659,8 @@ export class BlockRegistry {
         BlockRegistry.LARGE_COG = new BlockLargeCog(349, 0);
         BlockRegistry.MECHANICAL_BEARING = new BlockMechanicalBearing(350, 0);
         BlockRegistry.BLUESTONE_TORCH = new BlockBluestoneTorch(351, 0);
+        BlockRegistry.GEARSHIFT = new BlockGearshift(408, 0);
+        BlockRegistry.CLUTCH = new BlockClutch(409, 0);
 
         BlockRegistry.PORTAL = new BlockPortal(356, 0);
 
@@ -664,6 +670,9 @@ export class BlockRegistry {
         BlockRegistry.STRUCTURE_MARKER_4 = new BlockStructureMarker(403, 0, "lime_concrete", "Structure Marker #4");
         BlockRegistry.STRUCTURE_MARKER_5 = new BlockStructureMarker(404, 0, "light_blue_concrete", "Structure Marker #5");
         BlockRegistry.STRUCTURE_MARKER_6 = new BlockStructureMarker(405, 0, "magenta_concrete", "Structure Marker #6");
+
+        BlockRegistry.CCTV_CAMERA = new BlockCctvCamera(406, 0);
+        BlockRegistry.ITEM_CCTV_VIEWER = new ItemCctvViewer(407, 'spyglass', 'CCTV Viewer');
 
         for (const [key, val] of Object.entries(BlockRegistry)) {
             if (val && typeof val === "object" && val.id !== undefined) {

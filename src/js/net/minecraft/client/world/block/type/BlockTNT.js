@@ -87,7 +87,7 @@ export default class BlockTNT extends Block {
         }
     }
 
-    /** Detonate. Used by the flint and steel path, which never reaches onMouseButton. */
+    
     ignite(world, x, y, z) {
         if (!this.isExplosionEnabled(world)) {
             return false;
@@ -97,7 +97,7 @@ export default class BlockTNT extends Block {
         return true;
     }
 
-    /** Held item id, read from the client player when the caller does not pass one. */
+    
     getHeldItemId(world) {
         const stack = world?.minecraft?.player?.inventory?.getItemInSelectedSlot?.();
         return stack && typeof stack.getType === "function" ? (stack.getType() || 0) : 0;
@@ -107,7 +107,7 @@ export default class BlockTNT extends Block {
         return heldItemId > 0 && heldItemId === BlockRegistry.FLINT_AND_STEEL?.id;
     }
 
-    /** Any adjacent bluestone carrying signal, or a constant power source. */
+    
     isBluestonePowered(world, x, y, z) {
         if (!world || typeof world.getBlockAt !== "function") {
             return false;
@@ -128,8 +128,6 @@ export default class BlockTNT extends Block {
                 continue;
             }
 
-            // getPower first: a lever, torch or repeater only counts while it
-            // is actually on, whereas isPowerSource is a static flag.
             if (typeof block.getPower === "function") {
                 if (block.getPower(world, nx, ny, nz) > 0) {
                     return true;
@@ -172,8 +170,6 @@ export default class BlockTNT extends Block {
             ? this.getHeldItemId(world)
             : heldItemId;
 
-        // Only flint and steel ignites TNT on a click. Returning false keeps
-        // ordinary use going, so a block can still be placed against the TNT.
         if (!this.isIgnitionItem(item)) {
             return false;
         }
