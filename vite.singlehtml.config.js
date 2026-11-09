@@ -219,6 +219,71 @@ ${registrations}
     };
 }
 
+/**
+ * Single-file size is dominated by inlined images: the title-screen panorama
+ * faces alone are ~16 MB of PNG, which base64 turns into ~21.8 MB of text.
+ * Those are photographs, so WebP compresses them ~10x; the pixel-art textures
+ * stay PNG because they gain almost nothing and would lose sharpness.
+ *
+ * Runs last so it sees the finished HTML, and only rewrites the built
+ * single-file page - src/resources keeps its PNGs for the normal build and for
+ * the files served over HTTP.
+ */
+function shrinkInlinedImagesPlugin({ minBytes = 200 * 1024, maxRatio = 0.5, quality = 85 } = {}) {
+    return {
+        name: "shrink-inlined-images",
+        async closeBundle() {
+            const htmlPath = path.resolve(__dirname, "dist-single/index.html");
+            if (!fs.existsSync(htmlPath)) return;
+
+            let sharp;
+            try {
+                sharp = (await import("sharp")).default;
+            } catch (e) {
+                console.warn(`[shrink-inlined-images] sharp unavailable, keeping PNGs: ${e.message}`);
+                return;
+            }
+
+            const pattern = /data:image\/png;base64,([A-Za-z0-9+/=]+)/g;
+            const html = fs.readFileSync(htmlPath, "utf-8");
+
+            // Identical payloads can appear more than once; convert each once.
+            const unique = new Set();
+            for (const match of html.matchAll(pattern)) unique.add(match[1]);
+
+            const replacements = new Map();
+            let savedChars = 0;
+            for (const base64 of unique) {
+                const png = Buffer.from(base64, "base64");
+                if (png.length < minBytes) continue;
+                try {
+                    const webp = await sharp(png).webp({ quality, effort: 6 }).toBuffer();
+                    // Only swap when the win is worth a format change.
+                    if (webp.length > png.length * maxRatio) continue;
+                    const encoded = webp.toString("base64");
+                    replacements.set(base64, encoded);
+                    savedChars += base64.length - encoded.length;
+                } catch (e) {
+                    console.warn(`[shrink-inlined-images] left one image as PNG: ${e.message}`);
+                }
+            }
+
+            if (replacements.size === 0) return;
+
+            const shrunk = html.replace(pattern, (match, base64) => {
+                const encoded = replacements.get(base64);
+                return encoded ? `data:image/webp;base64,${encoded}` : match;
+            });
+            fs.writeFileSync(htmlPath, shrunk);
+            console.log(
+                `[shrink-inlined-images] Re-encoded ${replacements.size} image(s) as WebP: ` +
+                `${(html.length / 1048576).toFixed(1)} MB -> ${(shrunk.length / 1048576).toFixed(1)} MB ` +
+                `(saved ${(savedChars / 1048576).toFixed(1)} MB)`
+            );
+        },
+    };
+}
+
 export default defineConfig({
     plugins: [
         copyResourcesPlugin(),
@@ -230,6 +295,7 @@ export default defineConfig({
         inlineFaviconPlugin(),
         inlineMysteryClipPlugin(),
         inlineWorkerPlugin(),
+        shrinkInlinedImagesPlugin(),
     ],
     build: {
         outDir: "dist-single",
