@@ -2,6 +2,7 @@ import GuiButton from "../widgets/GuiButton.js";
 import GuiScreen from "../GuiScreen.js";
 import GuiOptions from "./GuiOptions.js";
 import { isIntegratedRunning } from "../../integrated/IntegratedServer.js";
+import GuiAccount from "./GuiAccount.js";
 
 export default class GuiIngameMenu extends GuiScreen {
 
@@ -22,6 +23,14 @@ export default class GuiIngameMenu extends GuiScreen {
             this.minecraft.displayScreen(new GuiOptions(this));
         }));
 
+        this.buttonList.push(new GuiButton(this.minecraft, "Account", this.width / 2 - 100, y + 24 * 2, 200, 20, () => {
+            this.minecraft.displayScreen(new GuiAccount(this));
+        }));
+
+        //this.buttonList.push(new GuiButton(this.minecraft, "Expirments", this.width / 2 + 2, y + 24 * 2, 98, 20, () => {
+        //    this.minecraft.displayScreen(new GuiOptions(this));
+        //}).setEnabled(false).setTooltip("Coming soon!"));
+
         const modButtons = this.minecraft.modLoader?.getGuiButtons('pause-menu', this) || [];
         for (const button of modButtons) {
             button.x = this.width / 2 + 2;
@@ -37,7 +46,7 @@ export default class GuiIngameMenu extends GuiScreen {
         shareButton.setEnabled(isIntegratedRunning());
         this.buttonList.push(shareButton);
 
-        this.buttonList.push(new GuiButton(this.minecraft, "Save and Quit to Title", this.width / 2 - 100, y + 70, 200, 20, async () => {
+        this.buttonList.push(new GuiButton(this.minecraft, "Save and Quit to Title", this.width / 2 - 100, y + 24 * 3, 200, 20, async () => {
             await this.minecraft.loadWorld(null);
         }));
     }

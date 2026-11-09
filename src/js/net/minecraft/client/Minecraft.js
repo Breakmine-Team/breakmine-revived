@@ -2225,7 +2225,6 @@ export default class Minecraft {
         return this.isInGame() && !(this.playerController instanceof PlayerControllerMultiplayer);
     }
 
-    
     isLocalSession() {
         return this.isInGame() && (this.isSingleplayer() || this.isConnectedToIntegratedServer);
     }

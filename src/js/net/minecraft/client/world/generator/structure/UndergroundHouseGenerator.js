@@ -6,6 +6,10 @@ export default class UndergroundHouseGenerator extends Generator {
     static STRUCT = 9;    
     static HEIGHT = 6;    
 
+    // Hard limit on how many different y levels a single house may use, so a
+    // run of shaft rooms can never turn into an endless vertical corridor.
+    static MAX_FLOORS = 6;
+
     static FACES = ["n", "e", "s", "w"];
 
     constructor(world, seed) {
@@ -425,6 +429,10 @@ export default class UndergroundHouseGenerator extends Generator {
 
         let count = 1;
 
+        // Distinct y levels used by the house. New floors are only allowed
+        // while under MAX_FLOORS, which bounds how tall the house can get.
+        const floors = new Set([y1]);
+
         while (queue.length > 0 && count < MAX_ROOMS) {
             const current = queue.shift();
             const { x, y, z, depth } = current;
@@ -432,41 +440,71 @@ export default class UndergroundHouseGenerator extends Generator {
             const maxBranches = depth === 0 ? 6 : this.getRandomInt(1, 3);
             const shuffled = [...offsets].sort(() => this.rng() - 0.5);
             let branches = 0;
+            const here = rooms.find(r => r.x === x && r.y === y && r.z === z);
 
-            for (const o of shuffled) {
-                if (branches >= maxBranches || count >= MAX_ROOMS) break;
-
+            const tryBranch = (o) => {
                 const nx = x + o.dx, ny = y + (o.dy || 0), nz = z + o.dz;
                 const nk = key(nx, ny, nz);
-                if (placed.has(nk)) continue;
+                if (placed.has(nk)) return false;
+                if (![nx, ny, nz].every(Number.isFinite)) return false;
+                if (o.dy && floors.size >= G.MAX_FLOORS) return false;
 
-                const horizontal = !o.dy;
-                const parent = rooms.find(r => r.x === x && r.y === y && r.z === z);
-                if (!parent || ![nx, ny, nz].every(Number.isFinite)) continue;
+                const parent = here;
+                if (!parent) return false;
 
-                if (horizontal) {
-                    const parentFaces = this.rotatedConns(parent.piece, parent.r);
-                    if (!parentFaces.includes(o.dir)) continue;
+                if (o.dy) {
+                    const piece = UndergroundHouseGenerator.SHAFT_PIECE;
+                    this.buildPiece(nx, ny, nz, piece, 0);
+                    if (o.dy > 0) {
+                        this.carveVertical(parent, { x: nx, y: ny, z: nz });
+                    } else {
+                        this.carveVertical({ x: nx, y: ny, z: nz }, parent);
+                    }
+                    rooms.push({ x: nx, y: ny, z: nz, piece, r: 0 });
+                    floors.add(ny);
+                } else {
+                    // Shafts double as landings: the 2x2 chimney sits in the
+                    // middle of the piece, so a doorway on any side opens into
+                    // it and lets that floor spread out from the stairs.
+                    const parentFaces = parent.piece.name === "shaft"
+                        ? UndergroundHouseGenerator.FACES
+                        : this.rotatedConns(parent.piece, parent.r);
+                    if (!parentFaces.includes(o.dir)) return false;
                     const requiredFace = { n: "s", s: "n", e: "w", w: "e" }[o.dir];
                     const { piece, r } = this.pickMatchingPiece(requiredFace);
                     this.buildPiece(nx, ny, nz, piece, r);
                     this.connectHorizontal(parent, { x: nx, y: ny, z: nz }, o.dir);
                     rooms.push({ x: nx, y: ny, z: nz, piece, r });
-                } else {
-                    const piece = UndergroundHouseGenerator.SHAFT_PIECE;
-                    this.buildPiece(nx, ny, nz, piece, 0);
-                    if (o.dy > 0) {
-                        this.carveVertical(parent, { x: nx, y: ny, z: nz });   
-                    } else {
-                        this.carveVertical({ x: nx, y: ny, z: nz }, parent);   
-                    }
-                    rooms.push({ x: nx, y: ny, z: nz, piece, r: 0 });
                 }
 
                 placed.add(nk);
                 queue.push({ x: nx, y: ny, z: nz, depth: depth + 1 });
-                count++;
+                return true;
+            };
+
+            // Spread sideways first: every free horizontal neighbour of this
+            // room is tried before a shaft is even considered, so the house
+            // grows outwards rather than climbing.
+            for (const o of shuffled) {
+                if (o.dy) continue;
+                if (branches >= maxBranches || count >= MAX_ROOMS) break;
+                if (!tryBranch(o)) continue;
                 branches++;
+                count++;
+            }
+
+            // Ordinary rooms only dig once they have nowhere to go sideways,
+            // but a shaft always keeps descending so the house can reach its
+            // other floors. Never past the floor limit either way.
+            const isShaftRoom = !!here && here.piece.name === "shaft";
+            if ((branches === 0 || isShaftRoom) && floors.size < G.MAX_FLOORS) {
+                for (const o of shuffled) {
+                    if (!o.dy) continue;
+                    if (branches >= maxBranches || count >= MAX_ROOMS) break;
+                    if (!tryBranch(o)) continue;
+                    branches++;
+                    count++;
+                }
             }
 
             if (branches === 0 && count < MAX_ROOMS && (current.retries || 0) < 4) {

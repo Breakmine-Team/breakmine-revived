@@ -1151,7 +1151,7 @@ if (isSinglefile) {
 (function setupAdminPanel() {
   const TOKEN_KEY = 'breakmine_admin_token';
   const API_KEY = 'breakmine_admin_api';
-  const LOCAL_API = 'http://localhost:6006';
+  const GAME_SETTINGS_KEY = 'breakmine_settings';
   const PROD_API = 'https://api.breakmine.com';
   const MAX_PLAYER_ROWS = 500;
 
@@ -1167,13 +1167,37 @@ if (isSinglefile) {
   let socketRequestId = 0;
   const pending = new Map();
 
+  // Follow the API URL the game itself is using (Options -> API URL, stored in
+  // GameSettings), so the panel talks to the same server as the game instead of
+  // guessing from the page hostname. Falls back to the production API.
+  function gameApiUrl() {
+    let raw;
+    try {
+      raw = localStorage.getItem(GAME_SETTINGS_KEY);
+    } catch (err) {
+      return '';
+    }
+    if (!raw) return '';
+
+    let saved;
+    try {
+      saved = JSON.parse(raw);
+    } catch (err) {
+      return '';
+    }
+
+    const value = saved && typeof saved.apiUrl === 'string' ? saved.apiUrl.trim() : '';
+    if (!value) return '';
+
+    // Same normalisation GameSettings/AuthLib apply to the configured value.
+    return /^https?:\/\//i.test(value) ? value : 'https://' + value;
+  }
+
   function apiBase() {
     const override = window.ADMIN_API_BASE || readStorage(localStorage, API_KEY);
-    if (override) return String(override).replace(/\/+$/, '');
+    if (override) return String(override).trim().replace(/\/+$/, '');
 
-    const host = window.location.hostname;
-    const localHost = host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local');
-    return localHost ? LOCAL_API : PROD_API;
+    return gameApiUrl().replace(/\/+$/, '') || PROD_API;
   }
 
   // The panel talks to the API over the WebSocket transport (/api-ws). The
@@ -2794,6 +2818,153 @@ document.addEventListener('logOccured', (event) => {
     requestAnimationFrame(pollGamepad);
   }
 
+})();
+</script>
+
+<!-- Easter egg: tap right Alt five times to unlock the encrypted clip -->
+<script src="media-encryptor.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const TAPS_NEEDED = 5;
+  const TAP_GAP_MS = 1000;
+  const CLIP_PATH = 'src/resources/mystery.enc';
+
+  let taps = 0;
+  let lastTapAt = 0;
+  let secretWindow = null;
+  let clipUrl = null;
+
+  function isRightAlt(event) {
+    return event.code === 'AltRight'
+      || event.key === 'AltGraph'
+      || (event.key === 'Alt' && event.location === 2);
+  }
+
+  function dropClipUrl() {
+    if (clipUrl) {
+      URL.revokeObjectURL(clipUrl);
+      clipUrl = null;
+    }
+  }
+
+  function openSecretWindow() {
+    if (typeof WindowManager === 'undefined') return;
+
+    if (secretWindow && secretWindow.el && secretWindow.el.isConnected) {
+      secretWindow.setHidden(false);
+      secretWindow.bringToFront();
+      const field = secretWindow.bodyEl.querySelector('[data-role="password"]');
+      if (field) field.focus();
+      return;
+    }
+
+    dropClipUrl();
+
+    const content = document.createElement('div');
+    content.innerHTML = `
+      <p style="margin:0 0 10px;font-size:13px;">This clip is encrypted. Enter the password to play it.</p>
+      <form data-role="form" style="display:flex;gap:8px;align-items:center;">
+        <input data-role="password" type="password" autocomplete="off" spellcheck="false" placeholder="Password"
+               style="flex:1;min-width:0;padding:6px 8px;border:1px solid #b5b5b5;border-radius:3px;font-size:13px;user-select:text;background:#fff;color:#111;caret-color:#111;-webkit-text-security:disc;">
+        <button type="submit">Unlock</button>
+      </form>
+      <p data-role="status" style="margin:8px 0 0;font-size:12px;color:#555;min-height:16px;"></p>
+      <div data-role="player" style="display:none;margin-top:10px;">
+        <video data-role="video" controls playsinline style="display:block;width:100%;max-height:330px;background:#000;border-radius:4px;"></video>
+      </div>
+    `;
+
+    secretWindow = WindowManager.create({
+      title: '???',
+      x: 140,
+      y: 90,
+      width: 480,
+      height: 210,
+      resizable: false,
+      content: content
+    });
+
+    // GameWindow cancels every keydown on window, which stops characters from
+    // ever reaching the input. Keep this window's keystrokes to itself.
+    ['keydown', 'keyup', 'keypress'].forEach((type) => {
+      secretWindow.el.addEventListener(type, (event) => {
+        event.stopPropagation();
+      });
+    });
+
+    const form = content.querySelector('[data-role="form"]');
+    const field = content.querySelector('[data-role="password"]');
+    const status = content.querySelector('[data-role="status"]');
+    const player = content.querySelector('[data-role="player"]');
+    const video = content.querySelector('[data-role="video"]');
+    const unlockButton = form.querySelector('button');
+
+    setTimeout(() => field.focus(), 0);
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      const password = field.value;
+      if (!password) {
+        status.textContent = 'Enter a password first.';
+        return;
+      }
+
+      status.style.color = '#555';
+      status.textContent = 'Decrypting...';
+      field.disabled = true;
+      unlockButton.disabled = true;
+
+      try {
+        if (typeof MediaEncryptor === 'undefined') {
+          throw new Error('media-encryptor.js did not load.');
+        }
+
+        const response = await fetch(CLIP_PATH, { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error('Could not load the encrypted clip (' + response.status + ').');
+        }
+
+        const encrypted = await response.arrayBuffer();
+        const decrypted = await MediaEncryptor.decrypt(encrypted, password);
+
+        dropClipUrl();
+        clipUrl = URL.createObjectURL(new Blob([decrypted], { type: 'video/mp4' }));
+        video.src = clipUrl;
+        video.play().catch(() => {});
+
+        form.style.display = 'none';
+        player.style.display = 'block';
+        status.style.color = '#2f7d32';
+        status.textContent = 'Unlocked.';
+        secretWindow.el.style.width = '620px';
+        secretWindow.el.style.height = '460px';
+      } catch (error) {
+        status.style.color = '#b00020';
+        status.textContent = /decrypt/i.test(error.message) ? 'Wrong password.' : error.message;
+        field.disabled = false;
+        unlockButton.disabled = false;
+        field.select();
+      }
+    });
+  }
+
+  // Capture phase, so the game's own key handling cannot swallow it.
+  window.addEventListener('keydown', (event) => {
+    if (event.repeat || !isRightAlt(event)) return;
+
+    const now = performance.now();
+    if (now - lastTapAt > TAP_GAP_MS) taps = 0;
+    lastTapAt = now;
+    taps += 1;
+
+    if (taps >= TAPS_NEEDED) {
+      taps = 0;
+      openSecretWindow();
+    }
+  }, true);
 })();
 </script>
 

@@ -170,7 +170,7 @@ export default class GuiAccount extends GuiScreen {
 
         this.buttonList.push(new GuiButton(this.minecraft, "Logout", layout.leftX, layout.signOutY, signOutWidth, 20, () => {
             this.confirmSignOut();
-        }));
+        }).setEnabled(!this.minecraft.isInGame()));
         this.buttonList.push(new GuiButton(this.minecraft, "Back", layout.leftX + signOutWidth + gap, layout.signOutY, backWidth, 20, () => {
             this.minecraft.displayScreen(this.parentScreen);
         }));
@@ -219,7 +219,7 @@ export default class GuiAccount extends GuiScreen {
 
         this.actionButton = new GuiButton(this.minecraft, "Login or Register", layout.leftX, layout.signOutY, signOutWidth, 20, () => {
             this.handleLogin();
-        });
+        }).setEnabled(!this.minecraft.isInGame());
 
         const backButton = new GuiButton(this.minecraft, "Back", layout.leftX + signOutWidth + gap, layout.signOutY, backWidth, 20, () => {
             this.minecraft.displayScreen(this.parentScreen);
