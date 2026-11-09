@@ -5,6 +5,7 @@ import GuiTextField from "../widgets/GuiTextField.js";
 import GuiWaitForCompletion from "./GuiWaitForCompletion.js";
 import GuiYesNo from "./GuiYesNo.js";
 import GuiPlayerPreview from "../widgets/GuiPlayerPreview.js";
+import GuiFriendSlotContainer from "../widgets/GuiFriendSlotContainer.js";
 import GuiCapesScreen from "./GuiCapesScreen.js";
 import * as AuthLib from "../../network/AuthLib.js";
 import PlayerRenderer from "../../render/entity/entity/PlayerRenderer.js";
@@ -43,6 +44,16 @@ export default class GuiAccount extends GuiScreen {
         this.playerPreview = null;
         this.animationButtons = [];
         this.uploadSkinButton = null;
+
+        this.friends = [];
+        this.friendSlotContainer = null;
+        this.fieldFriend = null;
+        this.addFriendButton = null;
+        this.removeFriendButton = null;
+        this.selectedFriend = -1;
+        this.friendBusy = false;
+        this.friendStatus = "";
+        this.friendStatusColor = 0xFF9A9A9A;
     }
 
     init() {
@@ -59,6 +70,7 @@ export default class GuiAccount extends GuiScreen {
 
         if (this.minecraft.settings.loggedIn) {
             this.initSignOutButton();
+            this.initFriendsPanel();
         } else {
             this.initLoginForm();
         }
@@ -318,6 +330,7 @@ export default class GuiAccount extends GuiScreen {
 
                 this.minecraft.capeManager?.refreshOwnCape();
 
+                this.setFriendStatus("");
                 this.errorMessage = `Signed in as ${username}`;
             } catch (error) {
                 this.errorMessage = `Authentication failed: ${this.formatError(error)}`;
@@ -330,6 +343,7 @@ export default class GuiAccount extends GuiScreen {
         this.errorMessage = "Signed out";
         this.loginUsernameValue = "";
         this.animationMode = "normal";
+        this.setFriendStatus("");
 
         AuthLib.clearAuthToken();
         if (this.minecraft?.setSession) {
@@ -373,20 +387,187 @@ export default class GuiAccount extends GuiScreen {
         this.drawString(stack, "Password", form.x, form.passwordLabelY, 0xFFAAAAAA);
     }
 
-    drawAchievementsPanel(stack) {
+    initFriendsPanel() {
+        const layout = this.layout;
+        const gap = 4;
+        const fieldHeight = 20;
+        const fieldY = layout.leftBottom - 48;
+        const actionY = layout.leftBottom - 24;
+        const addWidth = Math.min(68, Math.max(44, Math.floor(layout.leftWidth * 0.3)));
+        const fieldWidth = Math.max(40, layout.leftWidth - addWidth - gap);
+
+        this.friendBusy = false;
+        this.selectedFriend = -1;
+        this.friends = this.minecraft.friendsManager ? this.minecraft.friendsManager.list() : [];
+
+        this.friendSlotContainer = new GuiFriendSlotContainer(this, this.friends);
+        this.friendSlotContainer.viewLeft = layout.leftX;
+        this.friendSlotContainer.viewRight = layout.leftX + layout.leftWidth;
+        this.friendSlotContainer.top = layout.panelTop + 52;
+        this.friendSlotContainer.bottom = Math.max(layout.panelTop + 72, fieldY - 6);
+        this.friendSlotContainer.slotX = layout.leftX + 4;
+        this.friendSlotContainer.slotWidth = layout.leftWidth - 16;
+        this.friendSlotContainer.scrollBarX = layout.leftX + layout.leftWidth - 8;
+        this.friendSlotContainer.scrollStep = 6;
+        this.friendSlotContainer.drawBackgroundTexture = false;
+        this.friendSlotContainer.alwaysShowScrollBar = true;
+
+        this.fieldFriend = new GuiTextField(layout.leftX, fieldY, fieldWidth, fieldHeight);
+        this.fieldFriend.maxLength = 20;
+
+        this.addFriendButton = new GuiButton(
+            this.minecraft,
+            "Add",
+            layout.leftX + layout.leftWidth - addWidth,
+            fieldY,
+            addWidth,
+            fieldHeight,
+            () => this.handleAddFriend()
+        ).setTooltip("Add this account as a friend");
+
+        this.removeFriendButton = new GuiButton(
+            this.minecraft,
+            "Remove friend",
+            layout.leftX,
+            actionY,
+            layout.leftWidth,
+            fieldHeight,
+            () => this.handleRemoveFriend()
+        );
+
+        this.buttonList.push(this.fieldFriend);
+        this.buttonList.push(this.addFriendButton);
+        this.buttonList.push(this.removeFriendButton);
+
+        this.updateFriendButtons();
+    }
+
+    getSelectedFriend() {
+        if (this.selectedFriend < 0 || this.selectedFriend >= this.friends.length) {
+            return null;
+        }
+        return this.friends[this.selectedFriend];
+    }
+
+    setSelectedFriend(index) {
+        this.selectedFriend = index;
+        this.updateFriendButtons();
+    }
+
+    updateFriendButtons() {
+        const selected = this.getSelectedFriend();
+
+        if (this.removeFriendButton) {
+            this.removeFriendButton.enabled = selected !== null;
+        }
+        if (this.addFriendButton) {
+            this.addFriendButton.enabled = !this.friendBusy;
+        }
+        if (this.fieldFriend) {
+            this.fieldFriend.enabled = !this.friendBusy;
+        }
+    }
+
+    setFriendStatus(message, success = null) {
+        this.friendStatus = message || "";
+        this.friendStatusColor = success === true ? 0xFF55FF55 : (success === false ? 0xFFFF5555 : 0xFF9A9A9A);
+    }
+
+    refreshFriends() {
+        this.friends = this.minecraft.friendsManager ? this.minecraft.friendsManager.list() : [];
+        this.selectedFriend = -1;
+
+        if (this.friendSlotContainer) {
+            this.friendSlotContainer.setFriends(this.friends);
+        }
+
+        this.updateFriendButtons();
+    }
+
+    handleAddFriend() {
+        if (!this.fieldFriend || this.friendBusy) return;
+        if (!this.minecraft.friendsManager) {
+            this.setFriendStatus("Friends are unavailable", false);
+            return;
+        }
+
+        const username = this.fieldFriend.text.trim();
+        if (!username) {
+            this.setFriendStatus("Enter a username", false);
+            return;
+        }
+
+        this.friendBusy = true;
+        this.setFriendStatus(`Looking up ${username}\u2026`);
+        this.updateFriendButtons();
+
+        this.minecraft.friendsManager.add(username).then(name => {
+            this.fieldFriend.setText("");
+            this.setFriendStatus(`${name} added`, true);
+            this.refreshFriends();
+        }).catch(error => {
+            this.setFriendStatus(this.formatError(error), false);
+        }).finally(() => {
+            this.friendBusy = false;
+            this.updateFriendButtons();
+        });
+    }
+
+    handleRemoveFriend() {
+        const friend = this.getSelectedFriend();
+        if (!friend || !this.minecraft.friendsManager) return;
+
+        this.minecraft.displayScreen(new GuiYesNo(
+            this,
+            `Remove ${friend.username} from your friends?`,
+            "You can add them again later.",
+            "Remove",
+            "Cancel",
+            () => {
+                this.minecraft.friendsManager.remove(friend.username);
+                this.refreshFriends();
+                this.setFriendStatus(`${friend.username} removed`, true);
+            }
+        ));
+    }
+
+    drawFriendsPanel(stack, mouseX, mouseY, partialTicks) {
         const layout = this.layout;
         const centerX = layout.leftX + layout.leftWidth / 2;
-        const username = this.getCurrentUsername() || "Player";
 
-        this.drawCenteredString(stack, "Achievements", centerX, layout.panelTop + 18, 0xFFFFFFFF);
-        this.drawCenteredString(stack, `Signed in as ${username}`, centerX, layout.panelTop + 36, 0xFF9A9A9A);
+        this.drawCenteredString(stack, "Friends", centerX, layout.panelTop + 14, 0xFFFFFFFF);
 
-        const dividerY = layout.panelTop + 54;
+        if (this.friendStatus) {
+            this.drawCenteredString(stack, this.trimToWidth(stack, this.friendStatus, layout.leftWidth - 16), centerX, layout.panelTop + 30, this.friendStatusColor);
+        } else {
+            const count = this.friends.length;
+            this.drawCenteredString(stack, count === 1 ? "1 friend" : `${count} friends`, centerX, layout.panelTop + 30, 0xFF9A9A9A);
+        }
+
+        const dividerY = layout.panelTop + 46;
         this.drawRect(stack, layout.leftX + 18, dividerY, layout.leftX + layout.leftWidth - 18, dividerY + 1, "#3b3b3b", 0.9);
 
-        const messageY = layout.panelTop + Math.floor((layout.leftBottom - layout.panelTop) * 0.47);
-        this.drawCenteredString(stack, "Coming Soon", centerX, messageY, 0xFFFFFFFF);
-        this.drawCenteredString(stack, "Achievements will appear here.", centerX, messageY + 16, 0xFF898989);
+        if (this.friends.length === 0) {
+            const messageY = layout.panelTop + 92;
+            this.drawCenteredString(stack, "No friends yet", centerX, messageY, 0xFFFFFFFF);
+            this.drawCenteredString(stack, "Add someone by username below.", centerX, messageY + 16, 0xFF898989);
+            return;
+        }
+
+        if (this.friendSlotContainer) {
+            this.friendSlotContainer.drawScreen(stack, mouseX, mouseY, partialTicks);
+        }
+    }
+
+    trimToWidth(stack, text, maxWidth) {
+        const value = String(text ?? "");
+        if (this.getStringWidth(stack, value, false) <= maxWidth) return value;
+
+        let result = value;
+        while (result.length > 1 && this.getStringWidth(stack, result + '\u2026', false) > maxWidth) {
+            result = result.slice(0, -1);
+        }
+        return result + '\u2026';
     }
 
     drawPlayerPreview(stack, mouseX, mouseY, partialTicks) {
@@ -471,7 +652,7 @@ export default class GuiAccount extends GuiScreen {
         this.drawPanel(stack, layout.rightX, layout.panelTop, layout.rightWidth, layout.rightBottom);
 
         if (this.minecraft.settings.loggedIn) {
-            this.drawAchievementsPanel(stack);
+            this.drawFriendsPanel(stack, mouseX, mouseY, partialTicks);
         } else {
             this.drawLoginPanel(stack);
         }
@@ -482,6 +663,39 @@ export default class GuiAccount extends GuiScreen {
 
         this.drawPanelEdges(stack, layout.leftX, layout.panelTop, layout.leftWidth, layout.leftBottom);
         this.drawPanelEdges(stack, layout.rightX, layout.panelTop, layout.rightWidth, layout.rightBottom);
+    }
+
+    mouseClicked(mouseX, mouseY, mouseButton) {
+        if (this.friendSlotContainer) {
+            this.friendSlotContainer.mouseClicked(mouseX, mouseY, mouseButton);
+        }
+        super.mouseClicked(mouseX, mouseY, mouseButton);
+    }
+
+    mouseReleased(mouseX, mouseY, mouseButton) {
+        if (this.friendSlotContainer) {
+            this.friendSlotContainer.mouseReleased(mouseX, mouseY, mouseButton);
+        }
+        super.mouseReleased(mouseX, mouseY, mouseButton);
+    }
+
+    mouseDragged(mouseX, mouseY, mouseButton) {
+        if (this.friendSlotContainer) {
+            this.friendSlotContainer.mouseDragged(mouseX, mouseY, mouseButton);
+        }
+        super.mouseDragged(mouseX, mouseY, mouseButton);
+    }
+
+    mouseScrolled(mouseX, mouseY, amount) {
+        if (this.friendSlotContainer) {
+            this.friendSlotContainer.mouseScrolled(mouseX, mouseY, amount);
+        }
+    }
+
+    onScroll(mouseX, mouseY, amount) {
+        if (this.friendSlotContainer) {
+            this.friendSlotContainer.mouseScrolled(mouseX, mouseY, amount);
+        }
     }
 
     onClose() {

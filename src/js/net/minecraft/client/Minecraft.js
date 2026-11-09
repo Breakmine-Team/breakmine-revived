@@ -19,6 +19,7 @@ import FontRenderer from "./render/gui/FontRenderer.js";
 import GrassColorizer from "./render/GrassColorizer.js";
 import ModLoader from "./ModLoader.js";
 import CapeManager from "./render/CapeManager.js";
+import FriendsManager from "./FriendsManager.js";
 import CctvManager from "./CctvManager.js";
 import GuiMainMenu from "./gui/screens/GuiMainMenu.js";
 import GuiLoadingScreen from "./gui/screens/GuiLoadingScreen.js";
@@ -152,6 +153,7 @@ export default class Minecraft {
         this.modLoader = new ModLoader(this);
 
         this.capeManager = new CapeManager(this);
+        this.friendsManager = new FriendsManager(this);
         this.cctvManager = new CctvManager(this);
 
         this.movementLocks = new Set();
