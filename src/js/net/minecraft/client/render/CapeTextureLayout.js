@@ -1,7 +1,17 @@
+const CAPE_REGION = { x: 1, y: 1, width: 10, height: 16 };
+const BASE_WIDTH = 64;
+const BASE_HEIGHT = 32;
 
 export function getCapeTextureRect(width, height) {
-    if (width === 64 && height === 32) {
-        return { x: 1, y: 1, width: 10, height: 16 };
+    const scale = width / BASE_WIDTH;
+
+    if (Number.isInteger(scale) && scale >= 1 && height === BASE_HEIGHT * scale) {
+        return {
+            x: CAPE_REGION.x * scale,
+            y: CAPE_REGION.y * scale,
+            width: CAPE_REGION.width * scale,
+            height: CAPE_REGION.height * scale
+        };
     }
 
     return { x: 0, y: 0, width, height };

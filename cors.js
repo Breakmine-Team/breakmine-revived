@@ -69,7 +69,7 @@ const PORT = Number(process.env.PORT) || 6006;
 const JWT_EXPIRES_IN = '7d';
 const BCRYPT_ROUNDS = 12;
 const MAX_SKIN_SIZE = 256 * 1024;
-const MAX_CAPE_SIZE = 64 * 1024;
+const MAX_CAPE_SIZE = 256 * 1024;
 
 const CAPE_WIDTH = 64;
 const CAPE_HEIGHT = 32;
@@ -216,6 +216,13 @@ function isSupportedSkinSize(width, height) {
     // HD skins keep the 64px layout scaled by a whole number. Modern skins are
     // square; some older HD skins use a half-height (128x64, 256x128) layout.
     return width >= 128 && width % 64 === 0 && (height === width || height * 2 === width);
+}
+
+function isSupportedCapeSize(width, height) {
+    // Classic capes are 64x32. HD capes keep that layout scaled by a whole
+    // number (128x64, 256x128, ...), which is what the client renders from.
+    if (!Number.isInteger(width) || !Number.isInteger(height)) return false;
+    return width > 0 && width % CAPE_WIDTH === 0 && height * 2 === width;
 }
 
 function removeSkinFile(filename) {
@@ -865,7 +872,7 @@ function renderAdminPanel(req, res) {
     <h2>Capes</h2>
     <form class="upload" method="post" action="/admin/capes" enctype="multipart/form-data">
         <label>Cape name<input type="text" name="name" maxlength="${CAPE_NAME_MAX}" placeholder="e.g. Founder Cape" required></label>
-        <label>Cape PNG (64×32)<input type="file" name="file" accept="image/png" required></label>
+        <label>Cape PNG (64×32 or HD)<input type="file" name="file" accept="image/png" required></label>
         <button type="submit">Upload cape</button>
     </form>
 
@@ -1037,8 +1044,8 @@ app.post('/admin/capes', requireAdmin, (req, res) => {
 
         try {
             const metadata = await sharp(file.path).metadata();
-            if (metadata.format !== 'png' || metadata.width !== CAPE_WIDTH || metadata.height !== CAPE_HEIGHT) {
-                return fail('Cape PNG must be 64×32 pixels.');
+            if (metadata.format !== 'png' || !isSupportedCapeSize(metadata.width, metadata.height)) {
+                return fail('Cape PNG must be 64×32, or HD at a whole multiple of that (128×64, 256×128).');
             }
 
             const id = uuidv4();
@@ -1433,8 +1440,8 @@ app.post('/api/admin/capes', requireAdminToken, async (req, res) => {
 
     try {
         const metadata = await sharp(decoded.buffer).metadata();
-        if (metadata.format !== 'png' || metadata.width !== CAPE_WIDTH || metadata.height !== CAPE_HEIGHT) {
-            return res.status(400).json({ error: 'Cape PNG must be 64×32 pixels.' });
+        if (metadata.format !== 'png' || !isSupportedCapeSize(metadata.width, metadata.height)) {
+            return res.status(400).json({ error: 'Cape PNG must be 64×32, or HD at a whole multiple of that (128×64, 256×128).' });
         }
 
         const filename = writePngFile(CAPE_UPLOAD_DIR, decoded.buffer);
