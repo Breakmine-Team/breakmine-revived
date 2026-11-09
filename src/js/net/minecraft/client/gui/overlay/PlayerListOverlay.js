@@ -167,7 +167,6 @@ export default class PlayerListOverlay extends Gui {
 
         try {
             const image = new Image();
-            image.crossOrigin = "anonymous";
             image.onload = () => {
                 entry.image = image;
                 this.setDirty();
@@ -175,7 +174,12 @@ export default class PlayerListOverlay extends Gui {
             image.onerror = () => {
                 entry.failed = true;
             };
-            image.src = `${AuthLib.getSkinUrl(username)}?t=${Date.now()}`;
+            AuthLib.getSkinImageUrl(username).then((url) => {
+                if (entry.image) return;
+                image.src = url;
+            }).catch(() => {
+                entry.failed = true;
+            });
         } catch (e) {
             entry.failed = true;
         }

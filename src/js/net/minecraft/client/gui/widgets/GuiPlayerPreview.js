@@ -164,7 +164,6 @@ export default class GuiPlayerPreview {
 
         try {
             const image = new Image();
-            image.crossOrigin = "anonymous";
             image.onload = () => {
                 if (this.skinUsername === username) {
                     this.applySkinImage(image);
@@ -172,7 +171,10 @@ export default class GuiPlayerPreview {
             };
             image.onerror = () => {
             };
-            image.src = `${AuthLib.getSkinUrl(username)}?t=${Date.now()}`;
+            AuthLib.getSkinImageUrl(username).then((url) => {
+                if (this.skinUsername === username) image.src = url;
+            }).catch(() => {
+            });
         } catch (e) {
             console.warn('GuiPlayerPreview skin load error:', e);
         }
@@ -214,13 +216,11 @@ export default class GuiPlayerPreview {
         if (!username) return;
 
         const selected = capeManager?.getSelectedTexture?.() || null;
-        const source = selected || `${AuthLib.getCapeUrl(username)}?t=${Date.now()}`;
 
         this.capeUsername = username;
 
         try {
             const image = new Image();
-            image.crossOrigin = "anonymous";
             image.onload = () => {
                 if (this.capeUsername === username) {
                     this.applyCapeImage(image);
@@ -228,7 +228,13 @@ export default class GuiPlayerPreview {
             };
             image.onerror = () => {
             };
-            image.src = source;
+            const source = selected
+                ? Promise.resolve(selected)
+                : AuthLib.getCapeImageUrl(username);
+            source.then((url) => {
+                if (this.capeUsername === username) image.src = url;
+            }).catch(() => {
+            });
         } catch (e) {
             console.warn('GuiPlayerPreview cape load error:', e);
         }

@@ -13,14 +13,18 @@ function loadHeadImage(username) {
 
         try {
             const image = new Image();
-            image.crossOrigin = "anonymous";
             image.onload = () => {
                 entry.image = image;
             };
             image.onerror = () => {
                 entry.image = null;
             };
-            image.src = `${AuthLib.getSkinUrl(username)}?t=${Date.now()}`;
+            AuthLib.getSkinImageUrl(username).then((url) => {
+                if (entry.image) return;
+                image.src = url;
+            }).catch(() => {
+                entry.image = null;
+            });
         } catch (error) {
             entry.image = null;
         }

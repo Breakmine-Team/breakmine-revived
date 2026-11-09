@@ -263,22 +263,20 @@ export default class CapeManager {
         }
 
         try {
-            const response = await fetch(AuthLib.getCapeUrl(username), { cache: 'no-store' });
+            const blob = await AuthLib.fetchApiBlob(AuthLib.getCapePath(username));
             if (networkManager !== this.networkManager) return;
 
-            if (!response.ok) {
-                this.setCape(username, null);
-                this.sendCape(username, null);
-                return;
-            }
-
-            const dataUrl = await this.blobToDataUrl(await response.blob());
+            const dataUrl = await this.blobToDataUrl(blob);
             if (!CapeManager.isSupportedCape(dataUrl)) return;
             if (networkManager !== this.networkManager) return;
 
             this.setCape(username, dataUrl);
             this.sendCape(username, dataUrl);
         } catch (error) {
+            if (networkManager === this.networkManager) {
+                this.setCape(username, null);
+                this.sendCape(username, null);
+            }
             console.warn('[Cape] Could not publish own cape:', error);
         }
     }

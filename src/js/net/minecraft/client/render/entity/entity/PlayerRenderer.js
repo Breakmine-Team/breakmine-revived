@@ -47,6 +47,7 @@ export default class PlayerRenderer extends EntityRenderer {
     static invalidateSkinCache(username) {
         const nextVersion = (skinLoadVersions.get(username) || 0) + 1;
         skinLoadVersions.set(username, nextVersion);
+        AuthLib.invalidateApiImage(AuthLib.getSkinPath(username));
 
         for (const renderer of PlayerRenderer.instances) {
             if (renderer.skinTextures) {
@@ -85,11 +86,9 @@ export default class PlayerRenderer extends EntityRenderer {
 
     async loadSkinTexture(username, entity) {
         const skinVersion = skinLoadVersions.get(username) || 0;
-        const skinUrl = `${AuthLib.getSkinUrl(username)}?t=${Date.now()}`;
 
         try {
             const image = new Image();
-            image.crossOrigin = "anonymous";
             image.onload = () => {
                 if ((skinLoadVersions.get(username) || 0) !== skinVersion) {
                     return;
@@ -116,7 +115,7 @@ export default class PlayerRenderer extends EntityRenderer {
                 this.pendingSkinLoads.delete(username);
                 this.skinTextures.set(username, this.defaultTexture);
             };
-            image.src = skinUrl;
+            image.src = await AuthLib.getSkinImageUrl(username);
         } catch (error) {
             this.pendingSkinLoads.delete(username);
             this.skinTextures.set(username, this.defaultTexture);

@@ -34,14 +34,9 @@ export function isLocalNetwork() {
 let API_BASE_URL = 'https://api.breakmine.com';
 let API_WS_URL = null;
 
-
-
-let transportPreference = null;
-
 export function setApiBaseUrl(url) {
     if (typeof url !== 'string' || url.length === 0) return;
     API_BASE_URL = url.startsWith('http://') || url.startsWith('https://') ? url : 'https://' + url;
-    transportPreference = null;
 }
 
 export function getApiBaseUrl() {
@@ -72,7 +67,6 @@ export function getApiWebSocketUrl() {
 export function setApiWebSocketUrl(url) {
     if (typeof url !== 'string' || url.length === 0) {
         API_WS_URL = null;
-        transportPreference = null;
         return;
     }
 
@@ -86,8 +80,6 @@ export function setApiWebSocketUrl(url) {
         parsed.hash = '';
         API_WS_URL = parsed.toString();
     }
-
-    transportPreference = null;
 }
 
 export class AuthLibInfo {
@@ -132,29 +124,13 @@ function bytesToBase64(bytes) {
     return btoa(binary);
 }
 
-async function requestOverHttp(method, endpoint, { headers = {}, body = null } = {}) {
-    let response;
-
-    try {
-        response = await fetch(API_BASE_URL + endpoint, { method, headers, body });
-    } catch (err) {
-        throw new ApiTransportError(err && err.message ? err.message : 'HTTP request failed');
+function base64ToBytes(base64) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
     }
-
-    const contentType = response.headers.get('content-type') || '';
-
-    if (!contentType.includes('application/json')) {
-        throw new ApiTransportError(`Unexpected response from server (${response.status})`);
-    }
-
-    let data;
-    try {
-        data = await response.json();
-    } catch (err) {
-        throw new ApiTransportError('Malformed response from server');
-    }
-
-    return { status: response.status, data };
+    return bytes;
 }
 
 function requestOverWebSocket(method, endpoint, { headers = {}, body = null, timeoutMs = 20000 } = {}) {
@@ -223,27 +199,43 @@ function requestOverWebSocket(method, endpoint, { headers = {}, body = null, tim
 
             if (reply && reply.id !== undefined && reply.id !== null && String(reply.id) !== id) return;
 
+            const contentType = String((reply && reply.contentType) || '');
             let data = null;
             if (reply && reply.json !== undefined) {
                 data = reply.json;
             } else if (reply && typeof reply.body === 'string') {
-                try {
-                    data = JSON.parse(reply.body);
-                } catch (err) {
+                if (contentType.includes('application/json')) {
+                    try {
+                        data = JSON.parse(reply.body);
+                    } catch (err) {
+                        data = reply.body;
+                    }
+                } else {
                     data = reply.body;
                 }
             }
 
-            if (!data || typeof data !== 'object') {
+            let bodyBytes = null;
+            if (reply && typeof reply.bodyBase64 === 'string') {
+                try {
+                    bodyBytes = base64ToBytes(reply.bodyBase64);
+                } catch (err) {
+                    finish(new ApiTransportError('Malformed WebSocket API response'));
+                    return;
+                }
+            }
+
+            if (bodyBytes === null && (!data || typeof data !== 'object')) {
                 data = { error: typeof data === 'string' ? data : 'Unknown server response' };
             }
+            if (data === null) data = {};
 
             const status = Number(reply && reply.status) || (reply && reply.error ? 500 : 200);
             if (reply && reply.error && !data.error) {
                 data.error = String(reply.error);
             }
 
-            finish(null, { status, data });
+            finish(null, { status, data, bodyBytes, contentType });
         };
 
         socket.onerror = () => finish(new ApiTransportError('WebSocket API connection failed'));
@@ -252,33 +244,11 @@ function requestOverWebSocket(method, endpoint, { headers = {}, body = null, tim
 }
 
 async function apiRequest(method, endpoint, options = {}) {
-    const webSocketUrl = getApiWebSocketUrl();
-    let transports;
-
-    if (transportPreference === 'http') {
-        transports = webSocketUrl ? ['http', 'websocket'] : ['http'];
-    } else {
-        transports = webSocketUrl ? ['websocket', 'http'] : ['http'];
+    if (!getApiWebSocketUrl()) {
+        throw new ApiTransportError('WebSocket API is not available');
     }
 
-    let lastError = null;
-
-    for (const transport of transports) {
-        try {
-            const result = transport === 'websocket'
-                ? await requestOverWebSocket(method, endpoint, options)
-                : await requestOverHttp(method, endpoint, options);
-
-            transportPreference = transport;
-            return result;
-        } catch (error) {
-            if (!(error instanceof ApiTransportError)) throw error;
-            lastError = error;
-            if (transport === 'websocket') transportPreference = 'http';
-        }
-    }
-
-    throw new ApiTransportError(lastError ? lastError.message : 'No API transport available');
+    return requestOverWebSocket(method, endpoint, options);
 }
 
 async function postRequest(endpoint, payload, isProtected = false) {
@@ -379,6 +349,79 @@ export function getSkinUrl(username) {
 
 export function getCapeUrl(username) {
     return `${API_BASE_URL}/cape/${username}`;
+}
+
+export function getSkinPath(username) {
+    return `/skin/${encodeURIComponent(username)}`;
+}
+
+export function getCapePath(username, capeId) {
+    const base = `/cape/${encodeURIComponent(username)}`;
+    return capeId ? `${base}?id=${encodeURIComponent(capeId)}` : base;
+}
+
+export async function fetchApiBlob(path) {
+    const { status, data, bodyBytes, contentType } = await apiRequest('GET', path, { timeoutMs: 30000 });
+
+    if (status < 200 || status >= 300 || !bodyBytes) {
+        const error = new Error((data && data.error) || `Server error: ${status}`);
+        error.status = status;
+        throw error;
+    }
+
+    return new Blob([bodyBytes], { type: contentType || 'application/octet-stream' });
+}
+
+const MAX_CACHED_IMAGES = 64;
+const imageUrlCache = new Map();
+
+function revokeImageUrl(url) {
+    if (typeof url === 'string' && url.startsWith('blob:')) {
+        try { URL.revokeObjectURL(url); } catch (err) {  }
+    }
+}
+
+export function invalidateApiImage(path) {
+    const key = String(path);
+    const cached = imageUrlCache.get(key);
+    if (!cached) return;
+
+    imageUrlCache.delete(key);
+    cached.then((url) => {
+        if (![...imageUrlCache.values()].includes(cached)) revokeImageUrl(url);
+    }, () => {  });
+}
+
+export function loadApiImageUrl(path) {
+    const key = String(path);
+    const cached = imageUrlCache.get(key);
+    if (cached) return cached;
+
+    const pending = fetchApiBlob(key).then((blob) => URL.createObjectURL(blob));
+    imageUrlCache.set(key, pending);
+
+    if (imageUrlCache.size > MAX_CACHED_IMAGES) {
+        for (const [oldKey, oldValue] of imageUrlCache) {
+            if (oldKey === key) continue;
+            imageUrlCache.delete(oldKey);
+            oldValue.then(revokeImageUrl, () => {  });
+            break;
+        }
+    }
+
+    pending.catch(() => {
+        if (imageUrlCache.get(key) === pending) imageUrlCache.delete(key);
+    });
+
+    return pending;
+}
+
+export function getSkinImageUrl(username) {
+    return loadApiImageUrl(getSkinPath(username));
+}
+
+export function getCapeImageUrl(username, capeId) {
+    return loadApiImageUrl(getCapePath(username, capeId));
 }
 
 async function getProtectedRequest(endpoint) {
