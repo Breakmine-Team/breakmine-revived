@@ -1,5 +1,6 @@
 import Block from "../Block.js";
 import BoundingBox from "../../../../util/BoundingBox.js";
+import EnumBlockFace from "../../../../util/EnumBlockFace.js";
 import EnumCreativeInventoryTab from "../../../gui/EnumCreativeInventoryTab.js";
 
 export default class BlockDoor extends Block {
@@ -34,7 +35,7 @@ export default class BlockDoor extends Block {
     }
 
     getTextureForFace() {
-        return this.id === DOOR_BOTTOM ? 'oak_door_bottom' : 'oak_door_top';
+        return this.id === BlockDoor.DOOR_BOTTOM ? 'oak_door_bottom' : 'oak_door_top';
     }
 
     isSolid() {

@@ -68,7 +68,7 @@ export default class BlockBluestoneTorch extends BlockTorch {
 
         const support = this.getSupportCell(world, x, y, z);
 
-        for (const [dx, dy, dz] of BlockBluestoneTorch) {
+        for (const [dx, dy, dz] of BlockBluestoneTorch.NEIGHBOURS) {
             const nx = support.x + dx;
             const ny = support.y + dy;
             const nz = support.z + dz;
