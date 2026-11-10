@@ -5,9 +5,9 @@ import { base64Assets } from '../resources.js';
 import { uiTextures } from './assetManifest.js';
 import { Version } from '../resources/version.js';
 // Side effect: exposes window.MediaEncryptor for the index.html easter egg.
-// Imported here so the single-file build bundles it instead of leaving a
-// <script src> tag that has nothing next to it.
-import '../../media-encryptor.js';
+// It lives inside src/ so every deployment has it next to the module graph: the
+// raw public/ tree serves src/ wholesale, and Vite bundles this import.
+import './MediaEncryptor.js';
 
 
 

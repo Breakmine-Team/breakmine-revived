@@ -21,10 +21,7 @@ const FILES = [
     'openapi.json',
     'api-docs.html',
     '_headers',
-    'CNAME',
-    // Imported by src/js/Start.js as '../../media-encryptor.js', so it has to
-    // sit at the site root or the whole module graph fails with a MIME error.
-    'media-encryptor.js'
+    'CNAME'
 ];
 
 fs.rmSync(outDir, { recursive: true, force: true });
