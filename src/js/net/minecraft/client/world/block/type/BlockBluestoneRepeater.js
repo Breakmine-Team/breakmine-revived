@@ -10,7 +10,7 @@ export default class BlockBluestoneRepeater extends Block {
 
     constructor(id, textureSlotId) {
         super(id, textureSlotId);
-        this.description = "Bluestone Repeater";
+        this.description = "Bluestone Diode";
         this.hardness = 0.2;
         this.isBluestoneConsumer = true;
         this.isPowerSource = false; 

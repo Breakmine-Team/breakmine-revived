@@ -97,7 +97,8 @@ export default class GuiMultiplayer extends GuiScreen {
                                     name: worldJson.name ?? "New Server",
                                     date: worldJson.address ?? "127.0.0.1",
                                     details: worldJson.details || "",
-                                    motd: worldJson.motd || ""
+                                    motd: worldJson.motd || "",
+                                    protocol: worldJson.protocol || "binary"
                                 })
 
                                 this.worldSlotContainer.slotList = this.saveList.map((data, index) => this.createServerSlot(data, index));
@@ -208,7 +209,7 @@ export default class GuiMultiplayer extends GuiScreen {
             }
         }
 
-        this.minecraft.displayScreen(new GuiConnecting(this, worldDetails, undefined, proxy));
+        this.minecraft.displayScreen(new GuiConnecting(this, worldDetails, undefined, proxy, world.worldProtocol));
     }
 
     drawScreen(stack, mouseX, mouseY, partialTicks) {

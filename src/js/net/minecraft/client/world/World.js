@@ -12,6 +12,7 @@ import * as THREE from "../../../../../../libraries/three.module.js";
 import ContainerFurnace from "../inventory/container/ContainerFurnace.js";
 import BlockEntityRegistry from "./block/entity/BlockEntityRegistry.js";
 import {BiomeRegistry} from "./biome/BiomeRegistry.js";
+import { applyQueuedTerrain } from "./generator/JsonTerrain.js";
 
 export default class World {
 
@@ -167,6 +168,15 @@ export default class World {
 
         if (this.worldType !== "hellish") {
             this.time++;
+        }
+
+        if (this.chunkProvider !== null && typeof this.chunkProvider.updateTerrainChunks === "function") {
+            applyQueuedTerrain(this);
+
+            const player = this.minecraft !== null ? this.minecraft.player : null;
+            if (player) {
+                this.chunkProvider.updateTerrainChunks(player.x, player.z);
+            }
         }
     }
 

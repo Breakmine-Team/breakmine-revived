@@ -2,6 +2,7 @@ import ChunkProvider from "./ChunkProvider.js";
 import Chunk from "../Chunk.js";
 import Block from "../block/Block.js";
 import { BlockRegistry } from "../block/BlockRegistry.js";
+import { buildTerrainPayload } from "../generator/JsonTerrain.js";
 
 const SECTION_COUNT = 16;
 const SECTION_VOLUME = 16 * 16 * 16;
@@ -17,6 +18,7 @@ export default class ChunkProviderClient extends ChunkProvider {
 
         this.pendingChunks = new Map();
         this.pendingBlockChanges = new Map();
+        this.terrain = null;
         this.nextJobId = 1;
         this.blockTableSignature = null;
 
@@ -41,6 +43,46 @@ export default class ChunkProviderClient extends ChunkProvider {
         const key = x + (z << 16);
         const chunk = this.chunks.get(key);
         return chunk !== undefined && chunk.isTerrainPopulated && !this.pendingChunks.has(key);
+    }
+
+    hasTerrain() {
+        return this.terrain !== null;
+    }
+
+    // Called for the QuickJSON "terrain" message: remember the descriptor and
+    // the (identical) payload every generated chunk is filled from.
+    setTerrain(descriptor) {
+        const payload = buildTerrainPayload(descriptor);
+        this.terrain = {
+            descriptor,
+            data: payload.data,
+            mask: payload.mask
+        };
+    }
+
+    // Generates any missing terrain chunks around a world position.
+    updateTerrainChunks(x, z) {
+        if (this.terrain === null) {
+            return;
+        }
+
+        const centerX = Math.floor(x) >> 4;
+        const centerZ = Math.floor(z) >> 4;
+        const radius = this.terrain.descriptor.viewDistance;
+
+        for (let dx = -radius; dx <= radius; dx++) {
+            for (let dz = -radius; dz <= radius; dz++) {
+                const chunkX = centerX + dx;
+                const chunkZ = centerZ + dz;
+                const key = chunkX + (chunkZ << 16);
+
+                if (this.chunks.has(key) || this.pendingChunks.has(key)) {
+                    continue;
+                }
+
+                this.fillChunkFromPacket(chunkX, chunkZ, this.terrain.data, this.terrain.mask);
+            }
+        }
     }
 
     loadChunk(x, z) {

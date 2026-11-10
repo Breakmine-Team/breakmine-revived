@@ -1,7 +1,9 @@
 import GuiScreen from "../GuiScreen.js";
 import GuiButton from "../widgets/GuiButton.js";
 import GuiTextField from "../widgets/GuiTextField.js";
+import GuiDynamicSwitchButton from "../widgets/GuiDynamicSwitchButton.js";
 import GuiConnecting from "./GuiConnecting.js";
+import NetworkManager from "../../network/NetworkManager.js";
 import Minecraft from "../../Minecraft.js";
 
 export default class GuiDirectConnect extends GuiScreen {
@@ -12,6 +14,7 @@ export default class GuiDirectConnect extends GuiScreen {
         this.addServer = addServer;
         this.tunnel = tunnel;
         this.previousScreen = previousScreen;
+        this.protocol = NetworkManager.PROTOCOL_BINARY;
     }
 
     init() {
@@ -29,14 +32,36 @@ export default class GuiDirectConnect extends GuiScreen {
         this.fieldAddress.maxLength = 30;
         this.buttonList.push(this.fieldAddress);
 
+        if (!this.tunnel) {
+            this.buttonProtocol = new GuiDynamicSwitchButton(
+                "Protocol",
+                this.protocol === NetworkManager.PROTOCOL_JSON ? "QuickJSON" : "Binary",
+                this.width / 2 - 100,
+                y + 94,
+                200,
+                20,
+                {
+                    values: ["Binary", "QuickJSON"],
+                    callback: value => {
+                        this.protocol = value === "QuickJSON"
+                            ? NetworkManager.PROTOCOL_JSON
+                            : NetworkManager.PROTOCOL_BINARY;
+                    }
+                }
+            ).setTooltip("Most servers use Binary.");
+            this.buttonList.push(this.buttonProtocol);
+        }
+
+        const buttonY = this.tunnel ? y + 110 : y + 122;
         let btnTxt = this.addServer ? "Add Server" : "Connect";
-        this.buttonList.push(new GuiButton(this.minecraft, btnTxt, this.width / 2 - 155, y + 110, 150, 20, () => {
+        this.buttonList.push(new GuiButton(this.minecraft, btnTxt, this.width / 2 - 155, buttonY, 150, 20, () => {
             if (this.addServer) {
                 const baseData = {
                     name: this.fieldName.text,
                     details: this.fieldAddress.text,
                     address: this.fieldAddress.text,
-                    motd: ""
+                    motd: "",
+                    protocol: this.protocol
                 }
     
                 this.minecraft.fs.saveFile(JSON.stringify(baseData), `servers/${this.fieldName.text.replaceAll(' ', '_').replaceAll('/', '_')}.json`).then(() => {
@@ -66,10 +91,10 @@ export default class GuiDirectConnect extends GuiScreen {
                     }
                 }
                 
-                this.minecraft.displayScreen(new GuiConnecting(this, this.fieldAddress.text, undefined, proxy));
+                this.minecraft.displayScreen(new GuiConnecting(this, this.fieldAddress.text, undefined, proxy, this.protocol));
             }
         }));
-        this.buttonList.push(new GuiButton(this.minecraft, "Cancel", this.width / 2 + 5, y + 110, 150, 20, () => {
+        this.buttonList.push(new GuiButton(this.minecraft, "Cancel", this.width / 2 + 5, buttonY, 150, 20, () => {
             this.minecraft.displayScreen(this.previousScreen);
         }));
     }

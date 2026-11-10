@@ -6,11 +6,15 @@ import MissingPackets from "../../util/MissingPackets.js";
 import InventoryBasic from "../inventory/inventory/InventoryBasic.js";
 import IsomorphicWebSocket from "../../util/IsomorphicWebSocket.js";
 import CreeperEntity from "../entity/CreeperEntity.js";
+import JsonMultiplayer from "./JsonMultiplayer.js";
 
 export default class NetworkManager {
 
     static DEBUG = false;
     static MAX_COMPRESSION = 2097152;
+
+    static PROTOCOL_BINARY = "binary";
+    static PROTOCOL_JSON = "json";
 
     constructor(minecraft) {
         this.minecraft = minecraft;
@@ -20,6 +24,7 @@ export default class NetworkManager {
 
         this.registry = new PacketRegistry();
         this.protocolState = ProtocolState.HANDSHAKE;
+        this.protocol = NetworkManager.PROTOCOL_BINARY;
 
         this.queue = [];
 
@@ -42,7 +47,11 @@ export default class NetworkManager {
         this.networkHandler = networkHandler;
     }
 
-    connect(address, port, proxy) {
+    connect(address, port, proxy, protocol) {
+        this.protocol = protocol === NetworkManager.PROTOCOL_JSON
+            ? NetworkManager.PROTOCOL_JSON
+            : NetworkManager.PROTOCOL_BINARY;
+
         let wsUrl;
         if (typeof address === 'string' && address.startsWith('tunnel://')) {
             wsUrl = address;
@@ -67,6 +76,10 @@ export default class NetworkManager {
         }
 
         this._connectNext();
+    }
+
+    isJsonProtocol() {
+        return this.protocol === NetworkManager.PROTOCOL_JSON;
     }
 
     _connectNext() {
@@ -165,6 +178,21 @@ export default class NetworkManager {
             }
 
             this.setState(packetState);
+        }
+
+        if (this.isJsonProtocol()) {
+            const message = JsonMultiplayer.encode(packet);
+            if (message === null) {
+                if (NetworkManager.DEBUG) {
+                    console.log("[Network] [OUT] QuickJSON does not support " + packet.constructor.name);
+                }
+                return;
+            }
+
+            if (this.socket && this.socket.readyState === 1) {
+                this.socket.send(JSON.stringify(message));
+            }
+            return;
         }
 
         let buffer = new ByteBuf();
@@ -402,6 +430,15 @@ export default class NetworkManager {
     }
 
     _onMessage(event) {
+        if (this.isJsonProtocol()) {
+            if (typeof event.data === 'string') {
+                if (!JsonMultiplayer.handleMessage(event.data, this)) {
+                    this._onJsonMessage(event.data);
+                }
+            }
+            return;
+        }
+
         if (typeof event.data === 'string') {
             this._onJsonMessage(event.data);
             return;

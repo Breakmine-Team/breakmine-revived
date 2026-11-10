@@ -9,12 +9,13 @@ import LoginStartPacket from "../../network/packet/login/client/LoginStartPacket
 
 export default class GuiConnecting extends GuiScreen {
 
-    constructor(previousScreen, address, port, proxy) {
+    constructor(previousScreen, address, port, proxy, protocol) {
         super();
 
         this.previousScreen = previousScreen;
         this.connecting = false;
         this.networkManager = null;
+        this.protocol = protocol || NetworkManager.PROTOCOL_BINARY;
 
         if (typeof address === 'string' && address.startsWith('tunnel://')) {
             this.address = address;
@@ -44,9 +45,9 @@ export default class GuiConnecting extends GuiScreen {
         this.networkManager = new NetworkManager(this.minecraft);
         this.networkManager.setNetworkHandler(new NetworkLoginHandler(this.networkManager));
         this.networkManager.reconnect = () => {
-            this.minecraft.displayScreen(new GuiConnecting(this.previousScreen, this.address, this.port, this.proxy));
+            this.minecraft.displayScreen(new GuiConnecting(this.previousScreen, this.address, this.port, this.proxy, this.protocol));
         };
-        this.networkManager.connect(address, port, this.proxy);
+        this.networkManager.connect(address, port, this.proxy, this.protocol);
 
         const mods = this.minecraft.modLoader ? this.minecraft.modLoader.getHandshakeMods() : [];
         this.networkManager.sendPacket(new HandshakePacket(Minecraft.PROTOCOL_VERSION, ProtocolState.LOGIN, mods));
