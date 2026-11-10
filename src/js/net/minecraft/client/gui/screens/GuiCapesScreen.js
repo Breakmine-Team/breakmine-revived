@@ -1,5 +1,6 @@
 import GuiScreen from "../GuiScreen.js";
 import GuiButton from "../widgets/GuiButton.js";
+import GuiTextField from "../widgets/GuiTextField.js";
 import GuiPlayerPreview from "../widgets/GuiPlayerPreview.js";
 import GuiWorldSlotContainer from "../widgets/GuiWorldSlotContainer.js";
 import { getCapeTextureRect } from "../../render/CapeTextureLayout.js";
@@ -76,7 +77,8 @@ class GuiCapeSlotContainer extends GuiWorldSlotContainer {
         this.slotX = parentGui.layout.sidebarX + 4;
         this.slotWidth = parentGui.layout.sidebarWidth - 16;
         this.top = parentGui.layout.top;
-        this.bottom = parentGui.height - 10;
+        // Leave the bottom row of the sidebar free for the redeem controls.
+        this.bottom = parentGui.height - 30;
         this.viewLeft = parentGui.layout.sidebarX;
         this.viewRight = parentGui.layout.sidebarX + parentGui.layout.sidebarWidth;
         this.scrollBarX = parentGui.layout.sidebarX + parentGui.layout.sidebarWidth - 8;
@@ -115,6 +117,7 @@ export default class GuiCapesScreen extends GuiScreen {
         this.selectedIndex = -1;
         this.loading = true;
         this.layout = null;
+        this.redeeming = false;
     }
 
     async init() {
@@ -154,6 +157,30 @@ export default class GuiCapesScreen extends GuiScreen {
             20,
             () => this.minecraft.displayScreen(this.parentScreen)
         ));
+
+        this.initRedeemControls(signedIn);
+    }
+
+    initRedeemControls(enabled) {
+        const buttonWidth = 62;
+        const fieldWidth = Math.max(60, this.layout.sidebarWidth - 16 - buttonWidth - 4);
+
+        this.fieldRedeem = new GuiTextField(this.layout.sidebarX, this.height - 26, fieldWidth, 20);
+        this.fieldRedeem.maxLength = 7;
+        this.fieldRedeem.enabled = enabled;
+        this.buttonList.push(this.fieldRedeem);
+
+        this.redeemButton = new GuiButton(
+            this.minecraft,
+            "Redeem",
+            this.layout.sidebarX + fieldWidth + 4,
+            this.height - 26,
+            buttonWidth,
+            20,
+            () => this.handleRedeem()
+        ).setTooltip("Redeem a cape gift code (XXX-XXX)");
+        this.redeemButton.enabled = enabled;
+        this.buttonList.push(this.redeemButton);
     }
 
     initPreview() {
@@ -248,6 +275,42 @@ export default class GuiCapesScreen extends GuiScreen {
         }
     }
 
+    async handleRedeem() {
+        const manager = this.minecraft.capeManager;
+        if (!manager || this.redeeming) return;
+
+        const code = String(this.fieldRedeem?.getText?.() || "").trim();
+        if (!code) {
+            this.status = "Enter a gift code like ABC-123.";
+            return;
+        }
+
+        this.redeeming = true;
+        if (this.redeemButton) this.redeemButton.enabled = false;
+        this.status = `Redeeming ${code.toUpperCase()}...`;
+
+        try {
+            const result = await manager.redeemCode(code);
+            this.fieldRedeem.setText("");
+            this.entries = this.buildEntries(manager);
+            this.rebuildList();
+            this.preview?.reloadCape();
+            this.status = result?.message || "Cape redeemed!";
+        } catch (error) {
+            this.status = error?.message || "That code could not be redeemed.";
+        } finally {
+            this.redeeming = false;
+            if (this.redeemButton) this.redeemButton.enabled = this.minecraft.settings.loggedIn;
+        }
+    }
+
+    drawRedeemHint(stack) {
+        const field = this.fieldRedeem;
+        if (!field || !field.renderE || !field.enabled || field.text) return;
+
+        this.drawString(stack, "XXX-XXX", field.x + 3, field.y + 7, 0xFF8A8A8A, false);
+    }
+
     drawScreen(stack, mouseX, mouseY, partialTicks) {
         this.drawDefaultBackground(stack);
         this.drawCenteredString(stack, "Capes", this.width / 2, 14, 0xFFFFFFFF);
@@ -264,6 +327,7 @@ export default class GuiCapesScreen extends GuiScreen {
 
         this.drawPane(stack, mouseX, mouseY, partialTicks);
         super.drawScreen(stack, mouseX, mouseY, partialTicks);
+        this.drawRedeemHint(stack);
     }
 
     drawPane(stack, mouseX, mouseY, partialTicks) {

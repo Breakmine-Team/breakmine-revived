@@ -454,6 +454,10 @@ export async function selectCape(capeId) {
     return postRequest('/api/cape/choice', { capeId: capeId === undefined ? null : capeId }, true);
 }
 
+export async function redeemCapeCode(code) {
+    return postRequest('/api/capes/redeem', { code }, true);
+}
+
 export function getCapeUrlForId(username, capeId) {
     if (!capeId || capeId === 'common') {
         return `${API_BASE_URL}/cape/${username}?id=common`;

@@ -171,6 +171,17 @@ db.exec(`
         user_id TEXT PRIMARY KEY,
         cape_id TEXT NOT NULL
     );
+
+    -- Single-use gift codes an admin mints for a cape ("XXX-XXX").
+    CREATE TABLE IF NOT EXISTS cape_codes (
+        code TEXT PRIMARY KEY,
+        cape_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        redeemed_by TEXT,
+        redeemed_at INTEGER
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_cape_codes_cape ON cape_codes(cape_id);
 `);
 
 const stmts = {
@@ -207,6 +218,12 @@ const capeStmts = {
     clearChoice: db.prepare('DELETE FROM cape_choices WHERE user_id = ?'),
     deleteUserAssignments: db.prepare('DELETE FROM cape_assignments WHERE user_id = ?'),
     clearChoiceForCape: db.prepare('DELETE FROM cape_choices WHERE user_id = ? AND cape_id = ?'),
+    insertCapeCode: db.prepare('INSERT INTO cape_codes (code, cape_id, created_at) VALUES (?, ?, ?)'),
+    getCapeCode: db.prepare('SELECT code, cape_id, created_at, redeemed_by, redeemed_at FROM cape_codes WHERE code = ?'),
+    redeemCapeCode: db.prepare('UPDATE cape_codes SET redeemed_by = ?, redeemed_at = ? WHERE code = ? AND redeemed_by IS NULL'),
+    deleteCapeCodes: db.prepare('DELETE FROM cape_codes WHERE cape_id = ?'),
+    capeCodeCounts: db.prepare('SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN redeemed_by IS NULL THEN 1 ELSE 0 END), 0) AS unused FROM cape_codes WHERE cape_id = ?'),
+    listCapeCodes: db.prepare('SELECT code, redeemed_by, redeemed_at FROM cape_codes WHERE cape_id = ? ORDER BY created_at DESC LIMIT 200'),
 };
 
 setInterval(() => stmts.cleanExpiredTokens.run(Date.now()), 3600000);
@@ -365,6 +382,7 @@ app.use('/api', (req, res, next) => {
 
 const authLimiter = rateLimit({ windowMs: 900000, max: 10, skip: isWsReplay });
 const adminLimiter = rateLimit({ windowMs: 900000, max: 20, skip: isWsReplay });
+const redeemLimiter = rateLimit({ windowMs: 900000, max: 20, skip: isWsReplay });
 
 function makeUploader(destination, maxSize) {
     return multer({
@@ -910,6 +928,49 @@ function capeDataUrl(filename) {
     }
 }
 
+// --- Cape gift codes --------------------------------------------------------
+// Admins mint single-use codes shaped "XXX-XXX" for one cape; redeeming a code
+// assigns that cape to the account and equips it. Ambiguous characters
+// (I, O, 0, 1) are left out so a code can be typed from a screenshot.
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const CODE_LENGTH = 6;
+const CODE_MAX_PER_BATCH = 50;
+
+function compactCapeCode(raw) {
+    return String(raw ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, CODE_LENGTH);
+}
+
+function formatCapeCode(compact) {
+    return `${compact.slice(0, 3)}-${compact.slice(3)}`;
+}
+
+function generateCapeCode() {
+    let compact = '';
+    for (let i = 0; i < CODE_LENGTH; i++) {
+        compact += CODE_ALPHABET[crypto.randomInt(CODE_ALPHABET.length)];
+    }
+    return compact;
+}
+
+function createCapeCodes(capeId, count) {
+    const codes = [];
+
+    for (let i = 0; i < count; i++) {
+        for (let attempt = 0; attempt < 25; attempt++) {
+            const code = formatCapeCode(generateCapeCode());
+            try {
+                capeStmts.insertCapeCode.run(code, capeId, Date.now());
+                codes.push(code);
+                break;
+            } catch (err) {
+                if (!String(err.code || '').includes('SQLITE_CONSTRAINT')) throw err;
+            }
+        }
+    }
+
+    return codes;
+}
+
 app.get('/api/capes', authenticateToken, (req, res) => {
     try {
         const capes = capeStmts.capesForUser.all(req.user.sub)
@@ -953,6 +1014,45 @@ app.post('/api/cape/choice', authenticateToken, (req, res) => {
     } catch (err) {
         Logger.error('Cape', `Choice failed: ${err.message}`);
         res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.post('/api/capes/redeem', authenticateToken, redeemLimiter, (req, res) => {
+    const compact = compactCapeCode(req.body?.code);
+    if (compact.length !== CODE_LENGTH) {
+        return res.status(400).json({ error: 'Gift codes look like ABC-123.' });
+    }
+
+    const code = formatCapeCode(compact);
+    const entry = capeStmts.getCapeCode.get(code);
+    const cape = entry ? capeStmts.getCape.get(entry.cape_id) : null;
+    if (!cape) return res.status(404).json({ error: 'That gift code is not valid.' });
+
+    if (entry.redeemed_by) {
+        const message = entry.redeemed_by === req.user.sub
+            ? `You already redeemed this code for "${cape.name}".`
+            : 'That gift code was already redeemed.';
+        return res.status(409).json({ error: message });
+    }
+
+    try {
+        const redeemed = capeStmts.redeemCapeCode.run(req.user.sub, Date.now(), code);
+        if (redeemed.changes === 0) {
+            return res.status(409).json({ error: 'That gift code was already redeemed.' });
+        }
+
+        capeStmts.assignCape.run(cape.id, req.user.sub, Date.now());
+        capeStmts.setChoice.run(req.user.sub, cape.id);
+
+        Logger.info('Cape', `${req.user.username || req.user.sub} redeemed cape "${cape.name}" (${code})`);
+        res.json({
+            message: `Redeemed "${cape.name}"!`,
+            cape: { id: cape.id, name: cape.name },
+            choice: cape.id,
+        });
+    } catch (err) {
+        Logger.error('Cape', `Redeem failed: ${err.message}`);
+        return res.status(500).json({ error: 'Could not redeem that code.' });
     }
 });
 
@@ -1151,6 +1251,7 @@ app.post('/admin/capes/:id/delete', requireAdmin, (req, res) => {
 
     capeStmts.deleteCapeAssignments.run(cape.id);
     capeStmts.deleteCapeChoices.run(cape.id);
+    capeStmts.deleteCapeCodes.run(cape.id);
     capeStmts.deleteCape.run(cape.id);
 
     try {
@@ -1402,13 +1503,17 @@ app.post('/api/admin/login', adminApiLimiter, (req, res) => {
 
 app.get('/api/admin/state', requireAdminToken, (req, res) => {
     try {
-        const capes = capeStmts.listCapes.all().map((cape) => ({
-            id: cape.id,
-            name: cape.name,
-            createdAt: cape.created_at,
-            texture: capeDataUrl(cape.filename),
-            assigned: capeStmts.assignmentsForCape.all(cape.id).map((row) => row.username),
-        }));
+        const capes = capeStmts.listCapes.all().map((cape) => {
+            const codes = capeStmts.capeCodeCounts.get(cape.id);
+            return {
+                id: cape.id,
+                name: cape.name,
+                createdAt: cape.created_at,
+                texture: capeDataUrl(cape.filename),
+                assigned: capeStmts.assignmentsForCape.all(cape.id).map((row) => row.username),
+                codeCounts: { total: codes.total, unused: codes.unused },
+            };
+        });
 
         const users = stmts.listUsers.all().map((user) => {
             const choice = capeStmts.getChoice.get(user.id);
@@ -1548,6 +1653,7 @@ app.delete('/api/admin/capes/:id', requireAdminToken, (req, res) => {
 
     capeStmts.deleteCapeAssignments.run(cape.id);
     capeStmts.deleteCapeChoices.run(cape.id);
+    capeStmts.deleteCapeCodes.run(cape.id);
     capeStmts.deleteCape.run(cape.id);
 
     try {
@@ -1559,6 +1665,37 @@ app.delete('/api/admin/capes/:id', requireAdminToken, (req, res) => {
 
     Logger.info('Cape', `Deleted cape "${cape.name}"`);
     res.json({ message: `Deleted cape "${cape.name}".` });
+});
+
+app.post('/api/admin/capes/:id/codes', requireAdminToken, (req, res) => {
+    const cape = capeStmts.getCape.get(req.params.id);
+    if (!cape) return res.status(404).json({ error: 'Cape not found.' });
+
+    const requested = Number.parseInt(String(req.body?.count ?? ''), 10);
+    const count = Number.isFinite(requested) ? Math.min(Math.max(requested, 1), CODE_MAX_PER_BATCH) : 1;
+
+    try {
+        const codes = createCapeCodes(cape.id, count);
+        if (codes.length === 0) {
+            return res.status(500).json({ error: 'Could not generate gift codes.' });
+        }
+
+        Logger.info('Cape', `Generated ${codes.length} gift code(s) for "${cape.name}"`);
+        res.status(201).json({
+            codes,
+            cape: { id: cape.id, name: cape.name },
+            message: `Generated ${codes.length} code${codes.length === 1 ? '' : 's'} for "${cape.name}".`,
+        });
+    } catch (err) {
+        Logger.error('Cape', `Gift code generation failed: ${err.message}`);
+        res.status(500).json({ error: 'Could not generate gift codes.' });
+    }
+});
+
+app.get('/api/admin/capes/:id/codes', requireAdminToken, (req, res) => {
+    const cape = capeStmts.getCape.get(req.params.id);
+    if (!cape) return res.status(404).json({ error: 'Cape not found.' });
+    res.json({ codes: capeStmts.listCapeCodes.all(cape.id) });
 });
 
 app.post('/api/admin/users/purge-spam', requireAdminToken, (req, res) => {

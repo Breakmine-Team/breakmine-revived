@@ -147,6 +147,17 @@ export default class CapeManager {
         this.sendCape(username, dataUrl);
     }
 
+    /**
+     * Redeem a gift code. The server grants the cape and equips it, so the only
+     * local work left is reloading the catalog (which also refreshes the worn
+     * cape and this account's renderers).
+     */
+    async redeemCode(code) {
+        const result = await AuthLib.redeemCapeCode(code);
+        await this.loadCatalog(true);
+        return result;
+    }
+
     
 
     getOwnUsername() {

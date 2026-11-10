@@ -1160,6 +1160,9 @@ if (isSinglefile) {
   let state = null;
   let tab = 'capes';
   let notice = null;
+  // Codes minted during this session, keyed by cape id, so the admin can copy
+  // them before they are lost (the server only stores hashes-free plain codes).
+  const mintedCodes = new Map();
   let busy = false;
   let token = '';
   let socket = null;
@@ -1438,6 +1441,14 @@ if (isSinglefile) {
 
   function renderCapeRow(cape) {
     const id = esc(cape.id);
+    const counts = cape.codeCounts || { total: 0, unused: 0 };
+    const minted = mintedCodes.get(cape.id) || [];
+    const codeSummary = counts.total === 0
+      ? 'No gift codes yet'
+      : counts.unused + ' unused of ' + counts.total + ' code' + (counts.total === 1 ? '' : 's');
+    const mintedHtml = minted.length === 0
+      ? ''
+      : '<div class="bmadmin-codes">' + minted.map((code) => '<code>' + esc(code) + '</code>').join('') + '</div>';
     const pills = cape.assigned.length === 0
       ? '<span class="bmadmin-note">Not assigned to anyone</span>'
       : cape.assigned.map((username) => `<form class="bmadmin-inline" data-act="cape-unassign" data-id="${id}" data-username="${esc(username)}">
@@ -1450,7 +1461,12 @@ if (isSinglefile) {
 
     return `<tr>
       <td>${thumb}</td>
-      <td><strong>${esc(cape.name)}</strong><div class="bmadmin-sub">${id}</div></td>
+      <td>
+        <strong>${esc(cape.name)}</strong>
+        <div class="bmadmin-sub">${id}</div>
+        <div class="bmadmin-note">${codeSummary}</div>
+        ${mintedHtml}
+      </td>
       <td>
         <div class="bmadmin-pills">${pills}</div>
         <form class="bmadmin-inline" data-act="cape-assign" data-id="${id}">
@@ -1460,6 +1476,11 @@ if (isSinglefile) {
       </td>
       <td>
         <div class="bmadmin-actions">
+          <form class="bmadmin-inline" data-act="cape-codes" data-id="${id}">
+            <input type="text" name="count" value="1" size="2" inputmode="numeric" title="How many codes to mint">
+            <button type="submit">Generate codes</button>
+          </form>
+          <form data-act="cape-list-codes" data-id="${id}"><button type="submit">Show codes</button></form>
           <form data-act="cape-assign-all" data-id="${id}"><button type="submit">Gift all</button></form>
           <form data-act="cape-unassign-all" data-id="${id}"><button type="submit">Remove all</button></form>
           <form data-act="cape-delete" data-id="${id}"><button type="submit" class="bmadmin-danger">Delete</button></form>
@@ -1646,6 +1667,32 @@ if (isSinglefile) {
           await mutate(() => request('/api/admin/capes/' + id + '/unassign-all', { method: 'POST', body: {} }));
           return;
 
+        case 'cape-codes': {
+          const count = Math.min(Math.max(Number(field('count')) || 1, 1), 50);
+          const result = await request('/api/admin/capes/' + id + '/codes', {
+            method: 'POST', body: { count }
+          });
+          mintedCodes.set(form.dataset.id || '', (result && result.codes) || []);
+          notice = { kind: 'ok', text: (result && result.message) || 'Codes generated.' };
+          await loadState();
+          return;
+        }
+
+        case 'cape-list-codes': {
+          const result = await request('/api/admin/capes/' + id + '/codes');
+          const all = (result && result.codes) || [];
+          const unused = all.filter((entry) => !entry.redeemed_by).map((entry) => entry.code);
+          mintedCodes.set(form.dataset.id || '', unused);
+          notice = {
+            kind: 'ok',
+            text: unused.length === 0
+              ? 'No unused codes for this cape.'
+              : unused.length + ' unused code' + (unused.length === 1 ? '' : 's') + ' of ' + all.length + ' total.'
+          };
+          render();
+          return;
+        }
+
         case 'cape-delete':
           if (!confirm('Delete this cape and unassign it from everyone?')) return;
           await mutate(() => request('/api/admin/capes/' + id, { method: 'DELETE' }));
@@ -1731,6 +1778,8 @@ if (isSinglefile) {
       .bmadmin-pill { display: inline-flex; align-items: center; gap: 3px; background: #ececec; border-radius: 999px; padding: 1px 2px 1px 7px; }
       .bmadmin-pill button { padding: 0 4px; font-size: 12px; border: 0; background: transparent; }
       .bmadmin-danger { color: #8f1e1e; }
+      .bmadmin-codes { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+      .bmadmin-codes code { background: #eef3ff; border: 1px solid #cddaf5; border-radius: 3px; padding: 1px 4px; font: 11px/1.4 ui-monospace, monospace; user-select: all; }
       .bmadmin button:disabled { opacity: 0.5; cursor: not-allowed; }
     `;
     document.head.appendChild(style);
