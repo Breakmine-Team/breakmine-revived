@@ -839,7 +839,8 @@ export default class BlockRenderer {
         minV = 1 - minV;
         maxV = 1 - maxV;
 
-        const flip = block.getFlipForFace === Block.prototype.getFlipForFace
+        const flip = typeof block.getFlipForFace !== 'function'
+            || block.getFlipForFace === Block.prototype.getFlipForFace
             ? Block.FLIP_NONE
             : block.getFlipForFace(face, blockData, x, y, z, world);
 
