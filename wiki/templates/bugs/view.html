@@ -1,0 +1,454 @@
+{% extends "bugs/base.html" %}
+
+{% set show_header = false %}
+{% set status_colors = {'open': 'orange', 'in progress': 'blue', 'fixed': 'green', 'closed': 'grey'} %}
+
+{% block content %}
+  <div class="mod-header" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 5px;">
+    <div style="flex: 1;">
+      <h5 style="margin: 0 0 5px 0; font-weight: bold; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <span>#{{ bug['id'] }} {{ bug['title'] | e }}</span>
+        <span id="bug-status-chip" class="chip {{ status_colors.get(bug['status'], 'grey') }} white-text" style="padding: 0 8px; height: 24px; line-height: 24px; margin: 0; font-size: 0.8rem; display: inline-flex; align-items: center;">
+          {{ bug['status'] }}
+        </span>
+        <span class="chip" style="padding: 0 8px; height: 24px; line-height: 24px; margin: 0; font-size: 0.8rem; display: inline-flex; align-items: center;">
+          <i class="material-icons tiny" style="vertical-align: middle; margin-right: 2px;">category</i> {{ bug['category'] | capitalize }}
+        </span>
+      </h5>
+
+      <p style="margin: 8px 0;">
+        <span style="display: flex; align-items: center; gap: 4px;">
+          <i class="material-icons tiny">person</i> Reported by {{ bug['reported_by'] | e }}
+        </span>
+      </p>
+
+      <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 15px;">
+        <span style="display: flex; align-items: center; gap: 4px;">
+          <i class="material-icons tiny">schedule</i> {{ bug['created_at'] }}
+        </span>
+        <span style="color: var(--divider);">|</span>
+        <span style="display: flex; align-items: center; gap: 4px;">
+          <i class="material-icons tiny">update</i> {{ bug['updated_at'] }}
+        </span>
+        {% if bug['version'] %}
+          <span style="color: var(--divider);">|</span>
+          <span style="display: flex; align-items: center; gap: 4px;">
+            <i class="material-icons tiny">memory</i> {{ bug['version'] | e }}
+          </span>
+        {% endif %}
+        <span style="color: var(--divider);">|</span>
+        <span style="display: flex; align-items: center; gap: 4px;">
+          <i class="material-icons tiny">comment</i> <span class="comment-count">{{ comments | length }}</span> comments
+        </span>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+      {% if can_edit %}
+        <button type="button" class="btn-floating transparent waves-effect waves-dark" title="Delete Issue"
+                onclick="askDelete('{{ url_for('bugs.delete', bug_id=bug['id']) }}', 'Delete this issue and its comments? This cannot be undone.')">
+          <i class="material-icons">delete</i>
+        </button>
+        <a href="{{ url_for('bugs.edit', bug_id=bug['id']) }}" class="btn-floating transparent waves-effect waves-dark" title="Edit Issue">
+          <i class="material-icons">edit</i>
+        </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="divider" style="margin: 15px 0;"></div>
+
+  <style>
+    .tabs { background-color: transparent !important; }
+    .tabs .tab { background-color: transparent !important; }
+    .tabs .tab a { background-color: transparent !important; color: var(--text-color, #9e9e9e); }
+    .tabs .tab a:hover, .tabs .tab a.active { background-color: transparent !important; color: var(--accent, #009688); }
+    .tabs .indicator { background-color: var(--accent, #009688); }
+    .bug-body { white-space: pre-wrap; margin: 0; font-family: inherit; }
+    .strongtext strong, .strongtext b { font-weight: 700; }
+    .strongtext h1, .strongtext h2, .strongtext h3,
+    .strongtext h4, .strongtext h5, .strongtext h6 {
+      margin: 4px 0 2px 0;
+      line-height: 1.0;
+      font-weight: 700;
+    }
+    .strongtext h1 { font-size: 26pt; }
+    .strongtext h2 { font-size: 22pt; }
+    .strongtext h3 { font-size: 18pt; }
+    .strongtext h4 { font-size: 14pt; }
+    .strongtext h5 { font-size: 11pt; }
+    .strongtext h6 { font-size: 9pt; }
+  </style>
+
+  <div class="row" style="margin-bottom: 0;">
+    <div class="col s12" style="padding: 0;">
+      <ul class="tabs tabs-fixed-width">
+        <li class="tab {% if can_manage %}col s3{% else %}col s4{% endif %}"><a class="active" href="#tab-description">Description</a></li>
+        <li class="tab {% if can_manage %}col s3{% else %}col s4{% endif %}"><a href="#tab-gallery">Gallery (<span class="gallery-count">{{ images | length }}</span>)</a></li>
+        <li class="tab {% if can_manage %}col s3{% else %}col s4{% endif %}"><a href="#tab-comments">Comments (<span class="comment-count">{{ comments | length }}</span>)</a></li>
+        {% if can_manage %}
+          <li class="tab col s3"><a href="#tab-settings">Settings</a></li>
+        {% endif %}
+      </ul>
+    </div>
+  </div>
+
+  <div class="divider" style="margin-bottom: 20px;"></div>
+
+  <div id="tab-description" class="col s12" style="padding-top: 10px;">
+    {% if bug['description'] %}
+      <div class="bug-body strongtext">{{ bug['description'] | bug_markdown }}</div>
+    {% else %}
+      <em class="grey-text">No description provided.</em>
+    {% endif %}
+  </div>
+
+  <div id="tab-gallery" class="col s12" style="padding-top: 10px;">
+    {% if session.get('user') %}
+      <form id="image-form" action="{{ url_for('bugs.add_image', bug_id=bug['id']) }}" method="post" style="margin-bottom: 10px;">
+        <div class="input-field" style="display: flex; align-items: center; gap: 10px; margin-top: 0;">
+          <input id="image-url" name="url" type="url" maxlength="2000" placeholder="https://i.imgur.com/abc123.png" required>
+          <button id="image-submit" type="submit" class="btn-floating waves-effect waves-light teal" title="Attach image">
+            <i class="material-icons">add_photo_alternate</i>
+          </button>
+        </div>
+        <p class="grey-text" style="font-size: 0.85em; margin: -5px 0 0 0;">Paste a direct image link from Imgur or any image host.</p>
+      </form>
+      <p id="image-error" class="error-msg hide"></p>
+    {% else %}
+      <p><a href="#modal-login" class="modal-trigger">Log in</a> to attach images.</p>
+    {% endif %}
+
+    <p id="gallery-empty" class="{% if images %}hide{% endif %}"><em class="grey-text">No images yet.</em></p>
+    <div id="gallery-grid" class="row">
+      {% for image in images %}
+        <div class="col s12 m6 l4" data-image-id="{{ image['id'] }}">
+          <div class="card">
+            <div class="card-image">
+              <a href="{{ image['url'] | e }}" target="_blank" rel="noopener noreferrer">
+                <img class="bug-gallery-img" src="{{ image['url'] | e }}" alt="Image attached by {{ image['added_by'] | e }}" loading="lazy" referrerpolicy="no-referrer" style="width: 100%; height: 200px; object-fit: cover;">
+              </a>
+            </div>
+            <div class="card-content" style="padding: 10px 15px;">
+              <span class="grey-text" style="font-size: 0.85em;">{{ image['added_by'] | e }}</span>
+              {% if can_manage or image['added_by'] == session.get('user') %}
+                <button type="button" class="grey-text right" style="background: none; border: none; padding: 0; cursor: pointer;"
+                        onclick="askDelete('{{ url_for('bugs.delete_image', bug_id=bug['id'], image_id=image['id']) }}', 'Delete this image? This cannot be undone.')">
+                  <i class="material-icons">delete</i>
+                </button>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% if can_manage %}
+    <div id="tab-settings" class="col s12" style="padding-top: 10px;">
+      <form id="status-form" action="{{ url_for('bugs.set_status', bug_id=bug['id']) }}" method="post" style="display: flex; align-items: center; gap: 12px;">
+        <div class="input-field" style="margin: 0; min-width: 180px;">
+          <select name="status" id="status">
+            {% for status in statuses %}
+              <option value="{{ status }}" {% if bug['status'] == status %}selected{% endif %}>{{ status | capitalize }}</option>
+            {% endfor %}
+          </select>
+          <label for="status">Status</label>
+        </div>
+        <button id="status-submit" type="submit" class="btn btn-small waves-effect waves-light teal">Update</button>
+      </form>
+      <p id="status-error" class="error-msg hide"></p>
+    </div>
+  {% endif %}
+
+  <div id="tab-comments" class="col s12">
+    {% if session.get('user') %}
+      <form id="comment-form" action="{{ url_for('bugs.add_comment', bug_id=bug['id']) }}" method="post" style="margin-bottom: 20px;">
+        <div class="input-field" style="display: flex; align-items: center; gap: 10px;">
+          <textarea id="comment-content" name="content" class="materialize-textarea" rows="3" data-length="2000" placeholder="Leave a comment..." required></textarea>
+          <button id="comment-submit" type="submit" class="btn-floating waves-effect waves-light teal">
+            <i class="material-icons">send</i>
+          </button>
+        </div>
+      </form>
+      <p id="comment-error" class="error-msg hide"></p>
+    {% else %}
+      <p><a href="#modal-login" class="modal-trigger">Log in</a> to comment.</p>
+    {% endif %}
+
+    <ul id="comments-list" class="collection {% if not comments %}hide{% endif %}">
+    {% for c in comments %}
+      <li class="collection-item" data-comment-id="{{ c['id'] }}">
+        <div style="font-size: 0.85em;" class="grey-text text-darken-1">
+          <strong>{{ c['author'] | e }}</strong> at {{ c['created_at'] }}
+          {% if can_manage or c['author'] == session.get('user') %}
+            <button type="button" class="grey-text right" style="background: none; border: none; padding: 0; cursor: pointer;"
+                    onclick="askDelete('{{ url_for('bugs.delete_comment', bug_id=bug['id'], comment_id=c['id']) }}', 'Delete this comment? This cannot be undone.')">
+              <i class="material-icons">delete</i>
+            </button>
+          {% endif %}
+        </div>
+        <div style="white-space: pre-wrap; margin-top: 5px;">{{ c['content'] | e }}</div>
+      </li>
+    {% endfor %}
+    </ul>
+    <p id="comments-empty" class="{% if comments %}hide{% endif %}"><em class="grey-text">No comments yet.</em></p>
+  </div>
+
+  <div id="confirm-delete-modal" class="modal">
+    <form id="confirm-delete-form" method="post">
+      <div class="modal-content">
+        <h4>Are you sure?</h4>
+        <p id="confirm-delete-message">This cannot be undone.</p>
+      </div>
+      <div class="modal-footer">
+        <a href="#!" class="modal-close btn-flat">Cancel</a>
+        <button type="submit" class="btn waves-effect waves-light red">Delete</button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    function askDelete(action, message) {
+      var modal = document.getElementById('confirm-delete-modal');
+      document.getElementById('confirm-delete-form').action = action;
+      document.getElementById('confirm-delete-message').textContent = message;
+      var instance = M.Modal.getInstance(modal);
+      if (!instance) { M.Modal.init(modal); instance = M.Modal.getInstance(modal); }
+      instance.open();
+    }
+
+    function setNotice(el, message) {
+      if (!el) return;
+      el.textContent = message || '';
+      el.classList.toggle('hide', !message);
+    }
+
+    function postAjax(form) {
+      return fetch(form.action, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        body: new FormData(form),
+        credentials: 'same-origin'
+      }).then(function(response) {
+        return response.json().catch(function() { return {}; }).then(function(data) {
+          if (!response.ok) throw new Error(data.error || 'Request failed (' + response.status + ').');
+          return data;
+        });
+      });
+    }
+
+    function setCommentCount(count) {
+      document.querySelectorAll('.comment-count').forEach(function(el) {
+        el.textContent = count;
+      });
+      var tabsEl = document.querySelector('.tabs');
+      var tabs = tabsEl && M.Tabs.getInstance(tabsEl);
+      if (tabs) tabs.updateTabIndicator();
+    }
+
+    function appendComment(comment) {
+      var list = document.getElementById('comments-list');
+      var empty = document.getElementById('comments-empty');
+      var li = document.createElement('li');
+      li.className = 'collection-item';
+      li.setAttribute('data-comment-id', comment.id);
+
+      var meta = document.createElement('div');
+      meta.className = 'grey-text text-darken-1';
+      meta.style.fontSize = '0.85em';
+
+      var author = document.createElement('strong');
+      author.textContent = comment.author;
+      meta.appendChild(author);
+      meta.appendChild(document.createTextNode(' at ' + comment.created_at));
+
+      var del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'grey-text right';
+      del.style.cssText = 'background:none;border:none;padding:0;cursor:pointer;';
+      del.innerHTML = '<i class="material-icons">delete</i>';
+      del.addEventListener('click', function() {
+        askDelete(comment.delete_url, 'Delete this comment? This cannot be undone.');
+      });
+      meta.appendChild(del);
+
+      var body = document.createElement('div');
+      body.style.cssText = 'white-space:pre-wrap;margin-top:5px;';
+      body.textContent = comment.content;
+
+      li.appendChild(meta);
+      li.appendChild(body);
+      list.appendChild(li);
+      list.classList.remove('hide');
+      if (empty) empty.classList.add('hide');
+    }
+
+    function galleryFallback(img) {
+      // An Imgur page link becomes i.imgur.com/<id>.jpg, but the original may
+      // have been png/gif/webp; try the other extensions before giving up.
+      var imgur = /^(https:\/\/i\.imgur\.com\/[^./?#]+)(\.[a-z0-9]+)?(\?.*)?$/i.exec(img.src);
+      if (imgur) {
+        var current = (imgur[2] || '').toLowerCase();
+        var attempt = parseInt(img.getAttribute('data-gallery-attempt') || '0', 10);
+        var candidates = ['.jpg', '.png', '.gif', '.webp'];
+        for (var i = attempt; i < candidates.length; i++) {
+          if (candidates[i] !== current) {
+            img.setAttribute('data-gallery-attempt', String(i + 1));
+            img.src = imgur[1] + candidates[i] + (imgur[3] || '');
+            return;
+          }
+        }
+      }
+      img.style.display = 'none';
+      var parent = img.parentNode;
+      if (!parent || parent.querySelector('.gallery-error')) return;
+      var fallback = document.createElement('p');
+      fallback.className = 'gallery-error grey-text center';
+      fallback.style.cssText = 'padding:70px 10px;margin:0;';
+      fallback.textContent = 'Image could not be loaded.';
+      parent.appendChild(fallback);
+    }
+
+    function setGalleryCount(count) {
+      document.querySelectorAll('.gallery-count').forEach(function(el) {
+        el.textContent = count;
+      });
+      var tabsEl = document.querySelector('.tabs');
+      var tabs = tabsEl && M.Tabs.getInstance(tabsEl);
+      if (tabs) tabs.updateTabIndicator();
+    }
+
+    function appendGalleryImage(image) {
+      var grid = document.getElementById('gallery-grid');
+      var empty = document.getElementById('gallery-empty');
+      var col = document.createElement('div');
+      col.className = 'col s12 m6 l4';
+      col.setAttribute('data-image-id', image.id);
+
+      var card = document.createElement('div');
+      card.className = 'card';
+      var imageWrap = document.createElement('div');
+      imageWrap.className = 'card-image';
+      var link = document.createElement('a');
+      link.href = image.url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      var img = document.createElement('img');
+      img.className = 'bug-gallery-img';
+      img.src = image.url;
+      img.alt = 'Image attached by ' + image.added_by;
+      img.loading = 'lazy';
+      img.referrerPolicy = 'no-referrer';
+      img.style.cssText = 'width:100%;height:200px;object-fit:cover;';
+      img.addEventListener('error', function() { galleryFallback(img); });
+      link.appendChild(img);
+      imageWrap.appendChild(link);
+
+      var content = document.createElement('div');
+      content.className = 'card-content';
+      content.style.cssText = 'padding:10px 15px;';
+      var author = document.createElement('span');
+      author.className = 'grey-text';
+      author.style.fontSize = '0.85em';
+      author.textContent = image.added_by;
+
+      var del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'grey-text right';
+      del.style.cssText = 'background:none;border:none;padding:0;cursor:pointer;';
+      del.innerHTML = '<i class="material-icons">delete</i>';
+      del.addEventListener('click', function() {
+        askDelete(image.delete_url, 'Delete this image? This cannot be undone.');
+      });
+      content.appendChild(author);
+      content.appendChild(del);
+
+      card.appendChild(imageWrap);
+      card.appendChild(content);
+      col.appendChild(card);
+      grid.appendChild(col);
+      grid.classList.remove('hide');
+      if (empty) empty.classList.add('hide');
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      M.Tabs.init(document.querySelectorAll('.tabs'));
+      M.FormSelect.init(document.querySelectorAll('select'));
+      M.CharacterCounter.init(document.querySelectorAll('[data-length]'));
+
+      document.querySelectorAll('.bug-gallery-img').forEach(function(img) {
+        img.addEventListener('error', function() { galleryFallback(img); });
+        if (img.complete && img.naturalWidth === 0) galleryFallback(img);
+      });
+
+      var commentForm = document.getElementById('comment-form');
+      if (commentForm) commentForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        var textarea = document.getElementById('comment-content');
+        var button = document.getElementById('comment-submit');
+        var error = document.getElementById('comment-error');
+        if (!textarea.value.trim()) {
+          setNotice(error, 'Write a comment first.');
+          return;
+        }
+        setNotice(error, '');
+        button.disabled = true;
+        postAjax(commentForm).then(function(data) {
+          appendComment(data.comment);
+          setCommentCount(data.count);
+          commentForm.reset();
+          if (M.textareaAutoResize) M.textareaAutoResize(textarea);
+        }).catch(function(err) {
+          setNotice(error, err.message);
+        }).finally(function() {
+          button.disabled = false;
+        });
+      });
+
+      var imageForm = document.getElementById('image-form');
+      if (imageForm) imageForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        var input = document.getElementById('image-url');
+        var button = document.getElementById('image-submit');
+        var error = document.getElementById('image-error');
+        if (!input.value.trim()) {
+          setNotice(error, 'Paste an image URL first.');
+          return;
+        }
+        setNotice(error, '');
+        button.disabled = true;
+        postAjax(imageForm).then(function(data) {
+          appendGalleryImage(data.image);
+          setGalleryCount(data.count);
+          imageForm.reset();
+        }).catch(function(err) {
+          setNotice(error, err.message);
+        }).finally(function() {
+          button.disabled = false;
+        });
+      });
+
+      var statusForm = document.getElementById('status-form');
+      if (statusForm) statusForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        var button = document.getElementById('status-submit');
+        var error = document.getElementById('status-error');
+        setNotice(error, '');
+        button.disabled = true;
+        postAjax(statusForm).then(function(data) {
+          var chip = document.getElementById('bug-status-chip');
+          var colors = { 'open': 'orange', 'in progress': 'blue', 'fixed': 'green', 'closed': 'grey' };
+          if (chip) {
+            chip.className = 'chip ' + (colors[data.status] || 'grey') + ' white-text';
+            chip.textContent = data.status;
+          }
+        }).catch(function(err) {
+          setNotice(error, err.message);
+        }).finally(function() {
+          button.disabled = false;
+        });
+      });
+    });
+  </script>
+{% endblock %}

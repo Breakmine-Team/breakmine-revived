@@ -1,0 +1,44 @@
+{% extends "bugs/base.html" %}
+
+{% block content %}
+  {% if error %}
+    <p class="error-msg">{{ error }}</p>
+  {% endif %}
+
+  <form action="{{ url_for('bugs.edit', bug_id=bug_id) }}" method="post">
+    <div class="input-field">
+      <input type="text" id="title" name="title" maxlength="120" required
+             value="{{ (form.get('title', '') if form else bug['title']) | e }}">
+      <label for="title" class="active">Title</label>
+    </div>
+    <div class="row">
+      <div class="input-field col s12 m6">
+        <select id="category" name="category">
+          {% set selected_category = form.get('category', '') if form else bug['category'] %}
+          {% for category in categories %}
+            <option value="{{ category }}" {% if selected_category == category %}selected{% endif %}>{{ category | capitalize }}</option>
+          {% endfor %}
+        </select>
+        <label for="category">Type</label>
+      </div>
+      <div class="input-field col s12 m6">
+        <input type="text" id="version" name="version" maxlength="40"
+               value="{{ (form.get('version', '') if form else bug['version']) | e }}">
+        <label for="version" class="active">Breakmine version (optional)</label>
+      </div>
+    </div>
+    <div class="input-field">
+      <textarea id="description" name="description" class="materialize-textarea" rows="7" required>{{ (form.get('description', '') if form else bug['description']) | e }}</textarea>
+      <label for="description" class="active">What happened?</label>
+    </div>
+    <button type="submit" class="btn waves-effect waves-light teal">Save Changes</button>
+    <a href="{{ url_for('bugs.view', bug_id=bug_id) }}" class="btn-flat">Cancel</a>
+  </form>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      M.FormSelect.init(document.querySelectorAll('select'));
+      M.textareaAutoResize(document.querySelectorAll('.materialize-textarea'));
+    });
+  </script>
+{% endblock %}

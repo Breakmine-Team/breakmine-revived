@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="{{ meta_description | e }}">
   <meta name="robots" content="index, follow">
-  <meta property="og:title" content="{{ page_title | e }} | Breakmine Mods">
+  <meta property="og:title" content="{{ page_title | e }} | {{ nav_brand | default('Breakmine Mods') }}">
   <meta property="og:description" content="{{ meta_description | e }}">
   <meta property="og:type" content="website">
-  <title>Mods: {{ page_title | e }}</title>
-  <link rel="icon" type="image/x-icon" href="https://breakmine.com/src/resources/favicon.ico">
-  <link rel="apple-touch-icon" sizes="180x180" href="https://breakmine.com/src/resources/favicon.ico">
+  <title>{{ nav_doc_kind | default('Mods') }}: {{ page_title | e }}</title>
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='favicon.png') }}">
   <script>
     // Runs before the first paint so the stored theme is already applied and
     // there is no light flash on a dark page. Mirrors the logic in theme.js.
@@ -226,7 +226,7 @@
   <div class="navbar-sticky">
     <nav class="teal darken-2" style="padding: 0 0 0 20px;">
       <div class="nav-wrapper">
-        <a href="{{ url_for('mods.index') }}" class="brand-logo left">Breakmine Mods</a>
+        <a href="{{ url_for(nav_home_endpoint | default('mods.index')) }}" class="brand-logo left">{{ nav_brand | default('Breakmine Mods') }}</a>
 
         <ul class="right">
           {% if session.get('user') %}
@@ -241,9 +241,9 @@
           <li><a href="#!" id="theme-toggle" role="button" aria-label="Switch theme"><i class="material-icons" id="theme-toggle-icon">dark_mode</i></a></li>
         </ul>
 
-        <form action="{{ url_for('mods.index') }}" method="get" class="right hide-on-small-only">
+        <form action="{{ url_for(nav_search_endpoint | default('mods.index')) }}" method="get" class="right hide-on-small-only">
           <div class="input-field">
-            <input id="search" type="search" name="q" value="{{ search_query | e }}" placeholder="Search mods..." required>
+            <input id="search" type="search" name="q" value="{{ search_query | e }}" placeholder="{{ nav_search_placeholder | default('Search mods...') }}" required>
             <label class="label-icon" for="search"><i class="material-icons">search</i></label>
             <i class="material-icons">close</i>
           </div>
@@ -254,6 +254,7 @@
 
   <ul id="slide-out" class="sidenav sidenav-fixed">
     <li class="sidenav-padding">
+      {% block sidebar_nav %}
       <p><strong>Navigation</strong></p>
       <div class="collection" style="border: none;">
         <a href="{{ url_for('mods.index') }}" class="collection-item">Mods List</a>
@@ -266,6 +267,7 @@
           <a href="{{ url_for('mods.upload') }}" class="collection-item">Upload Mod</a>
         </div>
       {% endif %}
+      {% endblock %}
     </li>
   </ul>
 

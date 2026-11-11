@@ -1,0 +1,129 @@
+{% extends "bugs/base.html" %}
+
+{% set status_text_colors = {'open': 'orange-text text-darken-2', 'in progress': 'blue-text text-darken-2', 'fixed': 'green-text text-darken-2', 'closed': 'grey-text'} %}
+
+{% block content %}
+  <style>
+    .status-tabs {
+      background-color: transparent !important;
+    }
+    .status-tabs .tab {
+      background-color: transparent !important;
+    }
+    .status-tabs .tab a {
+      background-color: transparent !important;
+      color: var(--text-muted);
+      text-transform: none;
+    }
+    .status-tabs .tab a:hover,
+    .status-tabs .tab a.active {
+      background-color: transparent !important;
+      color: var(--accent);
+    }
+    .status-tabs .indicator {
+      background-color: var(--accent);
+    }
+    .tab-count {
+      opacity: 0.65;
+      font-weight: 500;
+    }
+  </style>
+
+  <div class="row" style="margin-bottom: 0;">
+    <div class="col s12" style="padding: 0;">
+      <ul class="tabs tabs-fixed-width status-tabs">
+        <li class="tab">
+          <a href="#status-all" class="{% if not search_status %}active{% endif %}">
+            All <span class="tab-count">{{ total }}</span>
+          </a>
+        </li>
+        {% for status in statuses %}
+          <li class="tab">
+            <a href="#status-{{ status | replace(' ', '-') }}"
+               class="{% if search_status == status %}active{% endif %}">
+              {{ status | capitalize }} <span class="tab-count">{{ counts.get(status, 0) }}</span>
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <div id="status-all" class="col s12" data-status="all"></div>
+  {% for status in statuses %}
+    <div id="status-{{ status | replace(' ', '-') }}" class="col s12" data-status="{{ status }}"></div>
+  {% endfor %}
+
+  <div class="divider" style="margin-bottom: 20px;"></div>
+
+  {% if reports %}
+    <table id="issues-table" class="striped responsive-table">
+      <thead>
+        <tr>
+          <th><i class="material-icons tiny" style="transform: translateY(2px);">flag</i> Status</th>
+          <th><i class="material-icons tiny" style="transform: translateY(2px);">bug_report</i> Title</th>
+          <th><i class="material-icons tiny" style="transform: translateY(2px);">category</i> Type</th>
+          <th><i class="material-icons tiny" style="transform: translateY(2px);">person</i> Reporter</th>
+          <th><i class="material-icons tiny" style="transform: translateY(2px);">comment</i> Comments</th>
+          <th><i class="material-icons tiny" style="transform: translateY(2px);">update</i> Updated</th>
+          <th><i class="material-icons tiny" style="transform: translateY(2px);">rule</i> Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for bug in reports %}
+        <tr data-status="{{ bug['status'] }}">
+          <td>
+            <span class="{{ status_text_colors.get(bug['status'], 'grey-text') }}"><strong>{{ bug['status'] }}</strong></span>
+          </td>
+          <td><a href="{{ url_for('bugs.view', bug_id=bug['id']) }}"><strong>{{ bug['title'] | e }}</strong></a></td>
+          <td>{{ bug['category'] | capitalize }}</td>
+          <td>{{ bug['reported_by'] | e }}</td>
+          <td>{{ bug['comment_count'] }}</td>
+          <td>{{ bug['updated_at'] }}</td>
+          <td>
+            <a href="{{ url_for('bugs.view', bug_id=bug['id']) }}" class="btn btn-floating waves-effect waves-light teal btn-small" title="View issue">
+              <i class="material-icons">visibility</i>
+            </a>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p id="issues-empty-filter" class="grey-text hide">No issues with this status.</p>
+  {% else %}
+    <p>No issues found.</p>
+    {% if session.get('user') %}
+      <a href="{{ url_for('bugs.report') }}" class="btn waves-effect waves-light teal">Report a Bug</a>
+    {% endif %}
+  {% endif %}
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      var tabs = document.querySelector('.status-tabs');
+      if (!tabs) return;
+
+      var rows = document.querySelectorAll('#issues-table tbody tr[data-status]');
+      var empty = document.getElementById('issues-empty-filter');
+
+      function setStatus(status) {
+        var visible = 0;
+        rows.forEach(function(row) {
+          var show = status === 'all' || row.getAttribute('data-status') === status;
+          row.style.display = show ? '' : 'none';
+          if (show) visible++;
+        });
+        if (empty) empty.classList.toggle('hide', visible > 0);
+      }
+
+      M.Tabs.init(tabs, {
+        onShow: function(content) {
+          setStatus(content.getAttribute('data-status') || 'all');
+        }
+      });
+
+      // Tabs select on click through Materialize, without navigating; apply the
+      // initially active one (or the ?status= deep link) to the rendered rows.
+      setStatus({{ (search_status or 'all') | tojson }});
+    });
+  </script>
+{% endblock %}

@@ -9,12 +9,14 @@ services:
     # Not published to the host - the Traefik proxy reaches these over the Docker network.
     expose:
       - "8001"
+      - "8002"
       - "8004"
     environment:
       WIKI_DATA_DIR: /data
       # Set explicitly so an injected PORT cannot move the wiki off 8001: the
       # proxy routes each hostname to a fixed container port.
       WIKI_PORT: "8001"
+      BUGS_PORT: "8002"
       MODS_PORT: "8004"
       # Source of truth for the 'kai' login. Set this in .env (see .env.example).
       WIKI_ADMIN_PASSWORD: "${WIKI_ADMIN_PASSWORD:-}"

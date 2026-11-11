@@ -7,6 +7,7 @@ import getpass
 import json
 import traceback
 import uuid
+import html
 import threading
 import time
 from datetime import datetime
@@ -15,7 +16,7 @@ import urllib.parse
 import urllib.request
 from io import BytesIO
 from flask import Flask, Blueprint, Response, request, redirect, url_for, session, render_template, send_file, current_app, jsonify
-from markupsafe import escape
+from markupsafe import Markup, escape
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.serving import run_simple
 
@@ -60,6 +61,13 @@ GALLERY_MAX_EDGE = 1600
 GALLERY_QUALITY = 72
 GALLERY_METHOD = 6
 CAPTION_ALIGNMENTS = ('center', 'left', 'right')
+# Bugtracker vocabulary. Kept short and closed so the status filter, the chips
+# and the database can never drift apart.
+BUG_STATUSES = ('open', 'in progress', 'fixed', 'closed')
+BUG_CATEGORIES = ('bug', 'crash', 'suggestion')
+MAX_BUG_TITLE = 120
+MAX_BUG_BODY = 20000
+MAX_BUG_VERSION = 40
 
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -103,6 +111,11 @@ def prompt_admin_password(exists):
 
 def discord_configured():
     return bool(DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET)
+
+def auth_base_layout():
+    """Layout for auth pages, including error bodies rendered after a POST."""
+    return (current_app.config.get('SITE_LAYOUT')
+            or ('layouts/mods_base.html' if current_app.config.get('IS_MODS_APP') else 'layouts/wiki_base.html'))
 
 # Stands in for the pbkdf2 hash of a row that was only recreated so a stale
 # session could keep writing. Never a valid hash, so password login can never
@@ -274,6 +287,11 @@ def init_db(force_reset_password=False):
     cursor.execute('''CREATE TABLE IF NOT EXISTS mod_versions (id INTEGER PRIMARY KEY AUTOINCREMENT, mod_id INTEGER NOT NULL, version TEXT NOT NULL, filename TEXT NOT NULL, original_filename TEXT NOT NULL, file_size INTEGER DEFAULT 0, uploaded_by TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (mod_id) REFERENCES mods (id) ON DELETE CASCADE, FOREIGN KEY (uploaded_by) REFERENCES users (username))''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS mod_comments (id INTEGER PRIMARY KEY AUTOINCREMENT, mod_id INTEGER NOT NULL, author TEXT NOT NULL, content TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (mod_id) REFERENCES mods (id) ON DELETE CASCADE, FOREIGN KEY (author) REFERENCES users (username))''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS mod_images (id INTEGER PRIMARY KEY AUTOINCREMENT, mod_id INTEGER NOT NULL, filename TEXT NOT NULL, original_filename TEXT NOT NULL, file_size INTEGER DEFAULT 0, width INTEGER DEFAULT 0, height INTEGER DEFAULT 0, position INTEGER DEFAULT 0, caption TEXT DEFAULT '', subtitle TEXT DEFAULT '', caption_align TEXT DEFAULT 'center', uploaded_by TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (mod_id) REFERENCES mods (id) ON DELETE CASCADE, FOREIGN KEY (uploaded_by) REFERENCES users (username))''')
+    # Bugtracker shares the users table above, so a wiki/mod account can report
+    # and comment without registering a second time.
+    cursor.execute('''CREATE TABLE IF NOT EXISTS bug_reports (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, category TEXT DEFAULT 'bug', description TEXT DEFAULT '', steps TEXT DEFAULT '', version TEXT DEFAULT '', status TEXT DEFAULT 'open', reported_by TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (reported_by) REFERENCES users (username))''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS bug_comments (id INTEGER PRIMARY KEY AUTOINCREMENT, bug_id INTEGER NOT NULL, author TEXT NOT NULL, content TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (bug_id) REFERENCES bug_reports (id) ON DELETE CASCADE, FOREIGN KEY (author) REFERENCES users (username))''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS bug_images (id INTEGER PRIMARY KEY AUTOINCREMENT, bug_id INTEGER NOT NULL, url TEXT NOT NULL, added_by TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (bug_id) REFERENCES bug_reports (id) ON DELETE CASCADE, FOREIGN KEY (added_by) REFERENCES users (username))''')
 
     try:
         cursor.execute("SELECT filename FROM mods LIMIT 0")
@@ -336,11 +354,12 @@ def render_wikilinks(text):
 auth_bp = Blueprint('auth', __name__)
 wiki_bp = Blueprint('wiki', __name__)
 mods_bp = Blueprint('mods', __name__)
+bugs_bp = Blueprint('bugs', __name__)
 tempmod_bp = Blueprint('tempmod', __name__)
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
-    base_layout = 'layouts/mods_base.html' if current_app.config.get('IS_MODS_APP') else 'layouts/wiki_base.html'
+    base_layout = auth_base_layout()
     if request.method == 'GET':
         # Reached by redirect from the login-gated routes, so it has to answer GET.
         return render_template(
@@ -402,7 +421,7 @@ def discord_login():
 
 @auth_bp.route('/callback')
 def discord_callback():
-    base_layout = 'layouts/mods_base.html' if current_app.config.get('IS_MODS_APP') else 'layouts/wiki_base.html'
+    base_layout = auth_base_layout()
     def fail(message, status):
         return render_template(
             base_layout,
@@ -466,6 +485,8 @@ def register():
             session['user'] = username
             if current_app.config.get('IS_MODS_APP'):
                 return redirect(url_for('mods.index'))
+            if current_app.config.get('SITE_LAYOUT'):
+                return redirect(url_for('bugs.index'))
             return redirect(url_for('wiki.index'))
         db.close()
     return render_template(
@@ -1130,6 +1151,329 @@ def delete_comment(mod_id, comment_id):
     db.execute('DELETE FROM mod_comments WHERE id=?', (comment_id,)); db.commit(); db.close()
     return redirect(url_for('mods.view', mod_id=mod_id))
 
+# --- BUGTRACKER ---
+# Same UI, accounts and database as the mods library; only the content differs.
+# No files are uploaded, so unlike a mod an issue never needs disk storage.
+def _clean_bug_field(value, limit):
+    return (value or '').strip()[:limit]
+
+def _bug_status(value):
+    return value if value in BUG_STATUSES else 'open'
+
+def _bug_category(value):
+    return value if value in BUG_CATEGORIES else 'bug'
+
+def _can_edit_bug(user, report):
+    return bool(user) and (user == 'kai' or user == report['reported_by'])
+
+def _bug_comment_count(db, bug_id):
+    return db.execute('SELECT COUNT(*) FROM bug_comments WHERE bug_id=?', (bug_id,)).fetchone()[0]
+
+@bugs_bp.route('/')
+def index():
+    q = request.args.get('q', '').strip()
+    status = request.args.get('status', '').strip()
+    if status not in BUG_STATUSES: status = ''  # only used to preselect a client-side tab
+    category = request.args.get('cat', '').strip()
+    # All statuses are returned: the status tabs filter the rendered rows in the
+    # browser, so switching tabs never reloads the page.
+    sql = '''SELECT b.*, (SELECT COUNT(*) FROM bug_comments c WHERE c.bug_id = b.id) AS comment_count
+             FROM bug_reports b WHERE 1=1'''
+    params = []
+    if category and category in BUG_CATEGORIES: sql += ' AND b.category = ?'; params.append(category)
+    if q: sql += ' AND (b.title LIKE ? OR b.description LIKE ?)'; params.extend([f'%{q}%', f'%{q}%'])
+    # Open work first, then the oldest waiting item within each status.
+    sql += ''' ORDER BY CASE b.status WHEN 'open' THEN 0 WHEN 'in progress' THEN 1 WHEN 'fixed' THEN 2 ELSE 3 END,
+                       b.updated_at DESC'''
+    db = get_db()
+    rows = db.execute(sql, params).fetchall()
+    counts = {s: 0 for s in BUG_STATUSES}
+    for row in db.execute('SELECT status, COUNT(*) AS n FROM bug_reports GROUP BY status').fetchall():
+        if row['status'] in counts: counts[row['status']] = row['n']
+    db.close()
+    reports = [dict(r) for r in rows]
+    meta_desc = "Report and follow Breakmine bugs, crashes and suggestions."
+    if q: meta_desc = f"Search results for '{q}' in the Breakmine Bugtracker."
+    return render_template(
+        'bugs/index.html',
+        page_title="Issues",
+        header_title="Issues",
+        reports=reports,
+        counts=counts,
+        total=sum(counts.values()),
+        search_query=q,
+        search_status=status,
+        search_cat=category,
+        statuses=BUG_STATUSES,
+        categories=BUG_CATEGORIES,
+        meta_description=meta_desc
+    )
+
+@bugs_bp.route('/report', methods=['GET', 'POST'])
+def report():
+    if not session.get('user'): return redirect(url_for('auth.login'))
+    if request.method == 'GET':
+        return render_template(
+            'bugs/report.html',
+            page_title="Report a Bug",
+            header_title="Report a Bug",
+            categories=BUG_CATEGORIES,
+            error=None,
+            meta_description="Report a bug, crash or suggestion for Breakmine."
+        )
+    title = _clean_bug_field(request.form.get('title'), MAX_BUG_TITLE)
+    category = _bug_category(request.form.get('category'))
+    version = _clean_bug_field(request.form.get('version'), MAX_BUG_VERSION)
+    description = _clean_bug_field(request.form.get('description'), MAX_BUG_BODY)
+    error = None if title else "Title required."
+    if not error and not description: error = "Description required."
+    if not error:
+        db = get_db()
+        bug_id = db.execute(
+            'INSERT INTO bug_reports (title, category, description, version, reported_by) VALUES (?, ?, ?, ?, ?)',
+            (title, category, description, version, session['user'])
+        ).lastrowid
+        db.commit(); db.close()
+        return redirect(url_for('bugs.view', bug_id=bug_id))
+    return render_template(
+        'bugs/report.html',
+        page_title="Report a Bug",
+        header_title="Report a Bug",
+        categories=BUG_CATEGORIES,
+        error=error,
+        form=request.form,
+        meta_description="Report a bug, crash or suggestion for Breakmine."
+    )
+
+@bugs_bp.route('/view/<int:bug_id>')
+def view(bug_id):
+    db = get_db()
+    bug = db.execute('SELECT * FROM bug_reports WHERE id = ?', (bug_id,)).fetchone()
+    if not bug:
+        db.close()
+        return render_template(
+            'bugs/error.html',
+            page_title="404",
+            header_title="404",
+            meta_description="The requested issue could not be found.",
+            message="The requested issue could not be found."
+        ), 404
+    comments = db.execute('SELECT * FROM bug_comments WHERE bug_id = ? ORDER BY created_at ASC', (bug_id,)).fetchall()
+    images = db.execute('SELECT * FROM bug_images WHERE bug_id = ? ORDER BY created_at ASC, id ASC', (bug_id,)).fetchall()
+    db.close()
+    user = session.get('user')
+    return render_template(
+        'bugs/view.html',
+        page_title=bug['title'],
+        header_title=bug['title'],
+        bug=bug,
+        comments=comments,
+        images=images,
+        can_edit=_can_edit_bug(user, bug),
+        can_manage=user == 'kai',
+        statuses=BUG_STATUSES,
+        meta_description=bug['description'][:150].replace('\n', ' ').strip() or f"Issue #{bug_id} reported by {bug['reported_by']}."
+    )
+
+@bugs_bp.route('/edit/<int:bug_id>', methods=['GET', 'POST'])
+def edit(bug_id):
+    if not session.get('user'): return redirect(url_for('auth.login'))
+    db = get_db()
+    bug = db.execute('SELECT * FROM bug_reports WHERE id = ?', (bug_id,)).fetchone()
+    if not bug: db.close(); return "Not found", 404
+    if not _can_edit_bug(session['user'], bug): db.close(); return "Unauthorized", 403
+    if request.method == 'GET':
+        db.close()
+        return render_template(
+            'bugs/edit.html',
+            page_title="Edit Issue",
+            header_title="Edit Issue",
+            bug=bug,
+            bug_id=bug_id,
+            categories=BUG_CATEGORIES,
+            error=None,
+            meta_description=f"Editing issue #{bug_id}."
+        )
+    title = _clean_bug_field(request.form.get('title'), MAX_BUG_TITLE)
+    category = _bug_category(request.form.get('category'))
+    version = _clean_bug_field(request.form.get('version'), MAX_BUG_VERSION)
+    description = _clean_bug_field(request.form.get('description'), MAX_BUG_BODY)
+    error = None if title else "Title required."
+    if not error and not description: error = "Description required."
+    if not error:
+        db.execute('UPDATE bug_reports SET title=?, category=?, version=?, description=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
+                   (title, category, version, description, bug_id))
+        db.commit(); db.close()
+        return redirect(url_for('bugs.view', bug_id=bug_id))
+    db.close()
+    return render_template(
+        'bugs/edit.html',
+        page_title="Edit Issue",
+        header_title="Edit Issue",
+        bug=bug,
+        bug_id=bug_id,
+        categories=BUG_CATEGORIES,
+        error=error,
+        form=request.form,
+        meta_description=f"Editing issue #{bug_id}."
+    )
+
+def _render_bug_markdown(value):
+    """The mods-site description format: headings, bold, italics and links."""
+    text = str(escape(value or ''))
+
+    def heading(match):
+        level = len(match.group(1))
+        return f'<h{level}>{match.group(2)}</h{level}>'
+
+    def link(match):
+        label, raw_url = match.group(1), match.group(2)
+        parsed = urllib.parse.urlparse(html.unescape(raw_url))
+        if parsed.scheme not in ('http', 'https') or not parsed.netloc:
+            return label
+        return f'<a href="{raw_url}" target="_blank" rel="noopener">{label}</a>'
+
+    text = re.sub(r'^(#{1,6})\s+(.*?)$', heading, text, flags=re.M)
+    text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+    text = re.sub(r'\*(.+?)\*', r'<em>\1</em>', text)
+    text = re.sub(r'\[(.*?)\]\((.*?)\)', link, text)
+    return Markup(text)
+
+def _bug_wants_json():
+    """The issue page posts comments/status over fetch and expects JSON back."""
+    return request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
+@bugs_bp.route('/status/<int:bug_id>', methods=['POST'])
+def set_status(bug_id):
+    wants_json = _bug_wants_json()
+    def fail(message, code):
+        return (jsonify({'error': message}), code) if wants_json else (message, code)
+    if session.get('user') != 'kai': return fail("Unauthorized", 403)
+    status = request.form.get('status', '')
+    if status not in BUG_STATUSES: return fail("Unknown status", 400)
+    db = get_db()
+    if not db.execute('SELECT 1 FROM bug_reports WHERE id=?', (bug_id,)).fetchone():
+        db.close(); return fail("Not found", 404)
+    db.execute('UPDATE bug_reports SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', (status, bug_id))
+    db.commit(); db.close()
+    if wants_json: return jsonify({'status': status})
+    return redirect(url_for('bugs.view', bug_id=bug_id))
+
+@bugs_bp.route('/comment/<int:bug_id>', methods=['POST'])
+def add_comment(bug_id):
+    wants_json = _bug_wants_json()
+    def fail(message, code):
+        return (jsonify({'error': message}), code) if wants_json else (message, code)
+    if not session.get('user'):
+        return (jsonify({'error': 'Sign in required.'}), 401) if wants_json else redirect(url_for('auth.login'))
+    content = request.form.get('content', '').strip()
+    if not content:
+        return (jsonify({'error': 'Write a comment first.'}), 400) if wants_json else redirect(url_for('bugs.view', bug_id=bug_id))
+    db = get_db()
+    if not db.execute('SELECT 1 FROM bug_reports WHERE id=?', (bug_id,)).fetchone():
+        db.close(); return fail("Not found", 404)
+    comment_id = db.execute('INSERT INTO bug_comments (bug_id, author, content) VALUES (?, ?, ?)', (bug_id, session['user'], content)).lastrowid
+    db.execute('UPDATE bug_reports SET updated_at=CURRENT_TIMESTAMP WHERE id=?', (bug_id,))
+    db.commit()
+    comment = db.execute('SELECT author, content, created_at FROM bug_comments WHERE id=?', (comment_id,)).fetchone()
+    count = db.execute('SELECT COUNT(*) FROM bug_comments WHERE bug_id=?', (bug_id,)).fetchone()[0]
+    db.close()
+    if wants_json:
+        return jsonify({
+            'comment': {
+                'id': comment_id,
+                'author': comment['author'],
+                'content': comment['content'],
+                'created_at': comment['created_at'],
+                'delete_url': url_for('bugs.delete_comment', bug_id=bug_id, comment_id=comment_id),
+            },
+            'count': count,
+        })
+    return redirect(url_for('bugs.view', bug_id=bug_id))
+
+@bugs_bp.route('/comment/<int:bug_id>/del/<int:comment_id>', methods=['POST'])
+def delete_comment(bug_id, comment_id):
+    if not session.get('user'): return redirect(url_for('auth.login'))
+    db = get_db()
+    c = db.execute('SELECT * FROM bug_comments WHERE id=? AND bug_id=?', (comment_id, bug_id)).fetchone()
+    if not c: db.close(); return "Not found", 404
+    if session['user'] != 'kai' and session['user'] != c['author']: db.close(); return "Unauthorized", 403
+    db.execute('DELETE FROM bug_comments WHERE id=?', (comment_id,))
+    db.commit(); db.close()
+    return redirect(url_for('bugs.view', bug_id=bug_id))
+
+def _clean_bug_image_url(raw):
+    """Accept plain http(s) image links, turning common Imgur page links into
+    direct i.imgur.com URLs so they can be shown inline."""
+    from urllib.parse import urlparse
+    url = (raw or '').strip()
+    if not url or len(url) > 2000: return None
+    parsed = urlparse(url)
+    if parsed.scheme not in ('http', 'https') or not parsed.netloc: return None
+    if parsed.netloc.lower() in ('imgur.com', 'www.imgur.com', 'm.imgur.com'):
+        parts = [part for part in parsed.path.split('/') if part]
+        if len(parts) == 1:
+            return f'https://i.imgur.com/{parts[0]}.jpg'
+    return url
+
+@bugs_bp.route('/gallery/<int:bug_id>/add', methods=['POST'])
+def add_image(bug_id):
+    wants_json = _bug_wants_json()
+    def fail(message, code):
+        return (jsonify({'error': message}), code) if wants_json else (message, code)
+    if not session.get('user'):
+        return (jsonify({'error': 'Sign in required.'}), 401) if wants_json else redirect(url_for('auth.login'))
+    url = _clean_bug_image_url(request.form.get('url'))
+    if not url: return fail("Enter a valid http(s) image URL.", 400)
+    db = get_db()
+    if not db.execute('SELECT 1 FROM bug_reports WHERE id=?', (bug_id,)).fetchone():
+        db.close(); return fail("Not found", 404)
+    image_id = db.execute('INSERT INTO bug_images (bug_id, url, added_by) VALUES (?, ?, ?)',
+                          (bug_id, url, session['user'])).lastrowid
+    db.execute('UPDATE bug_reports SET updated_at=CURRENT_TIMESTAMP WHERE id=?', (bug_id,))
+    db.commit()
+    image = db.execute('SELECT * FROM bug_images WHERE id=?', (image_id,)).fetchone()
+    count = db.execute('SELECT COUNT(*) FROM bug_images WHERE bug_id=?', (bug_id,)).fetchone()[0]
+    db.close()
+    if wants_json:
+        return jsonify({
+            'image': {
+                'id': image_id,
+                'url': image['url'],
+                'added_by': image['added_by'],
+                'created_at': image['created_at'],
+                'delete_url': url_for('bugs.delete_image', bug_id=bug_id, image_id=image_id),
+            },
+            'count': count,
+        })
+    return redirect(url_for('bugs.view', bug_id=bug_id, _anchor='tab-gallery'))
+
+@bugs_bp.route('/gallery/<int:bug_id>/del/<int:image_id>', methods=['POST'])
+def delete_image(bug_id, image_id):
+    if not session.get('user'): return redirect(url_for('auth.login'))
+    db = get_db()
+    image = db.execute('SELECT * FROM bug_images WHERE id=? AND bug_id=?', (image_id, bug_id)).fetchone()
+    if not image: db.close(); return "Not found", 404
+    if session['user'] != 'kai' and session['user'] != image['added_by']:
+        db.close(); return "Unauthorized", 403
+    db.execute('DELETE FROM bug_images WHERE id=?', (image_id,))
+    db.execute('UPDATE bug_reports SET updated_at=CURRENT_TIMESTAMP WHERE id=?', (bug_id,))
+    db.commit(); db.close()
+    return redirect(url_for('bugs.view', bug_id=bug_id, _anchor='tab-gallery'))
+
+@bugs_bp.route('/delete/<int:bug_id>', methods=['POST'])
+def delete(bug_id):
+    if not session.get('user'): return redirect(url_for('auth.login'))
+    db = get_db()
+    bug = db.execute('SELECT * FROM bug_reports WHERE id=?', (bug_id,)).fetchone()
+    if not bug: db.close(); return "Not found", 404
+    if not _can_edit_bug(session['user'], bug): db.close(); return "Unauthorized", 403
+    # Comments and gallery images cascade with the report.
+    db.execute('DELETE FROM bug_images WHERE bug_id=?', (bug_id,))
+    db.execute('DELETE FROM bug_reports WHERE id=?', (bug_id,))
+    db.commit(); db.close()
+    return redirect(url_for('bugs.index'))
+
 # --- PUBLIC JSON API ---
 # Read-only and unauthenticated, so the game client (and anyone else) can read
 # the catalogue without a session. Registered on the mods app only, so these
@@ -1327,6 +1671,19 @@ mods_app.register_blueprint(tempmod_bp)
 mods_app.register_blueprint(api_bp)
 mods_app.before_request(keep_session_user_valid)
 
+bugs_app = Flask(__name__, static_folder='static', static_url_path='/static', template_folder='templates')
+bugs_app.secret_key = SECRET_KEY
+bugs_app.config['SITE_LAYOUT'] = 'bugs/base.html'  # same Materialize layout and account modals as mods
+bugs_app.wsgi_app = behind_proxy(bugs_app.wsgi_app)
+bugs_app.jinja_env.globals['discord_enabled'] = discord_configured()
+bugs_app.jinja_env.globals['theme_asset_version'] = THEME_ASSET_VERSION
+bugs_app.jinja_env.filters['regex_replace'] = lambda s, find, replace: re.sub(find, replace, str(s))
+bugs_app.jinja_env.filters['bug_markdown'] = _render_bug_markdown
+bugs_app.json.ensure_ascii = False
+bugs_app.register_blueprint(auth_bp)
+bugs_app.register_blueprint(bugs_bp)
+bugs_app.before_request(keep_session_user_valid)
+
 # --- CORS HANDLERS ---
 def add_cors_headers(response):
     response.headers['Access-Control-Allow-Origin'] = '*'
@@ -1342,10 +1699,15 @@ def wiki_cors(response):
 def mods_cors(response):
     return add_cors_headers(response)
 
+@bugs_app.after_request
+def bugs_cors(response):
+    return add_cors_headers(response)
+
 # WIKI_PORT/MODS_PORT win; PORT is what PaaS proxies (Dokploy, Coolify, Render...)
 # inject, so honour it as the fallback or the reverse proxy hits a closed port.
 WIKI_PORT = int(os.environ.get('WIKI_PORT') or os.environ.get('PORT') or 8001)
 MODS_PORT = int(os.environ.get('MODS_PORT') or 8004)
+BUGS_PORT = int(os.environ.get('BUGS_PORT') or 8002)
 
 def serve(app, port, name):
     """Serve one app. Uses waitress when installed, otherwise falls back to werkzeug."""
@@ -1395,10 +1757,11 @@ if __name__ == '__main__':
 
         t1 = threading.Thread(target=run, args=(wiki_app, WIKI_PORT, 'Wiki'), daemon=True)
         t2 = threading.Thread(target=run, args=(mods_app, MODS_PORT, 'Mods'), daemon=True)
-        t1.start(); t2.start()
+        t3 = threading.Thread(target=run, args=(bugs_app, BUGS_PORT, 'Bugtracker'), daemon=True)
+        t1.start(); t2.start(); t3.start()
 
         try:
-            while not failures and (t1.is_alive() or t2.is_alive()): time.sleep(0.5)
+            while not failures and (t1.is_alive() or t2.is_alive() or t3.is_alive()): time.sleep(0.5)
         except KeyboardInterrupt: print("\nShutting down...")
         if failures: sys.exit(1)
     else:

@@ -1,4 +1,4 @@
-{% set base_template = 'layouts/mods_base.html' if config.get('IS_MODS_APP') else 'layouts/wiki_base.html' %}
+{% set base_template = config.get('SITE_LAYOUT') or ('layouts/mods_base.html' if config.get('IS_MODS_APP') else 'layouts/wiki_base.html') %}
 {% extends base_template %}
 
 {% block content %}

@@ -26,9 +26,9 @@ RUN useradd --uid 1000 --create-home --shell /usr/sbin/nologin wiki \
 USER wiki
 
 VOLUME ["/data"]
-EXPOSE 8001 8004
+EXPOSE 8001 8002 8004
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD python3 -c "import os,urllib.request as r,sys;w=os.getenv('WIKI_PORT') or os.getenv('PORT') or '8001';m=os.getenv('MODS_PORT') or '8004';sys.exit(0 if all(r.urlopen('http://127.0.0.1:'+p+q,timeout=3).status==200 for p,q in ((w,'/all'),(m,'/'))) else 1)"
+  CMD python3 -c "import os,urllib.request as r,sys;w=os.getenv('WIKI_PORT') or os.getenv('PORT') or '8001';m=os.getenv('MODS_PORT') or '8004';b=os.getenv('BUGS_PORT') or '8002';sys.exit(0 if all(r.urlopen('http://127.0.0.1:'+p+q,timeout=3).status==200 for p,q in ((w,'/all'),(m,'/'),(b,'/'))) else 1)"
 
 CMD ["python3", "app.py"]

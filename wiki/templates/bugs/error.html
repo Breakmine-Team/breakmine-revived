@@ -1,0 +1,6 @@
+{% extends "bugs/base.html" %}
+
+{% block content %}
+  <p class="error-msg">{{ message }}</p>
+  <a href="{{ url_for('bugs.index') }}" class="btn waves-effect waves-light teal">Back to Issues</a>
+{% endblock %}

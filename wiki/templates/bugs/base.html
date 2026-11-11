@@ -1,0 +1,22 @@
+{% extends "layouts/mods_base.html" %}
+
+{% set nav_brand = 'Breakmine Bugtracker' %}
+{% set nav_doc_kind = 'Bugtracker' %}
+{% set nav_home_endpoint = 'bugs.index' %}
+{% set nav_search_endpoint = 'bugs.index' %}
+{% set nav_search_placeholder = 'Search issues...' %}
+
+{% block sidebar_nav %}
+  <p><strong>Navigation</strong></p>
+  <div class="collection" style="border: none;">
+    <a href="{{ url_for('bugs.index') }}" class="collection-item">All Issues</a>
+  </div>
+
+  {% if session.get('user') %}
+    <div class="divider" style="margin: 15px 0;"></div>
+    <p><strong>Issue Actions</strong></p>
+    <div class="collection" style="border: none;">
+      <a href="{{ url_for('bugs.report') }}" class="collection-item">Report a Bug</a>
+    </div>
+  {% endif %}
+{% endblock %}

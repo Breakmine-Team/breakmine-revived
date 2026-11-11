@@ -1,0 +1,43 @@
+{% extends "bugs/base.html" %}
+
+{% block content %}
+  {% if error %}
+    <p class="error-msg">{{ error }}</p>
+  {% endif %}
+
+  <form action="{{ url_for('bugs.report') }}" method="post">
+    <div class="input-field">
+      <input type="text" id="title" name="title" maxlength="120" required
+             value="{{ (form.get('title', '') if form else '') | e }}">
+      <label for="title" class="{% if form and form.get('title') %}active{% endif %}">Title</label>
+    </div>
+    <div class="row">
+      <div class="input-field col s12 m6">
+        <select id="category" name="category">
+          {% for category in categories %}
+            <option value="{{ category }}" {% if form and form.get('category') == category %}selected{% endif %}>{{ category | capitalize }}</option>
+          {% endfor %}
+        </select>
+        <label for="category">Type</label>
+      </div>
+      <div class="input-field col s12 m6">
+        <input type="text" id="version" name="version" maxlength="40"
+               value="{{ (form.get('version', '') if form else '') | e }}">
+        <label for="version" class="{% if form and form.get('version') %}active{% endif %}">Breakmine version (optional)</label>
+      </div>
+    </div>
+    <div class="input-field">
+      <textarea id="description" name="description" class="materialize-textarea" rows="7" required>{{ (form.get('description', '') if form else '') | e }}</textarea>
+      <label for="description" class="{% if form and form.get('description') %}active{% endif %}">What happened?</label>
+    </div>
+    <button type="submit" class="btn waves-effect waves-light teal">Submit Report</button>
+    <a href="{{ url_for('bugs.index') }}" class="btn-flat">Cancel</a>
+  </form>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      M.FormSelect.init(document.querySelectorAll('select'));
+      M.textareaAutoResize(document.querySelectorAll('.materialize-textarea'));
+    });
+  </script>
+{% endblock %}

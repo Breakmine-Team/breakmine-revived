@@ -256,6 +256,16 @@ html[data-theme="dark"] .dropdown-content li.selected {
   box-shadow: none;
 }
 
+/* Colored buttons must keep white text. Without this, dark-mode link colors
+   (for example .card-content a) win over Materialize's .btn color:#fff, which
+   leaves anchor-styled buttons unreadable on teal. */
+html[data-theme="dark"] .btn:not(.btn-flat):not(.transparent),
+html[data-theme="dark"] .btn-large:not(.btn-flat),
+html[data-theme="dark"] .btn-small:not(.btn-flat),
+html[data-theme="dark"] .btn-floating:not(.transparent) {
+  color: #fff !important;
+}
+
 html[data-theme="dark"] .btn-flat {
   color: var(--text-muted);
 }
