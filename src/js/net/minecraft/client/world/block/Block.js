@@ -161,6 +161,16 @@ export default class Block {
         return 0;
     }
 
+    static FLIP_NONE = 0;
+    static FLIP_U = 1;
+    static FLIP_V = 2;
+    static FLIP_BOTH = 3;
+
+    // Return a bitmask of Block.FLIP_* flags to mirror this face's UVs.
+    getFlipForFace(face, data, x, y, z, world) {
+        return Block.FLIP_NONE;
+    }
+
     getRenderRotation(world, x, y, z, data, tick) {
         return 0;
     }
@@ -199,7 +209,7 @@ export default class Block {
         }
 
         let block = Block.getById(typeId);
-        return block === null || block.isTranslucent();
+        return block === null || !block.occludesNeighborFaces();
     }
 
     getColor(world, x, y, z, face) {
@@ -228,6 +238,10 @@ export default class Block {
 
     isTranslucent() {
         return false;
+    }
+
+    occludesNeighborFaces() {
+        return !this.isTranslucent();
     }
 
     getOpacity(world, x, y, z, block) {

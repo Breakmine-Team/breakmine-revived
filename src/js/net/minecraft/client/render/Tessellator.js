@@ -206,7 +206,9 @@ export default class Tessellator {
     setRenderingPass(isTransparent) {
         this.material.transparent = isTransparent;
         this.material.depthWrite = !isTransparent;
-        this.material.alphaTest = 0;
+        // Opaque leaves use a cutout texture, so the depth-writing pass still
+        // needs alpha testing to discard their transparent pixels.
+        this.material.alphaTest = isTransparent ? 0 : 0.5;
     }
 
     setColorRGB(red, green, blue) {

@@ -38,6 +38,7 @@ export default class GameSettings {
         this.resolution = 1;
         this.viewBobbing = true;
         this.ambientOcclusion = true;
+        this.fancyLeaves = false;
         this.shadows = false;
         this.sensitivity = 100;
         this.viewDistance = 4;

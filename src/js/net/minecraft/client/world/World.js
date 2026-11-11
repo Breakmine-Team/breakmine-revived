@@ -1436,9 +1436,8 @@ export default class World {
                             const section = chunk.sections[sectionY];
                             if (section && !section.isEmpty()) {
                                 section.isModified = true;
-                                if (this.minecraft.worldRenderer && 
-                                    !this.minecraft.worldRenderer.chunkSectionUpdateQueue.includes(section)) {
-                                    this.minecraft.worldRenderer.chunkSectionUpdateQueue.push(section);
+                                if (this.minecraft.worldRenderer) {
+                                    this.minecraft.worldRenderer.queueChunkSection(section);
                                 }
                             }
                         }

@@ -78,6 +78,8 @@ export default class ChunkProviderGenerateWorker extends ChunkProvider {
                 }
             }
 
+            section.invalidateFaceSolidCache();
+
             for (let i = 0; i < 4096; i++) {
                 const byteIndex = i >> 1;
                 const isHigh = (i & 1) === 0;
@@ -131,9 +133,14 @@ export default class ChunkProviderGenerateWorker extends ChunkProvider {
     requestChunksInRadius(centerX, centerZ, radius) {
         if (!this.worker || this._gameplayBatchInFlight) return;
 
+        // Section meshing waits for the four horizontal neighbour chunks, so
+        // load one extra ring beyond the rendered area. Without it the outer
+        // ring of visible chunks never becomes ready to mesh.
+        const loadRadius = radius + 1;
+
         const needed = [];
-        for (let x = -radius + 1; x < radius; x++) {
-            for (let z = -radius + 1; z < radius; z++) {
+        for (let x = -loadRadius + 1; x < loadRadius; x++) {
+            for (let z = -loadRadius + 1; z < loadRadius; z++) {
                 const cx = centerX + x;
                 const cz = centerZ + z;
                 const index = cx + (cz << 16);

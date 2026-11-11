@@ -2,6 +2,15 @@ import EnumSkyBlock from "../../util/EnumSkyBlock.js";
 import Block from "./block/Block.js";
 import * as THREE from "../../../../../../libraries/three.module.js";
 
+const FACE_SOLID_INDEX = {
+    north: 0,
+    south: 1,
+    west: 2,
+    east: 3,
+    down: 4,
+    up: 5
+};
+
 export default class ChunkSection {
 
     static SIZE = 16;
@@ -39,6 +48,8 @@ export default class ChunkSection {
         this.skyLight = [];
         this.skyLight = [];
         this.empty = true;
+
+        this.faceSolidCache = new Array(6).fill(null);
         
         this.translucentMesh = null;
     }
@@ -48,7 +59,14 @@ export default class ChunkSection {
     }
     
     isFaceSolid(side) {
-        for (let a = 0; a < 16; a++) {
+        const cacheIndex = FACE_SOLID_INDEX[side];
+        const cached = this.faceSolidCache[cacheIndex];
+        if (cached !== null) {
+            return cached;
+        }
+
+        let solid = true;
+        for (let a = 0; a < 16 && solid; a++) {
             for (let b = 0; b < 16; b++) {
                 let x = a, y = b, z = 0;
 
@@ -60,17 +78,25 @@ export default class ChunkSection {
                 else if (side === 'up')    { x = a; y = 15; z = b; }
 
                 const typeId = this.getBlockAt(x, y, z);
-                if (typeId === 0) return false;
+                if (typeId === 0) {
+                    solid = false;
+                    break;
+                }
 
                 const block = Block.getById(typeId);
-                if (block === null || !this.isOpaqueFullCube(block, x, y, z)) return false;
+                if (block === null || !this.isOpaqueFullCube(block, x, y, z)) {
+                    solid = false;
+                    break;
+                }
             }
         }
-        return true;
+
+        this.faceSolidCache[cacheIndex] = solid;
+        return solid;
     }
 
     isOpaqueFullCube(block, x, y, z) {
-        if (!block.isSolid() || block.isTranslucent()) return false;
+        if (!block.isSolid() || !block.occludesNeighborFaces()) return false;
         if (block.multipart || block.noFaceCull || block.path) return false;
         const wx = (this.x << 4) + x;
         const wy = (this.y << 4) + y;
@@ -84,19 +110,27 @@ export default class ChunkSection {
                bbox.maxX >= 1 && bbox.maxY >= 1 && bbox.maxZ >= 1;
     }
 
-    rebuild(renderer) {
-        const wx = this.x << 4;
-        const wz = this.z << 4;
+    invalidateFaceSolidCache() {
+        this.faceSolidCache.fill(null);
+    }
 
-        if (this.world && (
-            !this.world.chunkReady(wx >> 4, wz >> 4) ||
-            !this.world.chunkReady((wx >> 4) + 1, wz >> 4) ||
-            !this.world.chunkReady((wx >> 4) - 1, wz >> 4) ||
-            !this.world.chunkReady(wx >> 4, (wz >> 4) + 1) ||
-            !this.world.chunkReady(wx >> 4, (wz >> 4) - 1)
-        )) {
+    canRebuild() {
+        if (!this.world) return true;
+
+        return this.world.chunkReady(this.x, this.z)
+            && this.world.chunkReady(this.x + 1, this.z)
+            && this.world.chunkReady(this.x - 1, this.z)
+            && this.world.chunkReady(this.x, this.z + 1)
+            && this.world.chunkReady(this.x, this.z - 1);
+    }
+
+    rebuild(renderer) {
+        if (!this.canRebuild()) {
             return;
         }
+
+        const wx = this.x << 4;
+        const wz = this.z << 4;
 
         this.isModified = false;
         this.group.clear();
@@ -413,10 +447,16 @@ export default class ChunkSection {
 
     setBlockAt(x, y, z, typeId, data) {
         let index = y << 8 | z << 4 | x;
+        if (this.blocks[index] === typeId && (data === undefined || this.blocksData[index] === data)) {
+            return;
+        }
+
         this.blocks[index] = typeId;
         if (data !== undefined) {
             this.blocksData[index] = data;
         }
+
+        this.invalidateFaceSolidCache();
         this.isModified = true;
         this.isDirty = true;
 
@@ -427,19 +467,31 @@ export default class ChunkSection {
 
     setBlockDataAt(x, y, z, data) {
         let index = y << 8 | z << 4 | x;
+        if (this.blocksData[index] === data) {
+            return;
+        }
+
         this.blocksData[index] = data;
+        this.invalidateFaceSolidCache();
         this.isModified = true;
         this.isDirty = true;
     }
 
     setLightAt(sourceType, x, y, z, lightLevel) {
         let index = y << 8 | z << 4 | x;
+        let changed = false;
 
-        if (sourceType === EnumSkyBlock.SKY) {
+        if (sourceType === EnumSkyBlock.SKY && this.skyLight[index] !== lightLevel) {
             this.skyLight[index] = lightLevel;
+            changed = true;
         }
-        if (sourceType === EnumSkyBlock.BLOCK) {
+        if (sourceType === EnumSkyBlock.BLOCK && this.blockLight[index] !== lightLevel) {
             this.blockLight[index] = lightLevel;
+            changed = true;
+        }
+
+        if (!changed) {
+            return;
         }
 
         this.isModified = true;

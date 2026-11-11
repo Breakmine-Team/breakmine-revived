@@ -1,6 +1,7 @@
 import NoiseGeneratorOctaves from "./noise/NoiseGeneratorOctaves.js";
 import Primer from "./Primer.js";
 import CaveGenerator from "./structure/CaveGenerator.js";
+import RavineGenerator from "./structure/RavineGenerator.js";
 import {BlockRegistry} from "../block/BlockRegistry.js";
 import Block from "../block/Block.js";
 import TreeGenerator from "./structure/TreeGenerator.js";
@@ -56,6 +57,7 @@ export default class WorldGenerator extends Generator {
         this.LEAVE_ID = BlockRegistry.LEAVE.getId();
 
         this.caveGenerator = new CaveGenerator(world, seed);
+        this.ravineGenerator = new RavineGenerator(world, seed);
 
         this.terrainGenerator4 = new NoiseGeneratorOctaves(this.random, 16);
         this.terrainGenerator5 = new NoiseGeneratorOctaves(this.random, 16);
@@ -121,6 +123,7 @@ export default class WorldGenerator extends Generator {
         this.naturalize(chunkX, chunkZ, primer);
 
         this.caveGenerator.generateInChunk(chunkX, chunkZ, primer);
+        this.ravineGenerator.generateInChunk(chunkX, chunkZ, primer);
         this.generateOres(chunkX, chunkZ, primer);
     }
 

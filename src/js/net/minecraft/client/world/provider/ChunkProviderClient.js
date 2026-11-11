@@ -253,6 +253,7 @@ export default class ChunkProviderClient extends ChunkProvider {
             section.isModified = true;
             section.isDirty = true;
             section.translucentMesh = null;
+            section.invalidateFaceSolidCache();
         }
 
         chunk.heightMap = result.heightMap;
@@ -268,6 +269,7 @@ export default class ChunkProviderClient extends ChunkProvider {
                     const section = chunk.sections[layer];
                     if (section) {
                         section.blocks[index] = 1;
+                        section.invalidateFaceSolidCache();
                     }
                 }
             }
@@ -304,6 +306,7 @@ export default class ChunkProviderClient extends ChunkProvider {
             section.isModified = true;
             section.isDirty = true;
             section.translucentMesh = null;
+            section.invalidateFaceSolidCache();
         }
 
         chunk.fillChunk(pending.data, pending.mask, true);

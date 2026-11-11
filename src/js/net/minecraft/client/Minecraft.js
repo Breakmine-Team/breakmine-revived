@@ -11,6 +11,7 @@ import SoundManager from "./sound/SoundManager.js";
 import Sound from "./sound/Sound.js";
 import MusicManager from "./sound/MusicManager.js";
 import Block from "./world/block/Block.js";
+import BlockLeave from "./world/block/type/BlockLeave.js";
 import ItemTool from "./world/block/type/ItemTool.js";
 import BoundingBox from "../util/BoundingBox.js";
 import {BlockRegistry} from "./world/block/BlockRegistry.js";
@@ -135,6 +136,7 @@ export default class Minecraft {
         this.lastTime = Date.now();
 
         BlockRegistry.create();
+        BlockLeave.setFancyLeaves(this.settings.fancyLeaves);
         BiomeRegistry.create();
         CraftingRegistry.reset();
         SmeltingRegistry.reset();

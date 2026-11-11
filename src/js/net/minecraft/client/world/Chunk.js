@@ -551,6 +551,8 @@ export default class Chunk {
                     section.skyLight[parseInt(idxStr)] = sectionData.skyLight[idxStr];
                 }
             }
+
+            section.invalidateFaceSolidCache();
         }
 
         chunk.heightMap = data.heightMap.slice();

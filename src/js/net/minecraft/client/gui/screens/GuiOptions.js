@@ -9,6 +9,7 @@ import GuiTextField from "../widgets/GuiTextField.js";
 import GuiTooltip from "../widgets/GuiTooltip.js";
 import GuiControls from "./GuiControls.js";
 import I18n from "../../i18n/I18n.js";
+import BlockLeave from "../../world/block/type/BlockLeave.js";
 
 export default class GuiOptions extends GuiScreen {
 
@@ -155,6 +156,16 @@ export default class GuiOptions extends GuiScreen {
                             mc.settings.language = value;
                             I18n.setLanguage(value);
                             mc.settings.save();
+                        }
+                    },
+                    {
+                        name: "Fancy Leaves",
+                        settingKey: "fancyLeaves",
+                        type: "toggle",
+                        tooltip: "Render translucent leaves.\nDisable for better performance in forests.",
+                        onchange: (value, mc) => {
+                            BlockLeave.setFancyLeaves(value);
+                            mc.worldRenderer.rebuildAll();
                         }
                     },
                     {

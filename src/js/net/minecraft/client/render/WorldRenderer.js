@@ -165,6 +165,7 @@ export default class WorldRenderer {
         this.minecraft = minecraft;
         this.window = window;
         this.chunkSectionUpdateQueue = [];
+        this.chunkSectionUpdateSet = new Set();
         this.chunkMeshBudgetMs = 4;
 
         this.shadowsEnabled = !!minecraft.settings.shadows;
@@ -200,6 +201,11 @@ export default class WorldRenderer {
         this.sunLight.shadow.camera.bottom = -shadowCamSize;
         this.sunLight.shadow.camera.near = 0.5;
         this.sunLight.shadow.camera.far = 200;
+        // The sun travels through the Y/Z plane and passes directly overhead
+        // at noon. The default Y up vector is parallel to the light direction
+        // there, which collapses the shadow projection. X is always
+        // perpendicular to that path.
+        this.sunLight.shadow.camera.up.set(1, 0, 0);
         this.sunLight.shadow.camera.updateProjectionMatrix();
         this.updateShadowBias(1);
 
@@ -382,6 +388,10 @@ export default class WorldRenderer {
         });
 
         this.translucentBatcher = new TranslucentMeshBatcher(this.scene, this.getTranslucentMaterial());
+
+        if (this.shadowsEnabled) {
+            this.applyShadowsToObject(this.scene);
+        }
 
         this.initialize().catch(error => {
             console.error("Failed to initialize WorldRenderer:", error);
@@ -676,13 +686,51 @@ export default class WorldRenderer {
     updateChunkMeshing(budgetMs = this.chunkMeshBudgetMs) {
         if (this.chunkSectionUpdateQueue.length === 0) return;
 
+        this.sortChunkSectionQueue();
+
         const deadline = performance.now() + budgetMs;
         do {
             const chunkSection = this.chunkSectionUpdateQueue.shift();
-            if (chunkSection != null) {
-                chunkSection.rebuild(this);
+            if (chunkSection == null) {
+                continue;
             }
+
+            this.chunkSectionUpdateSet.delete(chunkSection);
+
+            // Neighbours can disappear while a section waits in the queue.
+            // Drop it instead of letting an unbuildable section block the budget.
+            if (!chunkSection.isModified || !chunkSection.canRebuild()) {
+                continue;
+            }
+
+            chunkSection.rebuild(this);
         } while (this.chunkSectionUpdateQueue.length > 0 && performance.now() < deadline);
+    }
+
+    sortChunkSectionQueue() {
+        const player = this.minecraft.player;
+        if (!player) return;
+
+        const px = player.x;
+        const py = player.y + player.getEyeHeight();
+        const pz = player.z;
+
+        for (const section of this.chunkSectionUpdateQueue) {
+            const dx = section.x * ChunkSection.SIZE + ChunkSection.SIZE * 0.5 - px;
+            const dy = section.y * ChunkSection.SIZE + ChunkSection.SIZE * 0.5 - py;
+            const dz = section.z * ChunkSection.SIZE + ChunkSection.SIZE * 0.5 - pz;
+            section._meshDistanceSq = dx * dx + dy * dy + dz * dz;
+        }
+
+        this.chunkSectionUpdateQueue.sort((a, b) => a._meshDistanceSq - b._meshDistanceSq);
+    }
+
+    queueChunkSection(chunkSection) {
+        if (!chunkSection.isModified || !chunkSection.canRebuild()) return;
+        if (this.chunkSectionUpdateSet.has(chunkSection)) return;
+
+        this.chunkSectionUpdateSet.add(chunkSection);
+        this.chunkSectionUpdateQueue.push(chunkSection);
     }
 
     onTick() {
@@ -1240,9 +1288,7 @@ export default class WorldRenderer {
 
                         chunkSection.updateRotatingBlocks(this, animationTick, animationBlend);
 
-                        if (chunkSection.isModified && !this.chunkSectionUpdateQueue.includes(chunkSection)) {
-                            this.chunkSectionUpdateQueue.push(chunkSection);
-                        }
+                        this.queueChunkSection(chunkSection);
                     } else {
                         chunkSection.group.visible = false;
                     }
@@ -1463,8 +1509,11 @@ export default class WorldRenderer {
         root.traverse(child => {
             if (!child.isMesh) return;
 
-            child.castShadow = this.shadowsEnabled && !(child.userData && child.userData.isTranslucent);
-            child.receiveShadow = this.shadowsEnabled;
+            const isTranslucent = child.userData && child.userData.isTranslucent;
+            // Shadow sampling on blended meshes produces black transparent
+            // surfaces. Leave the translucent pass unlit by the shadow map.
+            child.castShadow = this.shadowsEnabled && !isTranslucent;
+            child.receiveShadow = this.shadowsEnabled && !isTranslucent;
 
             let materials = Array.isArray(child.material) ? child.material : [child.material];
             for (let material of materials) {
@@ -1480,6 +1529,9 @@ export default class WorldRenderer {
         if (!world) return;
         for (let [index, chunk] of world.getChunkProvider().getChunks()) {
             chunk.setModifiedAllSections();
+            for (const section of chunk.sections) {
+                this.queueChunkSection(section);
+            }
         }
     }
 

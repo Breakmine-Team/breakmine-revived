@@ -74,6 +74,7 @@ import BlockWire from "./type/BlockWire.js";
 import ItemBucketLava from "./type/ItemBucketLava.js";
 import BlockSign from "./type/BlockSign.js";
 import BlockDoor from "./type/BlockDoor.js";
+import BlockBed from "./type/BlockBed.js";
 import ItemDoorPlacer from "./type/ItemDoorPlacer.js";
 import BlockLadder from "./type/BlockLadder.js";
 import BlockBluestoneDust from "./type/BlockBluestoneDust.js";
@@ -364,6 +365,8 @@ export class BlockRegistry {
         BlockRegistry.OAK_DOOR = new BlockDoor(160, 0);
         BlockRegistry.OAK_DOOR_TOP = new BlockDoor(161, 0);
         BlockRegistry.ITEM_OAK_DOOR_PLACER = new ItemDoorPlacer(162, 0, "Oak Door")
+        BlockRegistry.BED = new BlockBed(BlockBed.FOOT_ID, 0, false);
+        BlockRegistry.BED_HEAD = new BlockBed(BlockBed.HEAD_ID, 0, true);
         BlockRegistry.OAK_LADDER = new BlockLadder(252, 0);
 
         BlockRegistry.SPRUCE_LOG = new BlockLog(59, 0, "spruce", "Spruce Log");

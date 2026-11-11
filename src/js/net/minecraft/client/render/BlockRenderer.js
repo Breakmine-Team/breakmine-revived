@@ -188,7 +188,13 @@ export default class BlockRenderer {
             return null;
         }
 
-        return tessellator.draw(new THREE.Group());
+        const mesh = tessellator.draw(new THREE.Group());
+        mesh.userData.isTranslucent = translucent;
+        if (translucent) {
+            mesh.castShadow = false;
+            mesh.receiveShadow = false;
+        }
+        return mesh;
     }
 
     renderBlock(world, block, ambientOcclusion, x, y, z, knownRotation = undefined) {
@@ -592,7 +598,7 @@ export default class BlockRenderer {
             }
 
             let otherBlock = parts[i].partBlock;
-            if (otherBlock && otherBlock.isTranslucent()) {
+            if (otherBlock && !otherBlock.occludesNeighborFaces()) {
                 continue;
             }
 
@@ -641,7 +647,7 @@ export default class BlockRenderer {
 
     isOpaqueFullCube(block, world, x, y, z) {
         if (block === null || block.multipart || block.path
-            || block.isTranslucent() || !block.isSolid()) {
+            || !block.occludesNeighborFaces() || !block.isSolid()) {
             return false;
         }
 
@@ -710,7 +716,7 @@ export default class BlockRenderer {
             const neighborId = world.getBlockAt(nx, ny, nz);
             if (neighborId === 0) return false;
             const neighbor = Block.getById(neighborId);
-            if (neighbor === null || !neighbor.isSolid() || neighbor.isTranslucent()) return false;
+            if (neighbor === null || !neighbor.isSolid() || !neighbor.occludesNeighborFaces()) return false;
             const box = neighbor.getBoundingBox(world, nx, ny, nz);
             return box !== null && box.minX === 0 && box.minY === 0 && box.minZ === 0 &&
                    box.maxX === 1 && box.maxY === 1 && box.maxZ === 1;
@@ -832,6 +838,21 @@ export default class BlockRenderer {
 
         minV = 1 - minV;
         maxV = 1 - maxV;
+
+        const flip = block.getFlipForFace === Block.prototype.getFlipForFace
+            ? Block.FLIP_NONE
+            : block.getFlipForFace(face, blockData, x, y, z, world);
+
+        if ((flip & Block.FLIP_U) !== 0) {
+            const swapU = minU;
+            minU = maxU;
+            maxU = swapU;
+        }
+        if ((flip & Block.FLIP_V) !== 0) {
+            const swapV = minV;
+            minV = maxV;
+            maxV = swapV;
+        }
 
         let uSlideOffset = 0;
         let wrapFlags = wrapsU ? 1 : 0;
@@ -1114,7 +1135,7 @@ export default class BlockRenderer {
 
         if (typeId !== 0) {
             const block = Block.getById(typeId);
-            if (block !== null && block.isSolid() && !block.isTranslucent()
+            if (block !== null && block.isSolid() && block.occludesNeighborFaces()
                 && this.castsAmbientOcclusion(block)) {
                 boxes = this.getOccluderBoxes(block, world, cellX, cellY, cellZ);
             }

@@ -4,6 +4,12 @@ import { BlockRegistry } from "../BlockRegistry.js";
 
 export default class BlockLeave extends Block {
 
+    static fancyLeaves = false;
+
+    static setFancyLeaves(fancy) {
+        BlockLeave.fancyLeaves = fancy === true;
+    }
+
     constructor(id, textureSlotId, woodType = "oak", displayName = "Oak Leaves") {
         super(id, textureSlotId);
         this.description = displayName;
@@ -15,22 +21,37 @@ export default class BlockLeave extends Block {
     }
 
     getTextureForFace(face) {
-        return `${this.woodType}_leaves`;
+        return BlockLeave.fancyLeaves
+            ? `${this.woodType}_leaves`
+            : `leaves_${this.woodType}_opaque`;
     }
 
-    shouldRenderFace(world, x, y, z, face) {
-        let typeId = world.getBlockAtFace(x, y, z, face);
-        return typeId === 0 || typeId !== this.id || typeId === this.id;
+    shouldRenderFace(world, x, y, z, face, prefetchedTypeId) {
+        // Fancy leaves are layered, so keep every face.
+        if (BlockLeave.fancyLeaves || !world) return true;
+
+        // Fast leaves use glass-style culling: only hide the face against
+        // another leaf of the same type.
+        const typeId = prefetchedTypeId !== undefined
+            ? prefetchedTypeId
+            : world.getBlockAtFace(x, y, z, face);
+        return typeId === 0 || typeId !== this.id;
     }
 
     isTranslucent() {
-        return true;
+        return BlockLeave.fancyLeaves;
+    }
+
+    occludesNeighborFaces() {
+        // Leaves are cutouts, so neighboring blocks must render their faces
+        // behind them even when leaves use the fast opaque render pass.
+        return false;
     }
 
     canCastAmbientOcclusion() {
         return true;
     }
-    
+
     getDrop(world, x, y, z) {
         const rnd = Math.random();
         const rnd2 = Math.random();

@@ -285,6 +285,6 @@ export default class BlockStair extends Block {
         const neighbor = Block.getById(neighborId);
         if (!neighbor) return true;
 
-        return !(neighbor.isSolid() && !neighbor.isTranslucent() && !neighbor.noFaceCull && !neighbor.multipart && !neighbor.path);
+        return !(neighbor.isSolid() && neighbor.occludesNeighborFaces() && !neighbor.noFaceCull && !neighbor.multipart && !neighbor.path);
     }
 }

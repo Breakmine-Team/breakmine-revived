@@ -133,11 +133,19 @@ export default class ContainerCreative extends Container {
         } else {
             if (mouseButton === 2) {
                 this.toggleBookmark(slot.inventory.getItemInSlot(slot.index).getType());
+                this.dirty = true;
+                return;
             }
 
             let inventoryPlayer = player.inventory;
-            let slotItem = slot.inventory.getItemInSlot(slot.index);
-            inventoryPlayer.itemInCursor = slotItem.isEmpty() ? new ItemStack(0, 0) : slotItem.copy();
+            
+            // If the cursor already holds an item, clear the cursor instead of picking up the clicked item
+            if (!inventoryPlayer.itemInCursor.isEmpty()) {
+                inventoryPlayer.itemInCursor = new ItemStack(0, 0);
+            } else {
+                let slotItem = slot.inventory.getItemInSlot(slot.index);
+                inventoryPlayer.itemInCursor = slotItem.isEmpty() ? new ItemStack(0, 0) : slotItem.copy();
+            }
         }
         this.dirty = true;
     }
