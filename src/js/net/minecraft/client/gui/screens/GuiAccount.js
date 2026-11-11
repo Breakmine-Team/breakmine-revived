@@ -12,7 +12,7 @@ import PlayerRenderer from "../../render/entity/entity/PlayerRenderer.js";
 import { ICON_UPLOAD } from "../../render/gui/FontIcons.js";
 
 const ANIMATION_MODES = [
-    { key: "normal", label: "N", tooltip: "Normal animation" },
+    { key: "normal", label: "N", tooltip: "No animation" },
     { key: "walk", label: "W", tooltip: "Walk animation" },
     { key: "run", label: "R", tooltip: "Run animation" },
 ];
