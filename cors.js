@@ -228,6 +228,51 @@ const capeStmts = {
 
 setInterval(() => stmts.cleanExpiredTokens.run(Date.now()), 3600000);
 
+// OAuth clients and the single-use authorization codes handed to them. Codes
+// are stored hashed: the plain code only ever exists in the redirect that
+// delivers it to the site.
+db.exec(`
+    CREATE TABLE IF NOT EXISTS oauth_clients (
+        client_id TEXT PRIMARY KEY,
+        client_secret_hash TEXT,
+        name TEXT NOT NULL,
+        redirect_uris TEXT NOT NULL,
+        verified INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        last_used INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS oauth_codes (
+        code_hash TEXT PRIMARY KEY,
+        client_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        redirect_uri TEXT NOT NULL,
+        scope TEXT NOT NULL,
+        code_challenge TEXT,
+        code_challenge_method TEXT,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        consumed_at INTEGER
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_oauth_codes_client ON oauth_codes(client_id);
+`);
+
+const oauthStmts = {
+    insertClient: db.prepare('INSERT INTO oauth_clients (client_id, client_secret_hash, name, redirect_uris, verified, created_at) VALUES (?, ?, ?, ?, ?, ?)'),
+    upsertTrustedClient: db.prepare(`INSERT INTO oauth_clients (client_id, client_secret_hash, name, redirect_uris, verified, created_at)
+        VALUES (?, NULL, ?, ?, 1, ?)
+        ON CONFLICT(client_id) DO UPDATE SET name = excluded.name, redirect_uris = excluded.redirect_uris, verified = 1`),
+    getClient: db.prepare('SELECT * FROM oauth_clients WHERE client_id = ?'),
+    touchClient: db.prepare('UPDATE oauth_clients SET last_used = ? WHERE client_id = ?'),
+    insertCode: db.prepare('INSERT INTO oauth_codes (code_hash, client_id, user_id, redirect_uri, scope, code_challenge, code_challenge_method, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'),
+    getCode: db.prepare('SELECT * FROM oauth_codes WHERE code_hash = ?'),
+    consumeCode: db.prepare('UPDATE oauth_codes SET consumed_at = ? WHERE code_hash = ? AND consumed_at IS NULL'),
+    cleanCodes: db.prepare('DELETE FROM oauth_codes WHERE expires_at < ?'),
+};
+
+setInterval(() => oauthStmts.cleanCodes.run(Date.now() - 86400000), 900000);
+
 function isSupportedSkinSize(width, height) {
     if (width === 64 && (height === 32 || height === 64)) return true;
     // HD skins keep the 64px layout scaled by a whole number. Modern skins are
@@ -1827,6 +1872,770 @@ app.delete('/api/admin/users/:id', requireAdminToken, (req, res) => {
         res.status(500).json({ error: 'Could not delete that account.' });
     }
 });
+
+// --- OAuth 2.0: "Sign in with Breakmine" ------------------------------------
+//
+// Other sites register a client (POST /oauth/register, or a start-up entry in
+// OAUTH_CLIENTS) and send the browser to /oauth/authorize. The player signs in
+// with their Breakmine account - or creates one on the spot - and is asked to
+// allow that site to use it. Approving redirects back with a single-use code,
+// which the site trades for a bearer token at /oauth/token.
+//
+//   GET  /oauth/authorize    login/signup form, then the consent screen (HTML)
+//   POST /oauth/authorize    login, signup, approve, deny, switch account
+//   POST /oauth/token        authorization_code -> access token
+//   GET  /oauth/userinfo     bearer token -> { id, username, ... }
+//   POST /oauth/revoke       revoke a token early
+//   POST /oauth/register     dynamic client registration
+//   GET  /oauth/breakmine.js browser SDK: BreakmineAuth.login() -> { token, username }
+//
+// Browser clients use PKCE (S256) and token_endpoint_auth_method=none; server
+// clients get a client_secret and send it as a form field or HTTP Basic.
+
+const OAUTH_SCOPE = 'profile';
+const OAUTH_CODE_TTL_MS = 5 * 60 * 1000;
+const OAUTH_TOKEN_TTL = '7d';
+const OAUTH_TOKEN_SECONDS = 7 * 24 * 60 * 60;
+const OAUTH_SESSION_COOKIE = 'breakmine_oauth';
+const OAUTH_SESSION_SECONDS = 12 * 60 * 60;
+const OAUTH_CLIENT_NAME_MAX = 60;
+const OAUTH_MAX_REDIRECT_URIS = 5;
+
+// Dedicated CORS: the token, userinfo and registration endpoints are called
+// from the registering site's own origin, which is not in CORS_ORIGINS.
+const oauthCors = cors({
+    origin: true,
+    methods: ['GET', 'HEAD', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    maxAge: 86400,
+});
+
+const oauthPromptLimiter = rateLimit({ windowMs: 900000, max: 120 });
+const oauthLoginLimiter = rateLimit({ windowMs: 900000, max: 10 });
+
+// Kept short on purpose: plenty for a pasteable URL, and long enough that a
+// loopback dev server with a path works.
+const OAUTH_MAX_URI_LENGTH = 500;
+
+function findOAuthClient(clientId) {
+    return clientId ? oauthStmts.getClient.get(clientId) : null;
+}
+
+function oauthClientName(raw) {
+    const name = String(raw ?? '').trim().replace(/\s+/g, ' ');
+    if (name.length < 2 || name.length > OAUTH_CLIENT_NAME_MAX) return null;
+    return name;
+}
+
+// Discord-style redirect rules: https anywhere, http only for loopback, so a
+// developer's localhost test works without allowing plaintext third-party hops.
+function isAllowedRedirectUri(value) {
+    let url;
+    try {
+        url = new URL(value);
+    } catch (err) {
+        return false;
+    }
+    if (url.hash) return false;
+    if (url.protocol === 'https:') return true;
+    return url.protocol === 'http:' &&
+        (url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]');
+}
+
+function normalizeRedirectUris(raw) {
+    const list = Array.isArray(raw) ? raw : (typeof raw === 'string' ? [raw] : []);
+    const uris = [];
+
+    for (const value of list) {
+        if (typeof value !== 'string') continue;
+        const uri = value.trim();
+        if (!uri) continue;
+        if (uri.length > OAUTH_MAX_URI_LENGTH) return { error: 'That redirect URI is too long.' };
+        if (!isAllowedRedirectUri(uri)) {
+            return { error: `Use an https redirect URI (http is only allowed for localhost): ${uri}` };
+        }
+        if (!uris.includes(uri)) uris.push(uri);
+    }
+
+    if (uris.length === 0) return { error: 'At least one redirect_uri is required.' };
+    if (uris.length > OAUTH_MAX_REDIRECT_URIS) {
+        return { error: `Register at most ${OAUTH_MAX_REDIRECT_URIS} redirect URIs.` };
+    }
+    return { uris };
+}
+
+function readOAuthParam(source, name) {
+    const value = source ? source[name] : undefined;
+    return typeof value === 'string' ? value.trim() : '';
+}
+
+function sha256Base64Url(value) {
+    return crypto.createHash('sha256').update(value).digest('base64url');
+}
+
+function sha256Hex(value) {
+    return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+function requestOrigin(req) {
+    const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+    return `${forwardedProto || (req.secure ? 'https' : 'http')}://${hostnameOf(req)}`;
+}
+
+function oauthIssuer(req) {
+    return String(process.env.OAUTH_ISSUER || requestOrigin(req)).replace(/\/+$/, '');
+}
+
+// Validates everything the prompt needs, from either the query string or the
+// posted form. The client and its redirect URI are re-checked on every request
+// so a tampered hidden field cannot redirect a code somewhere else.
+function parseOAuthRequest(source) {
+    const clientId = readOAuthParam(source, 'client_id');
+    if (!clientId) return { error: 'This sign-in link is missing its application id.' };
+
+    const client = findOAuthClient(clientId);
+    if (!client) return { error: 'That application is not registered with Breakmine.' };
+
+    let registered = [];
+    try {
+        registered = JSON.parse(client.redirect_uris);
+    } catch (err) {
+        registered = [];
+    }
+    if (!Array.isArray(registered)) registered = [];
+
+    const requestedUri = readOAuthParam(source, 'redirect_uri');
+    const redirectUri = requestedUri || (registered.length === 1 ? registered[0] : '');
+    if (!redirectUri || !registered.includes(redirectUri)) {
+        return { error: 'That application asked to return to a page it is not registered for.' };
+    }
+
+    const responseType = readOAuthParam(source, 'response_type') || 'code';
+    if (responseType !== 'code') return { error: 'Only response_type=code is supported.' };
+
+    const state = readOAuthParam(source, 'state');
+    if (state.length > 200) return { error: 'The state value is too long.' };
+
+    const scope = (readOAuthParam(source, 'scope') || OAUTH_SCOPE).split(/\s+/).filter(Boolean).join(' ');
+    if (scope !== OAUTH_SCOPE) return { error: `Only the "${OAUTH_SCOPE}" scope is supported.` };
+
+    const codeChallenge = readOAuthParam(source, 'code_challenge');
+    const codeChallengeMethod = codeChallenge ? (readOAuthParam(source, 'code_challenge_method') || 'S256') : '';
+    if (codeChallenge) {
+        if (codeChallengeMethod !== 'S256') return { error: 'Only code_challenge_method=S256 is supported.' };
+        if (!/^[A-Za-z0-9_-]{43,128}$/.test(codeChallenge)) return { error: 'That code_challenge is malformed.' };
+    } else if (!client.client_secret_hash) {
+        return { error: 'This application has to use PKCE (code_challenge) to sign players in.' };
+    }
+
+    return {
+        client,
+        clientId: client.client_id,
+        clientName: client.name,
+        verified: !!client.verified,
+        redirectUri,
+        state,
+        scope,
+        codeChallenge,
+        codeChallengeMethod,
+    };
+}
+
+function oauthRequestQuery(request) {
+    const params = new URLSearchParams();
+    params.set('client_id', request.clientId);
+    params.set('redirect_uri', request.redirectUri);
+    params.set('response_type', 'code');
+    params.set('scope', request.scope);
+    if (request.state) params.set('state', request.state);
+    if (request.codeChallenge) {
+        params.set('code_challenge', request.codeChallenge);
+        params.set('code_challenge_method', request.codeChallengeMethod);
+    }
+    return params.toString();
+}
+
+function oauthRequestFields(request) {
+    const values = {
+        client_id: request.clientId,
+        redirect_uri: request.redirectUri,
+        response_type: 'code',
+        state: request.state,
+        scope: request.scope,
+        code_challenge: request.codeChallenge,
+        code_challenge_method: request.codeChallengeMethod,
+    };
+
+    return Object.entries(values)
+        .filter(([, value]) => value)
+        .map(([name, value]) => `<input type="hidden" name="${name}" value="${escapeHtml(value)}">`)
+        .join('\n            ');
+}
+
+function oauthStyles() {
+    return `
+        :root { color-scheme: light; }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; min-height: 100vh; padding: 24px;
+            display: flex; align-items: center; justify-content: center;
+            background-color: #b3c6ff;
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.24) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.24) 1px, transparent 1px);
+            background-size: 32px 32px;
+            color: #3a4250;
+            font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        .card {
+            width: 100%; max-width: 400px; padding: 22px 22px 14px;
+            background: #f4f4f4; border: 1px solid #9aa6c7; border-radius: 6px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.22);
+        }
+        .brand { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; font-weight: 700; color: #2f3640; }
+        .brand img { width: 20px; height: 20px; image-rendering: pixelated; }
+        h1 { font-size: 18px; line-height: 1.3; margin: 0 0 8px; color: #2f3640; }
+        p { margin: 0 0 14px; }
+        .sub { color: #5b6472; }
+        .field { display: block; margin-bottom: 12px; font-size: 12px; color: #5b6472; }
+        input[type=text], input[type=password] {
+            display: block; width: 100%; margin-top: 4px; padding: 8px 10px;
+            background: linear-gradient(to bottom, #d0d0d0 0%, #f4f4f4 100%);
+            border: 1px solid #b5b5b5; border-radius: 4px; color: #2f3640;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.18); font: inherit; outline: none;
+        }
+        input:focus { border-color: #2f6fed; }
+        .buttons { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+        button {
+            padding: 7px 16px; cursor: pointer; color: #4a4a4a; font: inherit; font-weight: 600;
+            background: linear-gradient(to bottom, #ececec 0%, #d8d8d8 100%);
+            border: 1px solid #b5b5b5; border-radius: 3px;
+            text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
+        }
+        button:hover { background: linear-gradient(to bottom, #d8d8d8 0%, #c4c4c4 100%); }
+        button.primary {
+            background: linear-gradient(to bottom, #6fd3c7 0%, #26a69a 100%);
+            border-color: #1f857c; color: #0d2a28;
+            text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+        }
+        button.primary:hover { background: linear-gradient(to bottom, #7ddbd0 0%, #2fb3a7 100%); }
+        button.link { background: none; border: 0; padding: 0; color: #2f6fed; font-weight: 500; text-decoration: underline; }
+        .switch { color: #2f6fed; font-size: 13px; }
+        .scopes { list-style: none; margin: 0 0 14px; padding: 0; }
+        .scopes li { position: relative; padding-left: 20px; margin-bottom: 6px; color: #39414d; }
+        .scopes li::before { content: "\u2713"; position: absolute; left: 0; color: #26a69a; font-weight: 700; }
+        .account {
+            display: flex; gap: 6px; align-items: center; padding: 8px 10px; margin-bottom: 14px;
+            background: #e9edf7; border: 1px solid #c3cbe0; border-radius: 4px;
+        }
+        .account strong { color: #2f3640; }
+        .warn { padding: 8px 10px; margin-bottom: 14px; background: #fff4d6; border: 1px solid #e6c86a; border-radius: 4px; color: #6b5312; }
+        .error { padding: 8px 10px; margin-bottom: 14px; background: #ffe2e0; border: 1px solid #e0a29d; border-radius: 4px; color: #8f2119; }
+        .foot { margin: 16px 0 0; font-size: 11px; color: #7c8698; }
+    `;
+}
+
+function renderOAuthPage(res, { title, body, status = 200 }) {
+    res.status(status).type('html').send(`<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${escapeHtml(title)} \u00b7 Breakmine</title>
+    <link rel="icon" type="image/x-icon" href="https://breakmine.com/src/resources/favicon.ico">
+    <style>${oauthStyles()}</style>
+</head>
+<body>
+    <main class="card">
+        <div class="brand"><img src="https://breakmine.com/src/resources/favicon.ico" alt=""> Breakmine account</div>
+${body}
+        <p class="foot">This page is served by Breakmine. Your password is only ever sent to Breakmine.</p>
+    </main>
+</body>
+</html>`);
+}
+
+function renderOAuthNotice(res, message, status = 400) {
+    renderOAuthPage(res, {
+        status,
+        title: 'Sign-in unavailable',
+        body: `        <h1>Sign-in unavailable</h1>
+        <p class="sub">${escapeHtml(message)}</p>`,
+    });
+}
+
+function renderOAuthForm(res, { request, user, mode, error, status = 200, username = '' }) {
+    const host = (() => {
+        try { return new URL(request.redirectUri).host; } catch (err) { return 'this site'; }
+    })();
+    const fields = oauthRequestFields(request);
+    const name = escapeHtml(request.clientName);
+    let body = '';
+
+    if (mode === 'consent' && user) {
+        const warning = request.verified
+            ? ''
+            : `        <div class="warn">${name} has not been reviewed by Breakmine. Only continue if you trust ${escapeHtml(host)}.</div>\n`;
+
+        body = `        <h1>Allow ${name} to use your Breakmine account?</h1>
+        <div class="account"><span>Signed in as</span> <strong>${escapeHtml(user.username)}</strong></div>
+${warning}        <p class="sub">${name} will be able to read:</p>
+        <ul class="scopes">
+            <li>Your username, ${escapeHtml(user.username)}</li>
+            <li>Your account id and the date you joined</li>
+        </ul>
+        <p class="sub">It never gets your password, your skin or your capes.</p>
+        <form method="post" action="/oauth/authorize">
+            ${fields}
+            <input type="hidden" name="action" value="approve">
+            <div class="buttons">
+                <button type="submit" class="primary">Allow</button>
+                <button type="submit" name="action" value="deny">Not now</button>
+            </div>
+        </form>
+        <form method="post" action="/oauth/authorize">
+            ${fields}
+            <input type="hidden" name="action" value="logout">
+            <p class="foot" style="margin-top:14px"><button type="submit" class="link">Not ${escapeHtml(user.username)}?</button></p>
+        </form>`;
+    } else {
+        const signup = mode === 'signup';
+        const errorHtml = error ? `        <div class="error">${escapeHtml(error)}</div>\n` : '';
+        const otherMode = signup ? 'login' : 'signup';
+        const switchHref = `/oauth/authorize?${oauthRequestQuery(request)}&mode=${otherMode}`;
+
+        body = `        <h1>${signup ? 'Create a Breakmine account' : 'Sign in to Breakmine'}</h1>
+        <p class="sub">${name} (${escapeHtml(host)}) wants to use your Breakmine account.</p>
+${errorHtml}        <form method="post" action="/oauth/authorize" autocomplete="on">
+            ${fields}
+            <label class="field">Username
+                <input type="text" name="username" required minlength="3" maxlength="32" autocomplete="username" value="${escapeHtml(username)}">
+            </label>
+            <label class="field">Password
+                <input type="password" name="password" required minlength="6" maxlength="128" autocomplete="${signup ? 'new-password' : 'current-password'}">
+            </label>
+            <div class="buttons">
+                <button type="submit" class="primary" name="action" value="${signup ? 'signup' : 'login'}">${signup ? 'Create account' : 'Sign in'}</button>
+                <a class="switch" href="${escapeHtml(switchHref)}">${signup ? 'I already have an account' : 'Create an account'}</a>
+            </div>
+        </form>`;
+    }
+
+    renderOAuthPage(res, { status, title: mode === 'consent' ? 'Allow access' : 'Sign in', body });
+}
+
+function oauthSessionUser(req) {
+    const token = readCookies(req)[OAUTH_SESSION_COOKIE];
+    if (!token) return null;
+
+    try {
+        const decoded = jwt.verify(token, secrets.jwtSecret, { algorithms: ['HS256'] });
+        if (!decoded || decoded.oauthSession !== true) return null;
+        return stmts.findById.get(decoded.sub) || null;
+    } catch (err) {
+        return null;
+    }
+}
+
+function setOAuthSessionCookie(req, res, user) {
+    const token = jwt.sign({ sub: user.id, username: user.username, oauthSession: true }, secrets.jwtSecret, {
+        expiresIn: OAUTH_SESSION_SECONDS,
+        algorithm: 'HS256',
+    });
+
+    const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+    const secure = req.secure || forwardedProto === 'https';
+    res.append('Set-Cookie', `${OAUTH_SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/oauth; HttpOnly; SameSite=Lax; Max-Age=${OAUTH_SESSION_SECONDS}${secure ? '; Secure' : ''}`);
+}
+
+function clearOAuthSessionCookie(res) {
+    res.append('Set-Cookie', `${OAUTH_SESSION_COOKIE}=; Path=/oauth; HttpOnly; SameSite=Lax; Max-Age=0`);
+}
+
+function issueOAuthToken(user, client, scope) {
+    const jti = uuidv4();
+    const token = jwt.sign({
+        sub: user.id,
+        username: user.username,
+        jti,
+        scope,
+        client_id: client.client_id,
+        token_use: 'oauth',
+    }, secrets.jwtSecret, {
+        expiresIn: OAUTH_TOKEN_TTL,
+        algorithm: 'HS256',
+        issuer: 'breakmine-oauth',
+    });
+    return { token, jti };
+}
+
+function authenticateOAuthToken(req, res, next) {
+    const header = req.headers['authorization'];
+    if (!header?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Missing or invalid authorization header' });
+    }
+
+    try {
+        const decoded = jwt.verify(header.slice(7), secrets.jwtSecret, { algorithms: ['HS256'] });
+        if (decoded.token_use !== 'oauth') {
+            return res.status(401).json({ error: 'Not an OAuth access token' });
+        }
+        if (stmts.isTokenRevoked.get(decoded.jti, Date.now())) {
+            return res.status(401).json({ error: 'Token has been revoked' });
+        }
+
+        const user = stmts.findById.get(decoded.sub);
+        if (!user) return res.status(401).json({ error: 'Account no longer exists' });
+
+        req.oauth = { ...decoded, user };
+        next();
+    } catch (err) {
+        return res.status(401).json({ error: err.name === 'TokenExpiredError' ? 'Token expired' : 'Invalid token' });
+    }
+}
+
+function basicAuthCredentials(req) {
+    const header = req.headers['authorization'];
+    if (!header || !header.startsWith('Basic ')) return null;
+
+    const decoded = Buffer.from(header.slice(6), 'base64').toString('utf8');
+    const colon = decoded.indexOf(':');
+    if (colon < 0) return null;
+    return { id: decoded.slice(0, colon), secret: decoded.slice(colon + 1) };
+}
+
+async function handleOAuthSignIn(req, res, action) {
+    const request = parseOAuthRequest(req.body);
+    if (request.error) return renderOAuthNotice(res, request.error, 400);
+
+    const usernameVal = validateUsername(req.body?.username);
+    const passwordVal = validatePassword(req.body?.password);
+    const fail = (message, status = 400) => renderOAuthForm(res, {
+        request,
+        user: null,
+        mode: action === 'signup' ? 'signup' : 'login',
+        error: message,
+        status,
+        username: typeof req.body?.username === 'string' ? req.body.username : '',
+    });
+
+    if (!usernameVal.valid) return fail(usernameVal.error);
+    if (!passwordVal.valid) return fail(passwordVal.error);
+
+    try {
+        if (action === 'signup') {
+            if (stmts.findByUsername.get(usernameVal.value)) {
+                return fail('That username is already taken.', 409);
+            }
+
+            const hash = await bcrypt.hash(passwordVal.value, BCRYPT_ROUNDS);
+            stmts.createUser.run(uuidv4(), usernameVal.value, hash, Date.now());
+            Logger.info('OAuth', `Registered via ${request.clientName}: ${usernameVal.value}`);
+        } else {
+            const user = stmts.findByUsername.get(usernameVal.value);
+            // Same dummy compare as /api/login, so a missing account costs the
+            // same time as a wrong password.
+            const matches = await bcrypt.compare(
+                passwordVal.value,
+                user ? user.password_hash : '$2b$12$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+            );
+            if (!user || !matches) {
+                Logger.warn('OAuth', `Failed sign-in for ${usernameVal.value} via ${request.clientName}`);
+                return fail('Incorrect username or password.', 401);
+            }
+            stmts.updateLastLogin.run(Date.now(), user.id);
+        }
+
+        const user = stmts.findByUsername.get(usernameVal.value);
+        setOAuthSessionCookie(req, res, user);
+        res.redirect(303, `/oauth/authorize?${oauthRequestQuery(request)}`);
+    } catch (err) {
+        Logger.error('OAuth', `Sign-in failed: ${err.message}`);
+        fail('Something went wrong. Try again.', 500);
+    }
+}
+
+function handleOAuthDecision(req, res, action) {
+    const request = parseOAuthRequest(req.body);
+    if (request.error) return renderOAuthNotice(res, request.error, 400);
+
+    const promptUrl = `/oauth/authorize?${oauthRequestQuery(request)}`;
+    const user = oauthSessionUser(req);
+
+    if (action === 'logout') {
+        clearOAuthSessionCookie(res);
+        return res.redirect(303, promptUrl);
+    }
+
+    // The session cookie expired between the consent page and the click.
+    if (!user) return res.redirect(303, promptUrl);
+
+    try {
+        const target = new URL(request.redirectUri);
+
+        if (action !== 'approve') {
+            target.searchParams.set('error', 'access_denied');
+            target.searchParams.set('error_description', 'The player declined to share their Breakmine account.');
+            if (request.state) target.searchParams.set('state', request.state);
+            Logger.info('OAuth', `${user.username} declined ${request.clientName}`);
+            return res.redirect(303, target.toString());
+        }
+
+        const code = crypto.randomBytes(32).toString('base64url');
+        oauthStmts.insertCode.run(
+            sha256Hex(code),
+            request.client.client_id,
+            user.id,
+            request.redirectUri,
+            request.scope,
+            request.codeChallenge || null,
+            request.codeChallengeMethod || null,
+            Date.now(),
+            Date.now() + OAUTH_CODE_TTL_MS
+        );
+        oauthStmts.touchClient.run(Date.now(), request.client.client_id);
+
+        target.searchParams.set('code', code);
+        if (request.state) target.searchParams.set('state', request.state);
+        Logger.info('OAuth', `${user.username} approved ${request.clientName}`);
+        res.redirect(303, target.toString());
+    } catch (err) {
+        Logger.error('OAuth', `Consent failed: ${err.message}`);
+        renderOAuthNotice(res, 'Something went wrong. Try again.', 500);
+    }
+}
+
+app.get('/oauth/authorize', oauthPromptLimiter, (req, res) => {
+    const request = parseOAuthRequest(req.query);
+    if (request.error) return renderOAuthNotice(res, request.error, 400);
+
+    const user = oauthSessionUser(req);
+    const mode = user ? 'consent' : (req.query.mode === 'signup' ? 'signup' : 'login');
+    renderOAuthForm(res, { request, user, mode });
+});
+
+app.post('/oauth/authorize', (req, res) => {
+    const action = readOAuthParam(req.body, 'action');
+
+    if (action === 'login' || action === 'signup') {
+        return oauthLoginLimiter(req, res, () => handleOAuthSignIn(req, res, action));
+    }
+    return handleOAuthDecision(req, res, action);
+});
+
+const oauthEndpointLimiter = rateLimit({ windowMs: 900000, max: 120 });
+
+app.post('/oauth/token', oauthEndpointLimiter, oauthCors, async (req, res) => {
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+
+    if (readOAuthParam(body, 'grant_type') !== 'authorization_code') {
+        return res.status(400).json({
+            error: 'unsupported_grant_type',
+            error_description: 'Use grant_type=authorization_code.',
+        });
+    }
+
+    const basic = basicAuthCredentials(req);
+    const clientId = readOAuthParam(body, 'client_id') || (basic ? basic.id : '');
+    const client = findOAuthClient(clientId);
+    if (!client) {
+        return res.status(401).json({ error: 'invalid_client', error_description: 'Unknown client.' });
+    }
+
+    const secret = readOAuthParam(body, 'client_secret') || (basic ? basic.secret : '');
+    if (client.client_secret_hash) {
+        if (!secret || !(await bcrypt.compare(secret, client.client_secret_hash))) {
+            return res.status(401).json({ error: 'invalid_client', error_description: 'Invalid client credentials.' });
+        }
+    } else if (secret) {
+        return res.status(401).json({ error: 'invalid_client', error_description: 'This client does not use a secret.' });
+    }
+
+    const code = readOAuthParam(body, 'code');
+    if (!code) return res.status(400).json({ error: 'invalid_request', error_description: 'Missing code.' });
+
+    const codeHash = sha256Hex(code);
+    const stored = oauthStmts.getCode.get(codeHash);
+    const invalidGrant = (description) => res.status(400).json({ error: 'invalid_grant', error_description: description });
+
+    if (!stored || stored.client_id !== client.client_id) return invalidGrant('That code is not valid.');
+    if (stored.consumed_at) return invalidGrant('That code was already used.');
+    if (stored.expires_at < Date.now()) return invalidGrant('That code expired. Start the sign-in again.');
+
+    const redirectUri = readOAuthParam(body, 'redirect_uri');
+    if (redirectUri && redirectUri !== stored.redirect_uri) {
+        return invalidGrant('redirect_uri does not match the one the code was issued for.');
+    }
+
+    if (stored.code_challenge) {
+        const verifier = readOAuthParam(body, 'code_verifier');
+        if (!verifier) return invalidGrant('code_verifier is required for this client.');
+        const expected = Buffer.from(stored.code_challenge);
+        const actual = Buffer.from(sha256Base64Url(verifier));
+        if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
+            return invalidGrant('code_verifier does not match the code_challenge.');
+        }
+    } else if (!client.client_secret_hash) {
+        return invalidGrant('This client has to use PKCE.');
+    }
+
+    const user = stmts.findById.get(stored.user_id);
+    if (!user) return invalidGrant('That account no longer exists.');
+
+    if (oauthStmts.consumeCode.run(Date.now(), codeHash).changes === 0) {
+        return invalidGrant('That code was already used.');
+    }
+    oauthStmts.touchClient.run(Date.now(), client.client_id);
+
+    const { token } = issueOAuthToken(user, client, stored.scope);
+    res.set('Cache-Control', 'no-store');
+    res.json({
+        access_token: token,
+        token_type: 'Bearer',
+        expires_in: OAUTH_TOKEN_SECONDS,
+        scope: stored.scope,
+        username: user.username,
+    });
+});
+
+function sendOAuthUserInfo(req, res) {
+    const { user, scope } = req.oauth;
+    const choice = capeStmts.getChoice.get(user.id);
+
+    res.set('Cache-Control', 'no-store');
+    res.json({
+        sub: user.id,
+        id: user.id,
+        username: user.username,
+        created_at: user.created_at,
+        has_skin: !!user.skin_path,
+        has_cape: !!choice && choice.cape_id !== '',
+        scope,
+    });
+}
+
+app.get('/oauth/userinfo', oauthCors, authenticateOAuthToken, sendOAuthUserInfo);
+// Also under /api/ so the game reaches it through the WebSocket relay.
+app.get('/api/oauth/userinfo', oauthCors, authenticateOAuthToken, sendOAuthUserInfo);
+
+app.post('/oauth/revoke', oauthCors, authenticateOAuthToken, (req, res) => {
+    try {
+        const decoded = jwt.decode(req.headers.authorization.slice(7));
+        stmts.revokeToken.run(req.oauth.jti, Date.now(), decoded.exp * 1000);
+        Logger.info('OAuth', `Revoked token for ${req.oauth.username} (${req.oauth.client_id || 'client'})`);
+    } catch (err) {
+        Logger.warn('OAuth', `Could not revoke token: ${err.message}`);
+    }
+
+    // RFC 7009: revoking is always reported as success.
+    res.status(200).json({});
+});
+
+app.post('/oauth/register', oauthEndpointLimiter, oauthCors, async (req, res) => {
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+
+    const name = oauthClientName(body.client_name || body.name);
+    if (!name) {
+        return res.status(400).json({
+            error: 'invalid_client_metadata',
+            error_description: `client_name must be 2-${OAUTH_CLIENT_NAME_MAX} characters.`,
+        });
+    }
+
+    const normalized = normalizeRedirectUris(body.redirect_uris || body.redirect_uri);
+    if (normalized.error) {
+        return res.status(400).json({ error: 'invalid_redirect_uri', error_description: normalized.error });
+    }
+
+    const method = String(body.token_endpoint_auth_method || 'none').trim().toLowerCase();
+    if (!['none', 'client_secret_post', 'client_secret_basic'].includes(method)) {
+        return res.status(400).json({
+            error: 'invalid_client_metadata',
+            error_description: 'token_endpoint_auth_method must be none, client_secret_post or client_secret_basic.',
+        });
+    }
+
+    try {
+        const clientId = 'bm_' + crypto.randomBytes(12).toString('hex');
+        const clientSecret = method === 'none' ? '' : crypto.randomBytes(24).toString('base64url');
+        const secretHash = clientSecret ? await bcrypt.hash(clientSecret, BCRYPT_ROUNDS) : null;
+
+        oauthStmts.insertClient.run(
+            clientId,
+            secretHash,
+            name,
+            JSON.stringify(normalized.uris),
+            0,
+            Date.now()
+        );
+
+        const issuer = oauthIssuer(req);
+        Logger.info('OAuth', `Registered client "${name}" (${clientId}) for ${normalized.uris.join(', ')}`);
+
+        res.status(201).json({
+            client_id: clientId,
+            ...(clientSecret ? { client_secret: clientSecret } : {}),
+            client_name: name,
+            redirect_uris: normalized.uris,
+            token_endpoint_auth_method: method,
+            grant_types: ['authorization_code'],
+            response_types: ['code'],
+            scope: OAUTH_SCOPE,
+            authorization_endpoint: `${issuer}/oauth/authorize`,
+            token_endpoint: `${issuer}/oauth/token`,
+            userinfo_endpoint: `${issuer}/oauth/userinfo`,
+            sdk: `${issuer}/oauth/breakmine.js`,
+        });
+    } catch (err) {
+        Logger.error('OAuth', `Client registration failed: ${err.message}`);
+        res.status(500).json({ error: 'server_error', error_description: 'Could not register that application.' });
+    }
+});
+
+// The browser SDK is a real file so it can be read and self-hosted, but it is
+// served from this origin so the token exchange is same-origin with the API.
+app.get('/oauth/breakmine.js', (req, res) => {
+    res.set({
+        'Content-Type': 'application/javascript; charset=utf-8',
+        'Cache-Control': 'public, max-age=300',
+    });
+    res.sendFile(path.join(__dirname, 'oauth-client.js'));
+});
+
+// Clients listed in OAUTH_CLIENTS skip the "not reviewed" warning on the
+// consent screen. Shape: [{ "client_id": "...", "name": "...", "redirect_uris": ["https://..."] }]
+function loadTrustedOAuthClients() {
+    const raw = process.env.OAUTH_CLIENTS;
+    if (!raw) return;
+
+    let list;
+    try {
+        list = JSON.parse(raw);
+    } catch (err) {
+        Logger.warn('OAuth', 'OAUTH_CLIENTS is not valid JSON; no trusted clients loaded');
+        return;
+    }
+    if (!Array.isArray(list)) {
+        Logger.warn('OAuth', 'OAUTH_CLIENTS must be a JSON array; no trusted clients loaded');
+        return;
+    }
+
+    for (const entry of list) {
+        const clientId = String(entry?.client_id || '').trim();
+        const name = oauthClientName(entry?.name || entry?.client_name);
+        const normalized = normalizeRedirectUris(entry?.redirect_uris);
+
+        if (!clientId || !name || normalized.error) {
+            Logger.warn('OAuth', `Skipping trusted client ${clientId || '(no id)'}: ${normalized.error || 'id and name are required'}`);
+            continue;
+        }
+
+        oauthStmts.upsertTrustedClient.run(clientId, name, JSON.stringify(normalized.uris), Date.now());
+        Logger.info('OAuth', `Trusted client ready: ${name} (${clientId})`);
+    }
+}
+
+loadTrustedOAuthClients();
 
 app.use((err, req, res, next) => {
     if (err instanceof multer.MulterError) {
