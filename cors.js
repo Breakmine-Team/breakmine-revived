@@ -239,7 +239,8 @@ db.exec(`
         redirect_uris TEXT NOT NULL,
         verified INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL,
-        last_used INTEGER
+        last_used INTEGER,
+        owner_id TEXT
     );
 
     CREATE TABLE IF NOT EXISTS oauth_codes (
@@ -258,12 +259,26 @@ db.exec(`
     CREATE INDEX IF NOT EXISTS idx_oauth_codes_client ON oauth_codes(client_id);
 `);
 
+// Databases created before the developer portal have no owner column.
+try {
+    db.exec('ALTER TABLE oauth_clients ADD COLUMN owner_id TEXT');
+} catch (err) {
+    // Already present.
+}
+
+db.exec('CREATE INDEX IF NOT EXISTS idx_oauth_clients_owner ON oauth_clients(owner_id)');
+
 const oauthStmts = {
     insertClient: db.prepare('INSERT INTO oauth_clients (client_id, client_secret_hash, name, redirect_uris, verified, created_at) VALUES (?, ?, ?, ?, ?, ?)'),
     upsertTrustedClient: db.prepare(`INSERT INTO oauth_clients (client_id, client_secret_hash, name, redirect_uris, verified, created_at)
         VALUES (?, NULL, ?, ?, 1, ?)
         ON CONFLICT(client_id) DO UPDATE SET name = excluded.name, redirect_uris = excluded.redirect_uris, verified = 1`),
     getClient: db.prepare('SELECT * FROM oauth_clients WHERE client_id = ?'),
+    insertOwnedClient: db.prepare('INSERT INTO oauth_clients (client_id, client_secret_hash, name, redirect_uris, verified, created_at, owner_id) VALUES (?, NULL, ?, ?, 0, ?, ?)'),
+    listClientsByOwner: db.prepare('SELECT * FROM oauth_clients WHERE owner_id = ? ORDER BY created_at DESC'),
+    getClientForOwner: db.prepare('SELECT * FROM oauth_clients WHERE client_id = ? AND owner_id = ?'),
+    updateOwnedClient: db.prepare('UPDATE oauth_clients SET name = ?, redirect_uris = ? WHERE client_id = ? AND owner_id = ?'),
+    deleteOwnedClient: db.prepare('DELETE FROM oauth_clients WHERE client_id = ? AND owner_id = ?'),
     touchClient: db.prepare('UPDATE oauth_clients SET last_used = ? WHERE client_id = ?'),
     insertCode: db.prepare('INSERT INTO oauth_codes (code_hash, client_id, user_id, redirect_uri, scope, code_challenge, code_challenge_method, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'),
     getCode: db.prepare('SELECT * FROM oauth_codes WHERE code_hash = ?'),
@@ -2074,65 +2089,135 @@ function oauthRequestFields(request) {
 
 function oauthStyles() {
     return `
-        :root { color-scheme: light; }
+        :root {
+            color-scheme: dark;
+            --bg: #141218;
+            --surface: #1f1f24;
+            --on-surface: #e8e8ec;
+            --on-surface-variant: #a9a9b4;
+            --outline: #55555f;
+            --outline-variant: #34333b;
+            --primary: #b4c5ff;
+            --on-primary: #0d1b3e;
+        }
         * { box-sizing: border-box; }
         body {
-            margin: 0; min-height: 100vh; padding: 24px;
+            margin: 0; padding: 24px 16px; min-height: 100vh;
             display: flex; align-items: center; justify-content: center;
-            background-color: #b3c6ff;
-            background-image:
-                linear-gradient(rgba(255, 255, 255, 0.24) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255, 255, 255, 0.24) 1px, transparent 1px);
-            background-size: 32px 32px;
-            color: #3a4250;
-            font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg); color: var(--on-surface);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 14px; line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+        }
+        .material-icons {
+            font-family: 'Material Icons'; font-weight: normal; font-style: normal;
+            font-size: 18px; line-height: 1; letter-spacing: normal; text-transform: none;
+            display: inline-block; white-space: nowrap; direction: ltr;
+            -webkit-font-feature-settings: 'liga'; -webkit-font-smoothing: antialiased;
         }
         .card {
-            width: 100%; max-width: 400px; padding: 22px 22px 14px;
-            background: #f4f4f4; border: 1px solid #9aa6c7; border-radius: 6px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.22);
+            position: relative; overflow: hidden; width: 100%; max-width: 380px;
+            padding: 32px 28px; background: var(--surface);
+            border: 1px solid var(--outline-variant); border-radius: 28px;
+            transition: opacity 0.2s ease;
         }
-        .brand { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; font-weight: 700; color: #2f3640; }
-        .brand img { width: 20px; height: 20px; image-rendering: pixelated; }
-        h1 { font-size: 18px; line-height: 1.3; margin: 0 0 8px; color: #2f3640; }
-        p { margin: 0 0 14px; }
-        .sub { color: #5b6472; }
-        .field { display: block; margin-bottom: 12px; font-size: 12px; color: #5b6472; }
-        input[type=text], input[type=password] {
-            display: block; width: 100%; margin-top: 4px; padding: 8px 10px;
-            background: linear-gradient(to bottom, #d0d0d0 0%, #f4f4f4 100%);
-            border: 1px solid #b5b5b5; border-radius: 4px; color: #2f3640;
-            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.18); font: inherit; outline: none;
+        .card.busy { opacity: 0.65; pointer-events: none; }
+        .top-progress { position: absolute; top: 0; left: 0; width: 100%; height: 4px; overflow: hidden; background: rgba(180, 197, 255, 0.16); }
+        .top-progress span { position: absolute; top: 0; bottom: 0; left: -40%; width: 40%; border-radius: 4px; background: var(--primary); animation: oauth-slide 1.1s ease-in-out infinite; }
+        .top-progress.hidden { display: none; }
+        @keyframes oauth-slide { from { left: -40%; } to { left: 100%; } }
+        .provider {
+            display: flex; align-items: center; gap: 8px;
+            margin: 0 0 20px; padding: 0 0 10px;
+            border-bottom: 1px solid var(--outline-variant);
+            font-size: 13px; font-weight: 500; color: var(--on-surface-variant);
         }
-        input:focus { border-color: #2f6fed; }
-        .buttons { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
-        button {
-            padding: 7px 16px; cursor: pointer; color: #4a4a4a; font: inherit; font-weight: 600;
-            background: linear-gradient(to bottom, #ececec 0%, #d8d8d8 100%);
-            border: 1px solid #b5b5b5; border-radius: 3px;
-            text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
+        .provider img { width: 20px; height: 20px; border-radius: 4px; object-fit: contain; }
+        .brand-mark { display: none; width: 20px; height: 20px; border-radius: 4px; align-items: center; justify-content: center; background: linear-gradient(135deg, #8ea8ff, #4d63c9); color: #fff; font-size: 11px; font-weight: 600; }
+        .app-icon {
+            width: 40px; height: 40px; margin: 0 0 14px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center; overflow: hidden;
+            color: #fff; font-size: 18px; font-weight: 600;
         }
-        button:hover { background: linear-gradient(to bottom, #d8d8d8 0%, #c4c4c4 100%); }
-        button.primary {
-            background: linear-gradient(to bottom, #6fd3c7 0%, #26a69a 100%);
-            border-color: #1f857c; color: #0d2a28;
-            text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+        h1, h2 { margin: 0 0 16px; font-size: 22px; font-weight: 400; line-height: 1.3; }
+        h2 strong { font-weight: 600; }
+        .sub { margin: 0 0 16px; font-size: 13px; color: var(--on-surface-variant); }
+        .sub strong { color: var(--on-surface); font-weight: 600; }
+        .field { position: relative; display: block; margin-bottom: 14px; }
+        .field input {
+            width: 100%; height: 56px; padding: 22px 14px 6px;
+            background: transparent; border: 1px solid var(--outline); border-radius: 4px;
+            color: var(--on-surface); font: inherit; font-size: 15px; outline: none;
         }
-        button.primary:hover { background: linear-gradient(to bottom, #7ddbd0 0%, #2fb3a7 100%); }
-        button.link { background: none; border: 0; padding: 0; color: #2f6fed; font-weight: 500; text-decoration: underline; }
-        .switch { color: #2f6fed; font-size: 13px; }
-        .scopes { list-style: none; margin: 0 0 14px; padding: 0; }
-        .scopes li { position: relative; padding-left: 20px; margin-bottom: 6px; color: #39414d; }
-        .scopes li::before { content: "\u2713"; position: absolute; left: 0; color: #26a69a; font-weight: 700; }
-        .account {
-            display: flex; gap: 6px; align-items: center; padding: 8px 10px; margin-bottom: 14px;
-            background: #e9edf7; border: 1px solid #c3cbe0; border-radius: 4px;
+        .field input:focus { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
+        .field span {
+            position: absolute; left: 15px; top: 17px; font-size: 15px; color: var(--on-surface-variant);
+            pointer-events: none; transition: top 0.12s ease, font-size 0.12s ease, color 0.12s ease;
         }
-        .account strong { color: #2f3640; }
-        .warn { padding: 8px 10px; margin-bottom: 14px; background: #fff4d6; border: 1px solid #e6c86a; border-radius: 4px; color: #6b5312; }
-        .error { padding: 8px 10px; margin-bottom: 14px; background: #ffe2e0; border: 1px solid #e0a29d; border-radius: 4px; color: #8f2119; }
-        .foot { margin: 16px 0 0; font-size: 11px; color: #7c8698; }
+        .field input:focus + span, .field input:not(:placeholder-shown) + span { top: 7px; font-size: 11px; }
+        .field input:focus + span { color: var(--primary); }
+        button { font: inherit; cursor: pointer; }
+        .filled {
+            width: 100%; padding: 11px 24px; border: 0; border-radius: 999px;
+            background: var(--primary); color: var(--on-primary);
+            font-size: 14px; font-weight: 600;
+        }
+        .filled:hover { filter: brightness(1.08); }
+        .filled.auto { width: auto; }
+        .outlined {
+            padding: 10px 22px; border: 1px solid var(--outline); border-radius: 999px;
+            background: transparent; color: var(--primary); font-size: 14px; font-weight: 500;
+        }
+        .outlined:hover { background: rgba(180, 197, 255, 0.08); }
+        .link { padding: 0; border: 0; background: none; color: var(--primary); font-size: 13px; text-decoration: none; }
+        .link:hover { text-decoration: underline; }
+        .toggle { margin: 16px 0 0; text-align: center; font-size: 13px; color: var(--on-surface-variant); }
+        .account-chip {
+            display: inline-flex; align-items: center; gap: 8px;
+            margin: 0 0 20px; padding: 4px 12px 4px 6px;
+            border: 1px solid var(--outline); border-radius: 999px;
+            font-size: 14px; font-weight: 500;
+        }
+        .avatar {
+            width: 24px; height: 24px; border-radius: 50%; flex: 0 0 auto;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--primary); color: var(--on-primary); font-size: 12px; font-weight: 600;
+        }
+        .scope-title { margin: 0 0 8px; font-size: 13px; font-weight: 500; }
+        .scopes { display: flex; flex-direction: column; gap: 12px; margin: 0 0 20px; }
+        .scope { display: flex; align-items: flex-start; gap: 12px; font-size: 13px; line-height: 1.4; color: var(--on-surface-variant); }
+        .scope .material-icons { color: var(--primary); margin-top: 2px; }
+        .disclaimer { margin: 0 0 20px; font-size: 11px; line-height: 1.4; color: var(--on-surface-variant); }
+        .actions { display: flex; justify-content: flex-end; gap: 10px; }
+        .notice { margin: 0 0 16px; padding: 10px 12px; border-radius: 12px; font-size: 12px; line-height: 1.45; }
+        .notice.warn { background: rgba(255, 209, 140, 0.1); border: 1px solid rgba(255, 209, 140, 0.35); color: #ffd18c; }
+        .notice.error { background: rgba(255, 180, 171, 0.1); border: 1px solid rgba(255, 180, 171, 0.4); color: #ffb4ab; }
+        .foot { margin: 18px 0 0; font-size: 11px; line-height: 1.45; color: #7c7c88; text-align: center; }
+        .foot .link { font-size: 11px; }
+        @media only screen and (max-width: 420px) {
+            body { padding: 12px; }
+            .card { padding: 26px 20px; border-radius: 22px; }
+            h1, h2 { font-size: 20px; }
+        }
     `;
+}
+
+function oauthBrandHeader(label) {
+    return `<div class="provider"><img src="https://breakmine.com/src/resources/favicon.ico" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="brand-mark">B</span><span>${escapeHtml(label)}</span></div>`;
+}
+
+function oauthClientHue(clientId) {
+    let hue = 0;
+    for (const ch of String(clientId)) hue = (hue * 31 + ch.charCodeAt(0)) % 360;
+    return hue;
+}
+
+// No app icons are collected, so the requester gets a stable coloured tile
+// with its initial instead.
+function oauthAppIcon(clientName, clientId) {
+    const hue = oauthClientHue(clientId);
+    const initial = escapeHtml(String(clientName || '?').trim().charAt(0).toUpperCase() || '?');
+    return `<div class="app-icon" style="background: linear-gradient(135deg, hsl(${hue} 62% 52%), hsl(${(hue + 46) % 360} 58% 34%))">${initial}</div>`;
 }
 
 function renderOAuthPage(res, { title, body, status = 200 }) {
@@ -2141,16 +2226,30 @@ function renderOAuthPage(res, { title, body, status = 200 }) {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="robots" content="noindex">
     <title>${escapeHtml(title)} \u00b7 Breakmine</title>
     <link rel="icon" type="image/x-icon" href="https://breakmine.com/src/resources/favicon.ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
     <style>${oauthStyles()}</style>
 </head>
 <body>
-    <main class="card">
-        <div class="brand"><img src="https://breakmine.com/src/resources/favicon.ico" alt=""> Breakmine account</div>
+    <main class="card" id="auth-card">
+        <div class="top-progress hidden" id="auth-progress"><span></span></div>
 ${body}
-        <p class="foot">This page is served by Breakmine. Your password is only ever sent to Breakmine.</p>
     </main>
+    <script>
+        // Both buttons are plain form submits; this only paints the progress bar
+        // the moment one of them is pressed.
+        Array.prototype.forEach.call(document.querySelectorAll('form'), function (form) {
+            form.addEventListener('submit', function () {
+                document.getElementById('auth-progress').classList.remove('hidden');
+                document.getElementById('auth-card').classList.add('busy');
+            });
+        });
+    </script>
 </body>
 </html>`);
 }
@@ -2159,8 +2258,10 @@ function renderOAuthNotice(res, message, status = 400) {
     renderOAuthPage(res, {
         status,
         title: 'Sign-in unavailable',
-        body: `        <h1>Sign-in unavailable</h1>
-        <p class="sub">${escapeHtml(message)}</p>`,
+        body: `        ${oauthBrandHeader('Breakmine Account')}
+        <h2>Sign-in unavailable</h2>
+        <div class="notice error">${escapeHtml(message)}</div>
+        <p class="disclaimer">Go back to the site you came from and start the sign-in again.</p>`,
     });
 }
 
@@ -2170,55 +2271,59 @@ function renderOAuthForm(res, { request, user, mode, error, status = 200, userna
     })();
     const fields = oauthRequestFields(request);
     const name = escapeHtml(request.clientName);
+    const hostLabel = escapeHtml(host);
     let body = '';
 
     if (mode === 'consent' && user) {
+        const initial = escapeHtml(String(user.username || '?').charAt(0).toUpperCase());
         const warning = request.verified
             ? ''
-            : `        <div class="warn">${name} has not been reviewed by Breakmine. Only continue if you trust ${escapeHtml(host)}.</div>\n`;
+            : `        <div class="notice warn"><strong>${name}</strong> has not been reviewed by Breakmine. Only continue if you trust ${hostLabel}.</div>\n`;
 
-        body = `        <h1>Allow ${name} to use your Breakmine account?</h1>
-        <div class="account"><span>Signed in as</span> <strong>${escapeHtml(user.username)}</strong></div>
-${warning}        <p class="sub">${name} will be able to read:</p>
-        <ul class="scopes">
-            <li>Your username, ${escapeHtml(user.username)}</li>
-            <li>Your account id and the date you joined</li>
-        </ul>
-        <p class="sub">It never gets your password, your skin or your capes.</p>
+        body = `        ${oauthBrandHeader('Breakmine Account Security')}
+${oauthAppIcon(request.clientName, request.clientId)}
+        <h2><strong>${name}</strong> wants to access your Breakmine account</h2>
+        <div class="account-chip"><div class="avatar">${initial}</div><span>${escapeHtml(user.username)}</span></div>
+${warning}        <p class="scope-title">This will allow the app to:</p>
+        <div class="scopes">
+            <div class="scope"><span class="material-icons">account_circle</span><div>Read your username, your account id and the date you joined</div></div>
+            <div class="scope"><span class="material-icons">apps</span><div>See that you signed in to ${name} from ${hostLabel}</div></div>
+        </div>
+        <p class="disclaimer">Make sure you trust this application. It never receives your password, your skin or your capes, and you can revoke its access at any time.</p>
         <form method="post" action="/oauth/authorize">
             ${fields}
-            <input type="hidden" name="action" value="approve">
-            <div class="buttons">
-                <button type="submit" class="primary">Allow</button>
-                <button type="submit" name="action" value="deny">Not now</button>
+            <div class="actions">
+                <button type="submit" class="outlined" name="action" value="deny">Cancel</button>
+                <button type="submit" class="filled auto" name="action" value="approve">Allow</button>
             </div>
         </form>
         <form method="post" action="/oauth/authorize">
             ${fields}
             <input type="hidden" name="action" value="logout">
-            <p class="foot" style="margin-top:14px"><button type="submit" class="link">Not ${escapeHtml(user.username)}?</button></p>
+            <p class="foot"><button type="submit" class="link">Not ${escapeHtml(user.username)}? Use another account</button></p>
         </form>`;
     } else {
         const signup = mode === 'signup';
-        const errorHtml = error ? `        <div class="error">${escapeHtml(error)}</div>\n` : '';
+        const errorHtml = error ? `        <div class="notice error">${escapeHtml(error)}</div>\n` : '';
         const otherMode = signup ? 'login' : 'signup';
         const switchHref = `/oauth/authorize?${oauthRequestQuery(request)}&mode=${otherMode}`;
 
-        body = `        <h1>${signup ? 'Create a Breakmine account' : 'Sign in to Breakmine'}</h1>
-        <p class="sub">${name} (${escapeHtml(host)}) wants to use your Breakmine account.</p>
+        body = `        ${oauthBrandHeader('Breakmine Account')}
+        <h2>${signup ? 'Create a Breakmine account' : 'Sign in to your Breakmine account'}</h2>
+        <p class="sub"><strong>${name}</strong> (${hostLabel}) wants to use your Breakmine account.</p>
 ${errorHtml}        <form method="post" action="/oauth/authorize" autocomplete="on">
             ${fields}
-            <label class="field">Username
-                <input type="text" name="username" required minlength="3" maxlength="32" autocomplete="username" value="${escapeHtml(username)}">
+            <label class="field">
+                <input type="text" name="username" placeholder=" " required minlength="3" maxlength="32" autocomplete="username" value="${escapeHtml(username)}">
+                <span>Username</span>
             </label>
-            <label class="field">Password
-                <input type="password" name="password" required minlength="6" maxlength="128" autocomplete="${signup ? 'new-password' : 'current-password'}">
+            <label class="field">
+                <input type="password" name="password" placeholder=" " required minlength="6" maxlength="128" autocomplete="${signup ? 'new-password' : 'current-password'}">
+                <span>Password</span>
             </label>
-            <div class="buttons">
-                <button type="submit" class="primary" name="action" value="${signup ? 'signup' : 'login'}">${signup ? 'Create account' : 'Sign in'}</button>
-                <a class="switch" href="${escapeHtml(switchHref)}">${signup ? 'I already have an account' : 'Create an account'}</a>
-            </div>
-        </form>`;
+            <button type="submit" class="filled" name="action" value="${signup ? 'signup' : 'login'}">${signup ? 'Register &amp; continue' : 'Sign in'}</button>
+        </form>
+        <p class="toggle"><a class="link" href="${escapeHtml(switchHref)}">${signup ? 'Already have an account? Sign in' : 'Need an account? Register'}</a></p>`;
     }
 
     renderOAuthPage(res, { status, title: mode === 'consent' ? 'Allow access' : 'Sign in', body });
@@ -2636,6 +2741,628 @@ function loadTrustedOAuthClients() {
 }
 
 loadTrustedOAuthClients();
+
+// --- Developer portal: /developers ------------------------------------------
+//
+// A Breakmine account can register, edit and test the OAuth clients that show
+// the "Sign in with Breakmine" popup. The chrome follows the mods, wiki and
+// bugtracker pages: Materialize, a teal navbar, a fixed sidenav, cards and
+// striped tables.
+//
+// Public clients only - the popup SDK uses PKCE, so there is no client secret
+// to store, show or leak. Server-side applications that need a secret still use
+// POST /oauth/register (client_secret_post / client_secret_basic).
+//
+//   GET  /developers                      -> apps, or the sign-in form
+//   GET  /developers/login                sign in / create an account
+//   POST /developers/login
+//   POST /developers/logout
+//   GET  /developers/apps                 list + register form
+//   POST /developers/apps                 register
+//   GET  /developers/apps/:clientId       settings, snippet, test link
+//   POST /developers/apps/:clientId       save name + redirect URIs
+//   POST /developers/apps/:clientId/delete
+//   GET  /developers/testbox              popup test box (uses /oauth/breakmine.js)
+
+const DEV_COOKIE = 'breakmine_developer';
+const DEV_SESSION_SECONDS = 12 * 60 * 60;
+const DEV_TESTBOX_PATH = '/developers/testbox';
+
+function devSessionUser(req) {
+    const token = readCookies(req)[DEV_COOKIE];
+    if (!token) return null;
+
+    try {
+        const decoded = jwt.verify(token, secrets.jwtSecret, { algorithms: ['HS256'] });
+        if (!decoded || decoded.developerSession !== true) return null;
+        return stmts.findById.get(decoded.sub) || null;
+    } catch (err) {
+        return null;
+    }
+}
+
+function setDevSessionCookie(req, res, user) {
+    const token = jwt.sign({ sub: user.id, username: user.username, developerSession: true }, secrets.jwtSecret, {
+        expiresIn: DEV_SESSION_SECONDS,
+        algorithm: 'HS256',
+    });
+
+    const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+    const secure = req.secure || forwardedProto === 'https';
+    res.append('Set-Cookie', `${DEV_COOKIE}=${encodeURIComponent(token)}; Path=/developers; HttpOnly; SameSite=Lax; Max-Age=${DEV_SESSION_SECONDS}${secure ? '; Secure' : ''}`);
+}
+
+function clearDevSessionCookie(res) {
+    res.append('Set-Cookie', `${DEV_COOKIE}=; Path=/developers; HttpOnly; SameSite=Lax; Max-Age=0`);
+}
+
+function requireDeveloper(req, res, next) {
+    req.developer = devSessionUser(req);
+    if (!req.developer) return res.redirect(302, '/developers/login');
+    next();
+}
+
+function parseStoredUris(raw) {
+    try {
+        const uris = JSON.parse(raw);
+        return Array.isArray(uris) ? uris.filter((uri) => typeof uri === 'string') : [];
+    } catch (err) {
+        return [];
+    }
+}
+
+// The form takes one URI per line, like the rest of the wiki's textareas.
+function splitRedirectUris(raw) {
+    return String(raw ?? '')
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+}
+
+function formatDevDate(ms) {
+    if (!ms) return 'never';
+    const date = new Date(Number(ms));
+    return Number.isNaN(date.getTime()) ? 'never' : date.toISOString().slice(0, 10);
+}
+
+function devNotice(message, kind = 'red lighten-4 red-text text-darken-3') {
+    return `<div class="card-panel ${kind}" style="padding: 12px 16px; border-radius: 4px">${escapeHtml(message)}</div>`;
+}
+
+function developerStyles() {
+    return `
+        body { background: #eceff1; }
+        .navbar-sticky { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; }
+        nav .nav-wrapper { padding: 0 16px; }
+        nav .brand-logo { position: static; transform: none; padding: 0; font-size: 1.4rem; }
+        .sidenav.sidenav-fixed { top: 64px; height: calc(100vh - 64px); width: 280px; box-shadow: 1px 0 5px rgba(0, 0, 0, 0.12); }
+        .sidenav-padding { padding: 20px; }
+        main { margin-top: 64px; padding: 20px; }
+        @media only screen and (min-width: 993px) { main { padding-left: 300px; } }
+        .card { margin: 0; }
+        .card .card-content { padding: 20px 24px 28px; }
+        h4 { font-size: 1.85rem; margin: 12px 0; }
+        h5 { font-size: 1.3rem; margin: 28px 0 12px; }
+        code.inline { background: #eceff1; color: #37474f; padding: 1px 6px; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; word-break: break-all; }
+        pre.snippet { background: #263238; color: #eceff1; padding: 16px; border-radius: 6px; overflow-x: auto; font-size: 0.78rem; line-height: 1.5; }
+        .material-icons.tiny { font-size: 1.1rem; vertical-align: middle; }
+        .testbox-result { min-height: 140px; background: #263238; color: #eceff1; border-radius: 6px; padding: 16px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; line-height: 1.65; overflow-wrap: anywhere; }
+        .testbox-result .key { color: #80cbc4; }
+        .testbox-result.idle { color: #90a4ae; font-family: inherit; font-size: 0.9rem; }
+        .uri-list { margin: 0; padding-left: 16px; }
+        .uri-list li { margin-bottom: 2px; word-break: break-all; }
+    `;
+}
+
+function renderDeveloperPage(res, { title, active = '', user = null, body, status = 200, script = '' }) {
+    const account = user
+        ? `<li><a href="/developers/apps">My apps</a></li>
+          <li><a href="${DEV_TESTBOX_PATH}">Test box</a></li>
+          <li><a href="#!" onclick="document.getElementById('dev-logout').submit(); return false;">Sign out ${escapeHtml(user.username)}</a></li>`
+        : '<li><a href="/developers/login">Sign in</a></li>';
+
+    res.status(status).type('html').send(`<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>${escapeHtml(title)} \u00b7 Breakmine Developers</title>
+    <link rel="icon" type="image/x-icon" href="https://breakmine.com/src/resources/favicon.ico">
+    <link rel="stylesheet" href="https://unpkg.com/materialize-css@1.0.0/dist/css/materialize.min.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <style>${developerStyles()}</style>
+</head>
+<body>
+    <div class="navbar-sticky">
+        <nav class="teal darken-2">
+            <div class="nav-wrapper">
+                <a href="/developers/apps" class="brand-logo">Breakmine Developers</a>
+                <ul class="right">
+                    ${account}
+                </ul>
+            </div>
+        </nav>
+    </div>
+
+    <ul class="sidenav sidenav-fixed">
+        <li>
+            <div class="sidenav-padding">
+                <p><strong>Navigation</strong></p>
+                <div class="collection" style="border: none">
+                    <a href="/developers/apps" class="collection-item${active === 'apps' ? ' active' : ''}">Applications</a>
+                    <a href="/developers/apps#register" class="collection-item">Register an app</a>
+                    <a href="${DEV_TESTBOX_PATH}" class="collection-item${active === 'testbox' ? ' active' : ''}">Popup test box</a>
+                </div>
+                <div class="divider" style="margin: 15px 0"></div>
+                <p class="grey-text" style="font-size: 0.85rem; line-height: 1.5">
+                    Breakmine developers register OAuth applications, then sites call
+                    <code class="inline">BreakmineAuth.login()</code> to sign players in.
+                </p>
+            </div>
+        </li>
+    </ul>
+
+    <main>
+        <div class="card">
+            <div class="card-content">
+${body}
+            </div>
+        </div>
+    </main>
+
+    <form id="dev-logout" method="post" action="/developers/logout" style="display: none"></form>
+${script}
+</body>
+</html>`);
+}
+
+function renderDeveloperLogin(res, { mode = 'login', error = '', status = 200, username = '' }) {
+    const signup = mode === 'signup';
+    const body = `                <h4>${signup ? 'Create a developer account' : 'Developer sign-in'}</h4>
+                <p class="grey-text">${signup
+                    ? 'Your Breakmine account is all you need to publish OAuth applications.'
+                    : 'Sign in with your Breakmine account to register and manage OAuth applications.'}</p>
+                ${error ? devNotice(error) : ''}
+                <form method="post" action="/developers/login" class="col s12 m8 l6" style="padding: 0">
+                    <input type="hidden" name="action" value="${signup ? 'signup' : 'login'}">
+                    <div class="input-field">
+                        <input id="dev-username" name="username" type="text" required minlength="3" maxlength="32" autocomplete="username" value="${escapeHtml(username)}">
+                        <label for="dev-username" class="active">Username</label>
+                    </div>
+                    <div class="input-field">
+                        <input id="dev-password" name="password" type="password" required minlength="6" maxlength="128" autocomplete="${signup ? 'new-password' : 'current-password'}">
+                        <label for="dev-password" class="active">Password</label>
+                    </div>
+                    <button class="btn teal darken-1 waves-effect waves-light" type="submit">${signup ? 'Create account' : 'Sign in'}</button>
+                    <a class="btn-flat teal-text" href="/developers/login${signup ? '' : '?mode=signup'}">${signup ? 'I already have an account' : 'Create an account'}</a>
+                </form>`;
+
+    renderDeveloperPage(res, { title: signup ? 'Create account' : 'Sign in', user: null, body, status });
+}
+
+function renderDeveloperApps(res, { user, apps, error = '', status = 200, form = {} }) {
+    const rows = apps.length
+        ? apps.map((app) => {
+            const uris = parseStoredUris(app.redirect_uris);
+            return `<tr>
+                        <td><a href="/developers/apps/${escapeHtml(app.client_id)}"><strong>${escapeHtml(app.name)}</strong></a></td>
+                        <td><code class="inline">${escapeHtml(app.client_id)}</code></td>
+                        <td>${uris.length}</td>
+                        <td>${formatDevDate(app.created_at)}</td>
+                        <td>${formatDevDate(app.last_used)}</td>
+                        <td><a class="btn-flat teal-text" href="${DEV_TESTBOX_PATH}?client=${encodeURIComponent(app.client_id)}">Test</a></td>
+                    </tr>`;
+        }).join('')
+        : '<tr><td colspan="6" class="grey-text">No applications yet. Register one below.</td></tr>';
+
+    const body = `                <h4>OAuth applications</h4>
+                <p class="grey-text">These applications can show the &ldquo;Sign in with Breakmine&rdquo; popup on their own sites. They are public clients: the SDK uses PKCE, so no client secret is issued.</p>
+                ${error ? devNotice(error) : ''}
+                <table class="striped responsive-table">
+                    <thead>
+                        <tr>
+                            <th><i class="material-icons tiny">badge</i> Name</th>
+                            <th><i class="material-icons tiny">vpn_key</i> Client ID</th>
+                            <th><i class="material-icons tiny">link</i> Redirect URIs</th>
+                            <th><i class="material-icons tiny">event</i> Created</th>
+                            <th><i class="material-icons tiny">history</i> Last used</th>
+                            <th><i class="material-icons tiny">rule</i> Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+
+                <div class="divider" style="margin: 32px 0"></div>
+
+                <h5 id="register">Register an application</h5>
+                <form method="post" action="/developers/apps" class="col s12 m10 l8" style="padding: 0">
+                    <div class="input-field">
+                        <input id="new-app-name" name="name" type="text" required minlength="2" maxlength="${OAUTH_CLIENT_NAME_MAX}" value="${escapeHtml(form.name || '')}">
+                        <label for="new-app-name" class="${form.name ? 'active' : ''}">Application name</label>
+                        <span class="helper-text">Shown on the consent screen, e.g. &ldquo;Pixel Chat&rdquo;.</span>
+                    </div>
+                    <div class="input-field">
+                        <textarea id="new-app-uris" name="redirect_uris" class="materialize-textarea" rows="3" required>${escapeHtml(form.uris || '')}</textarea>
+                        <label for="new-app-uris" class="${form.uris ? 'active' : ''}">Redirect URIs (one per line)</label>
+                        <span class="helper-text">https anywhere; http only for localhost. The popup returns to one of these.</span>
+                    </div>
+                    <button class="btn teal darken-1 waves-effect waves-light" type="submit">Register application</button>
+                </form>
+                <p class="grey-text" style="font-size: 0.85rem">The test box URL for this server is added automatically so you can try the popup without deploying first.</p>`;
+
+    renderDeveloperPage(res, { title: 'Applications', active: 'apps', user, body, status });
+}
+
+function renderDeveloperApp(res, { user, app, issuer, error = '', status = 200 }) {
+    const uris = parseStoredUris(app.redirect_uris);
+    const testUri = `${issuer}${DEV_TESTBOX_PATH}`;
+    const testReady = uris.includes(testUri);
+
+    const snippet = `<script src="${issuer}/oauth/breakmine.js"><\/script>
+<script>
+BreakmineAuth.login({ clientId: '${app.client_id}' })
+    .then(function (session) {
+        console.log(session.username, session.token);
+    })
+    .catch(function (err) { console.error(err.message); });
+<\/script>`;
+
+    const body = `                <a href="/developers/apps" class="grey-text"><i class="material-icons tiny">arrow_back</i> All applications</a>
+                <h4 style="margin: 8px 0 4px">${escapeHtml(app.name)}</h4>
+                <p class="grey-text" style="margin-top: 0">
+                    Client ID <code class="inline">${escapeHtml(app.client_id)}</code>
+                    <button type="button" class="btn-flat btn-small teal-text" data-copy="${escapeHtml(app.client_id)}" onclick="copyClientId(this)">copy</button>
+                    <br>Created ${formatDevDate(app.created_at)} &middot; last used ${formatDevDate(app.last_used)}
+                </p>
+                ${error ? devNotice(error) : ''}
+                <div class="row">
+                    <div class="col s12 l6">
+                        <h5>Settings</h5>
+                        <form method="post" action="/developers/apps/${escapeHtml(app.client_id)}">
+                            <div class="input-field">
+                                <input id="app-name" name="name" type="text" required minlength="2" maxlength="${OAUTH_CLIENT_NAME_MAX}" value="${escapeHtml(app.name)}">
+                                <label for="app-name" class="active">Application name</label>
+                            </div>
+                            <div class="input-field">
+                                <textarea id="app-uris" name="redirect_uris" class="materialize-textarea" rows="5" required>${escapeHtml(uris.join('\n'))}</textarea>
+                                <label for="app-uris" class="active">Redirect URIs (one per line)</label>
+                                <span class="helper-text">https anywhere; http only for localhost.</span>
+                            </div>
+                            <button class="btn teal darken-1 waves-effect waves-light" type="submit">Save changes</button>
+                        </form>
+
+                        <h5>Danger zone</h5>
+                        <form method="post" action="/developers/apps/${escapeHtml(app.client_id)}/delete" onsubmit="return confirm('Delete this application? Players will no longer be able to sign in with it.');">
+                            <button class="btn red lighten-1 waves-effect waves-light" type="submit">Delete application</button>
+                        </form>
+                    </div>
+                    <div class="col s12 l6">
+                        <h5>Popup test box</h5>
+                        <p>Run the real sign-in popup against this app and see the bearer token and profile it returns.</p>
+                        <p class="grey-text" style="font-size: 0.9rem">${testReady
+                            ? 'Ready: the test box URL is one of the redirect URIs.'
+                            : `Add <code class="inline">${escapeHtml(testUri)}</code> to the redirect URIs to finish the flow.`}</p>
+                        <a class="btn teal waves-effect waves-light" href="${DEV_TESTBOX_PATH}?client=${encodeURIComponent(app.client_id)}">Open the test box</a>
+
+                        <h5>Add it to your site</h5>
+                        <pre class="snippet">${escapeHtml(snippet)}</pre>
+                        <p class="grey-text" style="font-size: 0.85rem">The page that includes the SDK must be one of the redirect URIs, because the popup returns to it.</p>
+                    </div>
+                </div>
+                <script>
+                    function copyClientId(button) {
+                        if (navigator.clipboard) navigator.clipboard.writeText(button.getAttribute('data-copy'));
+                        button.textContent = 'copied';
+                    }
+                <\/script>`;
+
+    renderDeveloperPage(res, { title: app.name, active: 'apps', user, body, status });
+}
+
+function renderDeveloperTestbox(res, { user, apps, status = 200 }) {
+    const options = apps
+        .map((app) => `<option value="${escapeHtml(app.client_id)}">${escapeHtml(app.name)}</option>`)
+        .join('');
+
+    const data = JSON.stringify(apps).replace(/<\//g, '<\\/');
+
+    const body = apps.length
+        ? `                <h4>Popup test box</h4>
+                <p class="grey-text">Pick one of your applications and open the real Breakmine sign-in popup. The SDK completes the PKCE exchange and hands the test box a bearer token.</p>
+                <div class="row" style="margin-bottom: 0">
+                    <div class="col s12 m5">
+                        <div class="input-field">
+                            <select id="testbox-app" class="browser-default">${options}</select>
+                            <label for="testbox-app" class="active">Application</label>
+                        </div>
+                        <div class="input-field">
+                            <select id="testbox-redirect" class="browser-default"></select>
+                            <label for="testbox-redirect" class="active">Redirect URI</label>
+                        </div>
+                        <button type="button" class="btn teal darken-1 waves-effect waves-light" id="testbox-open">
+                            <i class="material-icons left">open_in_new</i>Open sign-in popup
+                        </button>
+                        <p class="grey-text" style="font-size: 0.8rem; margin-top: 16px">
+                            The popup must be allowed by the browser. Cancelling it returns
+                            &ldquo;Sign-in was cancelled.&rdquo; instead of a token.
+                        </p>
+                    </div>
+                    <div class="col s12 m7">
+                        <p class="grey-text" id="testbox-status" style="margin-bottom: 8px">Nothing yet.</p>
+                        <div class="testbox-result idle" id="testbox-result">The token, account and userinfo response appear here.</div>
+                    </div>
+                </div>`
+        : `                <h4>Popup test box</h4>
+                <p class="grey-text">Register an application first, then come back here to try the popup.</p>
+                <a class="btn teal darken-1 waves-effect waves-light" href="/developers/apps#register">Register an application</a>`;
+
+    const script = apps.length
+        ? `<script type="application/json" id="testbox-apps">${data}</script>
+<script src="/oauth/breakmine.js"><\/script>
+<script>
+(function () {
+    var apps = [];
+    try { apps = JSON.parse(document.getElementById('testbox-apps').textContent); } catch (err) { apps = []; }
+    if (!apps.length) return;
+
+    var appSelect = document.getElementById('testbox-app');
+    var redirectSelect = document.getElementById('testbox-redirect');
+    var openButton = document.getElementById('testbox-open');
+    var statusLine = document.getElementById('testbox-status');
+    var result = document.getElementById('testbox-result');
+    var testUri = location.origin + '${DEV_TESTBOX_PATH}';
+
+    var requested = new URLSearchParams(location.search).get('client');
+    if (requested && apps.some(function (app) { return app.client_id === requested; })) {
+        appSelect.value = requested;
+    }
+
+    function appFor(clientId) {
+        for (var i = 0; i < apps.length; i++) {
+            if (apps[i].client_id === clientId) return apps[i];
+        }
+        return apps[0];
+    }
+
+    function syncRedirects() {
+        var app = appFor(appSelect.value);
+        redirectSelect.textContent = '';
+
+        app.redirect_uris.forEach(function (uri) {
+            var option = document.createElement('option');
+            option.value = uri;
+            option.textContent = uri;
+            redirectSelect.appendChild(option);
+        });
+
+        if (app.redirect_uris.indexOf(testUri) >= 0) redirectSelect.value = testUri;
+    }
+
+    function showStatus(text) {
+        statusLine.textContent = text;
+    }
+
+    function line(label, value) {
+        var row = document.createElement('div');
+        var key = document.createElement('span');
+        key.className = 'key';
+        key.textContent = label + ': ';
+        var text = document.createElement('span');
+        text.textContent = value;
+        row.appendChild(key);
+        row.appendChild(text);
+        return row;
+    }
+
+    function resetResult() {
+        result.textContent = '';
+        result.classList.remove('idle');
+    }
+
+    appSelect.addEventListener('change', syncRedirects);
+    syncRedirects();
+
+    openButton.addEventListener('click', function () {
+        var app = appFor(appSelect.value);
+        var redirectUri = redirectSelect.value;
+
+        if (!app || !redirectUri) {
+            showStatus('This application has no redirect URI to return to.');
+            return;
+        }
+
+        showStatus('Waiting for the popup\\u2026');
+        resetResult();
+        result.appendChild(line('Application', app.name));
+        result.appendChild(line('Redirect URI', redirectUri));
+
+        BreakmineAuth.login({ clientId: app.client_id, redirectUri: redirectUri }).then(function (session) {
+            showStatus('Approved. The popup handed back a bearer token.');
+            result.appendChild(line('Username', session.username));
+            result.appendChild(line('Scope', session.scope));
+            result.appendChild(line('Expires in', session.expiresIn + ' seconds'));
+            result.appendChild(line('Access token', session.token));
+
+            return BreakmineAuth.user(session.token).then(function (profile) {
+                result.appendChild(line('userinfo', JSON.stringify(profile)));
+            }, function (err) {
+                result.appendChild(line('userinfo failed', err.message));
+            });
+        }).catch(function (err) {
+            showStatus(err.message);
+        });
+    });
+})();
+<\/script>`
+        : '';
+
+    renderDeveloperPage(res, { title: 'Popup test box', active: 'testbox', user, body, status, script });
+}
+
+app.get('/developers', (req, res) => {
+    res.redirect(302, devSessionUser(req) ? '/developers/apps' : '/developers/login');
+});
+
+app.get('/developers/login', (req, res) => {
+    if (devSessionUser(req)) return res.redirect(302, '/developers/apps');
+    renderDeveloperLogin(res, { mode: req.query.mode === 'signup' ? 'signup' : 'login' });
+});
+
+app.post('/developers/login', oauthLoginLimiter, async (req, res) => {
+    const action = readOAuthParam(req.body, 'action') === 'signup' ? 'signup' : 'login';
+    const usernameVal = validateUsername(req.body?.username);
+    const passwordVal = validatePassword(req.body?.password);
+    const fail = (message, status = 400) => renderDeveloperLogin(res, {
+        mode: action,
+        error: message,
+        status,
+        username: typeof req.body?.username === 'string' ? req.body.username : '',
+    });
+
+    if (!usernameVal.valid) return fail(usernameVal.error);
+    if (!passwordVal.valid) return fail(passwordVal.error);
+
+    try {
+        if (action === 'signup') {
+            if (stmts.findByUsername.get(usernameVal.value)) {
+                return fail('That username is already taken.', 409);
+            }
+
+            const hash = await bcrypt.hash(passwordVal.value, BCRYPT_ROUNDS);
+            stmts.createUser.run(uuidv4(), usernameVal.value, hash, Date.now());
+            Logger.info('Developers', `Registered account ${usernameVal.value} from the developer portal`);
+        } else {
+            const found = stmts.findByUsername.get(usernameVal.value);
+            const matches = await bcrypt.compare(
+                passwordVal.value,
+                found ? found.password_hash : '$2b$12$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+            );
+            if (!found || !matches) {
+                Logger.warn('Developers', `Failed developer sign-in for ${usernameVal.value}`);
+                return fail('Incorrect username or password.', 401);
+            }
+            stmts.updateLastLogin.run(Date.now(), found.id);
+        }
+
+        setDevSessionCookie(req, res, stmts.findByUsername.get(usernameVal.value));
+        res.redirect(303, '/developers/apps');
+    } catch (err) {
+        Logger.error('Developers', `Sign-in failed: ${err.message}`);
+        fail('Something went wrong. Try again.', 500);
+    }
+});
+
+app.post('/developers/logout', (req, res) => {
+    clearDevSessionCookie(res);
+    res.redirect(303, '/developers/login');
+});
+
+app.get('/developers/apps', requireDeveloper, (req, res) => {
+    renderDeveloperApps(res, {
+        user: req.developer,
+        apps: oauthStmts.listClientsByOwner.all(req.developer.id),
+    });
+});
+
+app.post('/developers/apps', requireDeveloper, oauthEndpointLimiter, (req, res) => {
+    const name = oauthClientName(req.body?.name);
+    const form = {
+        name: typeof req.body?.name === 'string' ? req.body.name : '',
+        uris: typeof req.body?.redirect_uris === 'string' ? req.body.redirect_uris : '',
+    };
+    const apps = oauthStmts.listClientsByOwner.all(req.developer.id);
+    const fail = (message, status = 400) => renderDeveloperApps(res, { user: req.developer, apps, error: message, status, form });
+
+    if (!name) return fail(`Application names are 2-${OAUTH_CLIENT_NAME_MAX} characters.`);
+
+    const normalized = normalizeRedirectUris(splitRedirectUris(req.body?.redirect_uris));
+    if (normalized.error) return fail(normalized.error);
+
+    try {
+        // The test box has to be a registered redirect URI, otherwise its popup
+        // has nowhere to come back to.
+        const testUri = `${oauthIssuer(req)}${DEV_TESTBOX_PATH}`;
+        const uris = normalized.uris.includes(testUri) || normalized.uris.length >= OAUTH_MAX_REDIRECT_URIS
+            ? normalized.uris
+            : [...normalized.uris, testUri];
+        const clientId = 'bm_' + crypto.randomBytes(12).toString('hex');
+
+        oauthStmts.insertOwnedClient.run(clientId, name, JSON.stringify(uris), Date.now(), req.developer.id);
+        Logger.info('Developers', `${req.developer.username} registered "${name}" (${clientId})`);
+        res.redirect(303, `/developers/apps/${clientId}`);
+    } catch (err) {
+        Logger.error('Developers', `Could not register ${name}: ${err.message}`);
+        fail('Could not register that application.', 500);
+    }
+});
+
+app.get('/developers/apps/:clientId', requireDeveloper, (req, res) => {
+    const app = oauthStmts.getClientForOwner.get(req.params.clientId, req.developer.id);
+    if (!app) {
+        return renderDeveloperPage(res, {
+            status: 404,
+            title: 'Not found',
+            user: req.developer,
+            body: `                <h4>Application not found</h4>
+                <p class="grey-text">It was deleted, or it belongs to another account.</p>
+                <a class="btn teal darken-1" href="/developers/apps">Back to my apps</a>`,
+        });
+    }
+
+    renderDeveloperApp(res, { user: req.developer, app, issuer: oauthIssuer(req) });
+});
+
+app.post('/developers/apps/:clientId', requireDeveloper, (req, res) => {
+    const app = oauthStmts.getClientForOwner.get(req.params.clientId, req.developer.id);
+    if (!app) return res.status(404).redirect(303, '/developers/apps');
+
+    const name = oauthClientName(req.body?.name);
+    const normalized = normalizeRedirectUris(splitRedirectUris(req.body?.redirect_uris));
+    const issuer = oauthIssuer(req);
+
+    if (!name) {
+        return renderDeveloperApp(res, {
+            user: req.developer,
+            app,
+            issuer,
+            status: 400,
+            error: `Application names are 2-${OAUTH_CLIENT_NAME_MAX} characters.`,
+        });
+    }
+    if (normalized.error) {
+        return renderDeveloperApp(res, { user: req.developer, app, issuer, status: 400, error: normalized.error });
+    }
+
+    try {
+        oauthStmts.updateOwnedClient.run(name, JSON.stringify(normalized.uris), app.client_id, req.developer.id);
+        Logger.info('Developers', `${req.developer.username} updated ${app.client_id}`);
+        res.redirect(303, `/developers/apps/${app.client_id}`);
+    } catch (err) {
+        Logger.error('Developers', `Could not update ${app.client_id}: ${err.message}`);
+        renderDeveloperApp(res, { user: req.developer, app, issuer, status: 500, error: 'Could not save those changes.' });
+    }
+});
+
+app.post('/developers/apps/:clientId/delete', requireDeveloper, (req, res) => {
+    try {
+        const removed = oauthStmts.deleteOwnedClient.run(req.params.clientId, req.developer.id);
+        if (removed.changes) Logger.info('Developers', `${req.developer.username} deleted ${req.params.clientId}`);
+    } catch (err) {
+        Logger.error('Developers', `Could not delete ${req.params.clientId}: ${err.message}`);
+    }
+    res.redirect(303, '/developers/apps');
+});
+
+app.get(DEV_TESTBOX_PATH, requireDeveloper, (req, res) => {
+    const apps = oauthStmts.listClientsByOwner.all(req.developer.id).map((app) => ({
+        client_id: app.client_id,
+        name: app.name,
+        redirect_uris: parseStoredUris(app.redirect_uris),
+    }));
+
+    renderDeveloperTestbox(res, { user: req.developer, apps });
+});
 
 app.use((err, req, res, next) => {
     if (err instanceof multer.MulterError) {
