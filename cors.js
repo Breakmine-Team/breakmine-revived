@@ -2203,7 +2203,7 @@ function oauthStyles() {
 }
 
 function oauthBrandHeader(label) {
-    return `<div class="provider"><img src="https://breakmine.com/src/resources/favicon.ico" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="brand-mark">B</span><span>${escapeHtml(label)}</span></div>`;
+    return `<div class="provider"><img src="https://breakmine.com/favicon.png" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="brand-mark">B</span><span>${escapeHtml(label)}</span></div>`;
 }
 
 function oauthClientHue(clientId) {
@@ -2229,7 +2229,7 @@ function renderOAuthPage(res, { title, body, status = 200 }) {
     <meta name="color-scheme" content="dark">
     <meta name="robots" content="noindex">
     <title>${escapeHtml(title)} \u00b7 Breakmine</title>
-    <link rel="icon" type="image/x-icon" href="https://breakmine.com/src/resources/favicon.ico">
+    <link rel="icon" type="image/png" href="https://breakmine.com/favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
@@ -2284,12 +2284,7 @@ function renderOAuthForm(res, { request, user, mode, error, status = 200, userna
 ${oauthAppIcon(request.clientName, request.clientId)}
         <h2><strong>${name}</strong> wants to access your Breakmine account</h2>
         <div class="account-chip"><div class="avatar">${initial}</div><span>${escapeHtml(user.username)}</span></div>
-${warning}        <p class="scope-title">This will allow the app to:</p>
-        <div class="scopes">
-            <div class="scope"><span class="material-icons">account_circle</span><div>Read your username, your account id and the date you joined</div></div>
-            <div class="scope"><span class="material-icons">apps</span><div>See that you signed in to ${name} from ${hostLabel}</div></div>
-        </div>
-        <p class="disclaimer">Make sure you trust this application. It never receives your password, your skin or your capes, and you can revoke its access at any time.</p>
+${warning}
         <form method="post" action="/oauth/authorize">
             ${fields}
             <div class="actions">
@@ -2851,6 +2846,22 @@ function developerStyles() {
         .testbox-result.idle { color: #90a4ae; font-family: inherit; font-size: 0.9rem; }
         .uri-list { margin: 0; padding-left: 16px; }
         .uri-list li { margin-bottom: 2px; word-break: break-all; }
+        /* Materialize indents every bare textarea by 3rem and pins it to 3rem
+           high with no scrollbar (a rule meant for inputs with a prefix icon).
+           Undo that so the redirect URI boxes look and behave normally. */
+        textarea, .input-field textarea {
+            margin-left: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 4.5rem;
+            overflow-y: auto !important;
+            resize: vertical !important;
+            box-sizing: border-box !important;
+            padding: .8rem 0 1rem !important;
+        }
+        .input-field { margin-top: 6px; }
+        .input-field .helper-text { margin-bottom: 14px; }
+        .redirect-field { margin-top: 0; }
     `;
 }
 
@@ -2868,7 +2879,7 @@ function renderDeveloperPage(res, { title, active = '', user = null, body, statu
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex">
     <title>${escapeHtml(title)} \u00b7 Breakmine Developers</title>
-    <link rel="icon" type="image/x-icon" href="https://breakmine.com/src/resources/favicon.ico">
+    <link rel="icon" type="image/png" href="https://breakmine.com/favicon.png">
     <link rel="stylesheet" href="https://unpkg.com/materialize-css@1.0.0/dist/css/materialize.min.css">
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
     <style>${developerStyles()}</style>
@@ -2912,6 +2923,12 @@ ${body}
     </main>
 
     <form id="dev-logout" method="post" action="/developers/logout" style="display: none"></form>
+    <script src="https://unpkg.com/materialize-css@1.0.0/dist/js/materialize.min.js"><\/script>
+    <script>
+        // Real Materialize dropdowns for every <select>; if the CDN is
+        // unreachable the plain selects stay usable.
+        if (window.M && M.FormSelect) M.FormSelect.init(document.querySelectorAll('select'));
+    <\/script>
 ${script}
 </body>
 </html>`);
@@ -3060,10 +3077,28 @@ BreakmineAuth.login({ clientId: '${app.client_id}' })
     renderDeveloperPage(res, { title: app.name, active: 'apps', user, body, status });
 }
 
-function renderDeveloperTestbox(res, { user, apps, status = 200 }) {
+function renderDeveloperTestbox(res, { user, apps, issuer, requested = '', status = 200 }) {
+    const testUri = `${issuer}${DEV_TESTBOX_PATH}`;
+    const selectedId = apps.some((app) => app.client_id === requested) ? requested : (apps[0] ? apps[0].client_id : '');
+
     const options = apps
-        .map((app) => `<option value="${escapeHtml(app.client_id)}">${escapeHtml(app.name)}</option>`)
+        .map((app) => `<option value="${escapeHtml(app.client_id)}"${app.client_id === selectedId ? ' selected' : ''}>${escapeHtml(app.name)}</option>`)
         .join('');
+
+    // One Materialize dropdown per application, built on the server, so changing
+    // the application only hides and shows a field that already exists.
+    const redirectGroups = apps.map((app) => {
+        const preferred = app.redirect_uris.includes(testUri) ? testUri : app.redirect_uris[0];
+        const uriOptions = app.redirect_uris
+            .map((uri) => `<option value="${escapeHtml(uri)}"${uri === preferred ? ' selected' : ''}>${escapeHtml(uri)}</option>`)
+            .join('');
+
+        return `<div class="input-field redirect-field" data-client="${escapeHtml(app.client_id)}"${app.client_id === selectedId ? '' : ' style="display: none"'}>
+                            <select class="redirect-select" aria-label="Redirect URI">${uriOptions}</select>
+                            <label class="active">Redirect URI</label>
+                            ${app.redirect_uris.length ? '' : '<span class="helper-text">No redirect URIs yet.</span>'}
+                        </div>`;
+    }).join('\n                        ');
 
     const data = JSON.stringify(apps).replace(/<\//g, '<\\/');
 
@@ -3073,13 +3108,10 @@ function renderDeveloperTestbox(res, { user, apps, status = 200 }) {
                 <div class="row" style="margin-bottom: 0">
                     <div class="col s12 m5">
                         <div class="input-field">
-                            <select id="testbox-app" class="browser-default">${options}</select>
+                            <select id="testbox-app">${options}</select>
                             <label for="testbox-app" class="active">Application</label>
                         </div>
-                        <div class="input-field">
-                            <select id="testbox-redirect" class="browser-default"></select>
-                            <label for="testbox-redirect" class="active">Redirect URI</label>
-                        </div>
+                        ${redirectGroups}
                         <button type="button" class="btn teal darken-1 waves-effect waves-light" id="testbox-open">
                             <i class="material-icons left">open_in_new</i>Open sign-in popup
                         </button>
@@ -3107,16 +3139,9 @@ function renderDeveloperTestbox(res, { user, apps, status = 200 }) {
     if (!apps.length) return;
 
     var appSelect = document.getElementById('testbox-app');
-    var redirectSelect = document.getElementById('testbox-redirect');
     var openButton = document.getElementById('testbox-open');
     var statusLine = document.getElementById('testbox-status');
     var result = document.getElementById('testbox-result');
-    var testUri = location.origin + '${DEV_TESTBOX_PATH}';
-
-    var requested = new URLSearchParams(location.search).get('client');
-    if (requested && apps.some(function (app) { return app.client_id === requested; })) {
-        appSelect.value = requested;
-    }
 
     function appFor(clientId) {
         for (var i = 0; i < apps.length; i++) {
@@ -3125,18 +3150,27 @@ function renderDeveloperTestbox(res, { user, apps, status = 200 }) {
         return apps[0];
     }
 
-    function syncRedirects() {
-        var app = appFor(appSelect.value);
-        redirectSelect.textContent = '';
+    function groupFor(clientId) {
+        var groups = document.querySelectorAll('.redirect-field');
+        for (var i = 0; i < groups.length; i++) {
+            if (groups[i].getAttribute('data-client') === clientId) return groups[i];
+        }
+        return null;
+    }
 
-        app.redirect_uris.forEach(function (uri) {
-            var option = document.createElement('option');
-            option.value = uri;
-            option.textContent = uri;
-            redirectSelect.appendChild(option);
-        });
+    function selectedUri(group) {
+        var select = group ? group.querySelector('select') : null;
+        return select ? select.value : '';
+    }
 
-        if (app.redirect_uris.indexOf(testUri) >= 0) redirectSelect.value = testUri;
+    // Every application already has its own dropdown, so switching just reveals
+    // the matching one.
+    function showSelectedGroup() {
+        var groups = document.querySelectorAll('.redirect-field');
+        for (var i = 0; i < groups.length; i++) {
+            groups[i].style.display = groups[i].getAttribute('data-client') === appSelect.value ? '' : 'none';
+        }
+        return groupFor(appSelect.value);
     }
 
     function showStatus(text) {
@@ -3160,14 +3194,17 @@ function renderDeveloperTestbox(res, { user, apps, status = 200 }) {
         result.classList.remove('idle');
     }
 
-    appSelect.addEventListener('change', syncRedirects);
-    syncRedirects();
+    appSelect.addEventListener('change', showSelectedGroup);
+    // Materialize handles option clicks itself and stops the event, so sample
+    // the selection from a capture-phase click instead.
+    document.addEventListener('click', function () { setTimeout(showSelectedGroup, 0); }, true);
+    showSelectedGroup();
 
     openButton.addEventListener('click', function () {
         var app = appFor(appSelect.value);
-        var redirectUri = redirectSelect.value;
+        var redirectUri = selectedUri(groupFor(appSelect.value));
 
-        if (!app || !redirectUri) {
+        if (!redirectUri) {
             showStatus('This application has no redirect URI to return to.');
             return;
         }
@@ -3361,7 +3398,7 @@ app.get(DEV_TESTBOX_PATH, requireDeveloper, (req, res) => {
         redirect_uris: parseStoredUris(app.redirect_uris),
     }));
 
-    renderDeveloperTestbox(res, { user: req.developer, apps });
+    renderDeveloperTestbox(res, { user: req.developer, apps, issuer: oauthIssuer(req), requested: String(req.query.client || '') });
 });
 
 app.use((err, req, res, next) => {
