@@ -240,7 +240,8 @@ db.exec(`
         verified INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL,
         last_used INTEGER,
-        owner_id TEXT
+        owner_id TEXT,
+        icon TEXT
     );
 
     CREATE TABLE IF NOT EXISTS oauth_codes (
@@ -266,6 +267,13 @@ try {
     // Already present.
 }
 
+// Icon uploads arrived after the portal did.
+try {
+    db.exec('ALTER TABLE oauth_clients ADD COLUMN icon TEXT');
+} catch (err) {
+    // Already present.
+}
+
 db.exec('CREATE INDEX IF NOT EXISTS idx_oauth_clients_owner ON oauth_clients(owner_id)');
 
 const oauthStmts = {
@@ -278,8 +286,14 @@ const oauthStmts = {
     listClientsByOwner: db.prepare('SELECT * FROM oauth_clients WHERE owner_id = ? ORDER BY created_at DESC'),
     getClientForOwner: db.prepare('SELECT * FROM oauth_clients WHERE client_id = ? AND owner_id = ?'),
     updateOwnedClient: db.prepare('UPDATE oauth_clients SET name = ?, redirect_uris = ? WHERE client_id = ? AND owner_id = ?'),
+    setClientIcon: db.prepare('UPDATE oauth_clients SET icon = ? WHERE client_id = ? AND owner_id = ?'),
     deleteOwnedClient: db.prepare('DELETE FROM oauth_clients WHERE client_id = ? AND owner_id = ?'),
     touchClient: db.prepare('UPDATE oauth_clients SET last_used = ? WHERE client_id = ?'),
+    setClientVerified: db.prepare('UPDATE oauth_clients SET verified = ? WHERE client_id = ?'),
+    listClientsForReview: db.prepare(`SELECT c.*, u.username AS owner_username FROM oauth_clients c
+        LEFT JOIN users u ON u.id = c.owner_id
+        WHERE c.client_secret_hash IS NULL
+        ORDER BY c.verified ASC, c.created_at DESC`),
     insertCode: db.prepare('INSERT INTO oauth_codes (code_hash, client_id, user_id, redirect_uri, scope, code_challenge, code_challenge_method, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'),
     getCode: db.prepare('SELECT * FROM oauth_codes WHERE code_hash = ?'),
     consumeCode: db.prepare('UPDATE oauth_codes SET consumed_at = ? WHERE code_hash = ? AND consumed_at IS NULL'),
@@ -1916,6 +1930,12 @@ const OAUTH_SESSION_SECONDS = 12 * 60 * 60;
 const OAUTH_CLIENT_NAME_MAX = 60;
 const OAUTH_MAX_REDIRECT_URIS = 5;
 
+// Icons are re-encoded to a square PNG and kept inline as a data URL, so the
+// consent screen shows one without an extra request or a public file store.
+const OAUTH_APP_ICON_SIZE = 128;
+const OAUTH_APP_ICON_MAX_UPLOAD = 512 * 1024;
+const OAUTH_APP_ICON_PREFIX = 'data:image/png;base64,';
+
 // Dedicated CORS: the token, userinfo and registration endpoints are called
 // from the registering site's own origin, which is not in CORS_ORIGINS.
 const oauthCors = cors({
@@ -2047,6 +2067,7 @@ function parseOAuthRequest(source) {
         client,
         clientId: client.client_id,
         clientName: client.name,
+        clientIcon: typeof client.icon === 'string' ? client.icon : '',
         verified: !!client.verified,
         redirectUri,
         state,
@@ -2139,6 +2160,7 @@ function oauthStyles() {
             display: flex; align-items: center; justify-content: center; overflow: hidden;
             color: #fff; font-size: 18px; font-weight: 600;
         }
+        img.app-icon { display: block; object-fit: contain; background: #2a2a32; }
         h1, h2 { margin: 0 0 16px; font-size: 22px; font-weight: 400; line-height: 1.3; }
         h2 strong { font-weight: 600; }
         .sub { margin: 0 0 16px; font-size: 13px; color: var(--on-surface-variant); }
@@ -2188,6 +2210,7 @@ function oauthStyles() {
         .scope { display: flex; align-items: flex-start; gap: 12px; font-size: 13px; line-height: 1.4; color: var(--on-surface-variant); }
         .scope .material-icons { color: var(--primary); margin-top: 2px; }
         .disclaimer { margin: 0 0 20px; font-size: 11px; line-height: 1.4; color: var(--on-surface-variant); }
+        .verified-badge { color: var(--primary); font-size: 17px; margin-left: 4px; vertical-align: -3px; }
         .actions { display: flex; justify-content: flex-end; gap: 10px; }
         .notice { margin: 0 0 16px; padding: 10px 12px; border-radius: 12px; font-size: 12px; line-height: 1.45; }
         .notice.warn { background: rgba(255, 209, 140, 0.1); border: 1px solid rgba(255, 209, 140, 0.35); color: #ffd18c; }
@@ -2212,9 +2235,13 @@ function oauthClientHue(clientId) {
     return hue;
 }
 
-// No app icons are collected, so the requester gets a stable coloured tile
-// with its initial instead.
-function oauthAppIcon(clientName, clientId) {
+// Applications upload an icon in the developer portal. Without one the
+// requester gets a stable coloured tile with its initial instead.
+function oauthAppIcon(clientName, clientId, icon) {
+    if (typeof icon === 'string' && icon.startsWith(OAUTH_APP_ICON_PREFIX)) {
+        return `<img class="app-icon" src="${escapeHtml(icon)}" alt="">`;
+    }
+
     const hue = oauthClientHue(clientId);
     const initial = escapeHtml(String(clientName || '?').trim().charAt(0).toUpperCase() || '?');
     return `<div class="app-icon" style="background: linear-gradient(135deg, hsl(${hue} 62% 52%), hsl(${(hue + 46) % 360} 58% 34%))">${initial}</div>`;
@@ -2279,10 +2306,13 @@ function renderOAuthForm(res, { request, user, mode, error, status = 200, userna
         const warning = request.verified
             ? ''
             : `        <div class="notice warn"><strong>${name}</strong> has not been reviewed by Breakmine. Only continue if you trust ${hostLabel}.</div>\n`;
+        const verifiedBadge = request.verified
+            ? ' <i class="material-icons verified-badge" title="Verified by Breakmine" aria-label="Verified application">verified</i>'
+            : '';
 
         body = `        ${oauthBrandHeader('Breakmine Account Security')}
-${oauthAppIcon(request.clientName, request.clientId)}
-        <h2><strong>${name}</strong> wants to access your Breakmine account</h2>
+${oauthAppIcon(request.clientName, request.clientId, request.clientIcon)}
+        <h2><strong>${name}</strong>${verifiedBadge}<br> wants to access your Breakmine account</h2>
         <div class="account-chip"><div class="avatar">${initial}</div><span>${escapeHtml(user.username)}</span></div>
 ${warning}
         <form method="post" action="/oauth/authorize">
@@ -2763,6 +2793,57 @@ const DEV_COOKIE = 'breakmine_developer';
 const DEV_SESSION_SECONDS = 12 * 60 * 60;
 const DEV_TESTBOX_PATH = '/developers/testbox';
 
+// Accounts allowed to mark applications as verified. Verification removes the
+// "not reviewed" warning from the consent screen and adds a badge next to the
+// app name there.
+const OAUTH_REVIEWER_USERNAMES = new Set(['kai']);
+
+function isOAuthReviewer(user) {
+    return !!user && OAUTH_REVIEWER_USERNAMES.has(String(user.username || '').toLowerCase());
+}
+
+// App icons are small, so they are held in memory, normalised and stored on the
+// client row rather than written next to the skins.
+const appIconUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: OAUTH_APP_ICON_MAX_UPLOAD, files: 1 },
+    fileFilter: (req, file, cb) => {
+        const png = file.mimetype === 'image/png';
+        cb(png ? null : new Error('Icons must be PNG images.'), png);
+    },
+});
+
+// Parse the upload here instead of letting the error reach the JSON handler.
+function readAppIconUpload(req, res, next) {
+    appIconUpload.single('icon')(req, res, (err) => {
+        if (!err) return next();
+        req.file = undefined;
+        req.appIconError = err.code === 'LIMIT_FILE_SIZE'
+            ? 'Icons must be 512 KB or smaller.'
+            : (err.message === 'Icons must be PNG images.' ? err.message : 'That file could not be read.');
+        next();
+    });
+}
+
+async function storeAppIcon(file) {
+    if (!file || !file.buffer || !file.buffer.length) return { error: 'Choose a PNG image first.' };
+    // The mimetype is whatever the browser claimed; check the PNG signature too.
+    if (file.buffer.length < 8 || file.buffer.readUInt32BE(0) !== 0x89504e47) return { error: 'Icons must be PNG images.' };
+
+    try {
+        const png = await sharp(file.buffer, { limitInputPixels: 40 * 1000 * 1000 })
+            .resize(OAUTH_APP_ICON_SIZE, OAUTH_APP_ICON_SIZE, {
+                fit: 'contain',
+                background: { r: 0, g: 0, b: 0, alpha: 0 },
+            })
+            .png({ compressionLevel: 9 })
+            .toBuffer();
+        return { icon: OAUTH_APP_ICON_PREFIX + png.toString('base64') };
+    } catch (err) {
+        return { error: 'That image could not be read. Try another PNG.' };
+    }
+}
+
 function devSessionUser(req) {
     const token = readCookies(req)[DEV_COOKIE];
     if (!token) return null;
@@ -2846,6 +2927,15 @@ function developerStyles() {
         .testbox-result.idle { color: #90a4ae; font-family: inherit; font-size: 0.9rem; }
         .uri-list { margin: 0; padding-left: 16px; }
         .uri-list li { margin-bottom: 2px; word-break: break-all; }
+        .app-icon-editor { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+        .app-icon-preview {
+            width: 64px; height: 64px; flex: 0 0 auto; border-radius: 12px;
+            object-fit: contain; background: #fff; border: 1px solid #cfd8dc; padding: 4px;
+        }
+        .app-icon-preview.empty { display: flex; align-items: center; justify-content: center; color: #b0bec5; background: #eceff1; }
+        .app-icon-editor .input-field { margin: 0 0 6px; }
+        .app-icon-editor form { margin: 0; }
+        .app-icon-editor .btn-flat { padding: 0 8px; }
         /* Materialize indents every bare textarea by 3rem and pins it to 3rem
            high with no scrollbar (a rule meant for inputs with a prefix icon).
            Undo that so the redirect URI boxes look and behave normally. */
@@ -2866,9 +2956,11 @@ function developerStyles() {
 }
 
 function renderDeveloperPage(res, { title, active = '', user = null, body, status = 200, script = '' }) {
+    const reviewer = isOAuthReviewer(user);
     const account = user
         ? `<li><a href="/developers/apps">My apps</a></li>
           <li><a href="${DEV_TESTBOX_PATH}">Test box</a></li>
+          ${reviewer ? '<li><a href="/developers/review">Review</a></li>' : ''}
           <li><a href="#!" onclick="document.getElementById('dev-logout').submit(); return false;">Sign out ${escapeHtml(user.username)}</a></li>`
         : '<li><a href="/developers/login">Sign in</a></li>';
 
@@ -2904,6 +2996,7 @@ function renderDeveloperPage(res, { title, active = '', user = null, body, statu
                     <a href="/developers/apps" class="collection-item${active === 'apps' ? ' active' : ''}">Applications</a>
                     <a href="/developers/apps#register" class="collection-item">Register an app</a>
                     <a href="${DEV_TESTBOX_PATH}" class="collection-item${active === 'testbox' ? ' active' : ''}">Popup test box</a>
+                    ${reviewer ? `<a href="/developers/review" class="collection-item${active === 'review' ? ' active' : ''}">Review queue</a>` : ''}
                 </div>
                 <div class="divider" style="margin: 15px 0"></div>
                 <p class="grey-text" style="font-size: 0.85rem; line-height: 1.5">
@@ -3011,6 +3104,55 @@ function renderDeveloperApps(res, { user, apps, error = '', status = 200, form =
     renderDeveloperPage(res, { title: 'Applications', active: 'apps', user, body, status });
 }
 
+// Reviewers approve portal applications here; the flag only affects how the
+// consent screen presents the app.
+function renderDeveloperReview(res, { user, apps, error = '', status = 200 }) {
+    const rows = apps.length
+        ? apps.map((app) => {
+            const hosts = [...new Set(parseStoredUris(app.redirect_uris).map((uri) => {
+                try { return new URL(uri).host; } catch (err) { return uri; }
+            }))];
+
+            return `<tr>
+                        <td><strong>${escapeHtml(app.name)}</strong><br>${app.verified
+                            ? '<span class="teal-text text-darken-2"><i class="material-icons tiny">verified</i> Verified</span>'
+                            : '<span class="orange-text text-darken-2">Pending review</span>'}</td>
+                        <td>${escapeHtml(app.owner_username || 'unknown')}</td>
+                        <td><code class="inline">${escapeHtml(app.client_id)}</code></td>
+                        <td>${hosts.length ? hosts.map((host) => escapeHtml(host)).join('<br>') : '<span class="grey-text">none</span>'}</td>
+                        <td>${formatDevDate(app.created_at)}</td>
+                        <td>
+                            <form method="post" action="/developers/review/${escapeHtml(app.client_id)}" style="margin: 0">
+                                <input type="hidden" name="verified" value="${app.verified ? '0' : '1'}">
+                                <button type="submit" class="btn-small waves-effect waves-light ${app.verified ? 'red lighten-1' : 'teal darken-1'}">
+                                    ${app.verified ? 'Revoke' : 'Approve'}
+                                </button>
+                            </form>
+                        </td>
+                    </tr>`;
+        }).join('')
+        : '<tr><td colspan="6" class="grey-text">No applications to review yet.</td></tr>';
+
+    const body = `                <h4>Review queue</h4>
+                <p class="grey-text">Approving an application removes the &ldquo;has not been reviewed&rdquo; warning from its consent screen and puts a verified badge next to its name there. Only portal applications are listed; clients registered on the server are trusted already.</p>
+                ${error ? devNotice(error) : ''}
+                <table class="striped responsive-table">
+                    <thead>
+                        <tr>
+                            <th><i class="material-icons tiny">badge</i> Application</th>
+                            <th><i class="material-icons tiny">person</i> Owner</th>
+                            <th><i class="material-icons tiny">vpn_key</i> Client ID</th>
+                            <th><i class="material-icons tiny">link</i> Redirect hosts</th>
+                            <th><i class="material-icons tiny">event</i> Created</th>
+                            <th><i class="material-icons tiny">rule</i> Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>`;
+
+    renderDeveloperPage(res, { title: 'Review queue', active: 'review', user, body, status });
+}
+
 function renderDeveloperApp(res, { user, app, issuer, error = '', status = 200 }) {
     const uris = parseStoredUris(app.redirect_uris);
     const testUri = `${issuer}${DEV_TESTBOX_PATH}`;
@@ -3033,6 +3175,36 @@ BreakmineAuth.login({ clientId: '${app.client_id}' })
                     <br>Created ${formatDevDate(app.created_at)} &middot; last used ${formatDevDate(app.last_used)}
                 </p>
                 ${error ? devNotice(error) : ''}
+                <h5>Application icon</h5>
+                <div class="app-icon-editor">
+                    ${app.icon
+                        ? `<img class="app-icon-preview" src="${escapeHtml(app.icon)}" alt="">`
+                        : '<div class="app-icon-preview empty"><i class="material-icons">apps</i></div>'}
+                    <div>
+                        <form method="post" action="/developers/apps/${escapeHtml(app.client_id)}/icon" enctype="multipart/form-data">
+                            <div class="file-field input-field">
+                                <div class="btn teal darken-1">
+                                    <span>Choose PNG</span>
+                                    <input type="file" name="icon" accept="image/png" required>
+                                </div>
+                                <div class="file-path-wrapper">
+                                    <input class="file-path validate" type="text" placeholder="No file chosen">
+                                </div>
+                            </div>
+                            <button class="btn waves-effect waves-light teal darken-1" type="submit">Upload icon</button>
+                        </form>
+                        ${app.icon
+                            ? `<form method="post" action="/developers/apps/${escapeHtml(app.client_id)}/icon/delete">
+                            <button class="btn-flat red-text" type="submit">Remove icon</button>
+                        </form>`
+                            : ''}
+                    </div>
+                </div>
+                <p class="grey-text" style="font-size: 0.85rem; margin-top: 4px">
+                    Shown on the sign-in consent screen next to your application name.
+                    PNG, square, up to 512 KB &mdash; it is resized to ${OAUTH_APP_ICON_SIZE}&times;${OAUTH_APP_ICON_SIZE}.
+                </p>
+
                 <div class="row">
                     <div class="col s12 l6">
                         <h5>Settings</h5>
@@ -3381,6 +3553,41 @@ app.post('/developers/apps/:clientId', requireDeveloper, (req, res) => {
     }
 });
 
+app.post('/developers/apps/:clientId/icon', requireDeveloper, oauthEndpointLimiter, readAppIconUpload, async (req, res) => {
+    const app = oauthStmts.getClientForOwner.get(req.params.clientId, req.developer.id);
+    if (!app) return res.redirect(303, '/developers/apps');
+
+    const issuer = oauthIssuer(req);
+    const fail = (message) => renderDeveloperApp(res, { user: req.developer, app, issuer, status: 400, error: message });
+
+    if (req.appIconError) return fail(req.appIconError);
+
+    const stored = await storeAppIcon(req.file);
+    if (stored.error) return fail(stored.error);
+
+    try {
+        oauthStmts.setClientIcon.run(stored.icon, app.client_id, req.developer.id);
+        Logger.info('Developers', `${req.developer.username} set the icon for ${app.client_id}`);
+        res.redirect(303, `/developers/apps/${app.client_id}`);
+    } catch (err) {
+        Logger.error('Developers', `Could not save the icon for ${app.client_id}: ${err.message}`);
+        fail('Could not save that icon.');
+    }
+});
+
+app.post('/developers/apps/:clientId/icon/delete', requireDeveloper, oauthEndpointLimiter, (req, res) => {
+    const app = oauthStmts.getClientForOwner.get(req.params.clientId, req.developer.id);
+    if (!app) return res.redirect(303, '/developers/apps');
+
+    try {
+        oauthStmts.setClientIcon.run(null, app.client_id, req.developer.id);
+        Logger.info('Developers', `${req.developer.username} removed the icon for ${app.client_id}`);
+    } catch (err) {
+        Logger.error('Developers', `Could not remove the icon for ${app.client_id}: ${err.message}`);
+    }
+    res.redirect(303, `/developers/apps/${app.client_id}`);
+});
+
 app.post('/developers/apps/:clientId/delete', requireDeveloper, (req, res) => {
     try {
         const removed = oauthStmts.deleteOwnedClient.run(req.params.clientId, req.developer.id);
@@ -3399,6 +3606,51 @@ app.get(DEV_TESTBOX_PATH, requireDeveloper, (req, res) => {
     }));
 
     renderDeveloperTestbox(res, { user: req.developer, apps, issuer: oauthIssuer(req), requested: String(req.query.client || '') });
+});
+
+app.get('/developers/review', requireDeveloper, (req, res) => {
+    if (!isOAuthReviewer(req.developer)) {
+        return renderDeveloperPage(res, {
+            status: 403,
+            title: 'Not allowed',
+            user: req.developer,
+            body: `                <h4>Not allowed</h4>
+                <p class="grey-text">Only Breakmine reviewers can approve applications.</p>
+                <a class="btn teal darken-1" href="/developers/apps">Back to my apps</a>`,
+        });
+    }
+
+    renderDeveloperReview(res, { user: req.developer, apps: oauthStmts.listClientsForReview.all() });
+});
+
+app.post('/developers/review/:clientId', requireDeveloper, oauthEndpointLimiter, (req, res) => {
+    if (!isOAuthReviewer(req.developer)) return res.redirect(303, '/developers/apps');
+
+    const app = oauthStmts.getClient.get(req.params.clientId);
+    if (!app || app.client_secret_hash) {
+        return renderDeveloperReview(res, {
+            user: req.developer,
+            apps: oauthStmts.listClientsForReview.all(),
+            status: 400,
+            error: 'That application cannot be reviewed here.',
+        });
+    }
+
+    const verified = req.body?.verified === '1';
+    try {
+        oauthStmts.setClientVerified.run(verified ? 1 : 0, app.client_id);
+        Logger.info('Developers', `${req.developer.username} ${verified ? 'verified' : 'unverified'} ${app.client_id}`);
+    } catch (err) {
+        Logger.error('Developers', `Could not update verification for ${app.client_id}: ${err.message}`);
+        return renderDeveloperReview(res, {
+            user: req.developer,
+            apps: oauthStmts.listClientsForReview.all(),
+            status: 500,
+            error: 'Could not save that change.',
+        });
+    }
+
+    res.redirect(303, '/developers/review');
 });
 
 app.use((err, req, res, next) => {
