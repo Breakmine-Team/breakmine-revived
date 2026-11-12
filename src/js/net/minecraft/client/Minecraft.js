@@ -1163,6 +1163,7 @@ export default class Minecraft {
         }
 
         this.publishGameStateToHost();
+        this.launcherApi?.onGameStateChanged?.(gs);
     }
 
     

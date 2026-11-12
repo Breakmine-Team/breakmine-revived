@@ -4,6 +4,7 @@ import MixinEngine from './net/minecraft/client/mixin/MixinEngine.js';
 import { base64Assets } from '../resources.js';
 import { uiTextures } from './assetManifest.js';
 import { Version } from '../resources/version.js';
+import { initLauncherApi, isLauncherMode } from './net/minecraft/client/launcher/LauncherApi.js';
 // Side effect: exposes window.MediaEncryptor for the index.html easter egg.
 // It lives inside src/ so every deployment has it next to the module graph: the
 // raw public/ tree serves src/ wholesale, and Vite bundles this import.
@@ -60,6 +61,9 @@ class Start {
     launch(canvasWrapperId) {
         this.loadTextures(uiTextures).then((resources) => {
             window.app = new Minecraft(canvasWrapperId, resources);
+            if (isLauncherMode()) {
+                initLauncherApi(window.app);
+            }
             if (window.hideLoadingScreen) {
                 window.hideLoadingScreen();
             }

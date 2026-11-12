@@ -369,7 +369,8 @@ def login():
             current_slug=None,
             page=None,
             meta_description="Log in to Breakmine.",
-            error=None
+            error=None,
+            next_url=request.args.get('next', '')
         )
     username = request.form.get('username', '').strip()
     password = request.form.get('password', '')
@@ -388,7 +389,10 @@ def login():
     db.close()
     if user and verify_password(user['salt'], user['password_hash'], password):
         session['user'] = username
-        return redirect(request.referrer or '/')
+        target = request.form.get('next') or ''
+        if not (target.startswith('/') and not target.startswith('//')):
+            target = request.referrer or '/'
+        return redirect(target)
     return render_template(
         base_layout,
         page_title="Error",
@@ -1211,14 +1215,25 @@ def index():
 
 @bugs_bp.route('/report', methods=['GET', 'POST'])
 def report():
-    if not session.get('user'): return redirect(url_for('auth.login'))
+    if not session.get('user'):
+        next_url = request.full_path if request.query_string else request.path
+        return redirect(url_for('auth.login', next=next_url))
     if request.method == 'GET':
+        form = None
+        if request.args:
+            form = {
+                'title': _clean_bug_field(request.args.get('title'), MAX_BUG_TITLE),
+                'category': _bug_category(request.args.get('category')),
+                'version': _clean_bug_field(request.args.get('version'), MAX_BUG_VERSION),
+                'description': _clean_bug_field(request.args.get('description'), MAX_BUG_BODY),
+            }
         return render_template(
             'bugs/report.html',
             page_title="Report a Bug",
             header_title="Report a Bug",
             categories=BUG_CATEGORIES,
             error=None,
+            form=form,
             meta_description="Report a bug, crash or suggestion for Breakmine."
         )
     title = _clean_bug_field(request.form.get('title'), MAX_BUG_TITLE)

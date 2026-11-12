@@ -310,6 +310,16 @@ export async function login(username, password) {
     return response;
 }
 
+export async function loginOrRegister(username, password) {
+    const exists = await userExists(username);
+
+    if (!exists) {
+        await register(username, password);
+    }
+
+    return login(username, password);
+}
+
 export async function logout() {
     try {
         const response = await postRequest('/api/logout', {}, true);

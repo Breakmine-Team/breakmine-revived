@@ -311,15 +311,7 @@ export default class GuiAccount extends GuiScreen {
 
         this.minecraft.displayScreen(new GuiWaitForCompletion(this, `Signing in as ${username}...`, async () => {
             try {
-                const exists = await AuthLib.userExists(username);
-                let result;
-
-                if (exists) {
-                    result = await AuthLib.login(username, password);
-                } else {
-                    await AuthLib.register(username, password);
-                    result = await AuthLib.login(username, password);
-                }
+                const result = await AuthLib.loginOrRegister(username, password);
 
                 this.minecraft.newSessionFromUsername(username);
                 this.minecraft.updateAccessToken(result.token);
@@ -329,6 +321,7 @@ export default class GuiAccount extends GuiScreen {
                 this.minecraft.settings.save();
 
                 this.minecraft.capeManager?.refreshOwnCape();
+                this.minecraft.launcherApi?.onAccountChanged?.();
 
                 this.setFriendStatus("");
                 this.errorMessage = `Signed in as ${username}`;
@@ -357,6 +350,7 @@ export default class GuiAccount extends GuiScreen {
         }
 
         this.minecraft.capeManager?.clearOwnCape();
+        this.minecraft.launcherApi?.onAccountChanged?.();
     }
 
     formatError(error) {

@@ -7,6 +7,7 @@
   {% endif %}
 
   <form action="{{ url_for('auth.login') }}" method="post">
+    <input type="hidden" name="next" value="{{ next_url | e }}">
     <div class="input-field">
       <input type="text" id="username" name="username" required>
       <label for="username">Username</label>

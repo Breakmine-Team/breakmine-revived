@@ -517,9 +517,9 @@ ${event.detail}
 \`\`\`
 
 *Before posting, check if there are any duplicate issues!*`);
-  const uri_generated = `https://github.com/Breakmine-Team/breakmine-revived/issues/new?title=${title}&body=${body}`;
+  const uri_generated = `https://bugs.breakmine.com/report?title=${title}&description=${body}&category=bug&version=${encodeURIComponent(window.GAME_VERSION || "")}`;
   const win = WindowManager.create({
-    title: `Error - <a href="${uri_generated}">Report on Github</a>`,
+    title: `Error - <a href="${uri_generated}">Report to Bugtracker</a>`,
     x: 60,
     y: 40,
     width: 520,

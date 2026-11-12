@@ -3,7 +3,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const RPC = require('discord-rpc');
 const { registerDeepLinks } = require('./deeplink.js');
-const { runSelfUpdate } = require('./updater.js');
+const { runSelfUpdate, updateGame, gameStartPage } = require('./updater.js');
 
 const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
 app.commandLine.appendSwitch('disable-pointer-lock-options');
@@ -149,11 +149,13 @@ function registerModHandlers() {
         }
     });
 
-    ipcMain.handle('game:selfUpdate', async (event, options) => {
+    ipcMain.handle('game:selfUpdate', async (event) => {
         const win = BrowserWindow.fromWebContents(event.sender);
-        const requested = options && typeof options.ref === 'string' ? options.ref.trim() : '';
-        const ref = /^[A-Za-z0-9._/-]{1,120}$/.test(requested) ? requested : 'main';
-        return runSelfUpdate({ window: win, ref });
+        const result = await runSelfUpdate({ window: win });
+        if (result.updated && win && !win.isDestroyed()) {
+            loadGame(win);
+        }
+        return result;
     });
 
     ipcMain.handle('mods:getFileSize', (_event, filename) => {
@@ -170,6 +172,37 @@ function registerModHandlers() {
         const { shell } = require('electron');
         shell.openPath(MODS_DIR);
     });
+}
+
+function loadGame(win) {
+  const file = gameStartPage();
+  return win.loadFile(file).catch((err) => {
+    console.error(`[game] could not load ${file}:`, err.message);
+  });
+}
+
+function isPlaying() {
+  return cachedGameState.state === 'ingame'
+    || cachedGameState.state === 'paused'
+    || cachedGameState.state === 'gui';
+}
+
+/**
+ * Pull the published game on launch. The bundled build is already on screen,
+ * so this runs in the background; once the download lands the window reloads
+ * into the new copy - unless the player is already in a world, in which case
+ * the new build is picked up on the next launch.
+ */
+async function refreshGame(win) {
+  const result = await updateGame({ window: win });
+  if (!result.updated || win.isDestroyed()) return;
+
+  if (isPlaying()) {
+    console.log(`[game] downloaded ${result.version || 'a new build'}; it will be used on the next launch.`);
+    return;
+  }
+
+  loadGame(win);
 }
 
 function createWindow() {
@@ -214,8 +247,10 @@ function createWindow() {
   if (isDev) {
     win.loadURL('http://localhost:8000');
   } else {
-    win.loadFile(path.join(__dirname, '..', '..', '..', '..', '..', 'dist/index.html'));
+    loadGame(win);
   }
+
+  return win;
 }
 
 
@@ -320,7 +355,7 @@ if (!gotInstanceLock) {
   });
 
   app.whenReady().then(() => {
-    createWindow();
+    const win = createWindow();
     registerModHandlers();
     deeplinks = registerDeepLinks({
       modsDir: MODS_DIR,
@@ -332,6 +367,9 @@ if (!gotInstanceLock) {
       deferredInstanceArgv = null;
       deeplinks.handleSecondInstance(argv);
     }
+
+    // Dev runs against the vite server, so there is nothing to download.
+    if (!isDev) refreshGame(win);
 
     rpc.login({ clientId: '1532728832660996116' }).catch((err) => {
       console.error("Discord RPC failed to connect:", err);

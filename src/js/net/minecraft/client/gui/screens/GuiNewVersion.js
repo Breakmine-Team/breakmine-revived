@@ -25,9 +25,9 @@ export default class GuiVersion extends GuiScreen {
             + (this.isFile
                 ? "Download the new version from the New Update prompt.\n"
                 : this.isPackaged
-                    ? "Breakmine will download and build the new version for you.\n"
-                    + "This takes a few minutes and needs Node and npm; the game\n"
-                    + "will close by itself when the update is installed.\n"
+                    ? "Breakmine will download the new game from\n"
+                    + "datastore.breakmine.com and restart. No new app image is\n"
+                    + "downloaded; the game reloads when the download finishes.\n"
                     : "Click 'Reload' to update the game.\n");
     }
 
@@ -81,9 +81,9 @@ export default class GuiVersion extends GuiScreen {
 
         this.updating = true;
         if (this.updateButton) this.updateButton.setEnabled(false);
-        this.templateText = "Starting the update...\n\nThe installer output will appear here.";
+        this.templateText = "Starting the update...\n\nThe download progress will appear here.";
 
-        const result = await window.modsBridge.selfUpdate({ ref: 'main' });
+        const result = await window.modsBridge.selfUpdate();
         if (result && !result.started) {
             this.updating = false;
             if (this.updateButton) this.updateButton.setEnabled(true);
