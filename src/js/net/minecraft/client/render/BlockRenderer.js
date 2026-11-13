@@ -518,7 +518,7 @@ export default class BlockRenderer {
                             }
 
                             let occluders = neighborOccluders[j];
-                            if (occluders !== null && this.isPartFaceCoveredByPart(occluders, -1, bbox, face)) {
+                            if (occluders !== null && this.isPartFaceCoveredByPart(occluders, -1, bbox, face, multipartBlock)) {
                                 continue;
                             }
                         }
@@ -559,8 +559,10 @@ export default class BlockRenderer {
             }];
         }
 
-        if (neighborBlock === multipartBlock) {
-            return this.resolveParts(multipartBlock.getMultipart(world, nx, ny, nz)).map((part) => ({
+        // Door halves (and other multipart pairs) are separate block instances,
+        // so match on the multipart class instead of object identity.
+        if (neighborBlock.multipart === true && neighborBlock.constructor === multipartBlock.constructor) {
+            return this.resolveParts(neighborBlock.getMultipart(world, nx, ny, nz)).map((part) => ({
                 partBlock: part.partBlock,
                 bbox: new BoundingBox(
                     part.bbox.minX + face.x, part.bbox.minY + face.y, part.bbox.minZ + face.z,
@@ -573,7 +575,7 @@ export default class BlockRenderer {
     }
 
     
-    isPartFaceCoveredByPart(parts, partIndex, bbox, face) {
+    isPartFaceCoveredByPart(parts, partIndex, bbox, face, ownerBlock = null) {
         let minA, maxA, minU, maxU, minV, maxV;
         if (face.x !== 0) {
             minA = 'minX'; maxA = 'maxX';
@@ -598,7 +600,11 @@ export default class BlockRenderer {
             }
 
             let otherBlock = parts[i].partBlock;
-            if (otherBlock && !otherBlock.occludesNeighborFaces()) {
+            // Translucent parts do not hide what is behind them, but two parts of
+            // the same multipart class touching flush (door halves, etc.) can still
+            // cull their shared faces.
+            if (otherBlock && !otherBlock.occludesNeighborFaces()
+                && (ownerBlock === null || otherBlock.constructor !== ownerBlock.constructor)) {
                 continue;
             }
 
