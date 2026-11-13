@@ -83,13 +83,15 @@ export default class BlockDoor extends Block {
     }
 
     shouldRenderFace(world, x, y, z, face) {
-        if (this.id === this.doorBottomId) {
+        const data = world ? world.getBlockDataAt(x, y, z) : 0;
+        
+        if (this.id === this.doorBottomId && (data & 8) === 0) {
             if (face === EnumBlockFace.TOP) {
                 return false;
             }
         }
         
-        if (this.id === this.doorTopId) {
+        if (this.id === this.doorTopId && (data & 8) === 0) {
             if (face === EnumBlockFace.BOTTOM) {
                 return false;
             }
