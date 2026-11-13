@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>{{title}} · Breakmine Developers</title>
+    <link rel="icon" type="image/png" href="https://breakmine.com/favicon.png">
+    <link rel="stylesheet" href="https://unpkg.com/materialize-css@1.0.0/dist/css/materialize.min.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <style>
+        body { background: #eceff1; }
+        .navbar-sticky { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; }
+        nav .nav-wrapper { padding: 0 16px; }
+        nav .brand-logo { position: static; transform: none; padding: 0; font-size: 1.4rem; }
+        .sidenav.sidenav-fixed { top: 64px; height: calc(100vh - 64px); width: 280px; box-shadow: 1px 0 5px rgba(0, 0, 0, 0.12); }
+        .sidenav-padding { padding: 20px; }
+        main { margin-top: 64px; padding: 20px; }
+        @media only screen and (min-width: 993px) { main { padding-left: 300px; } }
+        .card { margin: 0; }
+        .card .card-content { padding: 20px 24px 28px; }
+        h4 { font-size: 1.85rem; margin: 12px 0; }
+        h5 { font-size: 1.3rem; margin: 28px 0 12px; }
+        code.inline { background: #eceff1; color: #37474f; padding: 1px 6px; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; word-break: break-all; }
+        pre.snippet { background: #263238; color: #eceff1; padding: 16px; border-radius: 6px; overflow-x: auto; font-size: 0.78rem; line-height: 1.5; }
+        .material-icons.tiny { font-size: 1.1rem; vertical-align: middle; }
+        .testbox-result { min-height: 140px; background: #263238; color: #eceff1; border-radius: 6px; padding: 16px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; line-height: 1.65; overflow-wrap: anywhere; }
+        .testbox-result .key { color: #80cbc4; }
+        .testbox-result.idle { color: #90a4ae; font-family: inherit; font-size: 0.9rem; }
+        .uri-list { margin: 0; padding-left: 16px; }
+        .uri-list li { margin-bottom: 2px; word-break: break-all; }
+        .app-icon-editor { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+        .app-icon-preview {
+            width: 64px; height: 64px; flex: 0 0 auto; border-radius: 12px;
+            object-fit: contain; background: #fff; border: 1px solid #cfd8dc; padding: 4px;
+        }
+        .app-icon-preview.empty { display: flex; align-items: center; justify-content: center; color: #b0bec5; background: #eceff1; }
+        .app-icon-editor .input-field { margin: 0 0 6px; }
+        .app-icon-editor form { margin: 0; }
+        .app-icon-editor .btn-flat { padding: 0 8px; }
+        /* Materialize indents every bare textarea by 3rem and pins it to 3rem
+           high with no scrollbar (a rule meant for inputs with a prefix icon).
+           Undo that so the redirect URI boxes look and behave normally. */
+        textarea, .input-field textarea {
+            margin-left: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 4.5rem;
+            overflow-y: auto !important;
+            resize: vertical !important;
+            box-sizing: border-box !important;
+            padding: .8rem 0 1rem !important;
+        }
+        .input-field { margin-top: 6px; }
+        .input-field .helper-text { margin-bottom: 14px; }
+        .redirect-field { margin-top: 0; }
+    </style>
+</head>
+<body>
+    <div class="navbar-sticky">
+        <nav class="teal darken-2">
+            <div class="nav-wrapper">
+                <a href="/developers/apps" class="brand-logo">Breakmine Developers</a>
+                <ul class="right">
+                    {{accountNav}}
+                </ul>
+            </div>
+        </nav>
+    </div>
+
+    <ul class="sidenav sidenav-fixed">
+        <li>
+            <div class="sidenav-padding">
+                <p><strong>Navigation</strong></p>
+                <div class="collection" style="border: none">
+                    <a href="/developers/apps" class="collection-item{{appsActive}}">Applications</a>
+                    <a href="/developers/apps#register" class="collection-item">Register an app</a>
+                    <a href="{{testboxPath}}" class="collection-item{{testboxActive}}">Popup test box</a>
+                    {{reviewLink}}
+                </div>
+                <div class="divider" style="margin: 15px 0"></div>
+                <p class="grey-text" style="font-size: 0.85rem; line-height: 1.5">
+                    Breakmine developers register OAuth applications, then sites call
+                    <code class="inline">BreakmineAuth.login()</code> to sign players in.
+                </p>
+            </div>
+        </li>
+    </ul>
+
+    <main>
+        <div class="card">
+            <div class="card-content">
+{{body}}
+            </div>
+        </div>
+    </main>
+
+    <form id="dev-logout" method="post" action="/developers/logout" style="display: none"></form>
+    <script src="https://unpkg.com/materialize-css@1.0.0/dist/js/materialize.min.js"></script>
+    <script>
+        // Real Materialize dropdowns for every <select>; if the CDN is
+        // unreachable the plain selects stay usable.
+        if (window.M && M.FormSelect) M.FormSelect.init(document.querySelectorAll('select'));
+    </script>
+{{script}}
+</body>
+</html>

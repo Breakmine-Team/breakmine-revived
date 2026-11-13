@@ -1,0 +1,22 @@
+                <h4>Popup test box</h4>
+                <p class="grey-text">Pick one of your applications and open the real Breakmine sign-in popup. The SDK completes the PKCE exchange and hands the test box a bearer token.</p>
+                <div class="row" style="margin-bottom: 0">
+                    <div class="col s12 m5">
+                        <div class="input-field">
+                            <select id="testbox-app">{{options}}</select>
+                            <label for="testbox-app" class="active">Application</label>
+                        </div>
+                        {{redirectGroups}}
+                        <button type="button" class="btn teal darken-1 waves-effect waves-light" id="testbox-open">
+                            <i class="material-icons left">open_in_new</i>Open sign-in popup
+                        </button>
+                        <p class="grey-text" style="font-size: 0.8rem; margin-top: 16px">
+                            The popup must be allowed by the browser. Cancelling it returns
+                            &ldquo;Sign-in was cancelled.&rdquo; instead of a token.
+                        </p>
+                    </div>
+                    <div class="col s12 m7">
+                        <p class="grey-text" id="testbox-status" style="margin-bottom: 8px">Nothing yet.</p>
+                        <div class="testbox-result idle" id="testbox-result">The token, account and userinfo response appear here.</div>
+                    </div>
+                </div>

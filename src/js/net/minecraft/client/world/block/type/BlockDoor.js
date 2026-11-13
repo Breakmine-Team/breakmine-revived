@@ -9,21 +9,25 @@ export default class BlockDoor extends Block {
 
     static DOOR_BOTTOM = 160;
     static DOOR_TOP = 161;
-    
-    constructor(id, textureSlotId) {
+
+    constructor(id, textureSlotId, options = {}) {
         super(id, textureSlotId);
-        this.description = "Oak Door";
-        this.hardness = 3.0;
+        this.doorBottomId = options.bottomId ?? BlockDoor.DOOR_BOTTOM;
+        this.doorTopId = options.topId ?? BlockDoor.DOOR_TOP;
+        this.doorTexture = options.texture ?? 'oak_door';
+        this.description = options.description ?? "Oak Door";
+        this.hardness = options.hardness ?? 3.0;
         this.multipart = true;
         this.noFaceCull = true;
-        this.sound = Block.sounds.wood;
+        this.sound = options.sound ?? Block.sounds.wood;
         this.inventoryTab = EnumCreativeInventoryTab.NOTLISTED;
         this.renderAsItemInInventory = true;
-        this.itemTextureInventory = 'oak_door';
+        this.itemTextureInventory = options.itemTexture ?? 'oak_door';
+        this.preferredToolType = options.tool ?? 'axe';
     }
 
     getPreferredToolType() {
-        return 'axe';
+        return this.preferredToolType;
     }
 
     getAmbientOcclusion() {
@@ -35,7 +39,7 @@ export default class BlockDoor extends Block {
     }
 
     getTextureForFace() {
-        return this.id === BlockDoor.DOOR_BOTTOM ? 'oak_door_bottom' : 'oak_door_top';
+        return `${this.doorTexture}_${this.id === this.doorBottomId ? 'bottom' : 'top'}`;
     }
 
     isSolid() {
@@ -81,13 +85,13 @@ export default class BlockDoor extends Block {
     shouldRenderFace(world, x, y, z, face) {
         const data = world ? world.getBlockDataAt(x, y, z) : 0;
         
-        if (this.id === BlockDoor.DOOR_BOTTOM && (data & 8) === 0) {
+        if (this.id === this.doorBottomId && (data & 8) === 0) {
             if (face === EnumBlockFace.TOP) {
                 return false;
             }
         }
         
-        if (this.id === BlockDoor.DOOR_TOP && (data & 8) === 0) {
+        if (this.id === this.doorTopId && (data & 8) === 0) {
             if (face === EnumBlockFace.BOTTOM) {
                 return false;
             }
@@ -112,7 +116,7 @@ export default class BlockDoor extends Block {
     }
 
     getDrop(world, x, y, z) {
-        return this.id === BlockDoor.DOOR_TOP ? [BlockDoor.DOOR_BOTTOM, 1] : [this.id, 1];
+        return this.id === this.doorTopId ? [this.doorBottomId, 1] : [this.id, 1];
     }
 
     getPlacementMetadata(world, x, y, z, face, yaw = 0) {
@@ -131,11 +135,11 @@ export default class BlockDoor extends Block {
 
         world.setBlockDataAt(x, y, z, facing);
         
-        if (this.id === BlockDoor.DOOR_BOTTOM) {
+        if (this.id === this.doorBottomId) {
             const aboveY = y + 1;
             const aboveBlock = world.getBlockAt(x, aboveY, z);
-            if (aboveBlock !== BlockDoor.DOOR_TOP) {
-                world.setBlockAt(x, aboveY, z, BlockDoor.DOOR_TOP, facing);
+            if (aboveBlock !== this.doorTopId) {
+                world.setBlockAt(x, aboveY, z, this.doorTopId, facing);
             }
         }
 
@@ -170,10 +174,10 @@ export default class BlockDoor extends Block {
     }
 
     updateState(world, x, y, z) {
-        if (this.id === BlockDoor.DOOR_TOP && world.getBlockAt(x, y - 1, z) === BlockDoor.DOOR_BOTTOM) {
+        if (this.id === this.doorTopId && world.getBlockAt(x, y - 1, z) === this.doorBottomId) {
             y = y - 1;
         }
-        if (this.id !== BlockDoor.DOOR_BOTTOM || world.getBlockAt(x, y, z) !== BlockDoor.DOOR_BOTTOM) return;
+        if (this.id !== this.doorBottomId || world.getBlockAt(x, y, z) !== this.doorBottomId) return;
 
         const powered = this.isPowered(world, x, y, z) || this.isPowered(world, x, y + 1, z);
         const data = world.getBlockDataAt(x, y, z);
@@ -183,7 +187,7 @@ export default class BlockDoor extends Block {
 
         world.setBlockDataAt(x, y, z, powered ? (data | 8) : (data & ~8));
 
-        if (world.getBlockAt(x, y + 1, z) === BlockDoor.DOOR_TOP) {
+        if (world.getBlockAt(x, y + 1, z) === this.doorTopId) {
             const aboveData = world.getBlockDataAt(x, y + 1, z);
             world.setBlockDataAt(x, y + 1, z, powered ? (aboveData | 8) : (aboveData & ~8));
         }
@@ -201,9 +205,9 @@ export default class BlockDoor extends Block {
     }
 
     onNeighborBlockChange(world, x, y, z) {
-        if (this.id === BlockDoor.DOOR_BOTTOM) {
+        if (this.id === this.doorBottomId) {
             world.scheduleBlockTick(x, y, z, 1);
-        } else if (world.getBlockAt(x, y - 1, z) === BlockDoor.DOOR_BOTTOM) {
+        } else if (world.getBlockAt(x, y - 1, z) === this.doorBottomId) {
             world.scheduleBlockTick(x, y - 1, z, 1);
         }
     }
@@ -213,11 +217,11 @@ export default class BlockDoor extends Block {
     }
 
     onBlockRemoved(world, x, y, z) {
-        if (this.id === BlockDoor.DOOR_BOTTOM) {
-            if (world.getBlockAt(x, y + 1, z) === BlockDoor.DOOR_TOP) {
+        if (this.id === this.doorBottomId) {
+            if (world.getBlockAt(x, y + 1, z) === this.doorTopId) {
                 world.setBlockAt(x, y + 1, z, 0);
             }
-        } else if (world.getBlockAt(x, y - 1, z) === BlockDoor.DOOR_BOTTOM) {
+        } else if (world.getBlockAt(x, y - 1, z) === this.doorBottomId) {
             world.setBlockAt(x, y - 1, z, 0);
         }
     }
@@ -225,7 +229,7 @@ export default class BlockDoor extends Block {
     onMouseButton(world, x, y, z, button) {
         if (button === 2) {
             let bottomY = y;
-            if (world.getBlockAt(x, y - 1, z) === BlockDoor.DOOR_BOTTOM) {
+            if (world.getBlockAt(x, y - 1, z) === this.doorBottomId) {
                 bottomY = y - 1;
             }
 
@@ -236,7 +240,7 @@ export default class BlockDoor extends Block {
             world.setBlockDataAt(x, bottomY, z, newData);
 
             const aboveId = world.getBlockAt(x, bottomY + 1, z);
-            if (aboveId === BlockDoor.DOOR_BOTTOM || aboveId === BlockDoor.DOOR_TOP) {
+            if (aboveId === this.doorBottomId || aboveId === this.doorTopId) {
                 const aboveData = world.getBlockDataAt(x, bottomY + 1, z);
                 world.setBlockDataAt(x, bottomY + 1, z, isOpen ? (aboveData & ~8) : (aboveData | 8));
             }

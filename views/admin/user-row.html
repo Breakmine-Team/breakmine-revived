@@ -1,0 +1,28 @@
+<tr>
+            <td><strong>{{username}}</strong><div class="muted">{{idText}}</div></td>
+            <td>{{createdAt}}</td>
+            <td>{{lastLogin}}</td>
+            <td>
+                <div class="muted">{{skinLabel}}</div>
+                <form class="actions" method="post" action="/admin/users/{{id}}/skin" enctype="multipart/form-data">
+                    <input type="file" name="file" accept="image/png" required>
+                    <button type="submit">Upload</button>
+                </form>
+                {{resetSkin}}
+            </td>
+            <td>
+                <form class="actions" method="post" action="/admin/users/{{id}}/cape">
+                    <select name="capeId">{{capeOptions}}</select>
+                    <button type="submit">Apply</button>
+                </form>
+            </td>
+            <td>
+                <form class="actions" method="post" action="/admin/users/{{id}}/password">
+                    <input type="password" name="password" minlength="6" maxlength="128" placeholder="New password" autocomplete="new-password" required>
+                    <button type="submit">Set</button>
+                </form>
+            </td>
+            <td><form method="post" action="/admin/users/{{id}}/delete" onsubmit="return confirm('Delete this player and all their account data?')">
+                <button class="danger" type="submit">Delete</button>
+            </form></td>
+        </tr>

@@ -1,0 +1,102 @@
+<script type="application/json" id="testbox-apps">{{data}}</script>
+<script src="/oauth/breakmine.js"></script>
+<script>
+(function () {
+    var apps = [];
+    try { apps = JSON.parse(document.getElementById('testbox-apps').textContent); } catch (err) { apps = []; }
+    if (!apps.length) return;
+
+    var appSelect = document.getElementById('testbox-app');
+    var openButton = document.getElementById('testbox-open');
+    var statusLine = document.getElementById('testbox-status');
+    var result = document.getElementById('testbox-result');
+
+    function appFor(clientId) {
+        for (var i = 0; i < apps.length; i++) {
+            if (apps[i].client_id === clientId) return apps[i];
+        }
+        return apps[0];
+    }
+
+    function groupFor(clientId) {
+        var groups = document.querySelectorAll('.redirect-field');
+        for (var i = 0; i < groups.length; i++) {
+            if (groups[i].getAttribute('data-client') === clientId) return groups[i];
+        }
+        return null;
+    }
+
+    function selectedUri(group) {
+        var select = group ? group.querySelector('select') : null;
+        return select ? select.value : '';
+    }
+
+    // Every application already has its own dropdown, so switching just reveals
+    // the matching one.
+    function showSelectedGroup() {
+        var groups = document.querySelectorAll('.redirect-field');
+        for (var i = 0; i < groups.length; i++) {
+            groups[i].style.display = groups[i].getAttribute('data-client') === appSelect.value ? '' : 'none';
+        }
+        return groupFor(appSelect.value);
+    }
+
+    function showStatus(text) {
+        statusLine.textContent = text;
+    }
+
+    function line(label, value) {
+        var row = document.createElement('div');
+        var key = document.createElement('span');
+        key.className = 'key';
+        key.textContent = label + ': ';
+        var text = document.createElement('span');
+        text.textContent = value;
+        row.appendChild(key);
+        row.appendChild(text);
+        return row;
+    }
+
+    function resetResult() {
+        result.textContent = '';
+        result.classList.remove('idle');
+    }
+
+    appSelect.addEventListener('change', showSelectedGroup);
+    // Materialize handles option clicks itself and stops the event, so sample
+    // the selection from a capture-phase click instead.
+    document.addEventListener('click', function () { setTimeout(showSelectedGroup, 0); }, true);
+    showSelectedGroup();
+
+    openButton.addEventListener('click', function () {
+        var app = appFor(appSelect.value);
+        var redirectUri = selectedUri(groupFor(appSelect.value));
+
+        if (!redirectUri) {
+            showStatus('This application has no redirect URI to return to.');
+            return;
+        }
+
+        showStatus('Waiting for the popup\u2026');
+        resetResult();
+        result.appendChild(line('Application', app.name));
+        result.appendChild(line('Redirect URI', redirectUri));
+
+        BreakmineAuth.login({ clientId: app.client_id, redirectUri: redirectUri }).then(function (session) {
+            showStatus('Approved. The popup handed back a bearer token.');
+            result.appendChild(line('Username', session.username));
+            result.appendChild(line('Scope', session.scope));
+            result.appendChild(line('Expires in', session.expiresIn + ' seconds'));
+            result.appendChild(line('Access token', session.token));
+
+            return BreakmineAuth.user(session.token).then(function (profile) {
+                result.appendChild(line('userinfo', JSON.stringify(profile)));
+            }, function (err) {
+                result.appendChild(line('userinfo failed', err.message));
+            });
+        }).catch(function (err) {
+            showStatus(err.message);
+        });
+    });
+})();
+</script>

@@ -1,18 +1,19 @@
 import ItemGeneric from "./ItemGeneric.js";
-import { BlockRegistry } from "../BlockRegistry.js";
 import Block from "../Block.js";
 import EnumCreativeInventoryTab from "../../../gui/EnumCreativeInventoryTab.js";
 import BlockPosition from "../../../../util/BlockPosition.js";
 
 export default class ItemDoorPlacer extends ItemGeneric {
 
-    constructor(id, textureSlotId, description) {
+    constructor(id, textureSlotId, description, doorBlock, itemTexture = 'oak_door') {
         super(id, textureSlotId, description);
+        this.doorBlock = doorBlock;
+        this.itemTexture = itemTexture;
         this.inventoryTab = EnumCreativeInventoryTab.BUILDING_BLOCKS;
     }
 
     getTextureForFace(face) {
-        return 'oak_door';
+        return this.itemTexture;
     }
 
     onUse(world, x, y, z, itemstack, hitFace) {
@@ -28,10 +29,10 @@ export default class ItemDoorPlacer extends ItemGeneric {
             return;
         }
 
-        world.setBlockAt(x, y, z, BlockRegistry.OAK_DOOR.getId());
+        world.setBlockAt(x, y, z, this.doorBlock.getId());
         if (world && !world.minecraft.player.creative) itemstack.shrink(1);
         world.minecraft.player.swingArm();
-        this.notifyServerPlacement(world, x, y, z, hitFace, BlockRegistry.OAK_DOOR.getId());
+        this.notifyServerPlacement(world, x, y, z, hitFace, this.doorBlock.getId());
     }
 
     notifyServerPlacement(world, x, y, z, hitFace, blockId) {

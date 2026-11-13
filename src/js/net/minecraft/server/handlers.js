@@ -885,12 +885,15 @@ function handleBlockPlacement(player, buffer, offset) {
 
         addWorldChange(placeX, placeY, placeZ, blockId, metadata);
 
-        const doorTop = blockId === 160 && getBlockAt(placeX, placeY + 1, placeZ) !== 161;
+        const placedBlock = Block.getById(blockId);
+        const doorTopId = placedBlock && placedBlock.id === placedBlock.doorBottomId
+            ? placedBlock.doorTopId
+            : null;
+        const doorTop = doorTopId !== null && getBlockAt(placeX, placeY + 1, placeZ) !== doorTopId;
         if (doorTop) {
-            addWorldChange(placeX, placeY + 1, placeZ, 161, metadata);
+            addWorldChange(placeX, placeY + 1, placeZ, doorTopId, metadata);
         }
 
-        const placedBlock = Block.getById(blockId);
         if (placedBlock && typeof placedBlock.onBlockAdded === 'function') {
             try {
                 placedBlock.onBlockAdded(serverWorld, placeX, placeY, placeZ);
@@ -905,7 +908,7 @@ function handleBlockPlacement(player, buffer, offset) {
 
         const blockStates = [[placeX, placeY, placeZ, (blockId << 4) | metadata]];
         if (doorTop) {
-            blockStates.push([placeX, placeY + 1, placeZ, (161 << 4) | metadata]);
+            blockStates.push([placeX, placeY + 1, placeZ, (doorTopId << 4) | metadata]);
         }
         for (const [bx, by, bz, state] of blockStates) {
             for (const p of players.values()) {

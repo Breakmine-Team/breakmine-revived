@@ -69,6 +69,8 @@ COPY serve.json ./public/serve.json
 COPY cors.js ./
 # The browser SDK, served at /oauth/breakmine.js for third-party sites.
 COPY oauth-client.js ./
+# The admin panel, OAuth screens and developer portal markup.
+COPY views/ ./views/
 
 # --- the WebSocket tunnel relay ----------------------------------------------
 # tunnel.js relays game traffic over WS on TUNNEL_PORT. It needs only the `ws`

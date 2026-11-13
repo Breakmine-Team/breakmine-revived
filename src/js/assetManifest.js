@@ -129,7 +129,8 @@ export const atlasBlockTextures = [
     "redstone_dust_line0.png", "redstone_dust_line1.png", "redstone_dust_cross.png",
     "redstone_dust_overlay.png", "none.png", "sapphire_ore.png", "sapphire_block.png",
     "bluestone_ore.png", "slime_block_nontransparent.png", "wire.png",
-    "stonebrick.png", "dark_stonebrick.png", "oak_door_top.png", "oak_door_bottom.png", "ladder.png",
+    "stonebrick.png", "dark_stonebrick.png", "oak_door_top.png", "oak_door_bottom.png",
+    "glass_door_top.png", "glass_door_bottom.png", "ladder.png",
     "bed_head_top.png", "bed_head_side.png", "bed_head_end.png",
     "bed_feet_top.png", "bed_feet_side.png", "bed_feet_end.png",
     "bluestoneBlock.png", "bluestoneDust0000.png", "bluestoneDust0001.png",
@@ -179,7 +180,7 @@ const toolTypes = ['pickaxe', 'sword', 'shovel', 'axe', 'hoe', 'knife'];
 export const atlasItemTextures = [
     "apple.png", "bread.png", "burger.png", "stick.png", "iron_ingot.png", "coal.png",
     "diamond.png", "emerald.png", "gold_ingot.png", "uranium_ingot.png", "bucket.png",
-    "water_bucket.png", "lava_bucket.png", "oak_sign.png", "oak_door.png",
+    "water_bucket.png", "lava_bucket.png", "oak_sign.png", "oak_door.png", "glass_door.png",
     "clay_ball.png",
     "white_dye.png", "orange_dye.png", "magenta_dye.png", "light_blue_dye.png",
     "yellow_dye.png", "lime_dye.png", "pink_dye.png", "gray_dye.png",

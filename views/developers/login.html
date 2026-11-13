@@ -1,0 +1,16 @@
+                <h4>{{heading}}</h4>
+                <p class="grey-text">{{intro}}</p>
+                {{error}}
+                <form method="post" action="/developers/login" class="col s12 m8 l6" style="padding: 0">
+                    <input type="hidden" name="action" value="{{action}}">
+                    <div class="input-field">
+                        <input id="dev-username" name="username" type="text" required minlength="3" maxlength="32" autocomplete="username" value="{{username}}">
+                        <label for="dev-username" class="active">Username</label>
+                    </div>
+                    <div class="input-field">
+                        <input id="dev-password" name="password" type="password" required minlength="6" maxlength="128" autocomplete="{{passwordAutocomplete}}">
+                        <label for="dev-password" class="active">Password</label>
+                    </div>
+                    <button class="btn teal darken-1 waves-effect waves-light" type="submit">{{submitLabel}}</button>
+                    <a class="btn-flat teal-text" href="/developers/login{{switchQuery}}">{{switchLabel}}</a>
+                </form>

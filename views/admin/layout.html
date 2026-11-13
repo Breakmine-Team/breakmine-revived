@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{title}}</title><style>
+        :root { color-scheme: dark; }
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 24px; background: #14161a; color: #e6e6e6; font: 14px/1.45 system-ui, sans-serif; }
+        h1 { font-size: 20px; margin: 0 0 16px; }
+        h2 { font-size: 16px; margin: 24px 0 10px; }
+        a { color: #7fb8ff; }
+        .card { max-width: 420px; margin: 60px auto; background: #1c2026; border: 1px solid #2c323a; border-radius: 10px; padding: 20px; }
+        label { display: block; margin-bottom: 12px; font-size: 13px; color: #b9c0c9; }
+        input[type=text], input[type=password], input[type=file], select { width: 100%; margin-top: 4px; padding: 8px; background: #12151a; border: 1px solid #303742; border-radius: 6px; color: inherit; }
+        button { padding: 6px 12px; background: #2f6fed; color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
+        button.danger { background: #a83232; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 10px; border-bottom: 1px solid #2a3038; vertical-align: top; }
+        .thumb { width: 40px; height: 56px; image-rendering: pixelated; background: #0e1013; border-radius: 4px; }
+        .muted { color: #8d97a3; font-size: 12px; }
+        .pill { display: inline-flex; align-items: center; gap: 4px; background: #262d36; border-radius: 999px; padding: 2px 4px 2px 8px; margin: 0 4px 4px 0; }
+        .pill button { background: transparent; color: #aab4c0; padding: 0 4px; font-size: 14px; }
+        form.inline { display: inline; }
+        .assign { margin-top: 6px; display: flex; gap: 6px; }
+        .assign input { width: 180px; }
+        .actions { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+        .actions input[type=file] { width: 180px; }
+        .actions input[type=password] { width: 170px; }
+        .actions select { width: 190px; }
+        .msg { padding: 8px 10px; border-radius: 6px; background: #1d3a26; color: #9fe0b1; margin-bottom: 12px; }
+        .error { padding: 8px 10px; border-radius: 6px; background: #3a1d1d; color: #ffb4b4; margin-bottom: 12px; }
+        .topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 18px; }
+        .topbar form { margin: 0; }
+        .upload { background: #1c2026; border: 1px solid #2c323a; border-radius: 10px; padding: 16px; margin-bottom: 20px; display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
+        .upload label { margin: 0; flex: 1 1 220px; }
+        .purge { background: #1c2026; border: 1px solid #2c323a; border-radius: 10px; padding: 12px 16px; margin-bottom: 12px; display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .purge-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .purge-actions form { display: flex; gap: 6px; align-items: center; }
+        button:disabled { opacity: 0.45; cursor: not-allowed; }
+    </style></head>
+<body>
+{{body}}
+</body>
+</html>

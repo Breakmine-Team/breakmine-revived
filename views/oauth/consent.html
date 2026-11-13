@@ -1,0 +1,17 @@
+        {{brandHeader}}
+{{appIcon}}
+        <h2><strong>{{clientName}}</strong>{{verifiedBadge}}<br> wants to access your Breakmine account</h2>
+        <div class="account-chip"><div class="avatar">{{usernameInitial}}</div><span>{{username}}</span></div>
+{{warning}}
+        <form method="post" action="/oauth/authorize">
+            {{fields}}
+            <input type="hidden" name="action" value="logout">
+            <p class="foot"><button type="submit" class="link">Not {{username}}? Use another account</button></p>
+        </form>
+        <form method="post" action="/oauth/authorize">
+            {{fields}}
+            <div class="actions">
+                <button type="submit" class="outlined" name="action" value="deny">Cancel</button>
+                <button type="submit" class="filled auto" name="action" value="approve">Allow</button>
+            </div>
+        </form>

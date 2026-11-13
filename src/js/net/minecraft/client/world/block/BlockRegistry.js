@@ -364,7 +364,20 @@ export class BlockRegistry {
         BlockRegistry.OAK_TABLE = new BlockTable(357, 0, "oak", BlockRegistry.WOOD.id, "Oak");
         BlockRegistry.OAK_DOOR = new BlockDoor(160, 0);
         BlockRegistry.OAK_DOOR_TOP = new BlockDoor(161, 0);
-        BlockRegistry.ITEM_OAK_DOOR_PLACER = new ItemDoorPlacer(162, 0, "Oak Door")
+        BlockRegistry.ITEM_OAK_DOOR_PLACER = new ItemDoorPlacer(162, 0, "Oak Door", BlockRegistry.OAK_DOOR, 'oak_door')
+        const glassDoorOptions = {
+            bottomId: 413,
+            topId: 414,
+            texture: 'glass_door',
+            description: "Glass Door",
+            itemTexture: 'glass_door',
+            hardness: 0.3,
+            sound: Block.sounds.glass,
+            tool: 'pickaxe'
+        };
+        BlockRegistry.GLASS_DOOR = new BlockDoor(413, 0, glassDoorOptions);
+        BlockRegistry.GLASS_DOOR_TOP = new BlockDoor(414, 0, glassDoorOptions);
+        BlockRegistry.ITEM_GLASS_DOOR_PLACER = new ItemDoorPlacer(415, 0, "Glass Door", BlockRegistry.GLASS_DOOR, 'glass_door')
         BlockRegistry.BED = new BlockBed(BlockBed.FOOT_ID, 0, false);
         BlockRegistry.BED_HEAD = new BlockBed(BlockBed.HEAD_ID, 0, true);
         BlockRegistry.OAK_LADDER = new BlockLadder(252, 0);

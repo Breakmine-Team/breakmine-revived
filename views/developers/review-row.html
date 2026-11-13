@@ -1,0 +1,15 @@
+<tr>
+                        <td><strong>{{name}}</strong><br>{{badge}}</td>
+                        <td>{{owner}}</td>
+                        <td><code class="inline">{{clientId}}</code></td>
+                        <td>{{hosts}}</td>
+                        <td>{{created}}</td>
+                        <td>
+                            <form method="post" action="/developers/review/{{clientId}}" style="margin: 0">
+                                <input type="hidden" name="verified" value="{{toggle}}">
+                                <button type="submit" class="btn-small waves-effect waves-light {{actionClass}}">
+                                    {{actionLabel}}
+                                </button>
+                            </form>
+                        </td>
+                    </tr>

@@ -790,58 +790,31 @@ function escapeHtml(value) {
     }[ch]));
 }
 
-function adminStyles() {
-    return `
-        :root { color-scheme: dark; }
-        * { box-sizing: border-box; }
-        body { margin: 0; padding: 24px; background: #14161a; color: #e6e6e6; font: 14px/1.45 system-ui, sans-serif; }
-        h1 { font-size: 20px; margin: 0 0 16px; }
-        h2 { font-size: 16px; margin: 24px 0 10px; }
-        a { color: #7fb8ff; }
-        .card { max-width: 420px; margin: 60px auto; background: #1c2026; border: 1px solid #2c323a; border-radius: 10px; padding: 20px; }
-        label { display: block; margin-bottom: 12px; font-size: 13px; color: #b9c0c9; }
-        input[type=text], input[type=password], input[type=file], select { width: 100%; margin-top: 4px; padding: 8px; background: #12151a; border: 1px solid #303742; border-radius: 6px; color: inherit; }
-        button { padding: 6px 12px; background: #2f6fed; color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
-        button.danger { background: #a83232; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { text-align: left; padding: 10px; border-bottom: 1px solid #2a3038; vertical-align: top; }
-        .thumb { width: 40px; height: 56px; image-rendering: pixelated; background: #0e1013; border-radius: 4px; }
-        .muted { color: #8d97a3; font-size: 12px; }
-        .pill { display: inline-flex; align-items: center; gap: 4px; background: #262d36; border-radius: 999px; padding: 2px 4px 2px 8px; margin: 0 4px 4px 0; }
-        .pill button { background: transparent; color: #aab4c0; padding: 0 4px; font-size: 14px; }
-        form.inline { display: inline; }
-        .assign { margin-top: 6px; display: flex; gap: 6px; }
-        .assign input { width: 180px; }
-        .actions { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-        .actions input[type=file] { width: 180px; }
-        .actions input[type=password] { width: 170px; }
-        .actions select { width: 190px; }
-        .msg { padding: 8px 10px; border-radius: 6px; background: #1d3a26; color: #9fe0b1; margin-bottom: 12px; }
-        .error { padding: 8px 10px; border-radius: 6px; background: #3a1d1d; color: #ffb4b4; margin-bottom: 12px; }
-        .topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 18px; }
-        .topbar form { margin: 0; }
-        .upload { background: #1c2026; border: 1px solid #2c323a; border-radius: 10px; padding: 16px; margin-bottom: 20px; display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
-        .upload label { margin: 0; flex: 1 1 220px; }
-        .purge { background: #1c2026; border: 1px solid #2c323a; border-radius: 10px; padding: 12px 16px; margin-bottom: 12px; display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
-        .purge-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-        .purge-actions form { display: flex; gap: 6px; align-items: center; }
-        button:disabled { opacity: 0.45; cursor: not-allowed; }
-    `;
+// --- Page views -------------------------------------------------------------
+// Markup lives in views/*.html so this file only supplies data. Templates use
+// {{name}} placeholders and values are inserted raw, so anything that came from
+// a request has to be escaped before it is passed in.
+const VIEWS_DIR = path.join(__dirname, 'views');
+const viewCache = new Map();
+
+function renderView(name, vars = {}) {
+    let template = viewCache.get(name);
+    if (template === undefined) {
+        template = fs.readFileSync(path.join(VIEWS_DIR, name), 'utf8');
+        viewCache.set(name, template);
+    }
+    return template.replace(/\{\{(\w+)\}\}/g, (match, key) => (
+        Object.prototype.hasOwnProperty.call(vars, key) ? String(vars[key] ?? '') : match
+    ));
 }
 
 function renderAdminLogin(res, error = '', status = 200) {
-    res.status(status).type('html').send(`<!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Breakmine Admin</title><style>${adminStyles()}</style></head>
-<body>
-    <form class="card" method="post" action="/admin/login">
-        <h1>Breakmine Admin</h1>
-        ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
-        <label>Admin password<input type="password" name="password" autofocus required></label>
-        <button type="submit">Sign in</button>
-    </form>
-</body>
-</html>`);
+    res.status(status).type('html').send(renderView('admin/layout.html', {
+        title: 'Breakmine Admin',
+        body: renderView('admin/login.html', {
+            error: error ? renderView('admin/error.html', { message: escapeHtml(error) }) : '',
+        }),
+    }));
 }
 
 function renderAdminPanel(req, res) {
@@ -860,35 +833,22 @@ function renderAdminPanel(req, res) {
         const assigned = capeStmts.assignmentsForCape.all(cape.id).map((row) => row.username);
         const id = encodeURIComponent(cape.id);
         const pills = assigned.length === 0
-            ? '<span class="muted">Not assigned to anyone</span>'
-            : assigned.map((username) => `<form class="inline" method="post" action="/admin/capes/${id}/unassign">
-                    <input type="hidden" name="username" value="${escapeHtml(username)}">
-                    <span class="pill">${escapeHtml(username)}<button type="submit" title="Unassign">×</button></span>
-                </form>`).join(' ');
+            ? renderView('admin/no-assignments.html')
+            : assigned.map((username) => renderView('admin/cape-pill.html', {
+                id,
+                username: escapeHtml(username),
+            })).join(' ');
 
-        return `<tr>
-            <td><img class="thumb" src="/admin/capes/${id}/thumb" alt=""></td>
-            <td><strong>${escapeHtml(cape.name)}</strong><div class="muted">${escapeHtml(cape.id)}</div></td>
-            <td>${pills}
-                <form class="assign" method="post" action="/admin/capes/${id}/assign">
-                    <input type="text" name="username" placeholder="username, othername" required>
-                    <button type="submit">Assign</button>
-                </form>
-            </td>
-            <td>
-                <div class="actions">
-                    <form method="post" action="/admin/capes/${id}/assign-all" onsubmit="return confirm('Gift this cape to all ${users.length} registered players?')">
-                        <button type="submit"${users.length === 0 ? ' disabled' : ''}>Gift All</button>
-                    </form>
-                    <form method="post" action="/admin/capes/${id}/unassign-all" onsubmit="return confirm('Remove this cape from all ${assigned.length} assigned players?')">
-                        <button class="danger" type="submit"${assigned.length === 0 ? ' disabled' : ''}>Remove All</button>
-                    </form>
-                    <form method="post" action="/admin/capes/${id}/delete" onsubmit="return confirm('Delete this cape and unassign it from everyone?')">
-                        <button class="danger" type="submit">Delete</button>
-                    </form>
-                </div>
-            </td>
-        </tr>`;
+        return renderView('admin/cape-row.html', {
+            id,
+            idText: escapeHtml(cape.id),
+            name: escapeHtml(cape.name),
+            pills,
+            userCount: users.length,
+            assignedCount: assigned.length,
+            assignAllDisabled: users.length === 0 ? ' disabled' : '',
+            unassignAllDisabled: assigned.length === 0 ? ' disabled' : '',
+        });
     }).join('');
 
     const userRows = users.map((user) => {
@@ -896,91 +856,47 @@ function renderAdminPanel(req, res) {
         const selectedCape = choice ? choice.cape_id : null;
         const userId = encodeURIComponent(user.id);
         const capeOptions = [
-            `<option value="default"${selectedCape === null ? ' selected' : ''}>Server default</option>`,
-            `<option value="none"${selectedCape === '' ? ' selected' : ''}>No cape</option>`,
-            ...capes.map((cape) => `<option value="${escapeHtml(cape.id)}"${selectedCape === cape.id ? ' selected' : ''}>${escapeHtml(cape.name)}</option>`)
+            renderView('admin/cape-option.html', { value: 'default', selected: selectedCape === null ? ' selected' : '', label: 'Server default' }),
+            renderView('admin/cape-option.html', { value: 'none', selected: selectedCape === '' ? ' selected' : '', label: 'No cape' }),
+            ...capes.map((cape) => renderView('admin/cape-option.html', {
+                value: escapeHtml(cape.id),
+                selected: selectedCape === cape.id ? ' selected' : '',
+                label: escapeHtml(cape.name),
+            })),
         ].join('');
 
-        return `<tr>
-            <td><strong>${escapeHtml(user.username)}</strong><div class="muted">${escapeHtml(user.id)}</div></td>
-            <td>${formatDate(user.created_at, '—')}</td>
-            <td>${formatDate(user.last_login, 'Never')}</td>
-            <td>
-                <div class="muted">${user.skin_path ? 'Custom skin' : 'Default skin'}</div>
-                <form class="actions" method="post" action="/admin/users/${userId}/skin" enctype="multipart/form-data">
-                    <input type="file" name="file" accept="image/png" required>
-                    <button type="submit">Upload</button>
-                </form>
-                ${user.skin_path ? `<form method="post" action="/admin/users/${userId}/skin/reset"><button type="submit">Reset skin</button></form>` : ''}
-            </td>
-            <td>
-                <form class="actions" method="post" action="/admin/users/${userId}/cape">
-                    <select name="capeId">${capeOptions}</select>
-                    <button type="submit">Apply</button>
-                </form>
-            </td>
-            <td>
-                <form class="actions" method="post" action="/admin/users/${userId}/password">
-                    <input type="password" name="password" minlength="6" maxlength="128" placeholder="New password" autocomplete="new-password" required>
-                    <button type="submit">Set</button>
-                </form>
-            </td>
-            <td><form method="post" action="/admin/users/${userId}/delete" onsubmit="return confirm('Delete this player and all their account data?')">
-                <button class="danger" type="submit">Delete</button>
-            </form></td>
-        </tr>`;
+        return renderView('admin/user-row.html', {
+            id: userId,
+            idText: escapeHtml(user.id),
+            username: escapeHtml(user.username),
+            createdAt: formatDate(user.created_at, '—'),
+            lastLogin: formatDate(user.last_login, 'Never'),
+            skinLabel: user.skin_path ? 'Custom skin' : 'Default skin',
+            resetSkin: user.skin_path ? renderView('admin/reset-skin.html', { id: userId }) : '',
+            capeOptions,
+        });
     }).join('');
 
-    const purgeBar = `
-    <div class="purge">
-        <div>
-            <strong>Spam cleanup</strong>
-            <div class="muted">Matches auto-generated usernames such as JumpingPotato42.</div>
-        </div>
-        <div class="purge-actions">
-            <form method="post" action="/admin/users/purge-spam" onsubmit="return confirm('Delete all ${spamCount} auto-generated spam accounts? This cannot be undone.')">
-                <button class="danger" type="submit"${spamCount === 0 ? ' disabled' : ''}>Purge Spam</button>
-                <span class="muted">${spamCount} account${spamCount === 1 ? '' : 's'}</span>
-            </form>
-            <form method="post" action="/admin/users/purge-spam-never-logged-in" onsubmit="return confirm('Delete ${neverLoggedInSpamCount} auto-generated accounts that never logged in? This cannot be undone.')">
-                <button class="danger" type="submit"${neverLoggedInSpamCount === 0 ? ' disabled' : ''}>Purge Spam (Never logged in)</button>
-                <span class="muted">${neverLoggedInSpamCount} account${neverLoggedInSpamCount === 1 ? '' : 's'}</span>
-            </form>
-        </div>
-    </div>`;
+    const purgeBar = renderView('admin/purge-bar.html', {
+        spamCount,
+        spamWord: spamCount === 1 ? '' : 's',
+        spamDisabled: spamCount === 0 ? ' disabled' : '',
+        neverLoggedInSpamCount,
+        neverWord: neverLoggedInSpamCount === 1 ? '' : 's',
+        neverDisabled: neverLoggedInSpamCount === 0 ? ' disabled' : '',
+    });
 
-    res.type('html').send(`<!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Breakmine Admin</title><style>${adminStyles()}</style></head>
-<body>
-    <div class="topbar">
-        <h1>Breakmine Admin</h1>
-        <form method="post" action="/admin/logout"><button type="submit">Sign out</button></form>
-    </div>
-
-    ${message ? `<div class="msg">${escapeHtml(message)}</div>` : ''}
-    ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
-
-    <h2>Capes</h2>
-    <form class="upload" method="post" action="/admin/capes" enctype="multipart/form-data">
-        <label>Cape name<input type="text" name="name" maxlength="${CAPE_NAME_MAX}" placeholder="e.g. Founder Cape" required></label>
-        <label>Cape PNG (64×32 or HD)<input type="file" name="file" accept="image/png" required></label>
-        <button type="submit">Upload cape</button>
-    </form>
-
-    <table>
-        <thead><tr><th></th><th>Name</th><th>Assigned players</th><th></th></tr></thead>
-        <tbody>${capeRows || '<tr><td colspan="4" class="muted">No capes uploaded yet.</td></tr>'}</tbody>
-    </table>
-
-    <h2>Players</h2>
-    ${purgeBar}
-    <table>
-        <thead><tr><th>Player</th><th>Created</th><th>Last login</th><th>Skin</th><th>Cape</th><th>Password</th><th></th></tr></thead>
-        <tbody>${userRows || '<tr><td colspan="7" class="muted">No players registered yet.</td></tr>'}</tbody>
-    </table>
-</body>
-</html>`);
+    res.type('html').send(renderView('admin/layout.html', {
+        title: 'Breakmine Admin',
+        body: renderView('admin/panel.html', {
+            message: message ? renderView('admin/message.html', { message: escapeHtml(message) }) : '',
+            error: error ? renderView('admin/error.html', { message: escapeHtml(error) }) : '',
+            capeRows: capeRows || renderView('admin/empty-capes.html'),
+            userRows: userRows || renderView('admin/empty-users.html'),
+            purgeBar,
+            capeNameMax: CAPE_NAME_MAX,
+        }),
+    }));
 }
 
 function sendCapeFile(res, filename) {
@@ -2108,123 +2024,6 @@ function oauthRequestFields(request) {
         .join('\n            ');
 }
 
-function oauthStyles() {
-    return `
-        :root {
-            color-scheme: dark;
-            --bg: #141218;
-            --surface: #1f1f24;
-            --on-surface: #e8e8ec;
-            --on-surface-variant: #a9a9b4;
-            --outline: #55555f;
-            --outline-variant: #34333b;
-            --primary: #b4c5ff;
-            --on-primary: #0d1b3e;
-        }
-        * { box-sizing: border-box; }
-        body {
-            margin: 0; padding: 24px 16px; min-height: 100vh;
-            display: flex; align-items: center; justify-content: center;
-            background: var(--bg); color: var(--on-surface);
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            font-size: 14px; line-height: 1.5;
-            -webkit-font-smoothing: antialiased;
-        }
-        .material-icons {
-            font-family: 'Material Icons'; font-weight: normal; font-style: normal;
-            font-size: 18px; line-height: 1; letter-spacing: normal; text-transform: none;
-            display: inline-block; white-space: nowrap; direction: ltr;
-            -webkit-font-feature-settings: 'liga'; -webkit-font-smoothing: antialiased;
-        }
-        .card {
-            position: relative; overflow: hidden; width: 100%; max-width: 380px;
-            padding: 32px 28px; background: var(--surface);
-            border: 1px solid var(--outline-variant); border-radius: 28px;
-            transition: opacity 0.2s ease;
-        }
-        .card.busy { opacity: 0.65; pointer-events: none; }
-        .top-progress { position: absolute; top: 0; left: 0; width: 100%; height: 4px; overflow: hidden; background: rgba(180, 197, 255, 0.16); }
-        .top-progress span { position: absolute; top: 0; bottom: 0; left: -40%; width: 40%; border-radius: 4px; background: var(--primary); animation: oauth-slide 1.1s ease-in-out infinite; }
-        .top-progress.hidden { display: none; }
-        @keyframes oauth-slide { from { left: -40%; } to { left: 100%; } }
-        .provider {
-            display: flex; align-items: center; gap: 8px;
-            margin: 0 0 20px; padding: 0 0 10px;
-            border-bottom: 1px solid var(--outline-variant);
-            font-size: 13px; font-weight: 500; color: var(--on-surface-variant);
-        }
-        .provider img { width: 20px; height: 20px; border-radius: 4px; object-fit: contain; }
-        .brand-mark { display: none; width: 20px; height: 20px; border-radius: 4px; align-items: center; justify-content: center; background: linear-gradient(135deg, #8ea8ff, #4d63c9); color: #fff; font-size: 11px; font-weight: 600; }
-        .app-icon {
-            width: 40px; height: 40px; margin: 0 0 14px; border-radius: 10px;
-            display: flex; align-items: center; justify-content: center; overflow: hidden;
-            color: #fff; font-size: 18px; font-weight: 600;
-        }
-        img.app-icon { display: block; object-fit: contain; background: #2a2a32; }
-        h1, h2 { margin: 0 0 16px; font-size: 22px; font-weight: 400; line-height: 1.3; }
-        h2 strong { font-weight: 600; }
-        .sub { margin: 0 0 16px; font-size: 13px; color: var(--on-surface-variant); }
-        .sub strong { color: var(--on-surface); font-weight: 600; }
-        .field { position: relative; display: block; margin-bottom: 14px; }
-        .field input {
-            width: 100%; height: 56px; padding: 22px 14px 6px;
-            background: transparent; border: 1px solid var(--outline); border-radius: 4px;
-            color: var(--on-surface); font: inherit; font-size: 15px; outline: none;
-        }
-        .field input:focus { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
-        .field span {
-            position: absolute; left: 15px; top: 17px; font-size: 15px; color: var(--on-surface-variant);
-            pointer-events: none; transition: top 0.12s ease, font-size 0.12s ease, color 0.12s ease;
-        }
-        .field input:focus + span, .field input:not(:placeholder-shown) + span { top: 7px; font-size: 11px; }
-        .field input:focus + span { color: var(--primary); }
-        button { font: inherit; cursor: pointer; }
-        .filled {
-            width: 100%; padding: 11px 24px; border: 0; border-radius: 999px;
-            background: var(--primary); color: var(--on-primary);
-            font-size: 14px; font-weight: 600;
-        }
-        .filled:hover { filter: brightness(1.08); }
-        .filled.auto { width: auto; }
-        .outlined {
-            padding: 10px 22px; border: 1px solid var(--outline); border-radius: 999px;
-            background: transparent; color: var(--primary); font-size: 14px; font-weight: 500;
-        }
-        .outlined:hover { background: rgba(180, 197, 255, 0.08); }
-        .link { padding: 0; border: 0; background: none; color: var(--primary); font-size: 13px; text-decoration: none; }
-        .link:hover { text-decoration: underline; }
-        .toggle { margin: 16px 0 0; text-align: center; font-size: 13px; color: var(--on-surface-variant); }
-        .account-chip {
-            display: inline-flex; align-items: center; gap: 8px;
-            margin: 0 0 20px; padding: 4px 12px 4px 6px;
-            border: 1px solid var(--outline); border-radius: 999px;
-            font-size: 14px; font-weight: 500;
-        }
-        .avatar {
-            width: 24px; height: 24px; border-radius: 50%; flex: 0 0 auto;
-            display: flex; align-items: center; justify-content: center;
-            background: var(--primary); color: var(--on-primary); font-size: 12px; font-weight: 600;
-        }
-        .scope-title { margin: 0 0 8px; font-size: 13px; font-weight: 500; }
-        .scopes { display: flex; flex-direction: column; gap: 12px; margin: 0 0 20px; }
-        .scope { display: flex; align-items: flex-start; gap: 12px; font-size: 13px; line-height: 1.4; color: var(--on-surface-variant); }
-        .scope .material-icons { color: var(--primary); margin-top: 2px; }
-        .disclaimer { margin: 0 0 20px; font-size: 11px; line-height: 1.4; color: var(--on-surface-variant); }
-        .verified-badge { color: var(--primary); font-size: 17px; margin-left: 4px; vertical-align: -3px; }
-        .actions { display: flex; justify-content: flex-end; gap: 10px; }
-        .notice { margin: 0 0 16px; padding: 10px 12px; border-radius: 12px; font-size: 12px; line-height: 1.45; }
-        .notice.warn { background: rgba(255, 209, 140, 0.1); border: 1px solid rgba(255, 209, 140, 0.35); color: #ffd18c; }
-        .notice.error { background: rgba(255, 180, 171, 0.1); border: 1px solid rgba(255, 180, 171, 0.4); color: #ffb4ab; }
-        .foot { margin: 18px 0 0; font-size: 11px; line-height: 1.45; color: #7c7c88; text-align: center; }
-        .foot .link { font-size: 11px; }
-        @media only screen and (max-width: 420px) {
-            body { padding: 12px; }
-            .card { padding: 26px 20px; border-radius: 22px; }
-            h1, h2 { font-size: 20px; }
-        }
-    `;
-}
-
 function oauthBrandHeader(label) {
     return `<div class="provider"><img src="https://breakmine.com/favicon.png" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="brand-mark">B</span><span>${escapeHtml(label)}</span></div>`;
 }
@@ -2248,47 +2047,20 @@ function oauthAppIcon(clientName, clientId, icon) {
 }
 
 function renderOAuthPage(res, { title, body, status = 200 }) {
-    res.status(status).type('html').send(`<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="dark">
-    <meta name="robots" content="noindex">
-    <title>${escapeHtml(title)} \u00b7 Breakmine</title>
-    <link rel="icon" type="image/png" href="https://breakmine.com/favicon.png">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
-    <style>${oauthStyles()}</style>
-</head>
-<body>
-    <main class="card" id="auth-card">
-        <div class="top-progress hidden" id="auth-progress"><span></span></div>
-${body}
-    </main>
-    <script>
-        // Both buttons are plain form submits; this only paints the progress bar
-        // the moment one of them is pressed.
-        Array.prototype.forEach.call(document.querySelectorAll('form'), function (form) {
-            form.addEventListener('submit', function () {
-                document.getElementById('auth-progress').classList.remove('hidden');
-                document.getElementById('auth-card').classList.add('busy');
-            });
-        });
-    </script>
-</body>
-</html>`);
+    res.status(status).type('html').send(renderView('oauth/layout.html', {
+        title: escapeHtml(title),
+        body,
+    }));
 }
 
 function renderOAuthNotice(res, message, status = 400) {
     renderOAuthPage(res, {
         status,
         title: 'Sign-in unavailable',
-        body: `        ${oauthBrandHeader('Breakmine Account')}
-        <h2>Sign-in unavailable</h2>
-        <div class="notice error">${escapeHtml(message)}</div>
-        <p class="disclaimer">Go back to the site you came from and start the sign-in again.</p>`,
+        body: renderView('oauth/notice.html', {
+            brandHeader: oauthBrandHeader('Breakmine Account'),
+            message: escapeHtml(message),
+        }),
     });
 }
 
@@ -2297,58 +2069,42 @@ function renderOAuthForm(res, { request, user, mode, error, status = 200, userna
         try { return new URL(request.redirectUri).host; } catch (err) { return 'this site'; }
     })();
     const fields = oauthRequestFields(request);
-    const name = escapeHtml(request.clientName);
+    const clientName = escapeHtml(request.clientName);
     const hostLabel = escapeHtml(host);
     let body = '';
 
     if (mode === 'consent' && user) {
-        const initial = escapeHtml(String(user.username || '?').charAt(0).toUpperCase());
-        const warning = request.verified
-            ? ''
-            : `        <div class="notice warn"><strong>${name}</strong> has not been reviewed by Breakmine. Only continue if you trust ${hostLabel}.</div>\n`;
-        const verifiedBadge = request.verified
-            ? ' <i class="material-icons verified-badge" title="Verified by Breakmine" aria-label="Verified application">verified</i>'
-            : '';
-
-        body = `        ${oauthBrandHeader('Breakmine Account Security')}
-${oauthAppIcon(request.clientName, request.clientId, request.clientIcon)}
-        <h2><strong>${name}</strong>${verifiedBadge}<br> wants to access your Breakmine account</h2>
-        <div class="account-chip"><div class="avatar">${initial}</div><span>${escapeHtml(user.username)}</span></div>
-${warning}
-        <form method="post" action="/oauth/authorize">
-            ${fields}
-            <div class="actions">
-                <button type="submit" class="outlined" name="action" value="deny">Cancel</button>
-                <button type="submit" class="filled auto" name="action" value="approve">Allow</button>
-            </div>
-        </form>
-        <form method="post" action="/oauth/authorize">
-            ${fields}
-            <input type="hidden" name="action" value="logout">
-            <p class="foot"><button type="submit" class="link">Not ${escapeHtml(user.username)}? Use another account</button></p>
-        </form>`;
+        body = renderView('oauth/consent.html', {
+            brandHeader: oauthBrandHeader('Breakmine Account'),
+            appIcon: oauthAppIcon(request.clientName, request.clientId, request.clientIcon),
+            clientName,
+            verifiedBadge: request.verified ? renderView('oauth/verified-badge.html') : '',
+            usernameInitial: escapeHtml(String(user.username || '?').charAt(0).toUpperCase()),
+            username: escapeHtml(user.username),
+            warning: request.verified ? '' : renderView('oauth/consent-warning.html', {
+                clientName,
+                host: hostLabel,
+            }),
+            fields,
+        });
     } else {
         const signup = mode === 'signup';
-        const errorHtml = error ? `        <div class="notice error">${escapeHtml(error)}</div>\n` : '';
         const otherMode = signup ? 'login' : 'signup';
-        const switchHref = `/oauth/authorize?${oauthRequestQuery(request)}&mode=${otherMode}`;
 
-        body = `        ${oauthBrandHeader('Breakmine Account')}
-        <h2>${signup ? 'Create a Breakmine account' : 'Sign in to your Breakmine account'}</h2>
-        <p class="sub"><strong>${name}</strong> (${hostLabel}) wants to use your Breakmine account.</p>
-${errorHtml}        <form method="post" action="/oauth/authorize" autocomplete="on">
-            ${fields}
-            <label class="field">
-                <input type="text" name="username" placeholder=" " required minlength="3" maxlength="32" autocomplete="username" value="${escapeHtml(username)}">
-                <span>Username</span>
-            </label>
-            <label class="field">
-                <input type="password" name="password" placeholder=" " required minlength="6" maxlength="128" autocomplete="${signup ? 'new-password' : 'current-password'}">
-                <span>Password</span>
-            </label>
-            <button type="submit" class="filled" name="action" value="${signup ? 'signup' : 'login'}">${signup ? 'Register &amp; continue' : 'Sign in'}</button>
-        </form>
-        <p class="toggle"><a class="link" href="${escapeHtml(switchHref)}">${signup ? 'Already have an account? Sign in' : 'Need an account? Register'}</a></p>`;
+        body = renderView('oauth/credentials.html', {
+            brandHeader: oauthBrandHeader('Breakmine Account'),
+            heading: signup ? 'Create a Breakmine account' : 'Sign in to your Breakmine account',
+            clientName,
+            host: hostLabel,
+            error: error ? renderView('oauth/form-error.html', { message: escapeHtml(error) }) : '',
+            fields,
+            username: escapeHtml(username),
+            passwordAutocomplete: signup ? 'new-password' : 'current-password',
+            action: signup ? 'signup' : 'login',
+            submitLabel: signup ? 'Register &amp; continue' : 'Sign in',
+            switchHref: escapeHtml(`/oauth/authorize?${oauthRequestQuery(request)}&mode=${otherMode}`),
+            switchLabel: signup ? 'Already have an account? Sign in' : 'Need an account? Register',
+        });
     }
 
     renderOAuthPage(res, { status, title: mode === 'consent' ? 'Allow access' : 'Sign in', body });
@@ -2902,204 +2658,81 @@ function formatDevDate(ms) {
 }
 
 function devNotice(message, kind = 'red lighten-4 red-text text-darken-3') {
-    return `<div class="card-panel ${kind}" style="padding: 12px 16px; border-radius: 4px">${escapeHtml(message)}</div>`;
-}
-
-function developerStyles() {
-    return `
-        body { background: #eceff1; }
-        .navbar-sticky { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; }
-        nav .nav-wrapper { padding: 0 16px; }
-        nav .brand-logo { position: static; transform: none; padding: 0; font-size: 1.4rem; }
-        .sidenav.sidenav-fixed { top: 64px; height: calc(100vh - 64px); width: 280px; box-shadow: 1px 0 5px rgba(0, 0, 0, 0.12); }
-        .sidenav-padding { padding: 20px; }
-        main { margin-top: 64px; padding: 20px; }
-        @media only screen and (min-width: 993px) { main { padding-left: 300px; } }
-        .card { margin: 0; }
-        .card .card-content { padding: 20px 24px 28px; }
-        h4 { font-size: 1.85rem; margin: 12px 0; }
-        h5 { font-size: 1.3rem; margin: 28px 0 12px; }
-        code.inline { background: #eceff1; color: #37474f; padding: 1px 6px; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; word-break: break-all; }
-        pre.snippet { background: #263238; color: #eceff1; padding: 16px; border-radius: 6px; overflow-x: auto; font-size: 0.78rem; line-height: 1.5; }
-        .material-icons.tiny { font-size: 1.1rem; vertical-align: middle; }
-        .testbox-result { min-height: 140px; background: #263238; color: #eceff1; border-radius: 6px; padding: 16px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; line-height: 1.65; overflow-wrap: anywhere; }
-        .testbox-result .key { color: #80cbc4; }
-        .testbox-result.idle { color: #90a4ae; font-family: inherit; font-size: 0.9rem; }
-        .uri-list { margin: 0; padding-left: 16px; }
-        .uri-list li { margin-bottom: 2px; word-break: break-all; }
-        .app-icon-editor { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
-        .app-icon-preview {
-            width: 64px; height: 64px; flex: 0 0 auto; border-radius: 12px;
-            object-fit: contain; background: #fff; border: 1px solid #cfd8dc; padding: 4px;
-        }
-        .app-icon-preview.empty { display: flex; align-items: center; justify-content: center; color: #b0bec5; background: #eceff1; }
-        .app-icon-editor .input-field { margin: 0 0 6px; }
-        .app-icon-editor form { margin: 0; }
-        .app-icon-editor .btn-flat { padding: 0 8px; }
-        /* Materialize indents every bare textarea by 3rem and pins it to 3rem
-           high with no scrollbar (a rule meant for inputs with a prefix icon).
-           Undo that so the redirect URI boxes look and behave normally. */
-        textarea, .input-field textarea {
-            margin-left: 0 !important;
-            width: 100% !important;
-            height: auto !important;
-            min-height: 4.5rem;
-            overflow-y: auto !important;
-            resize: vertical !important;
-            box-sizing: border-box !important;
-            padding: .8rem 0 1rem !important;
-        }
-        .input-field { margin-top: 6px; }
-        .input-field .helper-text { margin-bottom: 14px; }
-        .redirect-field { margin-top: 0; }
-    `;
+    return renderView('developers/notice.html', { kind, message: escapeHtml(message) });
 }
 
 function renderDeveloperPage(res, { title, active = '', user = null, body, status = 200, script = '' }) {
     const reviewer = isOAuthReviewer(user);
-    const account = user
-        ? `<li><a href="/developers/apps">My apps</a></li>
-          <li><a href="${DEV_TESTBOX_PATH}">Test box</a></li>
-          ${reviewer ? '<li><a href="/developers/review">Review</a></li>' : ''}
-          <li><a href="#!" onclick="document.getElementById('dev-logout').submit(); return false;">Sign out ${escapeHtml(user.username)}</a></li>`
-        : '<li><a href="/developers/login">Sign in</a></li>';
+    const navItems = [];
 
-    res.status(status).type('html').send(`<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="robots" content="noindex">
-    <title>${escapeHtml(title)} \u00b7 Breakmine Developers</title>
-    <link rel="icon" type="image/png" href="https://breakmine.com/favicon.png">
-    <link rel="stylesheet" href="https://unpkg.com/materialize-css@1.0.0/dist/css/materialize.min.css">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
-    <style>${developerStyles()}</style>
-</head>
-<body>
-    <div class="navbar-sticky">
-        <nav class="teal darken-2">
-            <div class="nav-wrapper">
-                <a href="/developers/apps" class="brand-logo">Breakmine Developers</a>
-                <ul class="right">
-                    ${account}
-                </ul>
-            </div>
-        </nav>
-    </div>
+    if (user) {
+        navItems.push(
+            renderView('developers/nav-link.html', { href: '/developers/apps', label: 'My apps' }),
+            renderView('developers/nav-link.html', { href: DEV_TESTBOX_PATH, label: 'Test box' })
+        );
+        if (reviewer) navItems.push(renderView('developers/nav-link.html', { href: '/developers/review', label: 'Review' }));
+        navItems.push(renderView('developers/nav-signout.html', { username: escapeHtml(user.username) }));
+    } else {
+        navItems.push(renderView('developers/nav-link.html', { href: '/developers/login', label: 'Sign in' }));
+    }
 
-    <ul class="sidenav sidenav-fixed">
-        <li>
-            <div class="sidenav-padding">
-                <p><strong>Navigation</strong></p>
-                <div class="collection" style="border: none">
-                    <a href="/developers/apps" class="collection-item${active === 'apps' ? ' active' : ''}">Applications</a>
-                    <a href="/developers/apps#register" class="collection-item">Register an app</a>
-                    <a href="${DEV_TESTBOX_PATH}" class="collection-item${active === 'testbox' ? ' active' : ''}">Popup test box</a>
-                    ${reviewer ? `<a href="/developers/review" class="collection-item${active === 'review' ? ' active' : ''}">Review queue</a>` : ''}
-                </div>
-                <div class="divider" style="margin: 15px 0"></div>
-                <p class="grey-text" style="font-size: 0.85rem; line-height: 1.5">
-                    Breakmine developers register OAuth applications, then sites call
-                    <code class="inline">BreakmineAuth.login()</code> to sign players in.
-                </p>
-            </div>
-        </li>
-    </ul>
-
-    <main>
-        <div class="card">
-            <div class="card-content">
-${body}
-            </div>
-        </div>
-    </main>
-
-    <form id="dev-logout" method="post" action="/developers/logout" style="display: none"></form>
-    <script src="https://unpkg.com/materialize-css@1.0.0/dist/js/materialize.min.js"><\/script>
-    <script>
-        // Real Materialize dropdowns for every <select>; if the CDN is
-        // unreachable the plain selects stay usable.
-        if (window.M && M.FormSelect) M.FormSelect.init(document.querySelectorAll('select'));
-    <\/script>
-${script}
-</body>
-</html>`);
+    res.status(status).type('html').send(renderView('developers/layout.html', {
+        title: escapeHtml(title),
+        accountNav: navItems.join('\n                    '),
+        appsActive: active === 'apps' ? ' active' : '',
+        testboxActive: active === 'testbox' ? ' active' : '',
+        testboxPath: DEV_TESTBOX_PATH,
+        reviewLink: reviewer ? renderView('developers/sidenav-link.html', {
+            href: '/developers/review',
+            label: 'Review queue',
+            active: active === 'review' ? ' active' : '',
+        }) : '',
+        body,
+        script,
+    }));
 }
 
 function renderDeveloperLogin(res, { mode = 'login', error = '', status = 200, username = '' }) {
     const signup = mode === 'signup';
-    const body = `                <h4>${signup ? 'Create a developer account' : 'Developer sign-in'}</h4>
-                <p class="grey-text">${signup
-                    ? 'Your Breakmine account is all you need to publish OAuth applications.'
-                    : 'Sign in with your Breakmine account to register and manage OAuth applications.'}</p>
-                ${error ? devNotice(error) : ''}
-                <form method="post" action="/developers/login" class="col s12 m8 l6" style="padding: 0">
-                    <input type="hidden" name="action" value="${signup ? 'signup' : 'login'}">
-                    <div class="input-field">
-                        <input id="dev-username" name="username" type="text" required minlength="3" maxlength="32" autocomplete="username" value="${escapeHtml(username)}">
-                        <label for="dev-username" class="active">Username</label>
-                    </div>
-                    <div class="input-field">
-                        <input id="dev-password" name="password" type="password" required minlength="6" maxlength="128" autocomplete="${signup ? 'new-password' : 'current-password'}">
-                        <label for="dev-password" class="active">Password</label>
-                    </div>
-                    <button class="btn teal darken-1 waves-effect waves-light" type="submit">${signup ? 'Create account' : 'Sign in'}</button>
-                    <a class="btn-flat teal-text" href="/developers/login${signup ? '' : '?mode=signup'}">${signup ? 'I already have an account' : 'Create an account'}</a>
-                </form>`;
+    const body = renderView('developers/login.html', {
+        heading: signup ? 'Create a developer account' : 'Developer sign-in',
+        intro: signup
+            ? 'Your Breakmine account is all you need to publish OAuth applications.'
+            : 'Sign in with your Breakmine account to register and manage OAuth applications.',
+        error: error ? devNotice(error) : '',
+        action: signup ? 'signup' : 'login',
+        username: escapeHtml(username),
+        passwordAutocomplete: signup ? 'new-password' : 'current-password',
+        submitLabel: signup ? 'Create account' : 'Sign in',
+        switchQuery: signup ? '' : '?mode=signup',
+        switchLabel: signup ? 'I already have an account' : 'Create an account',
+    });
 
     renderDeveloperPage(res, { title: signup ? 'Create account' : 'Sign in', user: null, body, status });
 }
 
 function renderDeveloperApps(res, { user, apps, error = '', status = 200, form = {} }) {
     const rows = apps.length
-        ? apps.map((app) => {
-            const uris = parseStoredUris(app.redirect_uris);
-            return `<tr>
-                        <td><a href="/developers/apps/${escapeHtml(app.client_id)}"><strong>${escapeHtml(app.name)}</strong></a></td>
-                        <td><code class="inline">${escapeHtml(app.client_id)}</code></td>
-                        <td>${uris.length}</td>
-                        <td>${formatDevDate(app.created_at)}</td>
-                        <td>${formatDevDate(app.last_used)}</td>
-                        <td><a class="btn-flat teal-text" href="${DEV_TESTBOX_PATH}?client=${encodeURIComponent(app.client_id)}">Test</a></td>
-                    </tr>`;
-        }).join('')
-        : '<tr><td colspan="6" class="grey-text">No applications yet. Register one below.</td></tr>';
+        ? apps.map((app) => renderView('developers/app-row.html', {
+            clientId: escapeHtml(app.client_id),
+            clientIdEncoded: encodeURIComponent(app.client_id),
+            name: escapeHtml(app.name),
+            uriCount: parseStoredUris(app.redirect_uris).length,
+            created: formatDevDate(app.created_at),
+            lastUsed: formatDevDate(app.last_used),
+            testboxPath: DEV_TESTBOX_PATH,
+        })).join('')
+        : renderView('developers/empty-apps.html');
 
-    const body = `                <h4>OAuth applications</h4>
-                <p class="grey-text">These applications can show the &ldquo;Sign in with Breakmine&rdquo; popup on their own sites. They are public clients: the SDK uses PKCE, so no client secret is issued.</p>
-                ${error ? devNotice(error) : ''}
-                <table class="striped responsive-table">
-                    <thead>
-                        <tr>
-                            <th><i class="material-icons tiny">badge</i> Name</th>
-                            <th><i class="material-icons tiny">vpn_key</i> Client ID</th>
-                            <th><i class="material-icons tiny">link</i> Redirect URIs</th>
-                            <th><i class="material-icons tiny">event</i> Created</th>
-                            <th><i class="material-icons tiny">history</i> Last used</th>
-                            <th><i class="material-icons tiny">rule</i> Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                </table>
-
-                <div class="divider" style="margin: 32px 0"></div>
-
-                <h5 id="register">Register an application</h5>
-                <form method="post" action="/developers/apps" class="col s12 m10 l8" style="padding: 0">
-                    <div class="input-field">
-                        <input id="new-app-name" name="name" type="text" required minlength="2" maxlength="${OAUTH_CLIENT_NAME_MAX}" value="${escapeHtml(form.name || '')}">
-                        <label for="new-app-name" class="${form.name ? 'active' : ''}">Application name</label>
-                        <span class="helper-text">Shown on the consent screen, e.g. &ldquo;Pixel Chat&rdquo;.</span>
-                    </div>
-                    <div class="input-field">
-                        <textarea id="new-app-uris" name="redirect_uris" class="materialize-textarea" rows="3" required>${escapeHtml(form.uris || '')}</textarea>
-                        <label for="new-app-uris" class="${form.uris ? 'active' : ''}">Redirect URIs (one per line)</label>
-                        <span class="helper-text">https anywhere; http only for localhost. The popup returns to one of these.</span>
-                    </div>
-                    <button class="btn teal darken-1 waves-effect waves-light" type="submit">Register application</button>
-                </form>
-                <p class="grey-text" style="font-size: 0.85rem">The test box URL for this server is added automatically so you can try the popup without deploying first.</p>`;
+    const body = renderView('developers/apps.html', {
+        error: error ? devNotice(error) : '',
+        rows,
+        nameMax: OAUTH_CLIENT_NAME_MAX,
+        name: escapeHtml(form.name || ''),
+        uris: escapeHtml(form.uris || ''),
+        nameActive: form.name ? 'active' : '',
+        urisActive: form.uris ? 'active' : '',
+    });
 
     renderDeveloperPage(res, { title: 'Applications', active: 'apps', user, body, status });
 }
@@ -3113,42 +2746,24 @@ function renderDeveloperReview(res, { user, apps, error = '', status = 200 }) {
                 try { return new URL(uri).host; } catch (err) { return uri; }
             }))];
 
-            return `<tr>
-                        <td><strong>${escapeHtml(app.name)}</strong><br>${app.verified
-                            ? '<span class="teal-text text-darken-2"><i class="material-icons tiny">verified</i> Verified</span>'
-                            : '<span class="orange-text text-darken-2">Pending review</span>'}</td>
-                        <td>${escapeHtml(app.owner_username || 'unknown')}</td>
-                        <td><code class="inline">${escapeHtml(app.client_id)}</code></td>
-                        <td>${hosts.length ? hosts.map((host) => escapeHtml(host)).join('<br>') : '<span class="grey-text">none</span>'}</td>
-                        <td>${formatDevDate(app.created_at)}</td>
-                        <td>
-                            <form method="post" action="/developers/review/${escapeHtml(app.client_id)}" style="margin: 0">
-                                <input type="hidden" name="verified" value="${app.verified ? '0' : '1'}">
-                                <button type="submit" class="btn-small waves-effect waves-light ${app.verified ? 'red lighten-1' : 'teal darken-1'}">
-                                    ${app.verified ? 'Revoke' : 'Approve'}
-                                </button>
-                            </form>
-                        </td>
-                    </tr>`;
+            return renderView('developers/review-row.html', {
+                name: escapeHtml(app.name),
+                badge: renderView(app.verified ? 'developers/review-badge-verified.html' : 'developers/review-badge-pending.html'),
+                owner: escapeHtml(app.owner_username || 'unknown'),
+                clientId: escapeHtml(app.client_id),
+                hosts: hosts.length ? hosts.map((host) => escapeHtml(host)).join('<br>') : renderView('developers/none.html'),
+                created: formatDevDate(app.created_at),
+                toggle: app.verified ? '0' : '1',
+                actionClass: app.verified ? 'red lighten-1' : 'teal darken-1',
+                actionLabel: app.verified ? 'Revoke' : 'Approve',
+            });
         }).join('')
-        : '<tr><td colspan="6" class="grey-text">No applications to review yet.</td></tr>';
+        : renderView('developers/empty-review.html');
 
-    const body = `                <h4>Review queue</h4>
-                <p class="grey-text">Approving an application removes the &ldquo;has not been reviewed&rdquo; warning from its consent screen and puts a verified badge next to its name there. Only portal applications are listed; clients registered on the server are trusted already.</p>
-                ${error ? devNotice(error) : ''}
-                <table class="striped responsive-table">
-                    <thead>
-                        <tr>
-                            <th><i class="material-icons tiny">badge</i> Application</th>
-                            <th><i class="material-icons tiny">person</i> Owner</th>
-                            <th><i class="material-icons tiny">vpn_key</i> Client ID</th>
-                            <th><i class="material-icons tiny">link</i> Redirect hosts</th>
-                            <th><i class="material-icons tiny">event</i> Created</th>
-                            <th><i class="material-icons tiny">rule</i> Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                </table>`;
+    const body = renderView('developers/review.html', {
+        error: error ? devNotice(error) : '',
+        rows,
+    });
 
     renderDeveloperPage(res, { title: 'Review queue', active: 'review', user, body, status });
 }
@@ -3157,94 +2772,31 @@ function renderDeveloperApp(res, { user, app, issuer, error = '', status = 200 }
     const uris = parseStoredUris(app.redirect_uris);
     const testUri = `${issuer}${DEV_TESTBOX_PATH}`;
     const testReady = uris.includes(testUri);
+    const snippet = renderView('developers/snippet.html', {
+        issuer,
+        clientId: app.client_id,
+    });
 
-    const snippet = `<script src="${issuer}/oauth/breakmine.js"><\/script>
-<script>
-BreakmineAuth.login({ clientId: '${app.client_id}' })
-    .then(function (session) {
-        console.log(session.username, session.token);
-    })
-    .catch(function (err) { console.error(err.message); });
-<\/script>`;
-
-    const body = `                <a href="/developers/apps" class="grey-text"><i class="material-icons tiny">arrow_back</i> All applications</a>
-                <h4 style="margin: 8px 0 4px">${escapeHtml(app.name)}</h4>
-                <p class="grey-text" style="margin-top: 0">
-                    Client ID <code class="inline">${escapeHtml(app.client_id)}</code>
-                    <button type="button" class="btn-flat btn-small teal-text" data-copy="${escapeHtml(app.client_id)}" onclick="copyClientId(this)">copy</button>
-                    <br>Created ${formatDevDate(app.created_at)} &middot; last used ${formatDevDate(app.last_used)}
-                </p>
-                ${error ? devNotice(error) : ''}
-                <h5>Application icon</h5>
-                <div class="app-icon-editor">
-                    ${app.icon
-                        ? `<img class="app-icon-preview" src="${escapeHtml(app.icon)}" alt="">`
-                        : '<div class="app-icon-preview empty"><i class="material-icons">apps</i></div>'}
-                    <div>
-                        <form method="post" action="/developers/apps/${escapeHtml(app.client_id)}/icon" enctype="multipart/form-data">
-                            <div class="file-field input-field">
-                                <div class="btn teal darken-1">
-                                    <span>Choose PNG</span>
-                                    <input type="file" name="icon" accept="image/png" required>
-                                </div>
-                                <div class="file-path-wrapper">
-                                    <input class="file-path validate" type="text" placeholder="No file chosen">
-                                </div>
-                            </div>
-                            <button class="btn waves-effect waves-light teal darken-1" type="submit">Upload icon</button>
-                        </form>
-                        ${app.icon
-                            ? `<form method="post" action="/developers/apps/${escapeHtml(app.client_id)}/icon/delete">
-                            <button class="btn-flat red-text" type="submit">Remove icon</button>
-                        </form>`
-                            : ''}
-                    </div>
-                </div>
-                <p class="grey-text" style="font-size: 0.85rem; margin-top: 4px">
-                    Shown on the sign-in consent screen next to your application name.
-                    PNG, square, up to 512 KB &mdash; it is resized to ${OAUTH_APP_ICON_SIZE}&times;${OAUTH_APP_ICON_SIZE}.
-                </p>
-
-                <div class="row">
-                    <div class="col s12 l6">
-                        <h5>Settings</h5>
-                        <form method="post" action="/developers/apps/${escapeHtml(app.client_id)}">
-                            <div class="input-field">
-                                <input id="app-name" name="name" type="text" required minlength="2" maxlength="${OAUTH_CLIENT_NAME_MAX}" value="${escapeHtml(app.name)}">
-                                <label for="app-name" class="active">Application name</label>
-                            </div>
-                            <div class="input-field">
-                                <textarea id="app-uris" name="redirect_uris" class="materialize-textarea" rows="5" required>${escapeHtml(uris.join('\n'))}</textarea>
-                                <label for="app-uris" class="active">Redirect URIs (one per line)</label>
-                                <span class="helper-text">https anywhere; http only for localhost.</span>
-                            </div>
-                            <button class="btn teal darken-1 waves-effect waves-light" type="submit">Save changes</button>
-                        </form>
-
-                        <h5>Danger zone</h5>
-                        <form method="post" action="/developers/apps/${escapeHtml(app.client_id)}/delete" onsubmit="return confirm('Delete this application? Players will no longer be able to sign in with it.');">
-                            <button class="btn red lighten-1 waves-effect waves-light" type="submit">Delete application</button>
-                        </form>
-                    </div>
-                    <div class="col s12 l6">
-                        <h5>Popup test box</h5>
-                        <p>Run the real sign-in popup against this app and see the bearer token and profile it returns.</p>
-                        <p class="grey-text" style="font-size: 0.9rem">${testReady
-                            ? 'Ready: the test box URL is one of the redirect URIs.'
-                            : `Add <code class="inline">${escapeHtml(testUri)}</code> to the redirect URIs to finish the flow.`}</p>
-                        <a class="btn teal waves-effect waves-light" href="${DEV_TESTBOX_PATH}?client=${encodeURIComponent(app.client_id)}">Open the test box</a>
-
-                        <h5>Add it to your site</h5>
-                        <pre class="snippet">${escapeHtml(snippet)}</pre>
-                        <p class="grey-text" style="font-size: 0.85rem">The page that includes the SDK must be one of the redirect URIs, because the popup returns to it.</p>
-                    </div>
-                </div>
-                <script>
-                    function copyClientId(button) {
-                        if (navigator.clipboard) navigator.clipboard.writeText(button.getAttribute('data-copy'));
-                        button.textContent = 'copied';
-                    }
-                <\/script>`;
+    const body = renderView('developers/app.html', {
+        appName: escapeHtml(app.name),
+        clientId: escapeHtml(app.client_id),
+        clientIdEncoded: encodeURIComponent(app.client_id),
+        created: formatDevDate(app.created_at),
+        lastUsed: formatDevDate(app.last_used),
+        error: error ? devNotice(error) : '',
+        iconPreview: app.icon
+            ? renderView('developers/icon-preview.html', { icon: escapeHtml(app.icon) })
+            : renderView('developers/icon-empty.html'),
+        removeIconForm: app.icon ? renderView('developers/remove-icon-form.html', { clientId: escapeHtml(app.client_id) }) : '',
+        iconSize: OAUTH_APP_ICON_SIZE,
+        nameMax: OAUTH_CLIENT_NAME_MAX,
+        uris: escapeHtml(uris.join('\n')),
+        testStatus: testReady
+            ? 'Ready: the test box URL is one of the redirect URIs.'
+            : renderView('developers/test-not-ready.html', { testUri: escapeHtml(testUri) }),
+        testboxPath: DEV_TESTBOX_PATH,
+        snippet: escapeHtml(snippet),
+    });
 
     renderDeveloperPage(res, { title: app.name, active: 'apps', user, body, status });
 }
@@ -3254,156 +2806,36 @@ function renderDeveloperTestbox(res, { user, apps, issuer, requested = '', statu
     const selectedId = apps.some((app) => app.client_id === requested) ? requested : (apps[0] ? apps[0].client_id : '');
 
     const options = apps
-        .map((app) => `<option value="${escapeHtml(app.client_id)}"${app.client_id === selectedId ? ' selected' : ''}>${escapeHtml(app.name)}</option>`)
+        .map((app) => renderView('developers/testbox-app-option.html', {
+            value: escapeHtml(app.client_id),
+            selected: app.client_id === selectedId ? ' selected' : '',
+            label: escapeHtml(app.name),
+        }))
         .join('');
 
     // One Materialize dropdown per application, built on the server, so changing
     // the application only hides and shows a field that already exists.
-    const redirectGroups = apps.map((app) => {
-        const preferred = app.redirect_uris.includes(testUri) ? testUri : app.redirect_uris[0];
-        const uriOptions = app.redirect_uris
-            .map((uri) => `<option value="${escapeHtml(uri)}"${uri === preferred ? ' selected' : ''}>${escapeHtml(uri)}</option>`)
-            .join('');
-
-        return `<div class="input-field redirect-field" data-client="${escapeHtml(app.client_id)}"${app.client_id === selectedId ? '' : ' style="display: none"'}>
-                            <select class="redirect-select" aria-label="Redirect URI">${uriOptions}</select>
-                            <label class="active">Redirect URI</label>
-                            ${app.redirect_uris.length ? '' : '<span class="helper-text">No redirect URIs yet.</span>'}
-                        </div>`;
-    }).join('\n                        ');
-
-    const data = JSON.stringify(apps).replace(/<\//g, '<\\/');
+    const redirectGroups = apps.map((app) => renderView('developers/testbox-redirect-group.html', {
+        clientId: escapeHtml(app.client_id),
+        hidden: app.client_id === selectedId ? '' : ' style="display: none"',
+        uriOptions: app.redirect_uris
+            .map((uri) => renderView('developers/testbox-app-option.html', {
+                value: escapeHtml(uri),
+                selected: uri === (app.redirect_uris.includes(testUri) ? testUri : app.redirect_uris[0]) ? ' selected' : '',
+                label: escapeHtml(uri),
+            }))
+            .join(''),
+        emptyHint: app.redirect_uris.length ? '' : renderView('developers/testbox-no-uris.html'),
+    })).join('\n                        ');
 
     const body = apps.length
-        ? `                <h4>Popup test box</h4>
-                <p class="grey-text">Pick one of your applications and open the real Breakmine sign-in popup. The SDK completes the PKCE exchange and hands the test box a bearer token.</p>
-                <div class="row" style="margin-bottom: 0">
-                    <div class="col s12 m5">
-                        <div class="input-field">
-                            <select id="testbox-app">${options}</select>
-                            <label for="testbox-app" class="active">Application</label>
-                        </div>
-                        ${redirectGroups}
-                        <button type="button" class="btn teal darken-1 waves-effect waves-light" id="testbox-open">
-                            <i class="material-icons left">open_in_new</i>Open sign-in popup
-                        </button>
-                        <p class="grey-text" style="font-size: 0.8rem; margin-top: 16px">
-                            The popup must be allowed by the browser. Cancelling it returns
-                            &ldquo;Sign-in was cancelled.&rdquo; instead of a token.
-                        </p>
-                    </div>
-                    <div class="col s12 m7">
-                        <p class="grey-text" id="testbox-status" style="margin-bottom: 8px">Nothing yet.</p>
-                        <div class="testbox-result idle" id="testbox-result">The token, account and userinfo response appear here.</div>
-                    </div>
-                </div>`
-        : `                <h4>Popup test box</h4>
-                <p class="grey-text">Register an application first, then come back here to try the popup.</p>
-                <a class="btn teal darken-1 waves-effect waves-light" href="/developers/apps#register">Register an application</a>`;
+        ? renderView('developers/testbox.html', { options, redirectGroups })
+        : renderView('developers/testbox-empty.html');
 
     const script = apps.length
-        ? `<script type="application/json" id="testbox-apps">${data}</script>
-<script src="/oauth/breakmine.js"><\/script>
-<script>
-(function () {
-    var apps = [];
-    try { apps = JSON.parse(document.getElementById('testbox-apps').textContent); } catch (err) { apps = []; }
-    if (!apps.length) return;
-
-    var appSelect = document.getElementById('testbox-app');
-    var openButton = document.getElementById('testbox-open');
-    var statusLine = document.getElementById('testbox-status');
-    var result = document.getElementById('testbox-result');
-
-    function appFor(clientId) {
-        for (var i = 0; i < apps.length; i++) {
-            if (apps[i].client_id === clientId) return apps[i];
-        }
-        return apps[0];
-    }
-
-    function groupFor(clientId) {
-        var groups = document.querySelectorAll('.redirect-field');
-        for (var i = 0; i < groups.length; i++) {
-            if (groups[i].getAttribute('data-client') === clientId) return groups[i];
-        }
-        return null;
-    }
-
-    function selectedUri(group) {
-        var select = group ? group.querySelector('select') : null;
-        return select ? select.value : '';
-    }
-
-    // Every application already has its own dropdown, so switching just reveals
-    // the matching one.
-    function showSelectedGroup() {
-        var groups = document.querySelectorAll('.redirect-field');
-        for (var i = 0; i < groups.length; i++) {
-            groups[i].style.display = groups[i].getAttribute('data-client') === appSelect.value ? '' : 'none';
-        }
-        return groupFor(appSelect.value);
-    }
-
-    function showStatus(text) {
-        statusLine.textContent = text;
-    }
-
-    function line(label, value) {
-        var row = document.createElement('div');
-        var key = document.createElement('span');
-        key.className = 'key';
-        key.textContent = label + ': ';
-        var text = document.createElement('span');
-        text.textContent = value;
-        row.appendChild(key);
-        row.appendChild(text);
-        return row;
-    }
-
-    function resetResult() {
-        result.textContent = '';
-        result.classList.remove('idle');
-    }
-
-    appSelect.addEventListener('change', showSelectedGroup);
-    // Materialize handles option clicks itself and stops the event, so sample
-    // the selection from a capture-phase click instead.
-    document.addEventListener('click', function () { setTimeout(showSelectedGroup, 0); }, true);
-    showSelectedGroup();
-
-    openButton.addEventListener('click', function () {
-        var app = appFor(appSelect.value);
-        var redirectUri = selectedUri(groupFor(appSelect.value));
-
-        if (!redirectUri) {
-            showStatus('This application has no redirect URI to return to.');
-            return;
-        }
-
-        showStatus('Waiting for the popup\\u2026');
-        resetResult();
-        result.appendChild(line('Application', app.name));
-        result.appendChild(line('Redirect URI', redirectUri));
-
-        BreakmineAuth.login({ clientId: app.client_id, redirectUri: redirectUri }).then(function (session) {
-            showStatus('Approved. The popup handed back a bearer token.');
-            result.appendChild(line('Username', session.username));
-            result.appendChild(line('Scope', session.scope));
-            result.appendChild(line('Expires in', session.expiresIn + ' seconds'));
-            result.appendChild(line('Access token', session.token));
-
-            return BreakmineAuth.user(session.token).then(function (profile) {
-                result.appendChild(line('userinfo', JSON.stringify(profile)));
-            }, function (err) {
-                result.appendChild(line('userinfo failed', err.message));
-            });
-        }).catch(function (err) {
-            showStatus(err.message);
-        });
-    });
-})();
-<\/script>`
+        ? renderView('developers/testbox-script.html', {
+            data: JSON.stringify(apps).replace(/<\//g, '<\\/'),
+        })
         : '';
 
     renderDeveloperPage(res, { title: 'Popup test box', active: 'testbox', user, body, status, script });
@@ -3513,9 +2945,7 @@ app.get('/developers/apps/:clientId', requireDeveloper, (req, res) => {
             status: 404,
             title: 'Not found',
             user: req.developer,
-            body: `                <h4>Application not found</h4>
-                <p class="grey-text">It was deleted, or it belongs to another account.</p>
-                <a class="btn teal darken-1" href="/developers/apps">Back to my apps</a>`,
+            body: renderView('developers/app-not-found.html'),
         });
     }
 
@@ -3614,9 +3044,7 @@ app.get('/developers/review', requireDeveloper, (req, res) => {
             status: 403,
             title: 'Not allowed',
             user: req.developer,
-            body: `                <h4>Not allowed</h4>
-                <p class="grey-text">Only Breakmine reviewers can approve applications.</p>
-                <a class="btn teal darken-1" href="/developers/apps">Back to my apps</a>`,
+            body: renderView('developers/not-allowed.html'),
         });
     }
 

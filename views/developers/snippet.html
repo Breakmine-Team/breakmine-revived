@@ -1,0 +1,8 @@
+<script src="{{issuer}}/oauth/breakmine.js"></script>
+<script>
+BreakmineAuth.login({ clientId: '{{clientId}}' })
+    .then(function (session) {
+        console.log(session.username, session.token);
+    })
+    .catch(function (err) { console.error(err.message); });
+</script>

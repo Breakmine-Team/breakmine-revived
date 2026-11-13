@@ -1,0 +1,70 @@
+                <a href="/developers/apps" class="grey-text"><i class="material-icons tiny">arrow_back</i> All applications</a>
+                <h4 style="margin: 8px 0 4px">{{appName}}</h4>
+                <p class="grey-text" style="margin-top: 0">
+                    Client ID <code class="inline">{{clientId}}</code>
+                    <button type="button" class="btn-flat btn-small teal-text" data-copy="{{clientId}}" onclick="copyClientId(this)">copy</button>
+                    <br>Created {{created}} &middot; last used {{lastUsed}}
+                </p>
+                {{error}}
+                <h5>Application icon</h5>
+                <div class="app-icon-editor">
+                    {{iconPreview}}
+                    <div>
+                        <form method="post" action="/developers/apps/{{clientId}}/icon" enctype="multipart/form-data">
+                            <div class="file-field input-field">
+                                <div class="btn teal darken-1">
+                                    <span>Choose PNG</span>
+                                    <input type="file" name="icon" accept="image/png" required>
+                                </div>
+                                <div class="file-path-wrapper">
+                                    <input class="file-path validate" type="text" placeholder="No file chosen">
+                                </div>
+                            </div>
+                            <button class="btn waves-effect waves-light teal darken-1" type="submit">Upload icon</button>
+                        </form>
+                        {{removeIconForm}}
+                    </div>
+                </div>
+                <p class="grey-text" style="font-size: 0.85rem; margin-top: 4px">
+                    Shown on the sign-in consent screen next to your application name.
+                    PNG, square, up to 512 KB &mdash; it is resized to {{iconSize}}&times;{{iconSize}}.
+                </p>
+
+                <div class="row">
+                    <div class="col s12 l6">
+                        <h5>Settings</h5>
+                        <form method="post" action="/developers/apps/{{clientId}}">
+                            <div class="input-field">
+                                <input id="app-name" name="name" type="text" required minlength="2" maxlength="{{nameMax}}" value="{{appName}}">
+                                <label for="app-name" class="active">Application name</label>
+                            </div>
+                            <div class="input-field">
+                                <textarea id="app-uris" name="redirect_uris" class="materialize-textarea" rows="5" required>{{uris}}</textarea>
+                                <label for="app-uris" class="active">Redirect URIs (one per line)</label>
+                                <span class="helper-text">https anywhere; http only for localhost.</span>
+                            </div>
+                            <button class="btn teal darken-1 waves-effect waves-light" type="submit">Save changes</button>
+                        </form>
+
+                        <h5>Danger zone</h5>
+                        <form method="post" action="/developers/apps/{{clientId}}/delete" onsubmit="return confirm('Delete this application? Players will no longer be able to sign in with it.');">
+                            <button class="btn red lighten-1 waves-effect waves-light" type="submit">Delete application</button>
+                        </form>
+                    </div>
+                    <div class="col s12 l6">
+                        <h5>Popup test box</h5>
+                        <p>Run the real sign-in popup against this app and see the bearer token and profile it returns.</p>
+                        <p class="grey-text" style="font-size: 0.9rem">{{testStatus}}</p>
+                        <a class="btn teal waves-effect waves-light" href="{{testboxPath}}?client={{clientIdEncoded}}">Open the test box</a>
+
+                        <h5>Add it to your site</h5>
+                        <pre class="snippet">{{snippet}}</pre>
+                        <p class="grey-text" style="font-size: 0.85rem">The page that includes the SDK must be one of the redirect URIs, because the popup returns to it.</p>
+                    </div>
+                </div>
+                <script>
+                    function copyClientId(button) {
+                        if (navigator.clipboard) navigator.clipboard.writeText(button.getAttribute('data-copy'));
+                        button.textContent = 'copied';
+                    }
+                </script>

@@ -1,0 +1,26 @@
+    <div class="topbar">
+        <h1>Breakmine Admin</h1>
+        <form method="post" action="/admin/logout"><button type="submit">Sign out</button></form>
+    </div>
+
+{{message}}
+{{error}}
+
+    <h2>Capes</h2>
+    <form class="upload" method="post" action="/admin/capes" enctype="multipart/form-data">
+        <label>Cape name<input type="text" name="name" maxlength="{{capeNameMax}}" placeholder="e.g. Founder Cape" required></label>
+        <label>Cape PNG (64×32 or HD)<input type="file" name="file" accept="image/png" required></label>
+        <button type="submit">Upload cape</button>
+    </form>
+
+    <table>
+        <thead><tr><th></th><th>Name</th><th>Assigned players</th><th></th></tr></thead>
+        <tbody>{{capeRows}}</tbody>
+    </table>
+
+    <h2>Players</h2>
+{{purgeBar}}
+    <table>
+        <thead><tr><th>Player</th><th>Created</th><th>Last login</th><th>Skin</th><th>Cape</th><th>Password</th><th></th></tr></thead>
+        <tbody>{{userRows}}</tbody>
+    </table>

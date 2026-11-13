@@ -1,0 +1,23 @@
+<tr>
+            <td><img class="thumb" src="/admin/capes/{{id}}/thumb" alt=""></td>
+            <td><strong>{{name}}</strong><div class="muted">{{idText}}</div></td>
+            <td>{{pills}}
+                <form class="assign" method="post" action="/admin/capes/{{id}}/assign">
+                    <input type="text" name="username" placeholder="username, othername" required>
+                    <button type="submit">Assign</button>
+                </form>
+            </td>
+            <td>
+                <div class="actions">
+                    <form method="post" action="/admin/capes/{{id}}/assign-all" onsubmit="return confirm('Gift this cape to all {{userCount}} registered players?')">
+                        <button type="submit"{{assignAllDisabled}}>Gift All</button>
+                    </form>
+                    <form method="post" action="/admin/capes/{{id}}/unassign-all" onsubmit="return confirm('Remove this cape from all {{assignedCount}} assigned players?')">
+                        <button class="danger" type="submit"{{unassignAllDisabled}}>Remove All</button>
+                    </form>
+                    <form method="post" action="/admin/capes/{{id}}/delete" onsubmit="return confirm('Delete this cape and unassign it from everyone?')">
+                        <button class="danger" type="submit">Delete</button>
+                    </form>
+                </div>
+            </td>
+        </tr>

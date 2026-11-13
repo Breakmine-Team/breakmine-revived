@@ -1,0 +1,16 @@
+                <h4>Review queue</h4>
+                <p class="grey-text">Approving an application removes the &ldquo;has not been reviewed&rdquo; warning from its consent screen and puts a verified badge next to its name there. Only portal applications are listed; clients registered on the server are trusted already.</p>
+                {{error}}
+                <table class="striped responsive-table">
+                    <thead>
+                        <tr>
+                            <th><i class="material-icons tiny">badge</i> Application</th>
+                            <th><i class="material-icons tiny">person</i> Owner</th>
+                            <th><i class="material-icons tiny">vpn_key</i> Client ID</th>
+                            <th><i class="material-icons tiny">link</i> Redirect hosts</th>
+                            <th><i class="material-icons tiny">event</i> Created</th>
+                            <th><i class="material-icons tiny">rule</i> Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>{{rows}}</tbody>
+                </table>

@@ -1,0 +1,16 @@
+    <div class="purge">
+        <div>
+            <strong>Spam cleanup</strong>
+            <div class="muted">Matches auto-generated usernames such as JumpingPotato42.</div>
+        </div>
+        <div class="purge-actions">
+            <form method="post" action="/admin/users/purge-spam" onsubmit="return confirm('Delete all {{spamCount}} auto-generated spam accounts? This cannot be undone.')">
+                <button class="danger" type="submit"{{spamDisabled}}>Purge Spam</button>
+                <span class="muted">{{spamCount}} account{{spamWord}}</span>
+            </form>
+            <form method="post" action="/admin/users/purge-spam-never-logged-in" onsubmit="return confirm('Delete {{neverLoggedInSpamCount}} auto-generated accounts that never logged in? This cannot be undone.')">
+                <button class="danger" type="submit"{{neverDisabled}}>Purge Spam (Never logged in)</button>
+                <span class="muted">{{neverLoggedInSpamCount}} account{{neverWord}}</span>
+            </form>
+        </div>
+    </div>

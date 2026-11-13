@@ -1,0 +1,34 @@
+                <h4>OAuth applications</h4>
+                <p class="grey-text">These applications can show the &ldquo;Sign in with Breakmine&rdquo; popup on their own sites. They are public clients: the SDK uses PKCE, so no client secret is issued.</p>
+                {{error}}
+                <table class="striped responsive-table">
+                    <thead>
+                        <tr>
+                            <th><i class="material-icons tiny">badge</i> Name</th>
+                            <th><i class="material-icons tiny">vpn_key</i> Client ID</th>
+                            <th><i class="material-icons tiny">link</i> Redirect URIs</th>
+                            <th><i class="material-icons tiny">event</i> Created</th>
+                            <th><i class="material-icons tiny">history</i> Last used</th>
+                            <th><i class="material-icons tiny">rule</i> Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>{{rows}}</tbody>
+                </table>
+
+                <div class="divider" style="margin: 32px 0"></div>
+
+                <h5 id="register">Register an application</h5>
+                <form method="post" action="/developers/apps" class="col s12 m10 l8" style="padding: 0">
+                    <div class="input-field">
+                        <input id="new-app-name" name="name" type="text" required minlength="2" maxlength="{{nameMax}}" value="{{name}}">
+                        <label for="new-app-name" class="{{nameActive}}">Application name</label>
+                        <span class="helper-text">Shown on the consent screen, e.g. &ldquo;Pixel Chat&rdquo;.</span>
+                    </div>
+                    <div class="input-field">
+                        <textarea id="new-app-uris" name="redirect_uris" class="materialize-textarea" rows="3" required>{{uris}}</textarea>
+                        <label for="new-app-uris" class="{{urisActive}}">Redirect URIs (one per line)</label>
+                        <span class="helper-text">https anywhere; http only for localhost. The popup returns to one of these.</span>
+                    </div>
+                    <button class="btn teal darken-1 waves-effect waves-light" type="submit">Register application</button>
+                </form>
+                <p class="grey-text" style="font-size: 0.85rem">The test box URL for this server is added automatically so you can try the popup without deploying first.</p>
