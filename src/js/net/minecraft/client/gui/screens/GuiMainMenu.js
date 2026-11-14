@@ -243,7 +243,13 @@ export default class GuiMainMenu extends GuiScreen {
             this.drawRightString(stack, "Play at breakmine.com!", this.width - 2, 2, 0xFFFFFFff);
         }
 
+        const discordText = "Join Discord";
+        this.discordLinkWidth = this.getStringWidth(stack, discordText) + 4;
+        const discordMouseOver = mouseX > this.width - 2 - this.discordLinkWidth && mouseY > this.height - 31 && mouseY < this.height - 21;
+        this.drawRightString(stack, discordText, this.width - 2, this.height - 30, discordMouseOver ? 0x5865F2ff : 0xFFFFFFff);
+
         this.drawRightString(stack, "Updated at " + Minecraft.TIMESTAMP, this.width - 2, this.height - 20, 0xFFFFFFff);
+
         this.drawString(stack, "Breakmine " + Minecraft.VERSION, 2, this.height - 10, 0xFFFFFFff);
 
         this.drawString(stack, "Patchwork " + Version.PATCHWORK_VERSION, 2, this.height - 20, 0xFFFFFFff);
@@ -289,6 +295,12 @@ export default class GuiMainMenu extends GuiScreen {
 
     mouseClicked(mouseX, mouseY, mouseButton) {
         super.mouseClicked(mouseX, mouseY, mouseButton);
+
+        let discordMouseOver = mouseX > this.width - 2 - (this.discordLinkWidth || 70) && mouseY > this.height - 31 && mouseY < this.height - 21;
+        if (discordMouseOver) {
+            this.minecraft.window.openUrl("https://discord.gg/JtNgEjx9hC", true);
+            return;
+        }
 
         let mouseOver = mouseX > this.width - 190 && mouseY > this.height - 10;
         if (mouseOver) {
