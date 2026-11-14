@@ -34,6 +34,12 @@ class ScaffoldingPart {
     isTranslucent() {
         return false;
     }
+
+    // Renderer interface: translucent-looking parts must not hide other blocks,
+    // but parts of the same multipart class may still cull their shared faces.
+    occludesNeighborFaces() {
+        return false;
+    }
 }
 
 export default class BlockScaffolding extends Block {

@@ -494,7 +494,7 @@ export default class BlockRenderer {
             let partRotation = resolvedParts[i].rotation;
 
             const partAo = ambientOcclusion
-                && (multipartBlock !== null ? multipartBlock : partBlock).getAmbientOcclusion();
+                && this.partUsesAmbientOcclusion(multipartBlock, partBlock);
 
             const cullHiddenPart = cullHidden && world !== null && partRotation === null;
 
@@ -506,7 +506,8 @@ export default class BlockRenderer {
                 for (let j = 0; j < FACES.length; j++) {
                     let face = FACES[j];
 
-                    if (respectFaces && partBlock.shouldRenderFace(world, x, y, z, face) === false) {
+                    if (respectFaces && typeof partBlock.shouldRenderFace === 'function'
+                        && partBlock.shouldRenderFace(world, x, y, z, face) === false) {
                         continue;
                     }
 
@@ -603,7 +604,7 @@ export default class BlockRenderer {
             // Translucent parts do not hide what is behind them, but two parts of
             // the same multipart class touching flush (door halves, etc.) can still
             // cull their shared faces.
-            if (otherBlock && !otherBlock.occludesNeighborFaces()
+            if (otherBlock && !this.partOccludesNeighborFaces(otherBlock)
                 && (ownerBlock === null || otherBlock.constructor !== ownerBlock.constructor)) {
                 continue;
             }
@@ -633,6 +634,29 @@ export default class BlockRenderer {
         }
 
         return false;
+    }
+
+    // Parts can be lightweight render helpers instead of Block instances, so only
+    // rely on the interface members they actually provide and fall back to safe
+    // defaults for the rest.
+    partOccludesNeighborFaces(partBlock) {
+        if (!partBlock) {
+            return false;
+        }
+        if (typeof partBlock.occludesNeighborFaces === 'function') {
+            return partBlock.occludesNeighborFaces();
+        }
+        if (typeof partBlock.isTranslucent === 'function') {
+            return !partBlock.isTranslucent();
+        }
+        return false;
+    }
+
+    partUsesAmbientOcclusion(multipartBlock, partBlock) {
+        const source = multipartBlock !== null && multipartBlock !== undefined ? multipartBlock : partBlock;
+        return source && typeof source.getAmbientOcclusion === 'function'
+            ? source.getAmbientOcclusion()
+            : true;
     }
 
     isPartFaceAtBoundary(bbox, face) {
@@ -799,16 +823,19 @@ export default class BlockRenderer {
         let minU, minV;
         let maxU, maxV;
         
+        const textureValue = typeof block.getTextureForFace === 'function'
+            ? block.getTextureForFace(face, blockData, x, y, z, world)
+            : 'missing';
+
         const atlas = this.worldRenderer.textureAtlas;
         if (atlas && atlas.isLoaded()) {
-            let textureName = block.getTextureForFace(face, blockData, x, y, z, world);
-            let uvs = atlas.getUVs(textureName);
+            let uvs = atlas.getUVs(textureValue);
             minU = uvs.minU;
             maxU = uvs.maxU;
             minV = uvs.minV;
             maxV = uvs.maxV;
         } else {
-            let textureIndex = block.getTextureForFace(face, blockData, x, y, z, world);
+            let textureIndex = textureValue;
             minU = (textureIndex % 16) / 16.0;
             maxU = minU + (16 / 256);
             minV = Math.floor(textureIndex / 16) / 16.0;
@@ -903,11 +930,13 @@ export default class BlockRenderer {
             wrapRect = [minU, minV, maxU - minU, maxV - minV, wrapFlags];
         }
 
-        let rotation = block.getRotationForFace === Block.prototype.getRotationForFace
+        let rotation = typeof block.getRotationForFace !== 'function'
+            || block.getRotationForFace === Block.prototype.getRotationForFace
             ? 0
             : block.getRotationForFace(face, blockData, x, y, z, world);
 
-        let color = block.getColor === Block.prototype.getColor
+        let color = typeof block.getColor !== 'function'
+            || block.getColor === Block.prototype.getColor
             ? 0xffffff
             : block.getColor(world, x, y, z, face);
         let red = (color >> 16 & 255) / 255.0;

@@ -225,6 +225,12 @@ export default class GuiOptions extends GuiScreen {
         this._buildPage();
     }
 
+    _contentTop() {
+        const titleH = this.pages.length > 1 ? 34 : 22;
+        const total = titleH + this.itemsPerPage * 24 + 4 + 20;
+        return Math.max(4, Math.min(40, this.height - total - 4));
+    }
+
     _buildPage() {
         this.buttonList = [];
         this.selectedButtonIndex = -1;
@@ -233,11 +239,14 @@ export default class GuiOptions extends GuiScreen {
         if (!page) return;
 
         const settings = this.minecraft.settings;
+        const mobile = this.minecraft.window.mobileDevice;
 
         const buttonWidth = 200;
         const itemHeight = 24;
         const startX = this.width / 2 - buttonWidth / 2;
-        const startY = this.height / 2 - 60;
+        const startY = mobile
+            ? this._contentTop() + (this.pages.length > 1 ? 34 : 22)
+            : this.height / 2 - 60;
 
         const items = page.items || [];
 
@@ -248,10 +257,22 @@ export default class GuiOptions extends GuiScreen {
             this.buttonList.push(button);
         }
 
-        const navY = startY + this.itemsPerPage * itemHeight + 10;
-        const navButtonWidth = Math.floor((buttonWidth - 8) / 2);
+        const navY = startY + this.itemsPerPage * itemHeight + (mobile ? 4 : 10);
 
-        if (this.pages.length > 1) {
+        const createDoneButton = (x, y, width) => new GuiButton(this.minecraft, "Done", x, y, width, 20, () => {
+            for (const b of this.buttonList) {
+                if (b instanceof GuiStringButton && b.editing) {
+                    b.confirmEdit();
+                }
+            }
+            this.minecraft.displayScreen(this.previousScreen);
+        });
+
+        if (mobile && this.pages.length > 1) {
+            const doneWidth = 56;
+            const gap = 8;
+            const navButtonWidth = Math.floor((buttonWidth - doneWidth - gap * 2) / 2);
+
             const prevButton = new GuiButton(this.minecraft, "< Prev", startX, navY, navButtonWidth, 20, () => {
                 this.currentPage--;
                 this._buildPage();
@@ -260,24 +281,40 @@ export default class GuiOptions extends GuiScreen {
             prevButton.setEnabled(this.currentPage > 0);
             this.buttonList.push(prevButton);
 
-            const nextButton = new GuiButton(this.minecraft, "Next >", startX + navButtonWidth + 8, navY, navButtonWidth, 20, () => {
+            const nextButton = new GuiButton(this.minecraft, "Next >", startX + navButtonWidth + gap, navY, navButtonWidth, 20, () => {
                 this.currentPage++;
                 this._buildPage();
                 this.selectFirstEnabledButton();
             });
             nextButton.setEnabled(this.currentPage < this.pages.length - 1);
             this.buttonList.push(nextButton);
-        }
 
-        const doneY = navY + 26;
-        this.buttonList.push(new GuiButton(this.minecraft, "Done", startX, doneY, buttonWidth, 20, () => {
-            for (const b of this.buttonList) {
-                if (b instanceof GuiStringButton && b.editing) {
-                    b.confirmEdit();
-                }
+            this.buttonList.push(createDoneButton(startX + navButtonWidth * 2 + gap * 2, navY, doneWidth));
+        } else if (mobile) {
+            this.buttonList.push(createDoneButton(startX, navY, buttonWidth));
+        } else {
+            const navButtonWidth = Math.floor((buttonWidth - 8) / 2);
+
+            if (this.pages.length > 1) {
+                const prevButton = new GuiButton(this.minecraft, "< Prev", startX, navY, navButtonWidth, 20, () => {
+                    this.currentPage--;
+                    this._buildPage();
+                    this.selectFirstEnabledButton();
+                });
+                prevButton.setEnabled(this.currentPage > 0);
+                this.buttonList.push(prevButton);
+
+                const nextButton = new GuiButton(this.minecraft, "Next >", startX + navButtonWidth + 8, navY, navButtonWidth, 20, () => {
+                    this.currentPage++;
+                    this._buildPage();
+                    this.selectFirstEnabledButton();
+                });
+                nextButton.setEnabled(this.currentPage < this.pages.length - 1);
+                this.buttonList.push(nextButton);
             }
-            this.minecraft.displayScreen(this.previousScreen);
-        }));
+
+            this.buttonList.push(createDoneButton(startX, navY + 26, buttonWidth));
+        }
 
         for (let i = 0; i < items.length; i++) {
             const item = items[i];
@@ -376,11 +413,14 @@ export default class GuiOptions extends GuiScreen {
 
         const page = this.pages[this.currentPage];
         const title = (page && page.title) || "Settings";
-        this.drawCenteredString(stack, title, this.width / 2, 40);
+        const top = this._contentTop();
+        const titleY = this.minecraft.window.mobileDevice ? top : 40;
+        this.drawCenteredString(stack, title, this.width / 2, titleY);
 
         if (this.pages.length > 1) {
             const pageIndicator = `${this.currentPage + 1}/${this.pages.length}`;
-            this.drawCenteredString(stack, pageIndicator, this.width / 2, 52);
+            const indicatorY = this.minecraft.window.mobileDevice ? top + 12 : 52;
+            this.drawCenteredString(stack, pageIndicator, this.width / 2, indicatorY);
         }
 
         super.drawScreen(stack, mouseX, mouseY, partialTicks);

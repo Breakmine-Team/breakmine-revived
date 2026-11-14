@@ -46,7 +46,7 @@ export default class GuiMainMenu extends GuiScreen {
             this.checkForUpdateInBackground();
         }
 
-        let y = this.height / 4 + 36;
+        let y = this.height / 4 + (this.minecraft.window.mobileDevice ? 12 : 36);
 
         this.buttonList.push(new GuiButton(this.minecraft, "Singleplayer", this.width / 2 - 100, y, 200, 20, async () => {
             const loadingScreen = new GuiLoadingIntegratedServer(this);
@@ -117,7 +117,9 @@ export default class GuiMainMenu extends GuiScreen {
         const modButtons = this.minecraft.modLoader?.getGuiButtons('main-menu', this) || [];
         this.buttonList.push(...modButtons);
 
-        this.buttonList.push(new GuiButton(this.minecraft, "Options...", this.width / 2 - 100, y + 96 + 12, 98, 20, () => {
+        const optionsY = y + (this.minecraft.window.mobileDevice ? 96 : 96 + 12);
+
+        this.buttonList.push(new GuiButton(this.minecraft, "Options...", this.width / 2 - 100, optionsY, 98, 20, () => {
             this.minecraft.displayScreen(new GuiOptions(this));
         }));
 
@@ -127,7 +129,7 @@ export default class GuiMainMenu extends GuiScreen {
 
         const isElectron = isElectronApp();
 
-        this.buttonList.push(new GuiButton(this.minecraft, "Quit Game", this.width / 2 + 2, y + 96 + 12, 98, 20, () => {
+        this.buttonList.push(new GuiButton(this.minecraft, "Quit Game", this.width / 2 + 2, optionsY, 98, 20, () => {
             window.close();
         }).setEnabled(isElectron));
 
@@ -167,8 +169,8 @@ export default class GuiMainMenu extends GuiScreen {
 
         const x = Math.floor(buttonRight + (strip - width) / 2);
 
-        const buttonsTop = this.height / 4 + 36;
-        const buttonsBottom = buttonsTop + 108 + 20;
+        const buttonsTop = this.height / 4 + (this.minecraft.window.mobileDevice ? 12 : 36);
+        const buttonsBottom = buttonsTop + (this.minecraft.window.mobileDevice ? 96 : 108) + 20;
         const y = Math.round((buttonsTop + buttonsBottom) / 2 - height / 2);
         
         this.playerPreview.draw(stack, x, y, mouseX, mouseY, partialTicks, scale);
@@ -219,10 +221,11 @@ export default class GuiMainMenu extends GuiScreen {
     }
 
     drawScreen(stack, mouseX, mouseY, partialTicks) {
-        let logoWidth = 274;
+        const mobile = this.minecraft.window.mobileDevice;
+        let logoWidth = mobile ? 200 : 274;
         let logoHeight = Math.round(logoWidth * (158 / 1024)); 
         let x = this.width / 2 - logoWidth / 2;
-        let y = 30;
+        let y = mobile ? 10 : 30;
 
         let rotationX = Math.sin((this.panoramaTimer + partialTicks) / 400.0) * 25.0 + 20.0;
         let rotationY = -(this.panoramaTimer + partialTicks) * 0.1;
@@ -278,9 +281,10 @@ export default class GuiMainMenu extends GuiScreen {
         let f = 1.8 - Math.abs(Math.sin((new Date().getTime() % 1000) / 1000.0 * Math.PI * 2.0) * 0.1);
         f = f * 100.0 / (this.getStringWidth(stack, this.splashText) + 32);
 
+        const mobile = this.minecraft.window.mobileDevice;
         stack.save();
-        stack.translate((this.width / 2 + 90), 70.0, 0.0);
-        stack.rotate(MathHelper.toRadians(-20));
+        stack.translate((this.width / 2 + 90), mobile ? 45.0 : 70.0, 0.0);
+        stack.rotate(MathHelper.toRadians(mobile ? -10 : -20));
         stack.scale(f, f, f);
 
         this.drawCenteredString(stack, this.splashText, 0, -8, -256);

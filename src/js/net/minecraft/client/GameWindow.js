@@ -329,6 +329,18 @@ export default class GameWindow {
                 #mbtn-shift { right: 3.5vw; top: 39.70vh; }
                 #mbtn-space { right: 3.5vw; top: 52.11vh; }
                 #mbtn-e { right: 3.5vw; top: 27.30vh; }
+                #mbtn-chat { right: 3.5vw; top: 64.50vh; }
+
+                #mbtn-chat, #mbtn-pause {
+                    position: absolute;
+                    width: 48px;
+                    height: 48px;
+                }
+
+                #mbtn-pause {
+                    top: 15px;
+                    right: 15px;
+                }
 
                 #mobile-fullscreen {
                     position: fixed;
@@ -383,6 +395,13 @@ export default class GameWindow {
                 <button class="texture-btn" id="mbtn-shift"></button>
                 <button class="texture-btn" id="mbtn-space"></button>
                 <button class="texture-btn" id="mbtn-e"></button>
+
+                <button class="mobile-btn" id="mbtn-chat">
+                    <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+                </button>
+                <button class="mobile-btn" id="mbtn-pause">
+                    <svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+                </button>
             `;
             document.body.appendChild(overlay);
         }
@@ -685,6 +704,27 @@ export default class GameWindow {
             spaceBtn.addEventListener('touchend', e => {
                 e.preventDefault();
                 Keyboard.setState(this.mobileKey('keyJump', 'Space'), false);
+            }, { passive: false });
+        }
+
+        const pauseBtn = document.getElementById('mbtn-pause');
+        if (pauseBtn) {
+            pauseBtn.addEventListener('touchstart', e => {
+                e.preventDefault();
+                if (this.minecraft.isInGame() && this.minecraft.currentScreen === null) {
+                    this.minecraft.displayScreen(new GuiIngameMenu());
+                }
+            }, { passive: false });
+        }
+
+        const chatBtn = document.getElementById('mbtn-chat');
+        if (chatBtn) {
+            chatBtn.addEventListener('touchstart', e => {
+                e.preventDefault();
+                if (this.minecraft.currentScreen === null) {
+                    this.minecraft.onKeyPressed(this.mobileKey('keyOpenChat', 'KeyT'));
+                    this.syncMobileTextInput();
+                }
             }, { passive: false });
         }
 

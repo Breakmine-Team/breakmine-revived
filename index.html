@@ -1098,7 +1098,7 @@ window.devtoolsWindow = WindowManager.create({
 
     datastoreRequest('version.txt').then(file => {
       const latest = String(file.content || '').trim();
-      if (latest && isNewerVersion(latest, current)) {
+      if (latest && isNewerVersion(latest, current) && new URLSearchParams(window.location.search).get('tt') !== '0') {
         showUpdateWindow(current, latest);
       }
     }).catch(err => {
@@ -1115,7 +1115,7 @@ window.devtoolsWindow = WindowManager.create({
 
 // Singlefile warning window
 const isSinglefile = window.location.protocol === 'file:' || (typeof process !== 'undefined' && process.env && process.env.SINGLEFILE_BUILD === 'true');
-if (isSinglefile) {
+if (isSinglefile && new URLSearchParams(window.location.search).get('tt') !== '0') {
   window.singlefileWarningWindow = WindowManager.create({
     title: "file:// Notice",
     x: 100,

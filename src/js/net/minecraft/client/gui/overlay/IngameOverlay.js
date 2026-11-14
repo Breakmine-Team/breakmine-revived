@@ -67,13 +67,19 @@ export default class IngameOverlay extends Gui {
         }
 
         const cameraView = this.minecraft.cctvManager?.isViewing() === true;
+        const mobileGuiItems = this.minecraft.window.mobileDevice
+            && this.minecraft.currentScreen?.usesGuiItems?.() === true;
+
+        if (mobileGuiItems) {
+            this.minecraft.itemRenderer?.destroy("hotbar");
+        }
 
         if (cameraView) {
             this.hideHudItemLayers();
         }
 
         if (!this.minecraft.player.spectator) {
-            if (!cameraView) {
+            if (!cameraView && !mobileGuiItems) {
                 this.renderHotbar(stack, this.window.width / 2 - 91, this.window.height - 22);
             }
             this.updateSelectedItemName();
@@ -361,7 +367,7 @@ export default class IngameOverlay extends Gui {
             24, 24
         )
 
-        let brightness = this.minecraft.isPaused() ? 0.5 : 1; 
+        let brightness = (this.minecraft.isPaused() || this.minecraft.currentScreen !== null) ? 0.5 : 1; 
 
         this.minecraft.itemRenderer.prepareRender("hotbar");
 
@@ -382,6 +388,12 @@ export default class IngameOverlay extends Gui {
         if (this.minecraft.player.spectator) return;
         if (GuiFunctions.isGuiHidden()) return;
         if (this.minecraft.cctvManager?.isViewing()) return;
+        if (this.minecraft.window.mobileDevice
+            && this.minecraft.currentScreen?.usesGuiItems?.() === true) {
+            this.itemCountsDrawn = false;
+            this.itemCountsFresh = false;
+            return;
+        }
 
         const x = this.window.width / 2 - 91;
         const y = this.window.height - 22;
