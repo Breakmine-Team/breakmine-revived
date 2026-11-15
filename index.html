@@ -40,6 +40,14 @@
     <link rel="icon" type="image/x-icon" href="https://breakmine.com/src/resources/favicon.ico">
     <link rel="apple-touch-icon" sizes="180x180" href="https://breakmine.com/src/resources/favicon.ico">
 
+    <!-- Progressive web app: lets Chrome install the game as a standalone app.
+         The manifest <link> itself is injected by the pwa plugin in
+         vite.config.js, because Vite would hash the file into assets/ and its
+         relative start_url/icons would resolve one directory too deep. -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
     <!-- Schema.org Structured Data -->
     <script type="application/ld+json">
         {

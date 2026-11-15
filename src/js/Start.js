@@ -9,6 +9,9 @@ import { initLauncherApi, isLauncherMode } from './net/minecraft/client/launcher
 // It lives inside src/ so every deployment has it next to the module graph: the
 // raw public/ tree serves src/ wholesale, and Vite bundles this import.
 import './MediaEncryptor.js';
+// Side effect: registers the service worker that lets Chrome install the game
+// as a web app (production builds over http(s) only).
+import './pwa.js';
 
 
 

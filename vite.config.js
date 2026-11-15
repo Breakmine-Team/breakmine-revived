@@ -16,8 +16,54 @@ function copyResourcesPlugin() {
     };
 }
 
+// The web app manifest and the service worker have to sit next to the built
+// index.html: a worker can only control pages at or below its own URL, and the
+// manifest's relative start_url/scope/icons resolve against its location.
+// publicDir is disabled, so they are copied out of the project root instead.
+//
+// The <link rel="manifest"> is injected after bundling rather than written in
+// index.html: Vite processes <link href> as an asset, which moved the manifest
+// to assets/manifest-<hash>.webmanifest and left its relative URLs pointing one
+// directory too deep (start_url became /assets/ and every icon 404'd).
+function pwaPlugin() {
+    const files = ["manifest.webmanifest", "sw.js"];
+    const manifestTag = '<link rel="manifest" href="./manifest.webmanifest">';
+
+    return {
+        name: "pwa",
+        // The dev server serves the project root, so the manifest is already
+        // reachable there - only the tag is missing.
+        transformIndexHtml(html, ctx) {
+            if (!ctx.server) return html;
+            return {
+                html,
+                tags: [{
+                    tag: "link",
+                    attrs: { rel: "manifest", href: "./manifest.webmanifest" },
+                    injectTo: "head",
+                }],
+            };
+        },
+        closeBundle() {
+            const dest = path.resolve(__dirname, "dist");
+            for (const file of files) {
+                const src = path.resolve(__dirname, file);
+                if (fs.existsSync(src)) {
+                    fs.copyFileSync(src, path.join(dest, file));
+                }
+            }
+
+            const htmlPath = path.join(dest, "index.html");
+            if (!fs.existsSync(htmlPath)) return;
+            const html = fs.readFileSync(htmlPath, "utf-8");
+            if (html.includes('rel="manifest"')) return;
+            fs.writeFileSync(htmlPath, html.replace("</head>", `    ${manifestTag}\n</head>`));
+        },
+    };
+}
+
 export default defineConfig({
-    plugins: [copyResourcesPlugin(), basicSsl()],
+    plugins: [copyResourcesPlugin(), pwaPlugin(), basicSsl()],
     root: '.',
     publicDir: false,
     server: {

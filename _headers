@@ -15,3 +15,15 @@
 /openapi.json
   Content-Type: application/json
   Cache-Control: public, max-age=3600
+
+# Progressive web app files. The manifest needs the manifest+json type for
+# browsers that are strict about it, and the service worker must never be served
+# from the HTTP cache, or a stale worker keeps controlling the page after a
+# deploy.
+/manifest.webmanifest
+  Content-Type: application/manifest+json
+  Cache-Control: no-cache
+
+/sw.js
+  Content-Type: application/javascript; charset=utf-8
+  Cache-Control: no-cache
