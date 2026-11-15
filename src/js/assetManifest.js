@@ -273,6 +273,8 @@ export const soundPools = [
 
 export const ambientSounds = [
     "sound/random/cave_entity.mp3",
+    "sound/random/close_thunder.ogg",
+    "sound/random/distant_thunder.ogg",
 ];
 
 export const clickSound = "sound/random/click.ogg";

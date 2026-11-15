@@ -5,6 +5,9 @@ import { clickSound } from "../../../../assetManifest.js";
 
 const CAVE_SOUND_ASSET = "sound/random/cave_entity.mp3";
 
+const CLOSE_THUNDER_ASSET = "sound/random/close_thunder.ogg";
+const DISTANT_THUNDER_ASSET = "sound/random/distant_thunder.ogg";
+
 export default class SoundManager {
 
     constructor() {
@@ -281,7 +284,36 @@ export default class SoundManager {
         this.rainGain = gain;
     }
 
+    // Always uses the distant thunder sample for now; the close sample stays
+    // bundled for when nearby strikes should sound different. If the sample
+    // cannot be played the synthesized rumble keeps thunder audible.
     playThunder(volume = 1) {
+        if (this.disabled) {
+            return;
+        }
+
+        const strength = Math.max(0, Math.min(1, Number(volume) || 0));
+        const asset = DISTANT_THUNDER_ASSET;
+
+        let fellBack = false;
+        const fallback = () => {
+            if (fellBack) return;
+            fellBack = true;
+            this.playGeneratedThunder(strength);
+        };
+
+        try {
+            const audio = new Audio(this.resolveAsset(asset));
+            audio.volume = strength;
+            audio.playbackRate = 0.96 + Math.random() * 0.08;
+            audio.addEventListener('error', fallback, { once: true });
+            audio.play().catch(fallback);
+        } catch (e) {
+            fallback();
+        }
+    }
+
+    playGeneratedThunder(volume = 1) {
         if (this.disabled) {
             return;
         }
