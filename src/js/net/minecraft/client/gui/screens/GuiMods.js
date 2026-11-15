@@ -4,6 +4,21 @@ import GuiModSlotContainer from "../widgets/GuiModSlotContainer.js";
 import GuiModSlot from "../widgets/GuiModSlot.js";
 import GuiYesNo from "./GuiYesNo.js";
 import GuiModBrowser from "./GuiModBrowser.js";
+import GuiIde from "./GuiIde.js";
+
+// The IDE and .jph patch packages are still experimental; they only appear
+// with ?expui=1 or once turned on in the Experiments screen, so ordinary
+// players just see .zip mods.
+const EXPERIMENTAL_UI_PARAM = "expui";
+
+function isExperimentalUiEnabled(minecraft) {
+    try {
+        if (new URLSearchParams(window.location.search).get(EXPERIMENTAL_UI_PARAM) === "1") return true;
+    } catch (error) {
+        // No window (tests).
+    }
+    return !!(minecraft && minecraft.settings && minecraft.settings.experimentalUi);
+}
 
 const SIDEBAR_MIN_WIDTH = 180;
 const SIDEBAR_MAX_WIDTH = 300;
@@ -20,8 +35,9 @@ export default class GuiMods extends GuiScreen {
         this.mods = [];
         this.modSlotContainer = null;
         this.selectedIndex = -1;
-
         this.iconImages = new Map();
+
+        this.experimentalUi = isExperimentalUiEnabled(this.minecraft);
     }
 
     setSelectedWorld(index) {
@@ -113,7 +129,7 @@ export default class GuiMods extends GuiScreen {
             return xs;
         };
 
-        const topWidths = rowWidths(3);
+        const topWidths = rowWidths(this.experimentalUi ? 4 : 3);
         const topXs = rowXs(topWidths);
         const bottomCount = isElectron ? 3 : 2;
         const bottomWidths = rowWidths(bottomCount);
@@ -129,13 +145,20 @@ export default class GuiMods extends GuiScreen {
             this.updateButtonStates();
         });
 
-        this.buttonUpload = new GuiButton(this.minecraft, "Upload .zip", topXs[1], topY, topWidths[1], 20, () => {
+        this.buttonUpload = new GuiButton(this.minecraft, this.experimentalUi ? "Upload .zip/.jph" : "Upload .zip", topXs[1], topY, topWidths[1], 20, () => {
             this.uploadMod();
         });
 
         this.buttonUploadFolder = new GuiButton(this.minecraft, "Upload folder", topXs[2], topY, topWidths[2], 20, () => {
             this.uploadModFolder();
         });
+
+        this.buttonIde = null;
+        if (this.experimentalUi) {
+            this.buttonIde = new GuiButton(this.minecraft, "IDE (.jph)", topXs[3], topY, topWidths[3], 20, () => {
+                this.minecraft.displayScreen(new GuiIde(this.minecraft, this));
+            });
+        }
 
         this.buttonBrowse = new GuiButton(this.minecraft, "Browse Mods", this.sidebarX + 4, this.height - 28, this.sidebarWidth - 8, 20, () => {
             this.minecraft.displayScreen(new GuiModBrowser(this.minecraft, this));
@@ -180,6 +203,9 @@ export default class GuiMods extends GuiScreen {
         this.buttonList.push(this.buttonUploadFolder);
         this.buttonList.push(this.buttonUpload);
         this.buttonList.push(this.buttonToggle);
+        if (this.buttonIde) {
+            this.buttonList.push(this.buttonIde);
+        }
         this.buttonList.push(this.buttonDelete);
         this.buttonList.push(this.buttonBack);
         if (this.buttonOpenFolder) {
@@ -259,12 +285,12 @@ export default class GuiMods extends GuiScreen {
     uploadMod() {
         const input = document.createElement('input');
         input.type = 'file';
-        input.accept = '.zip';
+        input.accept = this.experimentalUi ? '.zip,.jph' : '.zip';
         input.onchange = async (e) => {
             const file = e.target.files[0];
             if (!file) return;
             try {
-                await this.minecraft.modLoader.installModFromZip(file);
+                await this.minecraft.modLoader.installModPackage(file);
                 await this.refreshModList();
                 this.rebuildSlotList();
                 this.selectedIndex = this.mods.length - 1;

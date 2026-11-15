@@ -278,6 +278,7 @@ export default class NetworkManager {
                 this.minecraft?.cctvManager?.handleState(payload.camera);
             } else if (payload.type === 'dimension') {
                 const world = this.minecraft?.world;
+                const previousType = world ? world.worldType : null;
                 if (world) {
                     world.clearChunks();
                     if (payload.worldType) {
@@ -285,7 +286,12 @@ export default class NetworkManager {
                     }
                 }
                 if (this.minecraft && typeof this.minecraft.showLoadingScreen === 'function') {
-                    this.minecraft.showLoadingScreen(payload.dimension === 1 ? 'Entering the Nether...' : 'Leaving the Nether...');
+                    const label = (type) => type === 'hellish' ? 'Hell'
+                        : type === 'bob' ? 'the Bob Dimension'
+                        : 'the Overworld';
+                    this.minecraft.showLoadingScreen(payload.dimension === 0
+                        ? `Leaving ${label(previousType)}...`
+                        : `Entering ${label(payload.worldType)}...`);
                 }
             } else if (payload.type === 'playerState') {
                 const player = this.minecraft?.player;

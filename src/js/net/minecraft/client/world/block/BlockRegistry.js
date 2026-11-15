@@ -10,6 +10,7 @@ import BlockTorch from "./type/BlockTorch.js";
 import Sound from "./sound/Sound.js";
 import Block from "./Block.js";
 import BlockPortal from "./type/BlockPortal.js";
+import BlockBobPortal from "./type/BlockBobPortal.js";
 import BlockWood from "./type/BlockWood.js";
 import BlockStair from "./type/BlockStair.js";
 import BlockBedrock from "./type/BlockBedrock.js";
@@ -58,6 +59,8 @@ import BlockCounterDrawer from "./type/BlockCounterDrawer.js";
 import BlockCounterOven from "./type/BlockCounterOven.js";
 import BlockTrafficCone from "./type/BlockTrafficCone.js";
 import BlockTrafficBarrier from "./type/BlockTrafficBarrier.js";
+import BlockTrafficLight from "./type/BlockTrafficLight.js";
+import BlockPole from "./type/BlockPole.js";
 import BlockPavement from "./type/BlockPavement.js";
 import BlockPavementSlope from "./type/BlockPavementSlope.js";
 import BlockScaffolding from "./type/BlockScaffolding.js";
@@ -460,6 +463,8 @@ export class BlockRegistry {
         BlockRegistry.OVEN_COUNTER = new BlockCounterOven(315, 0);
         BlockRegistry.TRAFFIC_CONE = new BlockTrafficCone(316, 0);
         BlockRegistry.TRAFFIC_BARRIER = new BlockTrafficBarrier(317, 0);
+        BlockRegistry.TRAFFIC_LIGHT = new BlockTrafficLight(319, 0);
+        BlockRegistry.POLE = new BlockPole(321, 0);
         BlockRegistry.SCAFFOLDING = new BlockScaffolding(326, 0);
         BlockRegistry.SNAIL_STATUE = new BlockSnailStatue(327, 0);
 
@@ -681,6 +686,7 @@ export class BlockRegistry {
         BlockRegistry.CLUTCH = new BlockClutch(409, 0);
 
         BlockRegistry.PORTAL = new BlockPortal(356, 0);
+        BlockRegistry.BOB_PORTAL = new BlockBobPortal(417, 0);
 
         BlockRegistry.STRUCTURE_MARKER_1 = new BlockStructureMarker(400, 0, "red_concrete", "Structure Marker #1");
         BlockRegistry.STRUCTURE_MARKER_2 = new BlockStructureMarker(401, 0, "orange_concrete", "Structure Marker #2");

@@ -284,10 +284,10 @@ export default class LauncherApi {
 
     async installModZip({ base64 } = {}) {
         if (!base64) {
-            throw new Error("mods.installZip requires 'base64' (the .zip file contents).");
+            throw new Error("mods.installZip requires 'base64' (the .zip or .jph file contents).");
         }
 
-        const modId = await this.minecraft.modLoader.installModFromZip(base64ToBytes(base64));
+        const modId = await this.minecraft.modLoader.installModPackage(base64ToBytes(base64));
         return {
             id: modId,
             mods: await this.listMods(),

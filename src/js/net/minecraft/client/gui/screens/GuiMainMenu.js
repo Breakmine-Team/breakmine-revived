@@ -19,6 +19,8 @@ import { checkForUpdate, isElectronApp } from "../../VersionChecker.js";
 import GuiNewVersion from "./GuiNewVersion.js";
 import GuiLoadingIntegratedServer from "./GuiLoadingIntegratedServer.js";
 import GuiPlayerPreview from "../widgets/GuiPlayerPreview.js";
+import GuiExperiments from "./GuiExperiments.js";
+import { ICON_EXPERIMENTS } from "../../render/gui/FontIcons.js";
 
 export default class GuiMainMenu extends GuiScreen {
 
@@ -141,11 +143,29 @@ export default class GuiMainMenu extends GuiScreen {
             this.minecraft.displayScreen(new GuiAccount(this));
         }));
 
+        this.buttonList.push(this.createExperimentsButton());
+
         this.initPanoramaRenderer();
         this.initPlayerPreview();
     }
 
     
+    // Icon-only 20x20 button in the top-right corner, drawn with the font
+    // renderer; ICON_EXPERIMENTS is the very top-right cell of font.png.
+    createExperimentsButton() {
+        const button = new GuiButton(this.minecraft, "", this.width - 22, 2, 20, 20, () => {
+            this.minecraft.displayScreen(new GuiExperiments(this));
+        }).setTooltip("Experiments");
+
+        const drawButton = button.drawButton;
+        button.drawButton = function (stack, enabled, mouseOver, x, y, width, height) {
+            drawButton.call(this, stack, enabled, mouseOver, x, y, width, height);
+            this.drawString(stack, ICON_EXPERIMENTS, x + 6, y + 6, 0xFFFFFF, false, true);
+        };
+
+        return button;
+    }
+
     initPlayerPreview() {
         if (this.playerPreview) {
             this.playerPreview.dispose();
@@ -243,7 +263,7 @@ export default class GuiMainMenu extends GuiScreen {
         const isSinglefile = typeof process !== 'undefined' && process.env && process.env.SINGLEFILE_BUILD === 'true' ||
                              window.location.protocol === 'file:';
         if (isSinglefile) {
-            this.drawRightString(stack, "Play at breakmine.com!", this.width - 2, 2, 0xFFFFFFff);
+            this.drawRightString(stack, "Play at breakmine.com!", this.width - 2, 26, 0xFFFFFFff);
         }
 
         const discordText = "Join Discord";

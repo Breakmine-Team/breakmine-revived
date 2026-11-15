@@ -1,0 +1,296 @@
+import GuiScreen from "../GuiScreen.js";
+import GuiButton from "../widgets/GuiButton.js";
+import GuiSwitchButton from "../widgets/GuiSwitchButton.js";
+import GuiSliderButton from "../widgets/GuiSliderButton.js";
+import GuiFovSliderButton from "../widgets/GuiFovSliderButton.js";
+import GuiStringButton from "../widgets/GuiStringButton.js";
+import GuiListButton from "../widgets/GuiListButton.js";
+import GuiTextField from "../widgets/GuiTextField.js";
+import GuiTooltip from "../widgets/GuiTooltip.js";
+import GuiControls from "./GuiControls.js";
+import I18n from "../../i18n/I18n.js";
+import BlockLeave from "../../world/block/type/BlockLeave.js";
+
+export default class GuiExperiments extends GuiScreen {
+
+    constructor(previousScreen, pagesOrItems = null, options = {}) {
+        super();
+
+        this.pauseGame = true;
+        this.previousScreen = previousScreen;
+
+        this.pages = this._normalizePages(pagesOrItems || this._defaultPages());
+
+        this.itemsPerPage = options.itemsPerPage !== undefined ? options.itemsPerPage : 5;
+
+        this.pages = this._autoChunk(this.pages, this.itemsPerPage);
+
+        this.currentPage = 0;
+    }
+
+    _defaultPages() {
+        return [
+            {
+                title: "Experiments",
+                items: [
+                    {
+                        name: "CodeGraft",
+                        settingKey: "experimentalUi",
+                        type: "toggle",
+                        tooltip: "JPH modding system"
+                    }
+                ]
+            }
+        ];
+    }
+
+    _normalizePages(input) {
+        if (!Array.isArray(input) || input.length === 0) {
+            return [{ title: "Settings", items: [] }];
+        }
+        const looksLikePage = (p) =>
+            p && typeof p === "object" && Array.isArray(p.items);
+
+        if (!looksLikePage(input[0])) {
+            return [{ title: "Settings", items: input }];
+        }
+        return input;
+    }
+
+    _autoChunk(pages, itemsPerPage) {
+        if (!itemsPerPage || itemsPerPage <= 0) return pages;
+
+        const out = [];
+        for (const page of pages) {
+            const items = page.items || [];
+            if (items.length <= itemsPerPage) {
+                out.push(page);
+                continue;
+            }
+            const chunkCount = Math.ceil(items.length / itemsPerPage);
+            for (let i = 0; i < chunkCount; i++) {
+                const slice = items.slice(i * itemsPerPage, (i + 1) * itemsPerPage);
+                out.push({
+                    title: page.title,
+                    items: slice
+                });
+            }
+        }
+        return out;
+    }
+
+    init() {
+        super.init();
+        this._buildPage();
+    }
+
+    _contentTop() {
+        const titleH = this.pages.length > 1 ? 34 : 22;
+        const total = titleH + this.itemsPerPage * 24 + 4 + 20;
+        return Math.max(4, Math.min(40, this.height - total - 4));
+    }
+
+    _buildPage() {
+        this.buttonList = [];
+        this.selectedButtonIndex = -1;
+
+        const page = this.pages[this.currentPage];
+        if (!page) return;
+
+        const settings = this.minecraft.settings;
+        const mobile = this.minecraft.window.mobileDevice;
+
+        const buttonWidth = 200;
+        const itemHeight = 24;
+        const startX = this.width / 2 - buttonWidth / 2;
+        const startY = mobile
+            ? this._contentTop() + (this.pages.length > 1 ? 34 : 22)
+            : this.height / 2 - 60;
+
+        const items = page.items || [];
+
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            const y = startY + i * itemHeight;
+            const button = this._createItemButton(item, startX, y, buttonWidth, 20, settings);
+            this.buttonList.push(button);
+        }
+
+        const navY = startY + this.itemsPerPage * itemHeight + (mobile ? 4 : 10);
+
+        const createDoneButton = (x, y, width) => new GuiButton(this.minecraft, "Done", x, y, width, 20, () => {
+            for (const b of this.buttonList) {
+                if (b instanceof GuiStringButton && b.editing) {
+                    b.confirmEdit();
+                }
+            }
+            this.minecraft.displayScreen(this.previousScreen);
+        });
+
+        if (mobile && this.pages.length > 1) {
+            const doneWidth = 56;
+            const gap = 8;
+            const navButtonWidth = Math.floor((buttonWidth - doneWidth - gap * 2) / 2);
+
+            const prevButton = new GuiButton(this.minecraft, "< Prev", startX, navY, navButtonWidth, 20, () => {
+                this.currentPage--;
+                this._buildPage();
+                this.selectFirstEnabledButton();
+            });
+            prevButton.setEnabled(this.currentPage > 0);
+            this.buttonList.push(prevButton);
+
+            const nextButton = new GuiButton(this.minecraft, "Next >", startX + navButtonWidth + gap, navY, navButtonWidth, 20, () => {
+                this.currentPage++;
+                this._buildPage();
+                this.selectFirstEnabledButton();
+            });
+            nextButton.setEnabled(this.currentPage < this.pages.length - 1);
+            this.buttonList.push(nextButton);
+
+            this.buttonList.push(createDoneButton(startX + navButtonWidth * 2 + gap * 2, navY, doneWidth));
+        } else if (mobile) {
+            this.buttonList.push(createDoneButton(startX, navY, buttonWidth));
+        } else {
+            const navButtonWidth = Math.floor((buttonWidth - 8) / 2);
+
+            if (this.pages.length > 1) {
+                const prevButton = new GuiButton(this.minecraft, "< Prev", startX, navY, navButtonWidth, 20, () => {
+                    this.currentPage--;
+                    this._buildPage();
+                    this.selectFirstEnabledButton();
+                });
+                prevButton.setEnabled(this.currentPage > 0);
+                this.buttonList.push(prevButton);
+
+                const nextButton = new GuiButton(this.minecraft, "Next >", startX + navButtonWidth + 8, navY, navButtonWidth, 20, () => {
+                    this.currentPage++;
+                    this._buildPage();
+                    this.selectFirstEnabledButton();
+                });
+                nextButton.setEnabled(this.currentPage < this.pages.length - 1);
+                this.buttonList.push(nextButton);
+            }
+
+            this.buttonList.push(createDoneButton(startX, navY + 26, buttonWidth));
+        }
+
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.tooltip) {
+                const y = startY + i * itemHeight;
+                this.buttonList.push(new GuiTooltip(this.minecraft, item.tooltip, startX, y, buttonWidth, 20));
+            }
+        }
+    }
+
+    _createItemButton(item, x, y, width, height, settings) {
+        const currentValue = settings[item.settingKey];
+
+        switch (item.type) {
+            case "toggle":
+                return new GuiSwitchButton(item.name, !!currentValue, x, y, width, height, newValue => {
+                    settings[item.settingKey] = newValue;
+                    if (item.onchange) item.onchange(newValue, this.minecraft);
+                });
+
+            case "fov": {
+                const min = item.min !== undefined ? item.min : 50;
+                const max = item.max !== undefined ? item.max : 110;
+                return new GuiFovSliderButton(item.name, currentValue, min, max, x, y, width, height, newValue => {
+                    settings[item.settingKey] = newValue;
+                    if (item.onchange) item.onchange(newValue, this.minecraft);
+                });
+            }
+
+            case "slider": {
+                const min = item.min !== undefined ? item.min : 0;
+                const max = item.max !== undefined ? item.max : 100;
+                const toSlider = typeof item.toSlider === "function" ? item.toSlider : (value => value);
+                const fromSlider = typeof item.fromSlider === "function" ? item.fromSlider : (value => value);
+                const slider = new GuiSliderButton(item.name, toSlider(currentValue), min, max, x, y, width, height, newValue => {
+                    settings[item.settingKey] = fromSlider(newValue);
+                    if (item.onchange) item.onchange(newValue, this.minecraft);
+                });
+                if (typeof item.display === "function") {
+                    slider.setDisplayNameBuilder(item.display);
+                } else if (item.step !== undefined && slider.setDisplayNameBuilder) {
+                    slider.setDisplayNameBuilder((name, value) => `${name}: ${value}`);
+                }
+                return slider;
+            }
+
+            case "list": {
+                const options = Array.isArray(item.options) ? item.options : [];
+                return new GuiListButton(item.name, currentValue, options, x, y, width, height, newValue => {
+                    settings[item.settingKey] = newValue;
+                    if (item.onchange) item.onchange(newValue, this.minecraft);
+                });
+            }
+
+            case "action":
+                return new GuiButton(this.minecraft, item.name, x, y, width, height, () => {
+                    if (item.action) item.action(this, this.minecraft);
+                });
+
+            case "text": {
+                const label = item.name || "";
+                const labelWidth = label ? Math.min(this.getStringWidth(label) + 2, width - 60) : 0;
+                const fieldX = x + labelWidth;
+                const fieldWidth = width - labelWidth;
+                const field = new GuiTextField(fieldX, y, fieldWidth, height);
+                field.setText(currentValue);
+                if (item.centered) field.centered = true;
+                if (item.maxLength !== undefined) field.maxLength = item.maxLength;
+                if (item.renderBackground !== undefined) field.renderBackground = item.renderBackground;
+                const originalOnTick = field.onTick.bind(field);
+                field.onTick = () => {
+                    originalOnTick();
+                    settings[item.settingKey] = field.getText();
+                };
+                if (label) {
+                    const originalRender = field.render.bind(field);
+                    field.render = (stack, mouseX, mouseY, partialTicks) => {
+                        this.drawString(stack, label, x, y + height / 2 - 4, 0xFFFFFF);
+                        originalRender(stack, mouseX, mouseY, partialTicks);
+                    };
+                }
+                return field;
+            }
+
+            case "string":
+            default:
+                return new GuiStringButton(item.name, currentValue, x, y, width, height, newValue => {
+                    settings[item.settingKey] = newValue;
+                    if (item.onchange) item.onchange(newValue, this.minecraft);
+                });
+        }
+    }
+
+    drawScreen(stack, mouseX, mouseY, partialTicks) {
+        this.drawDefaultBackground(stack);
+
+        const page = this.pages[this.currentPage];
+        const title = (page && page.title) || "Settings";
+        const top = this._contentTop();
+        const titleY = this.minecraft.window.mobileDevice ? top : 40;
+        this.drawCenteredString(stack, title, this.width / 2, titleY);
+
+        if (this.pages.length > 1) {
+            const pageIndicator = `${this.currentPage + 1}/${this.pages.length}`;
+            const indicatorY = this.minecraft.window.mobileDevice ? top + 12 : 52;
+            this.drawCenteredString(stack, pageIndicator, this.width / 2, indicatorY);
+        }
+
+        super.drawScreen(stack, mouseX, mouseY, partialTicks);
+    }
+
+    onClose() {
+        for (const b of this.buttonList) {
+            if (b instanceof GuiStringButton && b.editing) {
+                b.confirmEdit();
+            }
+        }
+        this.minecraft.settings.save();
+    }
+}

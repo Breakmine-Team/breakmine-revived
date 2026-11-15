@@ -172,7 +172,8 @@ export const atlasBlockTextures = [
     "counter_side_drawer.png", "counter_stove_side.png", "counter_stove_side_on.png",
     "scaffolding_top.png", "scaffolding_side.png", "scaffolding_bottom.png",
     "shaft_enterance.png", "clock.png",
-    "gearshift_on.png", "gearshift_off.png", "clutch_on.png", "clutch_off.png"
+    "gearshift_on.png", "gearshift_off.png", "clutch_on.png", "clutch_off.png",
+    "blank_white.png"
 ];
 
 const toolMaterials = ['wooden', 'stone', 'iron', 'diamond', 'golden'];
@@ -209,7 +210,9 @@ export const modelAssets = [
     "model/snail/model.obj",
     "model/snail/texture.png",
     "model/barrier/model.obj",
-    "model/barrier/texture.png"
+    "model/barrier/texture.png",
+    "model/trafficlight/model.obj",
+    "model/trafficlight/texture.png"
 ];
 
 

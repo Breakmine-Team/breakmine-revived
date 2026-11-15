@@ -210,7 +210,17 @@ ${registrations}
 })();
 </script>`;
 
-                fs.writeFileSync(htmlPath, html.replace(/(<\/head>)/, injectedScript + '$1'));
+                // Not the first </head>: the whole bundle is inlined above it,
+                // and bundle strings can carry markup of their own (a game file's
+                // HTML template, for one). Injecting at the first match spliced
+                // this script into the middle of a JS string, which breaks the
+                // bundle into "Unexpected token '<'" / "Unexpected end of input".
+                // The document's own head end is the last one.
+                const headEnd = html.lastIndexOf("</head>");
+                const withWorkers = headEnd === -1
+                    ? html
+                    : html.slice(0, headEnd) + injectedScript + html.slice(headEnd);
+                fs.writeFileSync(htmlPath, withWorkers);
                 console.log(`[inline-worker] Inlined ${blobs.length} worker bundle(s): ${blobs.map((entry) => entry.name).join(', ')}`);
             } catch (e) {
                 console.error('[inline-worker] Failed to inline worker:', e);
@@ -284,10 +294,31 @@ function shrinkInlinedImagesPlugin({ minBytes = 200 * 1024, maxRatio = 0.5, qual
     };
 }
 
+/**
+ * Everything ends up inside one <script type="module">, and the HTML parser ends
+ * that tag at the first literal `</script` - even when the characters sit inside
+ * a JS string. Any raw source file or HTML template carrying that sequence then
+ * closes the tag early and the remainder of the bundle is parsed as markup
+ * ("Unexpected token '<'", "Unexpected end of input"). Escaping the slash is
+ * transparent for strings and regex literals, so do it on the way out.
+ */
+function escapeInlineScriptPlugin() {
+    return {
+        name: "escape-inline-script",
+        renderChunk(code) {
+            if (!/<\/script/i.test(code)) {
+                return null;
+            }
+            return { code: code.replace(/<\/script/gi, "<\\/script"), map: null };
+        },
+    };
+}
+
 export default defineConfig({
     plugins: [
         copyResourcesPlugin(),
         forceBrowserFsPlugin(),
+        escapeInlineScriptPlugin(),
         viteSingleFile({
             removeOptionalTags: false,
             useRecommendedBuildConfig: true,

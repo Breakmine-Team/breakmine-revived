@@ -2,7 +2,7 @@ import { Buffer } from '../../../../../libraries/buffer.js';
 import { readLongBE } from './binary.js';
 import { readVarInt, readString, broadcast, ensureReadable, MalformedPacketError } from './protocol.js';
 import { addPlayer, removePlayer, getPlayers, updatePosition, loadPlayerData, findPlayerByUsername, normalizeInventoryState, savePlayerData, isSpectator, isSuperOp } from './players.js';
-import { addWorldChange, saveWorld, getBlockAt, getAllBlockInventoriesState, getSpawnPosition, deleteBlockInventory, getBlockInventories, getWorldTime, getBlockMetadata, setBlockInventory, setActiveDimension, getDimensionType, NETHER_DIMENSION } from './world.js';
+import { addWorldChange, saveWorld, getBlockAt, getAllBlockInventoriesState, getSpawnPosition, deleteBlockInventory, getBlockInventories, getWorldTime, getBlockMetadata, setBlockInventory, setActiveDimension, getDimensionType, NETHER_DIMENSION, BOB_DIMENSION } from './world.js';
 import { addItemEntity, removeItemEntity, getItemEntity, getAllItemEntities } from './entities.js';
 import { handleCommand } from './commands.js';
 import {
@@ -282,11 +282,12 @@ function handleLoginPacket(player, packetId, buffer, offset) {
         let spawn = getSpawnPosition();
 
         const playerData = loadPlayerData(username);
-        player.dimension = playerData && Number(playerData.dimension) === NETHER_DIMENSION
-            ? NETHER_DIMENSION
+        const savedDimension = playerData ? Number(playerData.dimension) : 0;
+        player.dimension = savedDimension === NETHER_DIMENSION || savedDimension === BOB_DIMENSION
+            ? savedDimension
             : 0;
-        if (player.dimension === NETHER_DIMENSION) {
-            spawn = getSpawnPosition(NETHER_DIMENSION);
+        if (player.dimension !== 0) {
+            spawn = getSpawnPosition(player.dimension);
         }
         if (playerData) {
             player.x = typeof playerData.x === 'number' ? playerData.x : spawn.x;
@@ -1000,7 +1001,16 @@ function handlePickupItem(player, buffer, offset) {
 }
 
 const PORTAL_ID = 356;
+const BOB_PORTAL_ID = 417;
+const OBSIDIAN_ID = 256;
+const BOB_FRAME_ID = 416;
 const PORTAL_COOLDOWN_MS = 3000;
+
+// Every portal frame block lights a portal that leads to its own dimension.
+const PORTAL_FRAMES = [
+    { frameId: OBSIDIAN_ID, portalId: PORTAL_ID },
+    { frameId: BOB_FRAME_ID, portalId: BOB_PORTAL_ID }
+];
 
 function broadcastBlockToDimension(dimension, x, y, z, blockId, metadata) {
     for (const other of getPlayers().values()) {
@@ -1014,10 +1024,21 @@ function broadcastBlockToDimension(dimension, x, y, z, blockId, metadata) {
 
 function lightPortal(player, x, y, z) {
     const dimension = player.dimension ?? 0;
-    const isFrame = (bx, by, bz) => getBlockAt(bx, by, bz, dimension) === 256;
+
+    for (const frame of PORTAL_FRAMES) {
+        if (tryLightPortal(dimension, frame.frameId, frame.portalId, x, y, z)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function tryLightPortal(dimension, frameId, portalId, x, y, z) {
+    const isFrame = (bx, by, bz) => getBlockAt(bx, by, bz, dimension) === frameId;
     const isOpen = (bx, by, bz) => {
         const id = getBlockAt(bx, by, bz, dimension);
-        return id === 0 || id === PORTAL_ID;
+        return id === 0 || id === portalId;
     };
 
     for (const [dx, dz] of [[1, 0], [0, 1]]) {
@@ -1055,8 +1076,8 @@ function lightPortal(player, x, y, z) {
                 const portalData = dx === 0 ? 1 : 0;
                 for (let i = 0; i < 2; i++) {
                     for (let j = 0; j < 3; j++) {
-                        addWorldChange(bx + i * dx, by + j, bz + i * dz, PORTAL_ID, portalData, dimension);
-                        broadcastBlockToDimension(dimension, bx + i * dx, by + j, bz + i * dz, PORTAL_ID, portalData);
+                        addWorldChange(bx + i * dx, by + j, bz + i * dz, portalId, portalData, dimension);
+                        broadcastBlockToDimension(dimension, bx + i * dx, by + j, bz + i * dz, portalId, portalData);
                     }
                 }
                 return true;
@@ -1077,33 +1098,47 @@ function checkPortalTravel(player) {
     const py = Math.floor(player.y);
     const pz = Math.floor(player.z);
 
-    if (getBlockAt(px, py, pz, dimension) !== PORTAL_ID && getBlockAt(px, py + 1, pz, dimension) !== PORTAL_ID) {
+    if (getBlockAt(px, py, pz, dimension) !== PORTAL_ID && getBlockAt(px, py + 1, pz, dimension) !== PORTAL_ID
+        && getBlockAt(px, py, pz, dimension) !== BOB_PORTAL_ID && getBlockAt(px, py + 1, pz, dimension) !== BOB_PORTAL_ID) {
         return;
     }
 
-    travelToDimension(player, dimension === NETHER_DIMENSION ? 0 : NETHER_DIMENSION);
+    const portalId = getBlockAt(px, py, pz, dimension) === BOB_PORTAL_ID || getBlockAt(px, py + 1, pz, dimension) === BOB_PORTAL_ID
+        ? BOB_PORTAL_ID
+        : PORTAL_ID;
+
+    const targetDimension = dimension !== 0
+        ? 0
+        : portalId === BOB_PORTAL_ID ? BOB_DIMENSION : NETHER_DIMENSION;
+
+    travelToDimension(player, targetDimension);
 }
 
 function travelToDimension(player, targetDimension) {
     if ((player.dimension ?? 0) === targetDimension) return;
 
-    const scale = targetDimension === NETHER_DIMENSION ? 1 / 8 : 8;
+    const fromDimension = player.dimension ?? 0;
+    const scale = targetDimension === NETHER_DIMENSION ? 1 / 8
+        : fromDimension === NETHER_DIMENSION ? 8 : 1;
     const tx = Math.floor(player.x * scale);
     const tz = Math.floor(player.z * scale);
     const ty = Math.max(4, Math.min(Math.floor(player.y), targetDimension === NETHER_DIMENSION ? 100 : 200));
+
+    const targetPortalId = targetDimension === BOB_DIMENSION ? BOB_PORTAL_ID : PORTAL_ID;
+    const targetFloorId = targetDimension === BOB_DIMENSION ? BOB_FRAME_ID : OBSIDIAN_ID;
 
     for (let dx = 0; dx < 4; dx++) {
         for (let dz = 0; dz < 2; dz++) {
             for (let dy = 0; dy < 5; dy++) {
                 addWorldChange(tx + dx, ty + dy, tz + dz, 0, 0, targetDimension);
             }
-            addWorldChange(tx + dx, ty - 1, tz + dz, 256, 0, targetDimension);
+            addWorldChange(tx + dx, ty - 1, tz + dz, targetFloorId, 0, targetDimension);
         }
     }
 
     for (let dx = 0; dx < 2; dx++) {
         for (let dy = 0; dy < 3; dy++) {
-            addWorldChange(tx + dx, ty + dy, tz, PORTAL_ID, 0, targetDimension);
+            addWorldChange(tx + dx, ty + dy, tz, targetPortalId, 0, targetDimension);
         }
     }
 

@@ -40,12 +40,26 @@ export default class Keyboard {
         return event.code;
     }
 
+    static isTextEntry(element) {
+        return !!element && (element.tagName === 'INPUT'
+            || element.tagName === 'TEXTAREA'
+            || element.isContentEditable === true);
+    }
+
     static create() {
+        // Keys typed into a real text field (the IDE's editor, a launcher input)
+        // are not game input: recording them made the player walk away while typing.
         window.addEventListener('keydown', event => {
+            if (Keyboard.isTextEntry(event.target) || Keyboard.isTextEntry(document.activeElement)) {
+                return;
+            }
             let code = Keyboard.mapKeyCode(event);
             Keyboard.state[code] = true;
         });
         window.addEventListener('keyup', event => {
+            if (Keyboard.isTextEntry(event.target) || Keyboard.isTextEntry(document.activeElement)) {
+                return;
+            }
             event.preventDefault();
             let code = Keyboard.mapKeyCode(event);
             delete Keyboard.state[code];

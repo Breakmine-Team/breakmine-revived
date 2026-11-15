@@ -49,6 +49,7 @@ export default class GuiTooltip extends Gui {
         
         const lineSpacing = 10;
         const padding = 2;
+        const border = 2;
 
         let k = 8;
         if (lines.length > 1) {
@@ -58,18 +59,27 @@ export default class GuiTooltip extends Gui {
         const screenWidth = this.minecraft?.window?.width || 1920;
         const screenHeight = this.minecraft?.window?.height || 1080;
 
-        const totalWidth = maxWidth + padding * 2;
-        const totalHeight = k + padding * 2;
+        // Size of the whole tooltip, border included, so it can snap to the
+        // screen edges without the border getting cut off.
+        const boxWidth = maxWidth + padding * 2 + border + 1;
+        const boxHeight = k + padding * 2 + border + 2;
 
-        if (l1 + totalWidth + 6 > screenWidth) {
-            l1 -= (totalWidth + 28);
+        // Flip to the other side of the cursor when there is no room left.
+        if (l1 - padding - border + boxWidth > screenWidth) {
+            l1 = Math.floor(mouseX) - 12 - boxWidth + padding + border;
+        }
+        if (i2 - padding - border + boxHeight > screenHeight) {
+            i2 = Math.floor(mouseY) - 12 - boxHeight + padding + border;
         }
 
-        if (i2 + totalHeight + 6 > screenHeight) {
-            i2 = screenHeight - totalHeight - 6;
-        }
-        if (l1 < 0) l1 = 0;
-        if (i2 < 0) i2 = 0;
+        // Snap to the screen edges, keeping the border on screen.
+        const minL1 = padding + border;
+        const maxL1 = Math.max(minL1, screenWidth - boxWidth + padding + border);
+        const minI2 = padding + border;
+        const maxI2 = Math.max(minI2, screenHeight - boxHeight + padding + border);
+
+        l1 = Math.max(minL1, Math.min(l1, maxL1));
+        i2 = Math.max(minI2, Math.min(i2, maxI2));
 
         const bgColor = 'rgba(16, 0, 16, 0.941)';
         const borderStart = 'rgba(80, 0, 255, 0.50)';

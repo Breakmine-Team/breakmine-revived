@@ -2,16 +2,18 @@ import { Buffer } from '../../../../../libraries/buffer.js';
 import config from './config.js';
 import WorldGenerator from '../client/world/generator/WorldGenerator.js';
 import HellWorldGenerator from '../client/world/generator/HellWorldGenerator.js';
+import BobWorldGenerator from '../client/world/generator/BobWorldGenerator.js';
 import Primer from '../client/world/generator/Primer.js';
 import Random from '../util/Random.js';
 import Long from '../../../../../libraries/long.js';
 
 let WorldGeneratorClass = WorldGenerator;
 let HellWorldGeneratorClass = HellWorldGenerator;
+let BobWorldGeneratorClass = BobWorldGenerator;
 let PrimerClass = Primer;
 let RandomClass = Random;
 
-const VALID_TYPES = ['flat', 'normal', 'amplified', 'hellish'];
+const VALID_TYPES = ['flat', 'normal', 'amplified', 'hellish', 'bob'];
 
 const SECTION_COUNT = 16;
 const BLOCK_STATE_SIZE = 4096 * 2;
@@ -45,6 +47,9 @@ function seedToLong(seedText) {
 function createGenerator(world, seedLong, worldType) {
     if (worldType === 'hellish' && HellWorldGeneratorClass) {
         return new HellWorldGeneratorClass(world, seedLong);
+    }
+    if (worldType === 'bob' && BobWorldGeneratorClass) {
+        return new BobWorldGeneratorClass(world, seedLong, 'bob');
     }
     return new WorldGeneratorClass(world, seedLong, worldType);
 }

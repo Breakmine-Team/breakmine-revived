@@ -6,7 +6,7 @@ export default class BlockPortal extends Block {
 
     constructor(id, textureSlotId) {
         super(id, textureSlotId);
-        this.description = "Nether Portal";
+        this.description = "Hell Portal";
         this.hardness = 0.0;
         this.inventoryTab = EnumCreativeInventoryTab.NOTLISTED;
     }

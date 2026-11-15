@@ -36,13 +36,17 @@ const NETHER_DIMENSION = 1;
 const netherChunks = new SubChunkStore('hellish');
 let netherTime = 6000;
 
+const BOB_DIMENSION = 2;
+const bobChunks = new SubChunkStore('bob');
+let bobTime = 6000;
+
 
 
 
 let activeDimension = 0;
 
 function setActiveDimension(dimension = 0) {
-    activeDimension = dimension === NETHER_DIMENSION ? NETHER_DIMENSION : 0;
+    activeDimension = dimension === NETHER_DIMENSION || dimension === BOB_DIMENSION ? dimension : 0;
 }
 
 function getActiveDimension() {
@@ -50,11 +54,15 @@ function getActiveDimension() {
 }
 
 function getDimensionType(dimension = 0) {
-    return dimension === NETHER_DIMENSION ? 'hellish' : worldGen.getWorldType();
+    if (dimension === NETHER_DIMENSION) return 'hellish';
+    if (dimension === BOB_DIMENSION) return 'bob';
+    return worldGen.getWorldType();
 }
 
 function getDimensionStore(dimension = 0) {
-    return dimension === NETHER_DIMENSION ? netherChunks : subChunks;
+    if (dimension === NETHER_DIMENSION) return netherChunks;
+    if (dimension === BOB_DIMENSION) return bobChunks;
+    return subChunks;
 }
 
 
@@ -381,13 +389,13 @@ function saveDimensionFile(store, file, time) {
 }
 
 function loadDimensionFile(store, file) {
-    if (!fs.existsSync(file)) return;
+    if (!fs.existsSync(file)) return null;
 
     const data = fs.readFileSync(file);
-    if (data.length < 17 || data.toString('ascii', 0, 4) !== NETHER_SAVE_MAGIC) return;
-    if (data.readUInt8(4) !== NETHER_SAVE_VERSION) return;
+    if (data.length < 17 || data.toString('ascii', 0, 4) !== NETHER_SAVE_MAGIC) return null;
+    if (data.readUInt8(4) !== NETHER_SAVE_VERSION) return null;
 
-    netherTime = Number(readLongBE(data, 5)) || 6000;
+    const time = Number(readLongBE(data, 5)) || 6000;
     let offset = 13;
     const count = data.readUInt32BE(offset);
     offset += 4;
@@ -403,6 +411,8 @@ function loadDimensionFile(store, file) {
         store.loadSection(cx, cz, sy, data.subarray(offset, offset + length));
         offset += length;
     }
+
+    return time;
 }
 
 function initWorld(worldName = 'main') {
@@ -420,8 +430,10 @@ function initWorld(worldName = 'main') {
     const worldFile = getWorldFile(worldName);
 
     netherChunks.clear();
-    netherTime = 6000;
-    loadDimensionFile(netherChunks, path.join(worldDir, 'world_nether.bin'));
+    netherTime = loadDimensionFile(netherChunks, path.join(worldDir, 'world_nether.bin')) ?? 6000;
+
+    bobChunks.clear();
+    bobTime = loadDimensionFile(bobChunks, path.join(worldDir, 'world_bob.bin')) ?? 6000;
 
     migrateOldWorld(worldName);
 
@@ -472,6 +484,7 @@ function saveWorld() {
     const worldFile = getWorldFile(currentWorldName);
 
     saveDimensionFile(netherChunks, path.join(worldDir, 'world_nether.bin'), netherTime);
+    saveDimensionFile(bobChunks, path.join(worldDir, 'world_bob.bin'), bobTime);
 
     const inventoryEntries = [];
     for (const [key, state] of blockInventories.entries()) {
@@ -630,12 +643,16 @@ function listWorlds() {
 }
 
 function getWorldTime(dimension = 0) {
-    return dimension === NETHER_DIMENSION ? netherTime : worldTime;
+    if (dimension === NETHER_DIMENSION) return netherTime;
+    if (dimension === BOB_DIMENSION) return bobTime;
+    return worldTime;
 }
 
 function setWorldTime(time, dimension = 0) {
     if (dimension === NETHER_DIMENSION) {
         netherTime = time;
+    } else if (dimension === BOB_DIMENSION) {
+        bobTime = time;
     } else {
         worldTime = time;
     }
@@ -657,6 +674,7 @@ function tickWorldTime() {
     }
 
     netherTime = HELLISH_TIME;
+    bobTime = worldTime;
 }
 
 function generateFlatChunkColumn(chunkX, chunkZ, dimension = activeDimension) {
@@ -676,6 +694,7 @@ function getSpawnPosition(dimension = 0) {
 
 export {
     NETHER_DIMENSION,
+    BOB_DIMENSION,
     getDimensionType,
     getDimensionStore,
     setActiveDimension,

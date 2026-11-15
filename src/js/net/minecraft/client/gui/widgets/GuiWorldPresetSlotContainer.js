@@ -1,7 +1,7 @@
 import GuiWorldPresetSlot from "../widgets/GuiWorldPresetSlot.js";
 import GuiScreen from "../GuiScreen.js";
 
-export default class GuiWorldPresetSlotContainer {
+export default class GuiWorldPresetSlotContainer extends GuiScreen {
 
     constructor(parentGui, listContent) {
         super(parentGui.minecraft);

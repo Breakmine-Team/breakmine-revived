@@ -167,6 +167,13 @@ export default class GameWindow {
             this.requestCursorUpdate();
         });
         this.registerListener(window, 'keydown', event => {
+            // A focused DOM text field owns the keyboard. This handler used to
+            // preventDefault every key, which swallowed the keystroke before the
+            // field saw it - the in-game IDE editor could not be typed into at all.
+            if (this.isDomTextEntryFocused()) {
+                return;
+            }
+
             if (event.key !== 'F11') {
                 event.preventDefault();
             }
@@ -198,6 +205,10 @@ export default class GameWindow {
             this.requestCursorUpdate();
         }, false);
         this.registerListener(window, 'keyup', event => {
+            if (this.isDomTextEntryFocused()) {
+                return;
+            }
+
             let currentScreen = this.minecraft.currentScreen;
             let payload = { key: event.code, char: event.key, type: 'keyup', screen: currentScreen !== null, cancelled: false };
             globalThis.Mixin?.emitCancellable('game:keypress', payload);
@@ -209,7 +220,7 @@ export default class GameWindow {
             if (!payload.cancelled) {
                 this.minecraft.onKeyReleased?.(event.code);
             }
-        });
+        }, false);
         this.registerListener(document, 'contextmenu');
         this.registerListener(this.wrapper, 'wheel', event => {
             event.stopPropagation();
@@ -1100,6 +1111,17 @@ export default class GameWindow {
         if (!this.minecraft.soundManager.isCreated()) {
             this.minecraft.soundManager.create(this.minecraft.worldRenderer);
         }
+    }
+
+    isDomTextEntryFocused() {
+        const active = document.activeElement;
+        if (!active) {
+            return false;
+        }
+
+        return active.tagName === 'INPUT'
+            || active.tagName === 'TEXTAREA'
+            || active.isContentEditable === true;
     }
 
     registerListener(parent, event, listener = null, preventDefaults = true) {

@@ -44,6 +44,7 @@ export default class GameSettings {
         this.viewDistance = 4;
         this.fogType = 'modern';
         this.showRealmsButton = false;
+        this.experimentalUi = false;
         this.debugOverlay = false;
         this.showChunkBoundaries = false;
         this.showEntityBoundingBoxes = false;

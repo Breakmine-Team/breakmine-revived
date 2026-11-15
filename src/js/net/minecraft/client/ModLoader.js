@@ -13,6 +13,8 @@ import * as AuthLib from "./network/AuthLib.js";
 import CommandRegistry from "./command/CommandRegistry.js";
 import BlockActionRegistry, { normalizeBlockAction } from "../mod/BlockActionRegistry.js";
 import { modDataPath } from "../mod/ModDataKey.js";
+import ModulePatcher from "../mod/ModulePatcher.js";
+import JphFormat from "../mod/JphFormat.js";
 import FontRenderer from "./render/gui/FontRenderer.js";
 
 const ENABLED_MODS_KEY = 'breakmine_enabled_mods';
@@ -809,7 +811,8 @@ export default class ModLoader {
     releaseModRegistrations(modId) {
         const record = this._modRegistrations.get(modId);
         this._modRegistrations.delete(modId);
-        if (!record) return 0;
+        const revertedPatches = ModulePatcher.revert(modId);
+        if (!record) return revertedPatches;
 
         for (const name of record.commands) {
             CommandRegistry.unregister(name);
@@ -835,7 +838,7 @@ export default class ModLoader {
         }
         this.clearCustomTabs(modId);
         return record.commands.size + record.hooks.size + record.blockActions.size +
-            record.overlayText.size + record.keybinds.size + record.services.size;
+            record.overlayText.size + record.keybinds.size + record.services.size + revertedPatches;
     }
 
     
@@ -881,11 +884,72 @@ export default class ModLoader {
             registerService: (serviceId, service) => loader.registerService(serviceId, service, modId),
             getService: (serviceId) => loader.getService(serviceId),
             resolveTexture: (key) => loader.resolveTexture(key),
+            patchFile: (file, fn) => loader.patchModFile(modId, file, fn),
+            loadFileModule: (file) => ModulePatcher.loadModule(file),
+            listPatchableFiles: () => ModulePatcher.listFiles(),
             log: (...args) => console.log(`[Patchwork] [${modId}]`, ...args),
             warn: (...args) => console.warn(`[Patchwork] [${modId}]`, ...args)
         };
         this._modApis.set(modId, api);
         return api;
+    }
+
+    
+    // Installs either a .zip mod or a .jph patch package, told apart by content.
+    async installModPackage(input) {
+        const bytes = await this._toPackageBytes(input);
+        const kind = JphFormat.detectKind(bytes);
+
+        if (kind === "zip") {
+            return this.installModFromZip(bytes);
+        }
+        if (kind === "jph") {
+            return this.installModFromJph(new TextDecoder().decode(bytes));
+        }
+
+        throw new Error("Unsupported mod package: expected a .zip or .jph file");
+    }
+
+    
+    // A .jph is metadata plus one patch script per game file. It is installed
+    // into the mods filesystem like any other mod, so it loads, toggles and
+    // unloads through the same paths.
+    async installModFromJph(input) {
+        // Text, bytes, a File/Blob, or an already-parsed document all work here;
+        // only the file-shaped inputs have to be read first.
+        const fileShaped = typeof input === "string"
+            || input instanceof Uint8Array
+            || input instanceof ArrayBuffer
+            || (input && typeof input.arrayBuffer === "function");
+        const jph = JphFormat.parse(fileShaped ? await this._toPackageBytes(input) : input);
+
+        if (this.mods.has(jph.id)) {
+            throw new Error(`A mod with ID '${jph.id}' is already loaded.`);
+        }
+        if (await this.isDiskMod(jph.id)) {
+            throw new Error(`'${jph.id}' already exists in mods/; remove that folder first.`);
+        }
+
+        console.log(`[Patchwork] Installing .jph '${jph.name}' (${jph.id}) with ${jph.patches.length} patch(es)`);
+
+        for (const file of JphFormat.toModFiles(jph)) {
+            await this.filesystem.saveFile(file.content, `mods/${jph.id}/${file.path}`);
+        }
+
+        this.enabledMods.add(jph.id);
+        this._saveEnabledSet();
+        await this._loadMod(jph.id, this.filesystem);
+        return jph.id;
+    }
+
+    
+    async _toPackageBytes(input) {
+        if (typeof input === "string") return new TextEncoder().encode(input);
+        if (input instanceof Uint8Array) return input;
+        if (input instanceof ArrayBuffer) return new Uint8Array(input);
+        if (input && typeof input.arrayBuffer === "function") return new Uint8Array(await input.arrayBuffer());
+
+        throw new Error("Unsupported mod package input");
     }
 
     
@@ -925,6 +989,9 @@ export default class ModLoader {
                 const src = await entry.async('string');
                 const filename = path.split('/').pop();
                 await this.filesystem.saveFile(src, `mods/${modId}/items/${filename}`);
+            } else if (path.startsWith('patches/') && path.endsWith('.js')) {
+                const src = await entry.async('string');
+                await this.filesystem.saveFile(src, `mods/${modId}/${path}`);
             } else if (path === 'icon.png' || path === './icon.png') {
                 const b64 = await entry.async('base64');
                 await this.filesystem.saveBinaryFile(b64, `mods/${modId}/icon.png.b64`);
@@ -1372,6 +1439,8 @@ export default class ModLoader {
             await this._registerModTabs(modId, entry, tabFiles, fs);
             await this._callModLoad(modId, entry, fs);
 
+            await this._registerModPatches(modId, relFiles, fs);
+
             console.log(`[Patchwork] Re-enabled mod '${entry.name}'`);
             return entry;
         } catch (err) {
@@ -1659,6 +1728,8 @@ export default class ModLoader {
         await this._registerModSmelting(modId, entry, smeltingFiles, fs);
 
         await this._callModLoad(modId, entry, fs);
+
+        await this._registerModPatches(modId, relFiles, fs);
 
         console.log(`[Patchwork] Loaded mod '${entry.name}' - ${entry.blockIds.length} block(s), ${entry.itemIds.length} item(s), ${entry.textureNames.length} texture(s), ${entry.soundNames.length} sound(s)`);
         return entry;
@@ -2135,6 +2206,52 @@ export default class ModLoader {
 
     
 
+    // Patches any game file from inside a mod. `fn` receives the file's live
+    // exports and may return a cleanup function that restores stock behaviour.
+    async patchModFile(modId, file, fn) {
+        if (!ModulePatcher.isAvailable()) {
+            throw new Error('File patching is unavailable: this build has no module registry');
+        }
+        if (typeof fn !== 'function') {
+            throw new Error('patchFile() expects a patch function');
+        }
+
+        const handle = await ModulePatcher.patch(modId, file, fn);
+        console.log(`[Patchwork] Patched ${handle.file} for mod '${modId}'`);
+        return handle;
+    }
+
+    
+    // A mod ships replacement code for a game file as
+    // patches/<path inside src/js>.js. Every such file is applied on load and
+    // reverted again when the mod is disabled, reloaded or uninstalled.
+    async _registerModPatches(modId, relFiles, fs = this.filesystem) {
+        const patchFiles = relFiles
+            .filter(f => f.startsWith('patches/') && f.endsWith('.js'))
+            .sort();
+
+        if (patchFiles.length === 0) return;
+
+        if (!ModulePatcher.isAvailable()) {
+            console.warn(`[Patchwork] Mod '${modId}' ships ${patchFiles.length} file patch(es), but this build has no module registry`);
+            return;
+        }
+
+        for (const patchFile of patchFiles) {
+            const target = patchFile.slice('patches/'.length);
+            try {
+                const src = await fs.loadFile(`mods/${modId}/${patchFile}`);
+                if (!src) continue;
+
+                const handle = await ModulePatcher.applySource(modId, target, src);
+                console.log(`[Patchwork] Patched ${handle.file} for mod '${modId}'`);
+            } catch (err) {
+                console.error(`[Patchwork] Failed to patch '${target}' for mod '${modId}':`, err);
+            }
+        }
+    }
+
+    
     async _callModLoad(modId, entry, fs = this.filesystem) {
         try {
             const src = await fs.loadFile(`mods/${modId}/ModLoad.js`);

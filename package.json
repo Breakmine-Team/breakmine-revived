@@ -34,6 +34,7 @@
     },
     "homepage": "https://codeberg.org/BreakmineDevelopers/breakmine_revived#readme",
     "dependencies": {
+        "ace-builds": "^1.45.2",
         "bad-words": "^4.1.5",
         "bcrypt": "^5.1.1",
         "better-sqlite3": "^11.6.0",

@@ -16,6 +16,7 @@ import EnumCreativeInventoryTab from "../gui/EnumCreativeInventoryTab.js";
 import getTrafficConeModel, { getTrafficConeTexture } from "./model/TrafficConeModel.js";
 import getSnailModel, { getSnailTexture } from "./model/SnailModel.js";
 import getTrafficBarrierModel, { getTrafficBarrierTexture } from "./model/TrafficBarrierModel.js";
+import getTrafficLightModel, { getTrafficLightTexture } from "./model/TrafficLightModel.js";
 
 
 
@@ -47,6 +48,7 @@ export default class BlockRenderer {
         this.modelTessellator = this.createModelTessellator(getTrafficConeTexture());
         this.barrierModelTessellator = this.createModelTessellator(getTrafficBarrierTexture());
         this.snailModelTessellator = this.createModelTessellator(getSnailTexture());
+        this.trafficLightModelTessellator = this.createModelTessellator(getTrafficLightTexture());
         this.modelPassActive = false;
 
         this.rotatingTessellator = new Tessellator();
@@ -1350,6 +1352,25 @@ export default class BlockRenderer {
         this.renderCustomModel(
             this.barrierModelTessellator,
             getTrafficBarrierModel(),
+            world, x, y, z, rotation
+        );
+    }
+
+    renderTrafficLight(world, x, y, z) {
+        const data = world === null ? 2 : world.getBlockDataAt(x, y, z);
+        let facing = data & 7;
+        if (facing === 0) {
+            facing = 2;
+        }
+
+        const rotation = facing === 3 ? Math.PI
+            : facing === 4 ? Math.PI / 2
+            : facing === 5 ? -Math.PI / 2
+            : 0;
+
+        this.renderCustomModel(
+            this.trafficLightModelTessellator,
+            getTrafficLightModel(),
             world, x, y, z, rotation
         );
     }
