@@ -1,12 +1,5 @@
 #!/usr/bin/env node
 /**
- * Builds the desktop distributables.
- *
- * scripts/install.sh downloads what this produces, so the artifacts are named
- * deterministically (electron-builder.yml pins linux.artifactName) and every
- * artifact gets a .sha256 sibling that the installer verifies after the
- * download.
- *
  * Usage:
  *   node appbuild.js                Linux AppImage into release/
  *   node appbuild.js --win          Windows NSIS installer into release/
@@ -49,8 +42,6 @@ if (flags.has('--help') || flags.has('-h')) {
     process.exit(0);
 }
 
-// Linux is the default because it is the only target scripts/install.sh knows
-// how to fetch; Windows has to be asked for explicitly.
 const targets = [];
 if (!flags.has('--win') || flags.has('--linux')) targets.push('linux');
 if (flags.has('--win')) targets.push('win');
@@ -59,8 +50,6 @@ const publish = optionValue('--publish') ?? 'never';
 const outDir = optionValue('--out');
 const COMMIT_MESSAGE = optionValue('--message') ?? 'New';
 
-// electron-builder leaves whatever was in release/ last time alone, so files
-// from an earlier build would otherwise be reported (and uploaded) as new.
 const buildStartedAt = Date.now();
 
 function fail(message) {
@@ -96,14 +85,6 @@ function formatSize(bytes) {
     return `${(bytes / 1048576).toFixed(1)} MiB`;
 }
 
-// Commit and push first, then read the version, then build. Both halves of
-// that order matter: the pre-commit hook bumps src/resources/version.js as
-// part of the commit, and vite bundles that file into the game. Reading or
-// building any earlier ships the previous version, which would make the
-// freshly installed build immediately claim an update is available.
-//
-// Function declarations hoist, so calling these before their definitions
-// further down this file is fine.
 if (!flags.has('--no-git')) {
     gitCommitAndPush();
 }
@@ -120,17 +101,6 @@ if (!fs.existsSync(RENDERER_ENTRY)) {
     fail('the vite build finished but dist/index.html is missing.');
 }
 
-/**
- * Stage, commit and push before anything is built or published.
- *
- * Order matters. The pre-commit hook bumps src/resources/version.js as part of
- * the commit, so the version has to be read *after* this runs - otherwise the
- * release would be tagged with the version of the commit it is superseding,
- * and the update check in the game would never see it as newer.
- *
- * Also: a release tag points at a commit, so an artifact built from an
- * unpushed tree is a version nobody can check out.
- */
 function gitCommitAndPush() {
     const git = (args) => {
         const result = spawnSync('git', args, {
@@ -165,16 +135,6 @@ function gitCommitAndPush() {
     }
 }
 
-/**
- * electron-builder takes `${version}` from package.json, and this repo never
- * updates that field - the pre-commit hook only bumps src/resources/version.js.
- * Left alone, every artifact is named Breakmine-1.0.0.AppImage inside a
- * release tagged 4.8.5a.
- *
- * So point both manifests at the game version for the duration of the build
- * and put the original bytes back afterwards. package-lock.json has to move
- * with it: `npm ci` compares the two and refuses to run if they disagree.
- */
 function withGameVersion(version, fn) {
     const manifests = [PACKAGE_JSON, PACKAGE_LOCK]
         .filter((file) => fs.existsSync(file))
@@ -230,14 +190,6 @@ for (const artifact of artifacts) {
     console.log(`  sha256 ${digest}`);
 }
 
-/**
- * The version the game reports, straight out of the file that gets committed.
- *
- * "4.8.5a-1109693" carries the hash of the build that produced it. That is
- * meaningful as a build id but wrong as a release tag: it would make every
- * rebuild of the same version a different release, and it is noise in the
- * release list. So the tag drops the hash and keeps "4.8.5a".
- */
 function readGameVersion() {
     if (!fs.existsSync(VERSION_FILE)) {
         fail(`cannot find ${path.relative(ROOT, VERSION_FILE)}`);
@@ -255,13 +207,6 @@ function readGameVersion() {
     };
 }
 
-/**
- * Push the artifacts to a GitHub release tagged with the game version.
- *
- * scripts/install.sh looks for exactly this: it resolves the latest release,
- * picks the *.AppImage asset and verifies the .sha256 sibling. Publishing here
- * is what turns a source build into a fast download for users.
- */
 function publishRelease(tag, files) {
     const ghArgs = (args) => {
         const result = spawnSync('gh', args, {
@@ -281,9 +226,6 @@ function publishRelease(tag, files) {
         fail('gh is not authenticated. Run "gh auth login", or pass --no-release.');
     }
 
-    // A tag points at a commit, so shipping a build made from uncommitted files
-    // would publish something nobody can check out. stdout has to be piped:
-    // `stdio: 'ignore'` hands back null, not an empty buffer.
     const dirty = spawnSync('git', ['status', '--porcelain'], {
         cwd: ROOT, encoding: 'utf8',
     }).stdout.trim();
