@@ -1,20 +1,24 @@
 const isNode = typeof window === 'undefined' && typeof process !== 'undefined';
 
-let NativeWS = null;
+// The native engine is resolved without a top-level await. An `await` at module
+// scope makes this module asynchronous, and in the single-file build - where
+// every module is inlined and dynamic imports are collapsed - an async module in
+// the Minecraft <-> GameWindow import cycle never finishes initializing, so the
+// page sat on the loading screen forever with no error. Browsers and Node 22
+// both expose a global WebSocket, which covers the game; a process that needs a
+// WebSocketServer calls loadNodeWebSocket() first.
+let NativeWS = typeof WebSocket !== 'undefined' ? WebSocket : null;
 let NativeServer = null;
 
-if (isNode) {
+export async function loadNodeWebSocket() {
+    if (!isNode) return;
     try {
         const wsModule = await import('ws');
-        NativeWS = wsModule.WebSocket || wsModule.default;
-        NativeServer = wsModule.WebSocketServer || wsModule.Server;
+        NativeWS = wsModule.WebSocket || wsModule.default || NativeWS;
+        NativeServer = wsModule.WebSocketServer || wsModule.Server || null;
     } catch {
-        if (typeof globalThis.WebSocket !== 'undefined') {
-            NativeWS = globalThis.WebSocket;
-        }
+        // No `ws` package: keep the engine the runtime already provides.
     }
-} else {
-    NativeWS = window.WebSocket;
 }
 
 function normalizeTunnelServerUrl(serverUrl) {
