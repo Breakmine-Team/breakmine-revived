@@ -1538,6 +1538,15 @@ export default class World {
             }
             if (entity.renderer && entity.renderer.group) {
                 this.group.remove(entity.renderer.group);
+                // Despawned entities keep their model buffers otherwise.
+                entity.renderer.group.traverse(node => {
+                    if (!node.isMesh) return;
+                    if (node.geometry) node.geometry.dispose();
+                    if (node.material) {
+                        if (Array.isArray(node.material)) node.material.forEach(material => material.dispose());
+                        else node.material.dispose();
+                    }
+                });
             }
             if (entity.renderer && entity.renderer.nametagGroup) {
                 const overlay = this.minecraft.worldRenderer.overlay;

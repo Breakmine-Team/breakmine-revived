@@ -181,6 +181,17 @@ export default class ModelRenderer {
     }
 
     rebuild(tessellator, group) {
+        // Rebuilding replaces the meshes, so release the old GPU buffers.
+        for (const child of this.bone.children) {
+            child.traverse(node => {
+                if (!node.isMesh) return;
+                if (node.geometry) node.geometry.dispose();
+                if (node.material) {
+                    if (Array.isArray(node.material)) node.material.forEach(material => material.dispose());
+                    else node.material.dispose();
+                }
+            });
+        }
         this.bone.clear();
 
         tessellator.startDrawing();

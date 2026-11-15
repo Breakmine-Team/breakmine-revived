@@ -133,6 +133,19 @@ export default class ChunkSection {
         const wz = this.z << 4;
 
         this.isModified = false;
+
+        // group.clear() drops the old meshes but not their GPU buffers, so
+        // every rebuild would leak a section's worth of vertex data.
+        for (const child of this.group.children) {
+            child.traverse(node => {
+                if (!node.isMesh) return;
+                if (node.geometry) node.geometry.dispose();
+                if (node.material) {
+                    if (Array.isArray(node.material)) node.material.forEach(material => material.dispose());
+                    else node.material.dispose();
+                }
+            });
+        }
         this.group.clear();
         this.rotatingMeshes.length = 0;
         this.translucentMesh = null; 

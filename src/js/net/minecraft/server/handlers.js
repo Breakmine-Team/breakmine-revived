@@ -14,6 +14,7 @@ import {
     sendChunks,
     sendPlayerPositionLook,
     sendSingleChunk,
+    unloadChunk,
     sendTimeUpdate,
     sendChatMessage,
     createSpawnPlayerPacket,
@@ -1130,6 +1131,19 @@ function checkAndSendChunks(player) {
     const playerChunkZ = Math.floor(player.z / 16);
 
     const sentChunks = playerChunks.get(player.eid) || new Set();
+
+    // Tell the client to drop chunks it has walked away from. Without this it
+    // keeps every chunk it has ever received, so memory use and frame cost
+    // grow for the whole session. Keep a margin past the send radius so
+    // walking back and forth does not reload the same chunks repeatedly.
+    const keepDistance = renderDistance + 2;
+    for (const chunkKey of sentChunks) {
+        const [cx, cz] = chunkKey.split(',').map(Number);
+        if (Math.abs(cx - playerChunkX) > keepDistance || Math.abs(cz - playerChunkZ) > keepDistance) {
+            unloadChunk(player, cx, cz);
+            sentChunks.delete(chunkKey);
+        }
+    }
 
     for (let cx = playerChunkX - renderDistance; cx <= playerChunkX + renderDistance; cx++) {
         for (let cz = playerChunkZ - renderDistance; cz <= playerChunkZ + renderDistance; cz++) {

@@ -357,9 +357,9 @@ export default class GuiMainMenu extends GuiScreen {
         this.camera = new THREE.PerspectiveCamera(120, 1, 0.1, 1);
         this.camera.rotation.order = 'ZYX';
 
-        let style = this.minecraft.window.canvas.style;
-        style.backdropFilter = "blur(0px)";
-        style.webkitBackdropFilter = "blur(0px)";
+        // No backdrop-filter here: even blur(0px) makes the compositor
+        // re-filter the full-screen animated panorama behind this canvas on
+        // every frame, which is a large and purely visual-effect-free cost.
         this.minecraft.window.wrapper.insertBefore(this.minecraft.window.canvasWorld, this.minecraft.window.canvas);
     }
 
@@ -369,9 +369,6 @@ export default class GuiMainMenu extends GuiScreen {
             this.playerPreview = null;
         }
 
-        let style = this.minecraft.window.canvas.style;
-        style.backdropFilter = "";
-        style.webkitBackdropFilter = "";
         if (this.minecraft.window.wrapper.contains(this.minecraft.window.canvasWorld)) {
             this.minecraft.window.wrapper.removeChild(this.minecraft.window.canvasWorld);
         }

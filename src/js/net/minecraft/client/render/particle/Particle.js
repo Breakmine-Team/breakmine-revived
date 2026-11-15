@@ -154,6 +154,17 @@ export default class Particle extends Entity {
 
         if (this.group !== null) {
             this.minecraft.worldRenderer.scene.remove(this.group);
+            // Removing the group does not free its WebGL buffers; particles
+            // are spawned in bursts, so this leak adds up quickly.
+            this.group.traverse(node => {
+                if (!node.isMesh) return;
+                if (node.geometry) node.geometry.dispose();
+                if (node.material) {
+                    if (Array.isArray(node.material)) node.material.forEach(material => material.dispose());
+                    else node.material.dispose();
+                }
+            });
+            this.group = null;
         }
     }
 

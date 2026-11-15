@@ -11,6 +11,7 @@ export default class GuiPlayerPreview {
     static WIDTH = 60;
     static HEIGHT = 85;
     static RENDER_SCALE = 6;
+    static FRAME_INTERVAL_MS = 1000 / 30;
 
     static MODEL_BASE_Y = 8;
 
@@ -37,6 +38,7 @@ export default class GuiPlayerPreview {
         this.lastWalkBob = 0;
 
         this.modelOffsetY = 0;
+        this.lastRenderTime = -Infinity;
 
         this.capeMesh = null;
         this.capeTexture = null;
@@ -76,7 +78,9 @@ export default class GuiPlayerPreview {
             this.glRenderer = new THREE.WebGLRenderer({
                 canvas: this.renderCanvas,
                 alpha: true,
-                antialias: true
+                // The preview is blitted at 120x170, so MSAA in the offscreen
+                // buffer costs a resolve pass without visible benefit.
+                antialias: false
             });
             this.glRenderer.setClearColor(0x000000, 0);
             this.glRenderer.setPixelRatio(1);
@@ -89,6 +93,7 @@ export default class GuiPlayerPreview {
 
             this.scene.add(this.modelGroup);
             this.modelReady = true;
+            this.lastRenderTime = -Infinity;
 
             this.modelOffsetY = this.measureSilhouetteOffset();
         } catch (e) {
@@ -339,33 +344,41 @@ export default class GuiPlayerPreview {
         const width = GuiPlayerPreview.WIDTH * scale;
         const height = GuiPlayerPreview.HEIGHT * scale;
 
-        const modelCenterX = x + width * 0.5;
-        const modelCenterY = y + height * 0.55;
+        // Rendering the preview is a second WebGL pass every frame. Cap it at
+        // 30 Hz and reuse the previous frame in between: the menu redraws the
+        // 2D canvas anyway, so the blit below still runs every frame.
+        const now = performance.now();
+        if (now - this.lastRenderTime >= GuiPlayerPreview.FRAME_INTERVAL_MS) {
+            this.lastRenderTime = now;
 
-        const dx = mouseX - modelCenterX;
-        const dy = mouseY - modelCenterY;
+            const modelCenterX = x + width * 0.5;
+            const modelCenterY = y + height * 0.55;
 
-        const totalYaw = Math.max(-60, Math.min(60, this.baseYaw - dx * 0.2));
-        const pitch = Math.max(-25, Math.min(25, dy * 0.2));
+            const dx = mouseX - modelCenterX;
+            const dy = mouseY - modelCenterY;
 
-        const headLimit = 20;
-        const headYaw = Math.max(-headLimit, Math.min(headLimit, totalYaw));
-        const bodyYaw = totalYaw - headYaw;
+            const totalYaw = Math.max(-60, Math.min(60, this.baseYaw - dx * 0.2));
+            const pitch = Math.max(-25, Math.min(25, dy * 0.2));
 
-        this.modelGroup.position.set(0, GuiPlayerPreview.MODEL_BASE_Y - this.modelOffsetY + walkBob, 0);
-        this.modelGroup.scale.set(-1, -1, 1);
-        this.modelGroup.rotation.y = MathHelper.toRadians(-bodyYaw + 180);
+            const headLimit = 20;
+            const headYaw = Math.max(-headLimit, Math.min(headLimit, totalYaw));
+            const bodyYaw = totalYaw - headYaw;
 
-        this.model.render(this.modelGroup, limbSwing, limbSwingStrength, this.animTime, headYaw, pitch, 0);
+            this.modelGroup.position.set(0, GuiPlayerPreview.MODEL_BASE_Y - this.modelOffsetY + walkBob, 0);
+            this.modelGroup.scale.set(-1, -1, 1);
+            this.modelGroup.rotation.y = MathHelper.toRadians(-bodyYaw + 180);
 
-        if (this.capeMesh) {
-            this.capeMesh.rotation.x = this.animationMode === "run" ? 0.45
-                : this.animationMode === "walk" ? 0.25 : 0.06;
+            this.model.render(this.modelGroup, limbSwing, limbSwingStrength, this.animTime, headYaw, pitch, 0);
+
+            if (this.capeMesh) {
+                this.capeMesh.rotation.x = this.animationMode === "run" ? 0.45
+                    : this.animationMode === "walk" ? 0.25 : 0.06;
+            }
+
+            this.modelGroup.updateMatrixWorld(true);
+
+            this.glRenderer.render(this.scene, this.camera);
         }
-
-        this.modelGroup.updateMatrixWorld(true);
-
-        this.glRenderer.render(this.scene, this.camera);
 
         stack.save();
         stack.translate(Math.floor(x), Math.floor(y));
@@ -395,6 +408,7 @@ export default class GuiPlayerPreview {
         this.skinUsername = null;
         this.lastWalkBob = 0;
         this.modelOffsetY = 0;
+        this.lastRenderTime = -Infinity;
         this.modelReady = false;
     }
 
