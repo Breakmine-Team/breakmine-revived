@@ -38,7 +38,7 @@ function handleStructurePaste(player, payload) {
     }
 
     if (!isOp(player)) {
-        sendChatMessageToPlayer(player, "§cYou do not have permission to paste structures!");
+        sendChatMessageToPlayer(player, "You do not have permission to paste structures!");
         return;
     }
 
@@ -51,12 +51,12 @@ function handleStructurePaste(player, payload) {
     if (!isValidSize(size)
         || !Number.isInteger(originX) || !Number.isInteger(originY) || !Number.isInteger(originZ)
         || !Array.isArray(blocks) || blocks.length > MAX_VOLUME) {
-        sendChatMessageToPlayer(player, "§cInvalid structure paste.");
+        sendChatMessageToPlayer(player, "Invalid structure paste.");
         return;
     }
 
     if (originY < 0 || originY + size.y > WORLD_HEIGHT) {
-        sendChatMessageToPlayer(player, "§cThe structure does not fit in the world from y " + originY + ".");
+        sendChatMessageToPlayer(player, "The structure does not fit in the world from y " + originY + ".");
         return;
     }
 
@@ -109,8 +109,8 @@ function handleStructurePaste(player, payload) {
         placed++;
     }
 
-    sendChatMessageToPlayer(player, "§aPasted §f" + name + " §7(" + size.x + "x" + size.y + "x" + size.z +
-        ", " + placed + " blocks) §aat §f" + originX + ", " + originY + ", " + originZ + "§a.");
+    sendChatMessageToPlayer(player, "Pasted " + name + " (" + size.x + "x" + size.y + "x" + size.z +
+        ", " + placed + " blocks) at " + originX + ", " + originY + ", " + originZ + ".");
 }
 
 export { handleStructurePaste };

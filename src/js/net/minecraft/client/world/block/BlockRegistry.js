@@ -102,6 +102,7 @@ import BlockSnow from "./type/BlockSnow.js";
 import BlockIce from "./type/BlockIce.js";
 import BlockCheese from "./type/BlockCheese.js";
 import BlockMoldyCheese from "./type/BlockMoldyCheese.js";
+import BlockBob from "./type/BlockBob.js";
 import BlockFlintCardoor from "./type/BlockFlintCardoor.js";
 import BlockObsidian from "./type/BlockObsidian.js";
 import BlockCryingObsidian from "./type/BlockCryingObsidian.js";
@@ -648,6 +649,7 @@ export class BlockRegistry {
 
         BlockRegistry.SNOW = new BlockSnow(234, 0, "snow", "Snow");
         BlockRegistry.CHEESE = new BlockCheese(255, 0);
+        BlockRegistry.BOB = new BlockBob(416, 0);
         BlockRegistry.ICE = new BlockIce(245, 0, "ice", "Ice", 0.5, 0.98);
         BlockRegistry.PACKED_ICE = new BlockIce(246, 0, "packed_ice", "Packed Ice", 0.5, 0.98);
         BlockRegistry.BLUE_ICE = new BlockIce(247, 0, "blue_ice", "Blue Ice", 0.5, 0.989);

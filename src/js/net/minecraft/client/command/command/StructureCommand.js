@@ -22,7 +22,7 @@ export default class StructureCommand extends Command {
 
     execute(minecraft, args) {
         if (!minecraft.world || !minecraft.player) {
-            minecraft.addMessageToChat("§cNo world loaded.");
+            minecraft.addMessageToChat("No world loaded.");
             return true;
         }
 
@@ -58,9 +58,9 @@ export default class StructureCommand extends Command {
         selection.setPoint(index, position.x, position.y, position.z);
 
         const size = selection.getSize();
-        minecraft.addMessageToChat("§aPosition p" + index + " set to §f" +
+        minecraft.addMessageToChat("Position p" + index + " set to " +
             position.x + ", " + position.y + ", " + position.z +
-            (size === null ? "" : " §7(" + size.x + "x" + size.y + "x" + size.z + " selected)"));
+            (size === null ? "" : " (" + size.x + "x" + size.y + "x" + size.z + " selected)"));
         return true;
     }
 
@@ -87,22 +87,22 @@ export default class StructureCommand extends Command {
         const selection = this.getSelection(minecraft);
         const bounds = selection.getBounds();
         if (bounds === null) {
-            minecraft.addMessageToChat("§cSet both corners first: /st p1 and /st p2.");
+            minecraft.addMessageToChat("Set both corners first: /st p1 and /st p2.");
             return true;
         }
 
         const size = selection.getSize();
         const volume = size.x * size.y * size.z;
         if (size.x > MAX_SIDE || size.y > MAX_SIDE || size.z > MAX_SIDE || volume > MAX_VOLUME) {
-            minecraft.addMessageToChat("§cSelection too large: " + size.x + "x" + size.y + "x" + size.z +
-                " §7(max " + MAX_SIDE + " per side, " + MAX_VOLUME + " blocks)");
+            minecraft.addMessageToChat("Selection too large: " + size.x + "x" + size.y + "x" + size.z +
+                " (max " + MAX_SIDE + " per side, " + MAX_VOLUME + " blocks)");
             return true;
         }
 
         const world = minecraft.world;
 
         if (this.isAreaUnloaded(world, {x: bounds.minX, y: bounds.minY, z: bounds.minZ}, size)) {
-            minecraft.addMessageToChat("§cThat area is not fully loaded, so it cannot be saved.");
+            minecraft.addMessageToChat("That area is not fully loaded, so it cannot be saved.");
             return true;
         }
 
@@ -131,8 +131,8 @@ export default class StructureCommand extends Command {
         this.storeStructure(name, text);
         this.download(name, text);
 
-        minecraft.addMessageToChat("§aSaved §f" + name + " §7(" + size.x + "x" + size.y + "x" + size.z +
-            ", " + blocks.length + " blocks) §aand downloaded it.");
+        minecraft.addMessageToChat("Saved " + name + " (" + size.x + "x" + size.y + "x" + size.z +
+            ", " + blocks.length + " blocks) and downloaded it.");
         return true;
     }
 
@@ -149,9 +149,9 @@ export default class StructureCommand extends Command {
         }
 
         const names = this.getStoredNames();
-        minecraft.addMessageToChat("§eNo saved structure named §f" + name +
-            "§e, choose the .json file to load." +
-            (names.length === 0 ? "" : " §7Saved: " + names.join(", ")));
+        minecraft.addMessageToChat("No saved structure named " + name +
+            ", choose the .json file to load." +
+            (names.length === 0 ? "" : " Saved: " + names.join(", ")));
         this.pickStructureFile(minecraft, name);
         return true;
     }
@@ -162,7 +162,7 @@ export default class StructureCommand extends Command {
         try {
             structure = this.parseStructure(text);
         } catch (e) {
-            minecraft.addMessageToChat("§cNot a structure file: " + e.message);
+            minecraft.addMessageToChat("Not a structure file: " + e.message);
             return null;
         }
 
@@ -227,18 +227,18 @@ export default class StructureCommand extends Command {
         const size = structure.size;
 
         if (target.y < 0 || target.y + size.y > World.TOTAL_HEIGHT) {
-            minecraft.addMessageToChat("§cThe structure does not fit in the world from y " + target.y + ".");
+            minecraft.addMessageToChat("The structure does not fit in the world from y " + target.y + ".");
             return;
         }
 
         if (this.sendPasteToServer(minecraft, name, structure, target)) {
-            minecraft.addMessageToChat("§ePasting §f" + name + " §7(" + size.x + "x" + size.y + "x" + size.z +
-                ", " + structure.blocks.length + " blocks)§e...");
+            minecraft.addMessageToChat("Pasting " + name + " (" + size.x + "x" + size.y + "x" + size.z +
+                ", " + structure.blocks.length + " blocks)...");
             return;
         }
 
         if (this.isAreaUnloaded(world, target, size)) {
-            minecraft.addMessageToChat("§cThat area is not fully loaded.");
+            minecraft.addMessageToChat("That area is not fully loaded.");
             return;
         }
 
@@ -248,8 +248,8 @@ export default class StructureCommand extends Command {
             placed++;
         }
 
-        minecraft.addMessageToChat("§aPasted §f" + name + " §7(" + size.x + "x" + size.y + "x" + size.z +
-            ", " + placed + " blocks) §aat §f" + target.x + ", " + target.y + ", " + target.z + "§a.");
+        minecraft.addMessageToChat("Pasted " + name + " (" + size.x + "x" + size.y + "x" + size.z +
+            ", " + placed + " blocks) at " + target.x + ", " + target.y + ", " + target.z + ".");
     }
 
     
@@ -366,7 +366,7 @@ export default class StructureCommand extends Command {
                     this.storeStructure(name, text);
                 }
             }).catch(error => {
-                minecraft.addMessageToChat("§cCould not read the file: " + error.message);
+                minecraft.addMessageToChat("Could not read the file: " + error.message);
             });
         });
 

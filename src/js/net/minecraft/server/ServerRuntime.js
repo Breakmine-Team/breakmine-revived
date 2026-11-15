@@ -1,7 +1,8 @@
 import { initWorld, saveWorld, getSubChunkStore, loadCurrentWorld, getWorldTime, tickWorldTime, setBlockInventory, getBlockInventories, getCurrentWorldName, setActiveDimension, getBlockAt } from './world.js';
 import { tickAllFurnaces, broadcastFurnaceChanges } from './Furnace.js';
-import { sendTimeUpdate, sendChatMessage, sendPlayerListEntry } from './packets.js';
+import { sendTimeUpdate, sendWeatherUpdate, sendChatMessage, sendPlayerListEntry } from './packets.js';
 import { handlePacket, cleanupPlayerChunks, respawnPlayer, flushSaveWorld } from './handlers.js';
+import { tickWeather, getWeatherVersion, getWeatherState } from './weather.js';
 import { createConnectionGate } from './security.js';
 import { verifyConnection } from './security.js';
 
@@ -22,6 +23,7 @@ let autosaveInterval = null;
 let playerSaveInterval = null;
 let latencyInterval = null;
 let started = false;
+let lastWeatherVersion = -1;
 
 const MAX_CAPE_DATA_URL_LENGTH = 512 * 1024;
 
@@ -128,6 +130,17 @@ export function initServer() {
             setActiveDimension(0);
             serverWorld.onTick();
             tickWorldTime();
+            tickWeather();
+
+            if (getWeatherVersion() !== lastWeatherVersion) {
+                lastWeatherVersion = getWeatherVersion();
+                const weatherState = getWeatherState();
+                for (const player of getPlayers().values()) {
+                    if (player.ws.readyState === 1) {
+                        sendWeatherUpdate(player, weatherState);
+                    }
+                }
+            }
 
             const furnaces = tickAllFurnaces(getBlockInventories());
             broadcastFurnaceChanges(getPlayers(), furnaces);
@@ -279,7 +292,7 @@ export function onConnection(ws, req) {
                     saveWorld();
                 }
             } else if (payload && payload.type === 'death' && player) {
-                const deathMsg = `${payload.username} ${payload.message}`;
+                const deathMsg = `§e${payload.username} ${payload.message}`;
                 sendChatMessage(deathMsg);
                 player.health = 0;
                 savePlayerData(player);

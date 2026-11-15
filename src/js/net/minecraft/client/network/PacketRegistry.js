@@ -45,6 +45,7 @@ import ServerSpawnPositionPacket from "./packet/play/server/ServerSpawnPositionP
 import ClientConfirmTransactionPacket from "./packet/play/client/ClientConfirmTransactionPacket.js";
 import ServerResetWorldPacket from "./packet/play/server/ServerResetWorldPacket.js";
 import ServerTimeUpdatePacket from "./packet/play/server/ServerTimeUpdatePacket.js";
+import ServerWeatherUpdatePacket from "./packet/play/server/ServerWeatherUpdatePacket.js";
 import ServerSpawnObjectPacket from "./packet/play/server/ServerSpawnObjectPacket.js";
 import ClientUpdateSignTextPacket from "./packet/play/client/ClientUpdateSignTextPacket.js";
 import ClientModListPacket from "./packet/play/client/ClientModListPacket.js";
@@ -83,6 +84,7 @@ export default class PacketRegistry {
         this.registerServer(ProtocolState.PLAY, 0x01, ServerJoinGamePacket);
         this.registerServer(ProtocolState.PLAY, 0x02, ServerChatPacket);
         this.registerServer(ProtocolState.PLAY, 0x03, ServerTimeUpdatePacket);
+        this.registerServer(ProtocolState.PLAY, 0x4A, ServerWeatherUpdatePacket);
         this.registerServer(ProtocolState.PLAY, 0x05, ServerSpawnPositionPacket);
         this.registerServer(ProtocolState.PLAY, 0x08, ServerPlayerPositionRotationPacket);
         this.registerServer(ProtocolState.PLAY, 0x0B, ServerAnimationPacket);

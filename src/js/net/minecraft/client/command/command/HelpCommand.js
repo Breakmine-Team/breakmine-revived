@@ -8,7 +8,7 @@ export default class HelpCommand extends Command {
     }
 
     execute(minecraft, args) {
-        minecraft.addMessageToChat("\u00a72--- Showing help page ---");
+        minecraft.addMessageToChat("--- Showing help page ---");
 
         const handler = minecraft.commandHandler;
         const builtins = handler ? handler.commands : [];
@@ -19,7 +19,7 @@ export default class HelpCommand extends Command {
         }
 
         if (modCommands.length > 0) {
-            minecraft.addMessageToChat("\u00a76--- Mod commands ---");
+            minecraft.addMessageToChat("--- Mod commands ---");
             for (const command of modCommands) {
                 const origin = command.modId ? " (" + command.modId + ")" : "";
                 const op = command.opOnly ? " [op]" : "";

@@ -11,17 +11,17 @@ class OffGridShortcutCommand extends Command {
 
     execute(minecraft) {
         if (!minecraft.worldRenderer) {
-            minecraft.addMessageToChat("§c/ofr is a client-side rendering command.");
+            minecraft.addMessageToChat("/ofr is a client-side rendering command.");
             return true;
         }
 
         if (!minecraft.world) {
-            minecraft.addMessageToChat("§cNo world loaded.");
+            minecraft.addMessageToChat("No world loaded.");
             return true;
         }
 
         if (!minecraft.player) {
-            minecraft.addMessageToChat("§cNo player.");
+            minecraft.addMessageToChat("No player.");
             return true;
         }
 
@@ -35,7 +35,7 @@ class OffGridShortcutCommand extends Command {
             for (let cx = (x - 1) >> 4; cx <= (x + 8) >> 4; cx++) {
                 for (let cz = (z - 1) >> 4; cz <= (z + 8) >> 4; cz++) {
                     if (!world.chunkExists(cx, cz)) {
-                        minecraft.addMessageToChat("§cYour area is not fully loaded yet.");
+                        minecraft.addMessageToChat("Your area is not fully loaded yet.");
                         return true;
                     }
                 }
@@ -49,10 +49,10 @@ class OffGridShortcutCommand extends Command {
             field.rotate(45, "x");
             field.rotate(45, "y");
             field.rotate(45, "z");
-            minecraft.addMessageToChat("§aSummoned §f" + count + " §rblocks of stone at (" +
+            minecraft.addMessageToChat("Summoned " + count + " blocks of stone at (" +
                 x + ", " + y + ", " + z + "), rotated 45° on all axes");
         } catch (e) {
-            minecraft.addMessageToChat("§cError summoning: " + e.message);
+            minecraft.addMessageToChat("Error summoning: " + e.message);
         }
 
         return true;

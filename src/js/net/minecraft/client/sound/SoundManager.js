@@ -3,6 +3,8 @@ import * as THREE from "../../../../../../libraries/three.module.js";
 import { base64Assets } from "../../../../../resources.js";
 import { clickSound } from "../../../../assetManifest.js";
 
+const CAVE_SOUND_ASSET = "sound/random/cave_entity.mp3";
+
 export default class SoundManager {
 
     constructor() {
@@ -211,6 +213,129 @@ export default class SoundManager {
             this.clickAudio.play();
         } catch (e) {
             console.warn('Failed to play click sound:', e);
+        }
+    }
+
+    setRainStrength(strength) {
+        if (this.disabled) {
+            return;
+        }
+
+        const context = this.audioListener ? this.audioListener.context : null;
+        if (!context) {
+            return;
+        }
+
+        const value = Math.max(0, Math.min(1, Number(strength) || 0));
+
+        if (!this.rainGain) {
+            if (value <= 0.001) {
+                return;
+            }
+            try {
+                this.createRainSound(context);
+            } catch (e) {
+                return;
+            }
+        }
+
+        try {
+            if (value > 0.001 && context.state === 'suspended') {
+                context.resume().catch(() => {});
+            }
+            this.rainGain.gain.setTargetAtTime(value * 0.14, context.currentTime, 0.5);
+        } catch (e) {
+        }
+    }
+
+    createRainSound(context) {
+        const length = Math.floor(context.sampleRate * 2);
+        const buffer = context.createBuffer(1, length, context.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+
+        const source = context.createBufferSource();
+        source.buffer = buffer;
+        source.loop = true;
+
+        const highpass = context.createBiquadFilter();
+        highpass.type = 'highpass';
+        highpass.frequency.value = 800;
+
+        const lowpass = context.createBiquadFilter();
+        lowpass.type = 'lowpass';
+        lowpass.frequency.value = 5200;
+
+        const gain = context.createGain();
+        gain.gain.value = 0;
+
+        source.connect(highpass);
+        highpass.connect(lowpass);
+        lowpass.connect(gain);
+        gain.connect(context.destination);
+        source.start();
+
+        this.rainSource = source;
+        this.rainGain = gain;
+    }
+
+    playThunder(volume = 1) {
+        if (this.disabled) {
+            return;
+        }
+
+        const context = this.audioListener ? this.audioListener.context : null;
+        if (!context || context.state !== 'running') {
+            return;
+        }
+
+        try {
+            const length = Math.floor(context.sampleRate * 2.4);
+            const buffer = context.createBuffer(1, length, context.sampleRate);
+            const data = buffer.getChannelData(0);
+
+            let value = 0;
+            for (let i = 0; i < length; i++) {
+                value = value * 0.985 + (Math.random() * 2 - 1) * 0.02;
+                data[i] = value;
+            }
+
+            const source = context.createBufferSource();
+            source.buffer = buffer;
+
+            const lowpass = context.createBiquadFilter();
+            lowpass.type = 'lowpass';
+            lowpass.frequency.value = 320;
+
+            const gain = context.createGain();
+            const now = context.currentTime;
+            const peak = Math.max(0, Math.min(1, volume)) * 0.5;
+
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(peak, now + 0.04);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 2.3);
+
+            source.connect(lowpass);
+            lowpass.connect(gain);
+            gain.connect(context.destination);
+            source.start(now);
+            source.stop(now + 2.4);
+        } catch (e) {
+        }
+    }
+
+    playCaveSound(volume = 0.5) {
+        if (this.disabled || this._soundsUnavailable) {
+            return;
+        }
+
+        try {
+            const audio = new Audio(this.resolveAsset(CAVE_SOUND_ASSET));
+            audio.volume = Math.max(0, Math.min(1, volume));
+            audio.play().catch(() => {});
+        } catch (e) {
         }
     }
 

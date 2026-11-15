@@ -160,6 +160,12 @@ function sendTimeUpdate(player, worldTime) {
     player.ws.send(makePacket(0x03, data));
 }
 
+function sendWeatherUpdate(player, weatherState) {
+    const data = Buffer.alloc(1);
+    data.writeUInt8(weatherState & 0xFF, 0);
+    player.ws.send(makePacket(0x4A, data));
+}
+
 function sendPlayerPositionLook(player) {
     const data = Buffer.alloc(50);
     let offset = 0;
@@ -549,6 +555,7 @@ export {
     unloadChunk,
     sendResetWorldPacket,
     sendTimeUpdate,
+    sendWeatherUpdate,
     sendPlayerPositionLook,
     sendBlockChange,
     sendSignTextUpdate,

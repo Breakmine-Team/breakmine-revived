@@ -127,6 +127,12 @@ export default class NetworkPlayHandler extends PacketHandler {
         this.minecraft.world.time = packet.getWorldTime();
     }
 
+    handleWeatherUpdate(packet) {
+        if (this.minecraft.world) {
+            this.minecraft.world.setWeather(packet.getState());
+        }
+    }
+
     handleServerPlayerPositionRotation(packet) {
         let player = this.minecraft.player;
         if (!player) {

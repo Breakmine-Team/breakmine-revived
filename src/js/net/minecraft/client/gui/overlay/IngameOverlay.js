@@ -22,9 +22,9 @@ export default class IngameOverlay extends Gui {
 
         this.textureCrosshair = minecraft.resources["gui/icons.png"];
         this.textureHotbar = minecraft.resources["gui/gui.png"];
-        this.textureHeart = minecraft.resources['gui/heart.png'];
-        this.textureHeartHalf = minecraft.resources['gui/heartHalf.png'];
-        this.textureHeartEmpty = minecraft.resources['gui/heartEmpty.png'];
+        this.textureHeart = minecraft.resources['gui/full.png'];
+        this.textureHeartHalf = minecraft.resources['gui/half.png'];
+        this.textureHeartEmpty = minecraft.resources['gui/container.png'];
 
         this.ticksRendered = 0;
 
@@ -87,7 +87,7 @@ export default class IngameOverlay extends Gui {
         }
 
         if (!this.minecraft.player.creative && !this.minecraft.player.spectator && !cameraView) {
-            this.renderHealth(stack, this.window.width / 2 - 91, this.window.height - 22 - 11)
+            this.renderHealth(stack, this.window.width / 2 - 91, this.window.height - 22 - 9)
         }
 
         this.renderStatusText(stack);
@@ -227,7 +227,7 @@ export default class IngameOverlay extends Gui {
 
     renderHealth(stack, x, y) {
         const health = this.minecraft.player.health;
-        const size = 11;
+        const size = 9;
         const maxHearts = 10;
         const fullHearts = Math.floor(health / 2);
     

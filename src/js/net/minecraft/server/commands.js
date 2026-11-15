@@ -7,6 +7,8 @@ import { sendResetWorldPacket, sendRespawn, sendServerRules, sendServerMods, sen
 import { banPlayer, unban as unbanPlayer, parseDuration, formatDuration, describeBan } from './bans.js';
 import { reloadServerSideMods } from './ServerModLoader.js';
 import { initWorld, saveWorld, getCurrentWorldName, getSpawnPosition } from './world.js';
+import { setWeatherState } from './weather.js';
+import { WEATHER_CLEAR, WEATHER_RAIN, WEATHER_THUNDER } from '../util/WeatherConstants.js';
 import { cleanupPlayerChunks } from './handlers.js';
 import { handleOffGridCommand } from './offgridCommands.js';
 import { sendState as sendOffGridState } from './offgrid.js';
@@ -57,7 +59,7 @@ function requireOp(player) {
     if (isOp(player)) {
         return true;
     }
-    sendChatMessageToPlayer(player, '§cYou do not have permission to use this command!');
+    sendChatMessageToPlayer(player, 'You do not have permission to use this command!');
     return false;
 }
 
@@ -67,7 +69,7 @@ function requireSuperOp(player) {
     if (isSuperOp(player)) {
         return true;
     }
-    sendChatMessageToPlayer(player, '§cOnly super operators can use this command!');
+    sendChatMessageToPlayer(player, 'Only super operators can use this command!');
     return false;
 }
 
@@ -95,6 +97,11 @@ function handleCommand(player, command) {
         return;
     }
 
+    if (cmd === 'weather') {
+        handleWeatherCommand(player, args);
+        return;
+    }
+
     if (cmd === 'time' && (args[0] === 'set' || args[0] === 'add') && !requireOp(player)) {
         return;
     }
@@ -105,7 +112,7 @@ function handleCommand(player, command) {
     if (!commandHandler.hasCommand(cmd)) {
         if (player.mods && player.mods.length > 0) {
             const names = player.mods.map(mod => mod.name).join(', ');
-            sendChatMessageToPlayer(player, `§cUnknown command! Type "/help" for help.`);
+            sendChatMessageToPlayer(player, `Unknown command! Type "/help" for help.`);
             return;
         }
     }
@@ -116,14 +123,45 @@ function handleCommand(player, command) {
         commandHandler.handleCommand(cmd, args);
     } catch (e) {
         log.error('Server', `Command /${cmd} failed: ${e.message}`);
-        sendChatMessageToPlayer(player, `§cCommand failed: ${e.message}`);
+        sendChatMessageToPlayer(player, `Command failed: ${e.message}`);
     }
 
     syncCommandState(player, context);
 }
 
+function handleWeatherCommand(player, args) {
+    if (!requireOp(player)) {
+        return;
+    }
+
+    const requested = String(args[0] || '').toLowerCase();
+    const states = {
+        clear: WEATHER_CLEAR,
+        rain: WEATHER_RAIN,
+        thunder: WEATHER_THUNDER
+    };
+
+    if (!Object.prototype.hasOwnProperty.call(states, requested)) {
+        sendChatMessageToPlayer(player, 'Usage: /weather <clear|rain|thunder> [duration_seconds]');
+        return;
+    }
+
+    let durationTicks = 0;
+    if (args[1] !== undefined) {
+        const seconds = Number(args[1]);
+        if (!Number.isFinite(seconds) || seconds < 1 || seconds > 86400) {
+            sendChatMessageToPlayer(player, 'Duration must be between 1 and 86400 seconds.');
+            return;
+        }
+        durationTicks = Math.round(seconds * 20);
+    }
+
+    setWeatherState(states[requested], durationTicks);
+    sendChatMessageToPlayer(player, `Weather set to ${requested}.`);
+}
+
 function moderationUsage(player, cmd) {
-    sendChatMessageToPlayer(player, `§cUsage: ${MODERATION_USAGE[cmd]}`);
+    sendChatMessageToPlayer(player, `Usage: ${MODERATION_USAGE[cmd]}`);
 }
 
 function readReason(args) {
@@ -165,7 +203,7 @@ function handleModerationCommand(player, cmd, args) {
     }
 
     if (!VALID_USERNAME.test(name)) {
-        sendChatMessageToPlayer(player, '§cPlayer names may only contain letters, numbers and underscores.');
+        sendChatMessageToPlayer(player, 'Player names may only contain letters, numbers and underscores.');
         return;
     }
 
@@ -185,25 +223,25 @@ function handleModerationCommand(player, cmd, args) {
 function handleKick(player, name, reasonArgs) {
     const target = findPlayerByUsername(name);
     if (!target) {
-        sendChatMessageToPlayer(player, `§cNo player called "${name}" is online.`);
+        sendChatMessageToPlayer(player, `No player called "${name}" is online.`);
         return;
     }
 
     const reason = readReason(reasonArgs) || 'No reason given';
     const message = [
-        '§cYou have been kicked from this server!',
-        '§7Reason: §f' + reason,
-        '§oPlease stop your behaviour elsewhere a ban may take place.'
+        'You have been kicked from this server!',
+        'Reason: ' + reason,
+        'Please stop your behaviour elsewhere a ban may take place.'
     ].join('\n');
 
     log.info('Server', `${player.username} kicked ${target.username}${reason ? ' (' + reason + ')' : ''}`);
     disconnectPlayer(target, message);
-    sendChatMessageToPlayer(player, `§eKicked §f${target.username}§e${reason ? '§7: ' + reason : '.'}`);
+    sendChatMessageToPlayer(player, `Kicked ${target.username}${reason ? ': ' + reason : '.'}`);
 }
 
 function handleBan(player, cmd, name, rest) {
     if (String(player.username || '').toLowerCase() === name.toLowerCase()) {
-        sendChatMessageToPlayer(player, '§cYou cannot ban yourself.');
+        sendChatMessageToPlayer(player, 'You cannot ban yourself.');
         return;
     }
 
@@ -219,7 +257,7 @@ function handleBan(player, cmd, name, rest) {
 
         expiresIn = parseDuration(durationArg);
         if (!expiresIn) {
-            sendChatMessageToPlayer(player, `§c"${durationArg}" is not a valid time. Try 30, 4m, 4d, 4w, 4months or 1yr.`);
+            sendChatMessageToPlayer(player, `"${durationArg}" is not a valid time. Try 30, 4m, 4d, 4w, 4months or 1yr.`);
             return;
         }
         reasonArgs = rest.slice(1);
@@ -228,7 +266,7 @@ function handleBan(player, cmd, name, rest) {
     const reason = readReason(reasonArgs);
     const entry = banPlayer(name, { reason, by: player.username, expires: expiresIn });
     if (!entry) {
-        sendChatMessageToPlayer(player, `§cCould not ban "${name}".`);
+        sendChatMessageToPlayer(player, `Could not ban "${name}".`);
         return;
     }
 
@@ -241,18 +279,18 @@ function handleBan(player, cmd, name, rest) {
         ? 'for ' + formatDuration(entry.expires - Date.now())
         : 'permanently';
     log.info('Server', `${player.username} banned ${name} ${length}${reason ? ' (' + reason + ')' : ''}`);
-    sendChatMessageToPlayer(player, `§eBanned §o${entry.name || name}§e ${length}${reason ? '§7: ' + reason : '.'}`);
+    sendChatMessageToPlayer(player, `Banned ${entry.name || name} ${length}${reason ? ': ' + reason : '.'}`);
 }
 
 function handleUnban(player, name) {
     const removed = unbanPlayer(name);
     if (!removed) {
-        sendChatMessageToPlayer(player, `§c${name} is not banned.`);
+        sendChatMessageToPlayer(player, `${name} is not banned.`);
         return;
     }
 
     log.info('Server', `${player.username} unbanned ${removed.name || name}`);
-    sendChatMessageToPlayer(player, `§eUnbanned §o${removed.name || name}§e.`);
+    sendChatMessageToPlayer(player, `Unbanned ${removed.name || name}.`);
 }
 
 
@@ -264,8 +302,8 @@ function withoutName(list, name) {
 function handleSuperOp(player, cmd, name) {
     if (config.isEnvSuperOp(name)) {
         sendChatMessageToPlayer(player, cmd === 'sop'
-            ? `§e${name} is already a super operator (set by the SUPER_OPS environment variable).`
-            : `§c${name} is a super operator set by the SUPER_OPS environment variable and cannot be unsop'd here.`);
+            ? `${name} is already a super operator (set by the SUPER_OPS environment variable).`
+            : `${name} is a super operator set by the SUPER_OPS environment variable and cannot be unsop'd here.`);
         return;
     }
 
@@ -286,19 +324,19 @@ function handleSuperOp(player, cmd, name) {
         config.writePlayerLists();
     } catch (e) {
         log.error('Server', `Could not save the super op list: ${e.message}`);
-        sendChatMessageToPlayer(player, `§cCould not save the super op list: ${e.message}`);
+        sendChatMessageToPlayer(player, `Could not save the super op list: ${e.message}`);
         return;
     }
 
     if (grant) {
-        sendChatMessageToPlayer(player, `§eGave super operator permissions to §f${label}§e.`);
+        sendChatMessageToPlayer(player, `Gave super operator permissions to ${label}.`);
         if (target && target.eid !== player.eid) {
-            sendChatMessageToPlayer(target, '§eYou are now a super operator.');
+            sendChatMessageToPlayer(target, 'You are now a super operator.');
         }
     } else {
-        sendChatMessageToPlayer(player, `§eRemoved super operator permissions from §f${label}§e.`);
+        sendChatMessageToPlayer(player, `Removed super operator permissions from ${label}.`);
         if (target && target.eid !== player.eid) {
-            sendChatMessageToPlayer(target, '§cYou are no longer a super operator.');
+            sendChatMessageToPlayer(target, 'You are no longer a super operator.');
         }
     }
 
@@ -312,7 +350,7 @@ function handleOp(player, cmd, name) {
 
     const superOps = Array.isArray(config.super_op_player_list) ? config.super_op_player_list : [];
     if (cmd === 'deop' && (superOps.some(matches) || config.isEnvSuperOp(name))) {
-        sendChatMessageToPlayer(player, `§c${name} is a super operator - use /unsop first.`);
+        sendChatMessageToPlayer(player, `${name} is a super operator - use /unsop first.`);
         return;
     }
 
@@ -346,20 +384,20 @@ function handleOp(player, cmd, name) {
         config.writePlayerLists();
     } catch (e) {
         log.error('Server', `Could not save the op list: ${e.message}`);
-        sendChatMessageToPlayer(player, `§cCould not save the op list: ${e.message}`);
+        sendChatMessageToPlayer(player, `Could not save the op list: ${e.message}`);
         return;
     }
 
     const target = findPlayerByUsername(name);
     if (cmd === 'op') {
-        sendChatMessageToPlayer(player, `§eGave operator permissions to §f${label}§e.`);
+        sendChatMessageToPlayer(player, `Gave operator permissions to ${label}.`);
         if (target && target.eid !== player.eid) {
-            sendChatMessageToPlayer(target, '§eYou are now an operator.');
+            sendChatMessageToPlayer(target, 'You are now an operator.');
         }
     } else {
-        sendChatMessageToPlayer(player, `§eRemoved operator permissions from §f${label}§e.`);
+        sendChatMessageToPlayer(player, `Removed operator permissions from ${label}.`);
         if (target && target.eid !== player.eid) {
-            sendChatMessageToPlayer(target, '§cYou are no longer an operator.');
+            sendChatMessageToPlayer(target, 'You are no longer an operator.');
         }
     }
 
@@ -368,7 +406,7 @@ function handleOp(player, cmd, name) {
 
 function handleServer(player, args) {
     if (args.length === 0) {
-        sendChatMessageToPlayer(player, `§6Current server: §e${getCurrentWorldName()}`);
+        sendChatMessageToPlayer(player, `Current server: ${getCurrentWorldName()}`);
         return;
     }
 
@@ -376,10 +414,10 @@ function handleServer(player, args) {
 
     if (subCommand === 'list') {
         const servers = config.listServers();
-        sendChatMessageToPlayer(player, '§6Available servers:');
+        sendChatMessageToPlayer(player, 'Available servers:');
         servers.forEach(server => {
-            const isCurrent = server === getCurrentWorldName() ? ' §7(current)' : '';
-            sendChatMessageToPlayer(player, `§e- ${server}${isCurrent}`);
+            const isCurrent = server === getCurrentWorldName() ? ' (current)' : '';
+            sendChatMessageToPlayer(player, `- ${server}${isCurrent}`);
         });
         return;
     }
@@ -391,7 +429,7 @@ function handleServer(player, args) {
     }
 
     if (serverName === getCurrentWorldName()) {
-        sendChatMessageToPlayer(player, `§cYou are already in server "${serverName}"`);
+        sendChatMessageToPlayer(player, `You are already in server "${serverName}"`);
         return;
     }
 

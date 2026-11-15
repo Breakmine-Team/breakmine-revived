@@ -64,11 +64,13 @@ export default class CommandHandler {
     }
 
     handleCommand(command, args) {
+        const minecraft = this.minecraft;
+
         for (let i = 0; i < this.commands.length; i++) {
             let commandExecutor = this.commands[i];
             if (commandExecutor.command === command) {
-                if (!this.commands[i].execute(this.minecraft, args)) {
-                    this.minecraft.addMessageToChat("/" + commandExecutor.command + " " + commandExecutor.usage);
+                if (!this.commands[i].execute(minecraft, args)) {
+                    minecraft.addMessageToChat("/" + commandExecutor.command + " " + commandExecutor.usage);
                 }
                 return;
             }
@@ -78,17 +80,17 @@ export default class CommandHandler {
         if (modCommand) {
             let handled = false;
             try {
-                handled = modCommand.execute(this.minecraft, args);
+                handled = modCommand.execute(minecraft, args);
             } catch (error) {
-                this.minecraft.addMessageToChat("§cCommand /" + modCommand.command + " failed: " + error.message);
+                minecraft.addMessageToChat("Command /" + modCommand.command + " failed: " + error.message);
                 return;
             }
             if (!handled) {
-                this.minecraft.addMessageToChat("/" + modCommand.command + " " + modCommand.usage);
+                minecraft.addMessageToChat("/" + modCommand.command + " " + modCommand.usage);
             }
             return;
         }
 
-        this.minecraft.addMessageToChat("Unknown command! Type \"/help\" for help.");
+        minecraft.addMessageToChat("Unknown command! Type \"/help\" for help.");
     }
 }

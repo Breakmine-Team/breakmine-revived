@@ -13,6 +13,7 @@ import ContainerFurnace from "../inventory/container/ContainerFurnace.js";
 import BlockEntityRegistry from "./block/entity/BlockEntityRegistry.js";
 import {BiomeRegistry} from "./biome/BiomeRegistry.js";
 import { applyQueuedTerrain } from "./generator/JsonTerrain.js";
+import { WEATHER_CLEAR, WEATHER_RAIN, WEATHER_THUNDER } from "../../util/WeatherConstants.js";
 
 export default class World {
 
@@ -36,6 +37,13 @@ export default class World {
 
         this.time = 0;
         this.worldType = "normal";
+
+        this.weather = WEATHER_CLEAR;
+        this.rainStrength = 0;
+        this.thunderStrength = 0;
+        this.lightningFlash = 0;
+        this.lastRainSoundStrength = 0;
+        this.caveSoundTimer = null;
         this.spawn = new Vector3(0, 0, 0);
 
         this.blockTickQueue = [];
@@ -122,6 +130,8 @@ export default class World {
             clearInterval(this.dynamicLightUpdateInterval);
             this.dynamicLightUpdateInterval = null;
         }
+
+        this.minecraft.soundManager?.setRainStrength?.(0);
     }
 
     setChunkProvider(chunkProvider) {
@@ -165,6 +175,8 @@ export default class World {
         }
 
         this.updateClouds();
+        this.tickWeather();
+        this.tickCaveSounds();
 
         if (this.worldType !== "hellish") {
             this.time++;
@@ -204,9 +216,86 @@ export default class World {
 
         const skyDarken = this.calculateSkylightSubtracted(1.0);
         const daylight = 1 - Math.min(11, skyDarken) / 11;
-        const brightness = 0.12 + 0.88 * Math.pow(daylight, 1.7);
+        const weatherDarkness = Math.min(0.6, this.rainStrength * 0.45 + this.thunderStrength * 0.15);
+        const brightness = Math.max(0.05, (0.12 + 0.88 * Math.pow(daylight, 1.7)) * (1 - weatherDarkness));
         this.clouds.material.color.setRGB(brightness, brightness, brightness);
         if (this.fancyClouds) this.fancyClouds.material.color.setRGB(brightness, brightness, brightness);
+    }
+
+    setWeather(state) {
+        const next = Math.max(0, Math.min(2, Number(state) | 0));
+        if (next === this.weather) {
+            return;
+        }
+
+        const wasThundering = this.weather === WEATHER_THUNDER;
+        this.weather = next;
+
+        if (next === WEATHER_THUNDER && !wasThundering && this.worldType !== "hellish") {
+            this.lightningFlash = 1.0;
+            this.minecraft.soundManager?.playThunder?.(0.8);
+        }
+    }
+
+    tickWeather() {
+        const hellish = this.worldType === "hellish";
+        const targetRain = !hellish && this.weather >= WEATHER_RAIN ? 1 : 0;
+        const targetThunder = !hellish && this.weather === WEATHER_THUNDER ? 1 : 0;
+
+        this.rainStrength += (targetRain - this.rainStrength) * 0.025;
+        this.thunderStrength += (targetThunder - this.thunderStrength) * 0.02;
+
+        if (this.rainStrength < 0.001) this.rainStrength = 0;
+        if (this.thunderStrength < 0.001) this.thunderStrength = 0;
+
+        this.lightningFlash = hellish ? 0 : Math.max(0, this.lightningFlash - 0.08);
+
+        if (this.thunderStrength > 0.5 && this.lightningFlash <= 0 && Math.random() < 0.006) {
+            this.lightningFlash = 1.0;
+            this.minecraft.soundManager?.playThunder?.(0.6 + Math.random() * 0.4);
+        }
+
+        const rainVolume = hellish ? 0 : this.rainStrength;
+        if (Math.abs(rainVolume - this.lastRainSoundStrength) > 0.02) {
+            this.lastRainSoundStrength = rainVolume;
+            this.minecraft.soundManager?.setRainStrength?.(rainVolume);
+        }
+    }
+
+    // Occasional cave ambience, played only when the player has no sky access.
+    tickCaveSounds() {
+        const player = this.minecraft ? this.minecraft.player : null;
+        const soundManager = this.minecraft ? this.minecraft.soundManager : null;
+        if (!player || !soundManager) {
+            return;
+        }
+
+        if (this.caveSoundTimer === null) {
+            this.caveSoundTimer = this.nextCaveSoundDelay();
+        }
+
+        if (this.caveSoundTimer > 0) {
+            this.caveSoundTimer--;
+            return;
+        }
+
+        if (!this.isCaveAt(player.x, player.y, player.z)) {
+            // Above ground: check again shortly instead of waiting a full interval.
+            this.caveSoundTimer = 100;
+            return;
+        }
+
+        this.caveSoundTimer = this.nextCaveSoundDelay();
+        soundManager.playCaveSound(0.35 + Math.random() * 0.25);
+    }
+
+    nextCaveSoundDelay() {
+        return 1200 + Math.floor(Math.random() * 3600);
+    }
+
+    // A position is considered a cave when it receives no sky light.
+    isCaveAt(x, y, z) {
+        return this.getSavedLightValue(EnumSkyBlock.SKY, Math.floor(x), Math.floor(y), Math.floor(z)) === 0;
     }
 
     setCloudMode(mode) {
@@ -1318,6 +1407,21 @@ export default class World {
         green *= brightness;
         blue *= brightness;
 
+        const overcast = Math.min(1, this.rainStrength * 0.9 + this.thunderStrength * 0.5);
+        if (overcast > 0) {
+            const grey = brightness * (0.55 - this.thunderStrength * 0.1);
+            red += (grey - red) * overcast;
+            green += (grey - green) * overcast;
+            blue += (grey - blue) * overcast;
+        }
+
+        if (this.lightningFlash > 0) {
+            const flash = this.lightningFlash * 0.85;
+            red = Math.min(1, red + flash);
+            green = Math.min(1, green + flash);
+            blue = Math.min(1, blue + flash);
+        }
+
         return new Vector3(red, green, blue);
     }
 
@@ -1337,6 +1441,14 @@ export default class World {
         x = x * (rotation * 0.94 + 0.06);
         y = y * (rotation * 0.94 + 0.06);
         z = z * (rotation * 0.91 + 0.09);
+
+        const overcast = Math.min(1, this.rainStrength * 0.9 + this.thunderStrength * 0.4);
+        if (overcast > 0) {
+            const target = 0.5 - this.thunderStrength * 0.12;
+            x += (target - x) * overcast;
+            y += (target - y) * overcast;
+            z += (target - z) * overcast;
+        }
 
         return new Vector3(x, y, z);
     }
@@ -1371,7 +1483,7 @@ export default class World {
         let angle = this.getCelestialAngle(partialTicks);
         let rotation = 1.0 - (Math.cos(angle * Math.PI * 2.0) * 2.0 + 0.75);
         rotation = MathHelper.clamp(rotation, 0.0, 1.0);
-        return rotation * rotation * 0.5;
+        return rotation * rotation * 0.5 * (1 - this.rainStrength);
     }
 
     getLightBrightnessForEntity(entity) {

@@ -9,6 +9,7 @@ import {
     modelAssets,
     musicTracks,
     soundPools,
+    ambientSounds,
     clickSound,
 } from '../src/js/assetManifest.js';
 
@@ -43,6 +44,11 @@ if (includeMusic) {
         wantedKeys.add(track);
         criticalKeys.add(track);
     }
+}
+
+for (const sound of ambientSounds) {
+    wantedKeys.add(sound);
+    criticalKeys.add(sound);
 }
 
 for (const pool of soundPools) {

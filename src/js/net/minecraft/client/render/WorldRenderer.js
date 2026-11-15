@@ -15,6 +15,7 @@ import FirstPersonItemRenderer from "./FirstPersonItemRenderer.js";
 import TranslucentMeshBatcher from "./TranslucentMeshBatcher.js";
 import GuiFunctions from "../gui/screens/GuiFunctions.js";
 import SignTextRenderer from "./SignTextRenderer.js";
+import WeatherRenderer from "./WeatherRenderer.js";
 
 
 
@@ -267,6 +268,9 @@ export default class WorldRenderer {
         this.entityRenderManager = new EntityRenderManager(this);
 
         this.signTextRenderer = new SignTextRenderer(this);
+
+        this.weatherRenderer = new WeatherRenderer(minecraft);
+        this.scene.add(this.weatherRenderer.mesh);
 
         this.equippedProgress = 0;
         this.prevEquippedProgress = 0;
@@ -603,6 +607,8 @@ export default class WorldRenderer {
             this.scene.remove(roadPreviewGroup);
             this.scene.add(roadPreviewGroup);
         }
+
+        this.weatherRenderer.update();
 
         this.webRenderer.render(this.scene, this.camera);
 
@@ -1155,9 +1161,13 @@ export default class WorldRenderer {
 
             let isDay = dir.y > 0.05;
             this.sunLight.castShadow = this.shadowsEnabled && isDay;
-            
-            this.ambientLight.intensity = isDay ? 0.6 : 1.0;
-            this.sunLight.intensity = isDay ? 0.4 : 0.0;
+
+            const weather = this.minecraft.world;
+            const rainStrength = weather.rainStrength || 0;
+            const lightningFlash = weather.lightningFlash || 0;
+
+            this.ambientLight.intensity = (isDay ? 0.6 : 1.0) * (1 - rainStrength * 0.25) + lightningFlash * 1.6;
+            this.sunLight.intensity = isDay ? 0.4 * (1 - rainStrength * 0.6) : 0.0;
         }
     }
 
@@ -1216,10 +1226,13 @@ export default class WorldRenderer {
 
             this.background.background = this.backgroundColor.setRGB(red, green, blue);
 
+            const rainStrength = this.minecraft.world.rainStrength || 0;
+            const weatherVisibility = 1 - Math.min(0.45, rainStrength * 0.45);
+
             if (this.minecraft.settings.fogType === 'classic') {
-                this.applyExp2Fog(red, green, blue, (hellish ? 3.4 : 2.0) / viewDistance);
+                this.applyExp2Fog(red, green, blue, ((hellish ? 3.4 : 2.0) / viewDistance) * (1 + rainStrength));
             } else {
-                this.applyLinearFog(red, green, blue, 0.0025, viewDistance * (hellish ? 1.25 : 2));
+                this.applyLinearFog(red, green, blue, 0.0025, viewDistance * (hellish ? 1.25 : 2) * weatherVisibility);
             }
 
             let skyMesh = this.listSky.children[0];
@@ -2255,6 +2268,9 @@ export default class WorldRenderer {
             this.scene.add(this.blockPreviewGroup);
         }
         this.blockPreviewGroup.visible = false;
+        if (this.weatherRenderer && !this.scene.children.includes(this.weatherRenderer.mesh)) {
+            this.scene.add(this.weatherRenderer.mesh);
+        }
         if (!this.overlay.children.includes(this.blockBreakMesh)) {
             this.overlay.add(this.blockBreakMesh);
         }

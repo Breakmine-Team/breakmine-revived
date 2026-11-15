@@ -1,7 +1,7 @@
 import { Buffer } from '../../../../../libraries/buffer.js';
 import { readLongBE } from './binary.js';
 import { readVarInt, readString, broadcast, ensureReadable, MalformedPacketError } from './protocol.js';
-import { addPlayer, removePlayer, getPlayers, updatePosition, loadPlayerData, findPlayerByUsername, normalizeInventoryState, savePlayerData, isSpectator } from './players.js';
+import { addPlayer, removePlayer, getPlayers, updatePosition, loadPlayerData, findPlayerByUsername, normalizeInventoryState, savePlayerData, isSpectator, isSuperOp } from './players.js';
 import { addWorldChange, saveWorld, getBlockAt, getAllBlockInventoriesState, getSpawnPosition, deleteBlockInventory, getBlockInventories, getWorldTime, getBlockMetadata, setBlockInventory, setActiveDimension, getDimensionType, NETHER_DIMENSION } from './world.js';
 import { addItemEntity, removeItemEntity, getItemEntity, getAllItemEntities } from './entities.js';
 import { handleCommand } from './commands.js';
@@ -16,6 +16,7 @@ import {
     sendSingleChunk,
     unloadChunk,
     sendTimeUpdate,
+    sendWeatherUpdate,
     sendChatMessage,
     createSpawnPlayerPacket,
     createEntityTeleportPacket,
@@ -33,6 +34,7 @@ import config from './config.js';
 import Logger from './logger.js';
 import { isBanned, describeBan } from './bans.js';
 import getServerWorld from './World.js';
+import { getWeatherState } from './weather.js';
 import { emitBlockAction } from './ServerModLoader.js';
 import Block from '../client/world/block/Block.js';
 import { NO_MODULES } from '../util/environment.js';
@@ -397,6 +399,7 @@ function handleLoginPacket(player, packetId, buffer, offset) {
         }
 
         sendTimeUpdate(player, getWorldTime());
+        sendWeatherUpdate(player, getWeatherState());
 
         const players = getPlayers();
         const visiblePlayers = Array.from(players.values()).filter(p => p.eid === player.eid || canSee(player, p));
@@ -444,7 +447,10 @@ function handlePlayPacket(player, packetId, buffer, offset) {
                 if (player.username === "LowQualityCoding") newname = '§a</>§f ' + player.username + '§7';
                 if (player.username === "Marw-Programmer") newname = '§a' + player.username + '§7';
                 if (player.username === "Hoofries") newname = '§1' + player.username + '§7';
-                sendChatMessage(`§7<§f${newname}§7> §f${msg}`);
+                const chatName = isSuperOp(player)
+                    ? `§7[§f${newname}§7]`
+                    : `§7<§f${newname}§7>`;
+                sendChatMessage(`${chatName} §f${msg}`);
             }
             break;
         }

@@ -19,7 +19,7 @@ import * as offgrid from './offgrid.js';
 const USAGE = '<x> <y> <z> <rx> <ry> <rz> [block] | fill <x> <y> <z> <w> <h> <d> <block> [data] | move <dx> <dy> <dz> | rotate <deg> [x|y|z] | clear';
 
 function usage(player) {
-    sendChatMessageToPlayer(player, '§c/offgridrenderer ' + USAGE);
+    sendChatMessageToPlayer(player, '/offgridrenderer ' + USAGE);
 }
 
 function resolveBlock(blockArg) {
@@ -44,7 +44,7 @@ function blockName(block) {
 
 function handleOffGridCommand(player, cmd, args) {
     if (!isOp(player)) {
-        sendChatMessageToPlayer(player, '§cYou do not have permission to use this command.');
+        sendChatMessageToPlayer(player, 'You do not have permission to use this command.');
         return true;
     }
 
@@ -86,11 +86,11 @@ function executeSingle(player, args) {
     const renderZ = parseFloat(args[5]);
 
     if (isNaN(blockX) || isNaN(blockY) || isNaN(blockZ)) {
-        sendChatMessageToPlayer(player, '§cInvalid source coordinates.');
+        sendChatMessageToPlayer(player, 'Invalid source coordinates.');
         return;
     }
     if (isNaN(renderX) || isNaN(renderY) || isNaN(renderZ)) {
-        sendChatMessageToPlayer(player, '§cInvalid render coordinates.');
+        sendChatMessageToPlayer(player, 'Invalid render coordinates.');
         return;
     }
 
@@ -100,34 +100,34 @@ function executeSingle(player, args) {
     if (args.length >= 7) {
         block = resolvePlaceableBlock(args.slice(6).join(' ').trim());
         if (!block) {
-            sendChatMessageToPlayer(player, '§cUnknown block: ' + args.slice(6).join(' '));
+            sendChatMessageToPlayer(player, 'Unknown block: ' + args.slice(6).join(' '));
             return;
         }
     } else {
         if (blockY < 0 || blockY >= OFF_GRID_WORLD_HEIGHT) {
-            sendChatMessageToPlayer(player, '§cThe source position is outside the world.');
+            sendChatMessageToPlayer(player, 'The source position is outside the world.');
             return;
         }
         const sourceId = getBlockAt(blockX, blockY, blockZ);
         if (!sourceId) {
-            sendChatMessageToPlayer(player, '§cThe source position is air.');
+            sendChatMessageToPlayer(player, 'The source position is air.');
             return;
         }
         block = Block.getById(sourceId) || BlockRegistry.get(sourceId);
         if (!block) {
-            sendChatMessageToPlayer(player, '§cThe source position is not a known block.');
+            sendChatMessageToPlayer(player, 'The source position is not a known block.');
             return;
         }
         sourceData = getBlockMetadata(blockX, blockY, blockZ);
     }
 
     if (!offgrid.addGhost(renderX, renderY, renderZ, block.getId(), sourceData)) {
-        sendChatMessageToPlayer(player, '§cCould not render that block (vertex limit reached or invalid position).');
+        sendChatMessageToPlayer(player, 'Could not render that block (vertex limit reached or invalid position).');
         return;
     }
 
     offgrid.broadcastState();
-    sendChatMessageToPlayer(player, '§aRendered §f' + blockName(block) +
+    sendChatMessageToPlayer(player, 'Rendered ' + blockName(block) +
         (args.length >= 7 ? ' at ' : ' from (' + blockX + ', ' + blockY + ', ' + blockZ + ') to ') +
         '(' + renderX + ', ' + renderY + ', ' + renderZ + ').');
 }
@@ -146,25 +146,25 @@ function executeFill(player, args) {
     const d = parseInt(args[5]);
 
     if (isNaN(x) || isNaN(y) || isNaN(z) || isNaN(w) || isNaN(h) || isNaN(d)) {
-        sendChatMessageToPlayer(player, '§cInvalid coordinates or sizes.');
+        sendChatMessageToPlayer(player, 'Invalid coordinates or sizes.');
         return;
     }
     if (w < 1 || h < 1 || d < 1 || w > OFF_GRID_MAX_DIM || h > OFF_GRID_MAX_DIM || d > OFF_GRID_MAX_DIM) {
-        sendChatMessageToPlayer(player, '§cEach size must be 1..' + OFF_GRID_MAX_DIM + '.');
+        sendChatMessageToPlayer(player, 'Each size must be 1..' + OFF_GRID_MAX_DIM + '.');
         return;
     }
     if (w * h * d > OFF_GRID_MAX_CELLS) {
-        sendChatMessageToPlayer(player, '§cToo many blocks: ' + (w * h * d) + ' > ' + OFF_GRID_MAX_CELLS + '.');
+        sendChatMessageToPlayer(player, 'Too many blocks: ' + (w * h * d) + ' > ' + OFF_GRID_MAX_CELLS + '.');
         return;
     }
     if (y < 0 || y + h > OFF_GRID_WORLD_HEIGHT) {
-        sendChatMessageToPlayer(player, '§cHeight out of world (y 0..' + (OFF_GRID_WORLD_HEIGHT - 1) + ').');
+        sendChatMessageToPlayer(player, 'Height out of world (y 0..' + (OFF_GRID_WORLD_HEIGHT - 1) + ').');
         return;
     }
 
     const block = resolvePlaceableBlock(args[6]);
     if (!block) {
-        sendChatMessageToPlayer(player, '§cUnknown block: ' + args[6]);
+        sendChatMessageToPlayer(player, 'Unknown block: ' + args[6]);
         return;
     }
 
@@ -172,15 +172,15 @@ function executeFill(player, args) {
     if (args.length >= 8) {
         data = parseInt(args[7]);
         if (isNaN(data) || data < 0 || data > 15) {
-            sendChatMessageToPlayer(player, '§cBlock data must be 0..15.');
+            sendChatMessageToPlayer(player, 'Block data must be 0..15.');
             return;
         }
     }
 
     const count = offgrid.applyFill(x, y, z, w, h, d, block.getId(), data);
     offgrid.broadcastState();
-    sendChatMessageToPlayer(player, '§aSummoned §f' + count + ' §rblock(s) of §f' + blockName(block) +
-        ' §aat (' + x + ', ' + y + ', ' + z + ')-(' +
+    sendChatMessageToPlayer(player, 'Summoned ' + count + ' block(s) of ' + blockName(block) +
+        ' at (' + x + ', ' + y + ', ' + z + ')-(' +
         (x + w - 1) + ', ' + (y + h - 1) + ', ' + (z + d - 1) + ').');
 }
 
@@ -195,11 +195,11 @@ function executeMove(player, args) {
     const dz = parseFloat(args[2]);
 
     if (!Number.isFinite(dx) || !Number.isFinite(dy) || !Number.isFinite(dz)) {
-        sendChatMessageToPlayer(player, '§cInvalid offsets, FYI decimals are allowed (e.g. 0.5 -1 2.25).');
+        sendChatMessageToPlayer(player, 'Invalid offsets, FYI decimals are allowed (e.g. 0.5 -1 2.25).');
         return;
     }
     if (offgrid.getCellCount() === 0) {
-        sendChatMessageToPlayer(player, '§cNothing summoned yet.');
+        sendChatMessageToPlayer(player, 'Nothing summoned yet.');
         return;
     }
 
@@ -208,9 +208,9 @@ function executeMove(player, args) {
 
     const wholeMove = Number.isInteger(dx) && Number.isInteger(dy) && Number.isInteger(dz);
     if (wholeMove && !result.shifted) {
-        sendChatMessageToPlayer(player, '§eThe structure did not move (out-of-world destination or zero offset).');
+        sendChatMessageToPlayer(player, 'The structure did not move (out-of-world destination or zero offset).');
     } else {
-        sendChatMessageToPlayer(player, '§aMoved the summoned group by (' + dx + ', ' + dy + ', ' + dz + ').');
+        sendChatMessageToPlayer(player, 'Moved the summoned group by (' + dx + ', ' + dy + ', ' + dz + ').');
     }
 }
 
@@ -222,36 +222,36 @@ function executeRotate(player, args) {
 
     const degrees = parseFloat(args[0]);
     if (!Number.isFinite(degrees)) {
-        sendChatMessageToPlayer(player, '§cInvalid angle.');
+        sendChatMessageToPlayer(player, 'Invalid angle.');
         return;
     }
 
     const axis = args.length >= 2 ? String(args[1]).toLowerCase() : 'y';
     if (axis !== 'x' && axis !== 'y' && axis !== 'z') {
-        sendChatMessageToPlayer(player, '§cAxis must be x, y or z.');
+        sendChatMessageToPlayer(player, 'Axis must be x, y or z.');
         return;
     }
     if (offgrid.getCellCount() === 0) {
-        sendChatMessageToPlayer(player, '§cNothing summoned yet.');
+        sendChatMessageToPlayer(player, 'Nothing summoned yet.');
         return;
     }
 
     offgrid.applyRotate(degrees, axis);
     offgrid.broadcastState();
-    sendChatMessageToPlayer(player, '§aRotated the summoned group by ' + degrees + '° around ' + axis.toUpperCase());
+    sendChatMessageToPlayer(player, 'Rotated the summoned group by ' + degrees + '° around ' + axis.toUpperCase());
 }
 
 function executeClear(player) {
     const removed = offgrid.getCellCount();
     offgrid.applyClear();
     offgrid.broadcastState();
-    sendChatMessageToPlayer(player, '§aCleared off-grid renderings' +
+    sendChatMessageToPlayer(player, 'Cleared off-grid renderings' +
         (removed > 0 ? ' and ' + removed + ' summoned block(s)' : '') + '.');
 }
 
 function executeShortcut(player) {
     if (!Number.isFinite(player.x) || !Number.isFinite(player.y) || !Number.isFinite(player.z)) {
-        sendChatMessageToPlayer(player, '§cInvalid player position.');
+        sendChatMessageToPlayer(player, 'Invalid player position.');
         return;
     }
 
@@ -260,13 +260,13 @@ function executeShortcut(player) {
     const z = Math.floor(player.z);
 
     if (y < 0 || y + 8 > OFF_GRID_WORLD_HEIGHT) {
-        sendChatMessageToPlayer(player, '§cNot enough room in the world for the 8x8x8 field here.');
+        sendChatMessageToPlayer(player, 'Not enough room in the world for the 8x8x8 field here.');
         return;
     }
 
     const stone = BlockRegistry.STONE || resolveBlock('stone');
     if (!stone) {
-        sendChatMessageToPlayer(player, '§cStone is not registered on this server.');
+        sendChatMessageToPlayer(player, 'Stone is not registered on this server.');
         return;
     }
 
@@ -277,7 +277,7 @@ function executeShortcut(player) {
     offgrid.applyRotate(45, 'z');
     offgrid.broadcastState();
 
-    sendChatMessageToPlayer(player, '§aSummoned §f' + count + ' §rblocks of stone at (' +
+    sendChatMessageToPlayer(player, 'Summoned ' + count + ' blocks of stone at (' +
         x + ', ' + y + ', ' + z + '), rotated 45° on all axes');
 }
 

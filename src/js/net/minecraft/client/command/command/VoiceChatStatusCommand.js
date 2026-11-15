@@ -14,7 +14,7 @@ export default class VoiceChatStatusCommand extends Command {
         }
 
         for (const line of voiceChat.getStatusLines()) {
-            minecraft.addMessageToChat("\u00a77" + line);
+            minecraft.addMessageToChat(line);
         }
 
         return true;

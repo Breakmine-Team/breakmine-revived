@@ -10,6 +10,7 @@ import LoginSuccessPacket from "./packet/login/server/LoginSuccessPacket.js";
 import ServerJoinGamePacket from "./packet/play/server/ServerJoinGamePacket.js";
 import ServerChatPacket from "./packet/play/server/ServerChatPacket.js";
 import ServerTimeUpdatePacket from "./packet/play/server/ServerTimeUpdatePacket.js";
+import ServerWeatherUpdatePacket from "./packet/play/server/ServerWeatherUpdatePacket.js";
 import ServerSpawnPositionPacket from "./packet/play/server/ServerSpawnPositionPacket.js";
 import ServerPlayerPositionRotationPacket from "./packet/play/server/ServerPlayerPositionRotationPacket.js";
 import ServerChunkDataPacket from "./packet/play/server/ServerChunkDataPacket.js";
@@ -350,6 +351,15 @@ const JsonMultiplayer = {
 
                 case "time": {
                     new ServerTimeUpdatePacket(message.time ?? message.worldTime ?? 0).handle(handler);
+                    return true;
+                }
+
+                case "weather": {
+                    const rawState = message.weather ?? message.state ?? 0;
+                    const weatherState = typeof rawState === "number"
+                        ? rawState
+                        : (rawState === "rain" ? 1 : rawState === "thunder" ? 2 : 0);
+                    new ServerWeatherUpdatePacket(weatherState).handle(handler);
                     return true;
                 }
             }

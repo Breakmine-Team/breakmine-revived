@@ -17,12 +17,12 @@ export default class OffGridBlockRendererCommand extends Command {
 
     execute(minecraft, args) {
         if (!minecraft.worldRenderer) {
-            minecraft.addMessageToChat("§c/offgridrenderer is a client-side rendering command.");
+            minecraft.addMessageToChat("/offgridrenderer is a client-side rendering command.");
             return true;
         }
 
         if (!minecraft.world) {
-            minecraft.addMessageToChat("§cNo world loaded.");
+            minecraft.addMessageToChat("No world loaded.");
             return true;
         }
 
@@ -57,12 +57,12 @@ export default class OffGridBlockRendererCommand extends Command {
         const renderZ = parseFloat(args[5]);
 
         if (isNaN(blockX) || isNaN(blockY) || isNaN(blockZ)) {
-            minecraft.addMessageToChat("§cInvalid source coordinates.");
+            minecraft.addMessageToChat("Invalid source coordinates.");
             return true;
         }
 
         if (isNaN(renderX) || isNaN(renderY) || isNaN(renderZ)) {
-            minecraft.addMessageToChat("§cInvalid render coordinates.");
+            minecraft.addMessageToChat("Invalid render coordinates.");
             return true;
         }
 
@@ -72,7 +72,7 @@ export default class OffGridBlockRendererCommand extends Command {
         if (args.length >= 7) {
             block = this.resolveBlock(args.slice(6).join(" ").trim());
             if (!block) {
-                minecraft.addMessageToChat("§cUnknown block: " + args.slice(6).join(" "));
+                minecraft.addMessageToChat("Unknown block: " + args.slice(6).join(" "));
                 return true;
             }
         }
@@ -83,16 +83,16 @@ export default class OffGridBlockRendererCommand extends Command {
                 : renderer.render(blockX, blockY, blockZ, renderX, renderY, renderZ);
 
             if (!result) {
-                minecraft.addMessageToChat("§cThe position is unloaded or air.");
+                minecraft.addMessageToChat("The position is unloaded or air.");
                 return true;
             }
 
             const name = result.block.name || result.block.getId();
-            minecraft.addMessageToChat("§aRendered §f" + name +
+            minecraft.addMessageToChat("Rendered " + name +
                 (block ? " at " : " from (" + blockX + ", " + blockY + ", " + blockZ + ") to ") +
                 "(" + renderX + ", " + renderY + ", " + renderZ + ").");
         } catch (e) {
-            minecraft.addMessageToChat("§cError rendering: " + e.message);
+            minecraft.addMessageToChat("Error rendering: " + e.message);
         }
 
         return true;
@@ -112,28 +112,28 @@ export default class OffGridBlockRendererCommand extends Command {
         const d = parseInt(args[5]);
 
         if (isNaN(x) || isNaN(y) || isNaN(z) || isNaN(w) || isNaN(h) || isNaN(d)) {
-            minecraft.addMessageToChat("§cInvalid coordinates or sizes.");
+            minecraft.addMessageToChat("Invalid coordinates or sizes.");
             return true;
         }
 
         if (w < 1 || h < 1 || d < 1 || w > OffGridBlockField.MAX_DIM || h > OffGridBlockField.MAX_DIM || d > OffGridBlockField.MAX_DIM) {
-            minecraft.addMessageToChat("§cEach size must be 1.." + OffGridBlockField.MAX_DIM + ".");
+            minecraft.addMessageToChat("Each size must be 1.." + OffGridBlockField.MAX_DIM + ".");
             return true;
         }
 
         if (w * h * d > OffGridBlockField.MAX_CELLS) {
-            minecraft.addMessageToChat("§cToo many blocks: " + (w * h * d) + " > " + OffGridBlockField.MAX_CELLS + ".");
+            minecraft.addMessageToChat("Too many blocks: " + (w * h * d) + " > " + OffGridBlockField.MAX_CELLS + ".");
             return true;
         }
 
         if (y < 0 || y + h > World.TOTAL_HEIGHT) {
-            minecraft.addMessageToChat("§cHeight out of world (y 0.." + (World.TOTAL_HEIGHT - 1) + ").");
+            minecraft.addMessageToChat("Height out of world (y 0.." + (World.TOTAL_HEIGHT - 1) + ").");
             return true;
         }
 
         const block = this.resolveBlock(args[6]);
         if (!block) {
-            minecraft.addMessageToChat("§cUnknown block: " + args[6]);
+            minecraft.addMessageToChat("Unknown block: " + args[6]);
             return true;
         }
 
@@ -141,7 +141,7 @@ export default class OffGridBlockRendererCommand extends Command {
         if (args.length >= 8) {
             data = parseInt(args[7]);
             if (isNaN(data) || data < 0 || data > 15) {
-                minecraft.addMessageToChat("§cBlock data must be 0..15.");
+                minecraft.addMessageToChat("Block data must be 0..15.");
                 return true;
             }
         }
@@ -151,7 +151,7 @@ export default class OffGridBlockRendererCommand extends Command {
             for (let cx = (x - 1) >> 4; cx <= (x + w) >> 4; cx++) {
                 for (let cz = (z - 1) >> 4; cz <= (z + d) >> 4; cz++) {
                     if (!world.chunkExists(cx, cz)) {
-                        minecraft.addMessageToChat("§cThat area is not fully loaded.");
+                        minecraft.addMessageToChat("That area is not fully loaded.");
                         return true;
                     }
                 }
@@ -162,11 +162,11 @@ export default class OffGridBlockRendererCommand extends Command {
             const field = this.getOrBindField(minecraft);
             const count = field.fill(x, y, z, w, h, d, block.getId(), data);
             const name = block.name || block.getId();
-            minecraft.addMessageToChat("§aSummoned §f" + count + " §rblock(s) of §f" + name +
-                " §aat (" + x + ", " + y + ", " + z + ")-(" + (x + w - 1) + ", " + (y + h - 1) + ", " + (z + d - 1) +
+            minecraft.addMessageToChat("Summoned " + count + " block(s) of " + name +
+                " at (" + x + ", " + y + ", " + z + ")-(" + (x + w - 1) + ", " + (y + h - 1) + ", " + (z + d - 1) +
                 ").");
         } catch (e) {
-            minecraft.addMessageToChat("§cError summoning: " + e.message);
+            minecraft.addMessageToChat("Error summoning: " + e.message);
         }
 
         return true;
@@ -183,7 +183,7 @@ export default class OffGridBlockRendererCommand extends Command {
         const dz = parseFloat(args[2]);
 
         if (isNaN(dx) || isNaN(dy) || isNaN(dz)) {
-            minecraft.addMessageToChat("§cInvalid offsets, FYI decimals are allowed (e.g. 0.5 -1 2.25).");
+            minecraft.addMessageToChat("Invalid offsets, FYI decimals are allowed (e.g. 0.5 -1 2.25).");
             return true;
         }
 
@@ -194,12 +194,12 @@ export default class OffGridBlockRendererCommand extends Command {
             const result = field.move(dx, dy, dz, minecraft.world);
             const wholeMove = Number.isInteger(dx) && Number.isInteger(dy) && Number.isInteger(dz);
             if (wholeMove && !result.shifted) {
-                minecraft.addMessageToChat("§eTarget area not loaded.");
+                minecraft.addMessageToChat("Target area not loaded.");
             } else {
-                minecraft.addMessageToChat("§aMoved the summoned group by (" + dx + ", " + dy + ", " + dz + ").");
+                minecraft.addMessageToChat("Moved the summoned group by (" + dx + ", " + dy + ", " + dz + ").");
             }
         } catch (e) {
-            minecraft.addMessageToChat("§cError moving: " + e.message);
+            minecraft.addMessageToChat("Error moving: " + e.message);
         }
 
         return true;
@@ -213,13 +213,13 @@ export default class OffGridBlockRendererCommand extends Command {
 
         const degrees = parseFloat(args[0]);
         if (isNaN(degrees)) {
-            minecraft.addMessageToChat("§cInvalid angle.");
+            minecraft.addMessageToChat("Invalid angle.");
             return true;
         }
 
         const axis = args.length >= 2 ? String(args[1]).toLowerCase() : "y";
         if (axis !== "x" && axis !== "y" && axis !== "z") {
-            minecraft.addMessageToChat("§cAxis must be x, y or z.");
+            minecraft.addMessageToChat("Axis must be x, y or z.");
             return true;
         }
 
@@ -228,9 +228,9 @@ export default class OffGridBlockRendererCommand extends Command {
 
         try {
             field.rotate(degrees, axis);
-            minecraft.addMessageToChat("§aRotated the summoned group by " + degrees + "° around " + axis.toUpperCase());
+            minecraft.addMessageToChat("Rotated the summoned group by " + degrees + "° around " + axis.toUpperCase());
         } catch (e) {
-            minecraft.addMessageToChat("§cError rotating: " + e.message);
+            minecraft.addMessageToChat("Error rotating: " + e.message);
         }
 
         return true;
@@ -240,11 +240,11 @@ export default class OffGridBlockRendererCommand extends Command {
     requireField(minecraft) {
         const field = minecraft.offGridBlockField;
         if (!field || field.cells.size === 0) {
-            minecraft.addMessageToChat("§cNothing summoned yet.");
+            minecraft.addMessageToChat("Nothing summoned yet.");
             return null;
         }
         if (field.world !== minecraft.world) {
-            minecraft.addMessageToChat("§cThe summoned blocks belong to a previous world.");
+            minecraft.addMessageToChat("The summoned blocks belong to a previous world.");
             return null;
         }
         return field;
@@ -264,7 +264,7 @@ export default class OffGridBlockRendererCommand extends Command {
             minecraft.offGridBlockRenderer.clear();
         }
 
-        minecraft.addMessageToChat("§aCleared off-grid renderings" +
+        minecraft.addMessageToChat("Cleared off-grid renderings" +
             (removed > 0 ? " and " + removed + " summoned block(s)" : "") + ".");
         return true;
     }

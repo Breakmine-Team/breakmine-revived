@@ -1,5 +1,6 @@
 export const uiTextures = [
     "misc/grasscolor.png",
+    "misc/rain.png",
     "gui/font.png",
     "gui/accented.png",
     "gui/gui.png",
@@ -46,9 +47,9 @@ export const uiTextures = [
     "gui/RecipeBook/RecipeT.png",
     "gui/RecipeBook/RecipeBook1.png",
     "gui/RecipeBook/RecipeBookGUI.png",
-    "gui/heart.png",
-    "gui/heartHalf.png",
-    "gui/heartEmpty.png",
+    "gui/container.png",
+    "gui/half.png",
+    "gui/full.png",
     "gui/ping.png",
     "gui/pinging_1.png",
     "gui/pinging_2.png",
@@ -154,7 +155,7 @@ export const atlasBlockTextures = [
     "bluestoneMemoryTopOff.png", "bluestoneMemoryTopSetOffResetOffOn.png",
     "bluestoneMemoryTopSetOnResetOff.png", "bluestoneMemoryTopSetOnResetOnOff.png",
     "bluestoneMemoryTopSetOffResetOn.png",
-    "ice.png", "packed_ice.png", "blue_ice.png", "cheese.png",
+    "ice.png", "packed_ice.png", "blue_ice.png", "cheese.png", "bob.png",
     "farmland.png", "farmland_moist.png",
     "wheat_stage0.png", "wheat_stage1.png", "wheat_stage2.png", "wheat_stage3.png",
     "wheat_stage4.png", "wheat_stage5.png", "wheat_stage6.png", "wheat_stage7.png",
@@ -268,6 +269,10 @@ export const soundPools = [
     "random.fallsmall",
     "random.fire_hurt",
     "random.hit",
+];
+
+export const ambientSounds = [
+    "sound/random/cave_entity.mp3",
 ];
 
 export const clickSound = "sound/random/click.ogg";
