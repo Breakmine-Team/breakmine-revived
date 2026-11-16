@@ -673,6 +673,39 @@ export default class World {
         this.updateLight(EnumSkyBlock.BLOCK, x1, 0, z1, x1 + ChunkSection.SIZE - 1, World.TOTAL_HEIGHT - 1, z1 + ChunkSection.SIZE - 1);
     }
 
+    // Relight a freshly generated chunk straight away instead of leaving it to
+    // the budgeted light queue, which starves or drops these updates while the
+    // neighbouring chunks are still arriving and leaves black patches until
+    // something else happens to touch them.
+    relightChunk(chunk) {
+        if (!chunk) return;
+
+        const size = ChunkSection.SIZE;
+        const x1 = chunk.x * size;
+        const z1 = chunk.z * size;
+
+        for (let lx = 0; lx < size; lx++) {
+            for (let lz = 0; lz < size; lz++) {
+                const height = chunk.getHeightAt(lx, lz);
+                for (let y = 0; y < World.TOTAL_HEIGHT; y++) {
+                    const section = chunk.getSection(y >> 4);
+                    if (section === null) continue;
+                    section.setLightAt(EnumSkyBlock.SKY, lx, y & 15, lz, y >= height ? 15 : 0);
+                }
+            }
+        }
+
+        const skyUpdate = new MetadataChunkBlock(EnumSkyBlock.SKY,
+            x1, 0, z1, x1 + size - 1, World.TOTAL_HEIGHT - 1, z1 + size - 1);
+        skyUpdate.updateBlockLightning(this, 400000);
+
+        const blockUpdate = new MetadataChunkBlock(EnumSkyBlock.BLOCK,
+            x1, 0, z1, x1 + size - 1, World.TOTAL_HEIGHT - 1, z1 + size - 1);
+        blockUpdate.updateBlockLightning(this, 400000);
+
+        chunk.setModifiedAllSections();
+    }
+
     blockExists(x, y, z) {
         if (y < 0 || y >= World.TOTAL_HEIGHT) {
             return false;

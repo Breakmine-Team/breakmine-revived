@@ -11,6 +11,9 @@ import Sound from "./sound/Sound.js";
 import Block from "./Block.js";
 import BlockPortal from "./type/BlockPortal.js";
 import BlockBobPortal from "./type/BlockBobPortal.js";
+import BlockChorusPlant from "./type/BlockChorusPlant.js";
+import BlockChorusFlower from "./type/BlockChorusFlower.js";
+import ItemChorusFruit from "./type/ItemChorusFruit.js";
 import BlockWood from "./type/BlockWood.js";
 import BlockStair from "./type/BlockStair.js";
 import BlockBedrock from "./type/BlockBedrock.js";
@@ -687,6 +690,11 @@ export class BlockRegistry {
 
         BlockRegistry.PORTAL = new BlockPortal(356, 0);
         BlockRegistry.BOB_PORTAL = new BlockBobPortal(417, 0);
+
+        BlockRegistry.END_STONE = new BlockStoneLike(418, 0, "end_stone", "End Stone", 3.0, [418, 1], 'pickaxe');
+        BlockRegistry.CHORUS_PLANT = new BlockChorusPlant(419, 0, "chorus_plant", "Chorus Plant");
+        BlockRegistry.CHORUS_FLOWER = new BlockChorusFlower(420, 0, "chorus_flower", "Chorus Flower");
+        BlockRegistry.ITEM_CHORUS_FRUIT = new ItemChorusFruit(421);
 
         BlockRegistry.STRUCTURE_MARKER_1 = new BlockStructureMarker(400, 0, "red_concrete", "Structure Marker #1");
         BlockRegistry.STRUCTURE_MARKER_2 = new BlockStructureMarker(401, 0, "orange_concrete", "Structure Marker #2");

@@ -3,6 +3,32 @@ import ChunkSection from "../client/world/ChunkSection.js";
 import EnumSkyBlock from "./EnumSkyBlock.js";
 import World from "../client/world/World.js";
 
+function isOpenBlock(world, x, y, z) {
+    const typeId = world.getBlockAt(x, y, z);
+    if (typeId === 0) {
+        return true;
+    }
+
+    const block = Block.getById(typeId);
+    if (block === null) {
+        return false;
+    }
+
+    return Math.round(block.getOpacity(world, x, y, z, block) * 255) < 15;
+}
+
+function seedColumn(stack, world, x, z) {
+    if (!world.chunkExists(x >> 4, z >> 4)) {
+        return;
+    }
+
+    for (let y = 0; y < World.TOTAL_HEIGHT; y++) {
+        if (isOpenBlock(world, x, y, z)) {
+            stack.push(x, y, z);
+        }
+    }
+}
+
 export default class MetadataChunkBlock {
 
     constructor(type, x1, y1, z1, x2, y2, z2) {
@@ -38,34 +64,32 @@ export default class MetadataChunkBlock {
             const stack = this.stack;
 
         if (isFullChunk && this.type === EnumSkyBlock.SKY) {
-            const stride = centerX + 2;
-            const heights = new Int32Array(stride * stride);
-            for (let lx = 0; lx < stride; lx++) {
-                for (let lz = 0; lz < stride; lz++) {
-                    heights[lz * stride + lx] = world.getHeightAt(this.x1 - 1 + lx, this.z1 - 1 + lz);
+            // Seed every block that is open but sits below its column's surface.
+            // The straight-down pass cannot light air under overhangs or the empty
+            // space below floating terrain, so that light has to flood in from the
+            // lit columns beside it.
+            for (let lx = 0; lx < centerX; lx++) {
+                for (let lz = 0; lz < centerZ; lz++) {
+                    const x = this.x1 + lx;
+                    const z = this.z1 + lz;
+                    const height = world.getHeightAt(x, z);
+                    for (let y = 0; y < height; y++) {
+                        if (isOpenBlock(world, x, y, z)) {
+                            stack.push(x, y, z);
+                        }
+                    }
                 }
             }
-            for (let lx = 1; lx <= centerX; lx++) {
-                for (let lz = 1; lz <= centerZ; lz++) {
-                    const own = heights[lz * stride + lx];
-                    if (own <= 0) {
-                        continue;
-                    }
-                    const hn = Math.min(
-                        heights[lz * stride + (lx - 1)] || 1e9,
-                        heights[lz * stride + (lx + 1)] || 1e9,
-                        heights[(lz - 1) * stride + lx] || 1e9,
-                        heights[(lz + 1) * stride + lx] || 1e9
-                    );
-                    if (hn >= own) {
-                        continue;
-                    }
-                    const x = this.x1 + lx - 1;
-                    const z = this.z1 + lz - 1;
-                    for (let y = own - 1; y >= hn; y--) {
-                        stack.push(x, y, z);
-                    }
-                }
+
+            // Seed one block past each chunk border too. A chunk that was lit
+            // while its neighbour was still missing could not see that
+            // neighbour's light, so the neighbour pushes it in again once it
+            // arrives and the seam stops being black.
+            for (let i = 0; i < centerX; i++) {
+                seedColumn(stack, world, this.x1 - 1, this.z1 + i);
+                seedColumn(stack, world, this.x2 + 1, this.z1 + i);
+                seedColumn(stack, world, this.x1 + i, this.z1 - 1);
+                seedColumn(stack, world, this.x1 + i, this.z2 + 1);
             }
         } else if (isFullChunk && this.type === EnumSkyBlock.BLOCK) {
             const chunk = world.getChunkAt(this.x1 >> 4, this.z1 >> 4);
@@ -209,59 +233,11 @@ export default class MetadataChunkBlock {
             return false;
         }
 
-        if (x1 >= this.x1 && y1 >= this.y1 && z1 >= this.z1 && x2 <= this.x2 && y2 <= this.y2 && z2 <= this.z2) {
-            return true;
-        }
-
-        let radius = 1;
-        if (x1 >= this.x1 - radius
-            && y1 >= this.y1 - radius
-            && z1 >= this.z1 - radius
-            && x2 <= this.x2 + radius
-            && y2 <= this.y2 + radius
-            && z2 <= this.z2 + radius) {
-
-            let distanceX = this.x2 - this.x1;
-            let distanceY = this.y2 - this.y1;
-            let distanceZ = this.z2 - this.z1;
-
-            if (x1 > this.x1) {
-                x1 = this.x1;
-            }
-            if (y1 > this.y1) {
-                y1 = this.y1;
-            }
-            if (z1 > this.z1) {
-                z1 = this.z1;
-            }
-            if (x2 < this.x2) {
-                x2 = this.x2;
-            }
-            if (y2 < this.y2) {
-                y2 = this.y2;
-            }
-            if (z2 < this.z2) {
-                z2 = this.z2;
-            }
-
-            let newDistanceX = x2 - x1;
-            let newDistanceY = y2 - y1;
-            let newDistanceZ = z2 - z1;
-
-            let size = distanceX * distanceY * distanceZ;
-            let newSize = newDistanceX * newDistanceY * newDistanceZ;
-
-            if (newSize - size <= 2) {
-                this.x1 = x1;
-                this.y1 = y1;
-                this.z1 = z1;
-                this.x2 = x2;
-                this.y2 = y2;
-                this.z2 = z2;
-                return true;
-            }
-        }
-        return false;
+        // Only swallow a region that this pending update already covers. A
+        // region that merely overlaps it still needs its own pass, otherwise its
+        // blocks are never lit and stay black until something else touches them.
+        return x1 >= this.x1 && y1 >= this.y1 && z1 >= this.z1
+            && x2 <= this.x2 && y2 <= this.y2 && z2 <= this.z2;
     }
 
 }

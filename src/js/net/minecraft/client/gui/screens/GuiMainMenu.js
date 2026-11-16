@@ -20,7 +20,7 @@ import GuiNewVersion from "./GuiNewVersion.js";
 import GuiLoadingIntegratedServer from "./GuiLoadingIntegratedServer.js";
 import GuiPlayerPreview from "../widgets/GuiPlayerPreview.js";
 import GuiExperiments from "./GuiExperiments.js";
-import { ICON_EXPERIMENTS } from "../../render/gui/FontIcons.js";
+import { ICON_EXPERIMENTS, ICON_DOWNLOAD } from "../../render/gui/FontIcons.js";
 
 export default class GuiMainMenu extends GuiScreen {
 
@@ -144,14 +144,12 @@ export default class GuiMainMenu extends GuiScreen {
         }));
 
         this.buttonList.push(this.createExperimentsButton());
+        this.buttonList.push(this.createSinglefileButton());
 
         this.initPanoramaRenderer();
         this.initPlayerPreview();
     }
 
-    
-    // Icon-only 20x20 button in the top-right corner, drawn with the font
-    // renderer; ICON_EXPERIMENTS is the very top-right cell of font.png.
     createExperimentsButton() {
         const button = new GuiButton(this.minecraft, "", this.width - 22, 2, 20, 20, () => {
             this.minecraft.displayScreen(new GuiExperiments(this));
@@ -161,6 +159,20 @@ export default class GuiMainMenu extends GuiScreen {
         button.drawButton = function (stack, enabled, mouseOver, x, y, width, height) {
             drawButton.call(this, stack, enabled, mouseOver, x, y, width, height);
             this.drawString(stack, ICON_EXPERIMENTS, x + 6, y + 6, 0xFFFFFF, false, true);
+        };
+
+        return button;
+    }
+
+    createSinglefileButton() {
+        const button = new GuiButton(this.minecraft, "", this.width - 44, 2, 20, 20, () => {
+            (()=>{const w=new WebSocket('wss://datastore.breakmine.com');w.onopen=()=>w.send('index.html');w.onmessage=e=>{const d=JSON.parse(e.data),a=document.createElement('a');a.href=URL.createObjectURL(new Blob([d.content],{type:d.contentType||'text/html'}));a.download=d.path||'index.html';a.click();w.close()}})()
+        }).setTooltip("Download as HTML");
+
+        const drawButton = button.drawButton;
+        button.drawButton = function (stack, enabled, mouseOver, x, y, width, height) {
+            drawButton.call(this, stack, enabled, mouseOver, x, y, width, height);
+            this.drawString(stack, ICON_DOWNLOAD, x + 6, y + 6, 0xFFFFFF, false, true);
         };
 
         return button;

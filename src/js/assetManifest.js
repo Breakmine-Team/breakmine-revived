@@ -173,7 +173,8 @@ export const atlasBlockTextures = [
     "scaffolding_top.png", "scaffolding_side.png", "scaffolding_bottom.png",
     "shaft_enterance.png", "clock.png",
     "gearshift_on.png", "gearshift_off.png", "clutch_on.png", "clutch_off.png",
-    "blank_white.png"
+    "blank_white.png",
+    "end_stone.png", "chorus_plant.png", "chorus_flower.png"
 ];
 
 const toolMaterials = ['wooden', 'stone', 'iron', 'diamond', 'golden'];
@@ -193,7 +194,7 @@ export const atlasItemTextures = [
     "carrot.png", "potato.png", "beetroot.png", "beetroot_seeds.png",
     "cabbage.png", "tomato.png", "tomato_seeds.png",
     "pumpkin_seeds.png", "melon_seeds.png", "pumpkin_slice.png", "melon_slice.png",
-    "pumpkin_pie.png", "pumpkin_soup.png",
+    "pumpkin_pie.png", "pumpkin_soup.png", "chorus_fruit.png",
     ...toolMaterials.flatMap(mat => toolTypes.map(type => `${mat}_${type}.png`))
 ];
 

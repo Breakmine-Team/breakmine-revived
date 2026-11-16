@@ -49,7 +49,7 @@ export default class ChunkProviderGenerateWorker extends ChunkProvider {
                         this.chunks.set(key, chunk);
                         this.world.group.add(chunk.group);
 
-                        this.world.queueChunkLight(chunk);
+                        this.world.relightChunk(chunk);
                     } catch (err) {
                         console.error("Failed to deserialize chunk", result.x, result.z, err);
                     }

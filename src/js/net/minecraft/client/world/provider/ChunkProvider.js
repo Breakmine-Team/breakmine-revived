@@ -46,6 +46,10 @@ export default class ChunkProvider {
         chunk.loaded = true;
         this.chunks.set(index, chunk);
 
+        if (typeof this.world.relightChunk === "function") {
+            this.world.relightChunk(chunk);
+        }
+
         this.populateChunk(chunk);
 
         this.world.group.add(chunk.group);

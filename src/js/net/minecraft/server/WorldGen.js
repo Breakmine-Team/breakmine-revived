@@ -3,6 +3,7 @@ import config from './config.js';
 import WorldGenerator from '../client/world/generator/WorldGenerator.js';
 import HellWorldGenerator from '../client/world/generator/HellWorldGenerator.js';
 import BobWorldGenerator from '../client/world/generator/BobWorldGenerator.js';
+import IslandsWorldGenerator from '../client/world/generator/IslandsWorldGenerator.js';
 import Primer from '../client/world/generator/Primer.js';
 import Random from '../util/Random.js';
 import Long from '../../../../../libraries/long.js';
@@ -10,10 +11,11 @@ import Long from '../../../../../libraries/long.js';
 let WorldGeneratorClass = WorldGenerator;
 let HellWorldGeneratorClass = HellWorldGenerator;
 let BobWorldGeneratorClass = BobWorldGenerator;
+let IslandsWorldGeneratorClass = IslandsWorldGenerator;
 let PrimerClass = Primer;
 let RandomClass = Random;
 
-const VALID_TYPES = ['flat', 'normal', 'amplified', 'hellish', 'bob'];
+const VALID_TYPES = ['flat', 'normal', 'amplified', 'hellish', 'bob', 'islands'];
 
 const SECTION_COUNT = 16;
 const BLOCK_STATE_SIZE = 4096 * 2;
@@ -50,6 +52,9 @@ function createGenerator(world, seedLong, worldType) {
     }
     if (worldType === 'bob' && BobWorldGeneratorClass) {
         return new BobWorldGeneratorClass(world, seedLong, 'bob');
+    }
+    if (worldType === 'islands' && IslandsWorldGeneratorClass) {
+        return new IslandsWorldGeneratorClass(world, seedLong);
     }
     return new WorldGeneratorClass(world, seedLong, worldType);
 }

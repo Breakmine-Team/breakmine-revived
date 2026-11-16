@@ -3,6 +3,7 @@ import Long from "../../../../../../../libraries/long.js";
 import WorldGenerator from "../generator/WorldGenerator.js";
 import FlatWorldGenerator from "../generator/FlatWorldGenerator.js";
 import HellWorldGenerator from "../generator/HellWorldGenerator.js";
+import EndWorldGenerator from "../generator/IslandsWorldGenerator.js";
 import {BlockRegistry} from "../block/BlockRegistry.js";
 import {BiomeRegistry} from "../biome/BiomeRegistry.js";
 
@@ -42,6 +43,9 @@ const BLOCK_STUBS = {
     30: new BlockStub(30),                         
     55: new BlockStub(55, { opacity: 0.01, lightValue: 15, solid: false }), 
     234: new BlockStub(234),                       
+    418: new BlockStub(418),                       
+    419: new BlockStub(419),                       
+    420: new BlockStub(420),                       
 };
 
 const _defaultBlock = new BlockStub(0);
@@ -434,7 +438,9 @@ function generateChunks(chunkCoords, seedData, worldType, onProgress) {
         ? new FlatWorldGenerator(world, seed)
         : worldType === "hellish"
             ? new HellWorldGenerator(world, seed)
-            : new WorldGenerator(world, seed, worldType);
+            : worldType === "islands"
+                ? new EndWorldGenerator(world, seed)
+                : new WorldGenerator(world, seed, worldType);
 
     const populateKeys = new Set();
     const populateCoords = [];

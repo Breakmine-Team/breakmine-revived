@@ -71,7 +71,7 @@ function applyEnvOverrides(config) {
 }
 
 
-const WORLD_TYPES = ['flat', 'normal', 'amplified', 'hellish'];
+const WORLD_TYPES = ['flat', 'normal', 'amplified', 'hellish', 'islands'];
 
 function sanitizeServerName(name) {
     return String(name || 'main').toLowerCase().replace(/[^a-z0-9_]/g, '') || 'main';
