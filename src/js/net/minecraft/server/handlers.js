@@ -811,7 +811,7 @@ function handleBlockPlacement(player, buffer, offset) {
             }
 
             try {
-                targetBlock.onMouseButton(serverWorld, x, y, z, 2, heldItemId);
+                targetBlock.onMouseButton(serverWorld, x, y, z, 2, heldItemId, player);
             } catch (e) {
                 log.error('Server', `onMouseButton error at ${x},${y},${z}: ${e.message}`);
             }
@@ -908,6 +908,12 @@ function handleBlockPlacement(player, buffer, offset) {
             } catch (e) {
                 log.error('Server', `onBlockAdded error at ${placeX},${placeY},${placeZ}: ${e.message}`);
             }
+        }
+        // Singleplayer kicks freshly placed blocks through onBlockPlaced; the
+        // server never does that, so place-and-fall blocks (sand, gravel,
+        // concrete powder) would sit still forever without this tick.
+        if (placedBlock && typeof placedBlock.onBlockTick === 'function') {
+            serverWorld.scheduleBlockTick(placeX, placeY, placeZ, 3);
         }
         serverWorld.scheduleNeighborTicks(placeX, placeY, placeZ);
         serverWorld.notifyNeighborBlockChange(placeX, placeY, placeZ);
@@ -1248,8 +1254,43 @@ function respawnPlayer(player) {
     broadcast(createEntityTeleportPacket(player), getPlayers());
 }
 
+// Clients ask for this when the player walks into a push block. The move is
+// validated here and broadcast, so every client agrees on where the block is.
+function handlePushBlock(player, message) {
+    if (!player || typeof player.username !== 'string') return;
+    if (typeof player.health === 'number' && player.health <= 0) return;
+
+    setActiveDimension(player.dimension ?? 0);
+
+    const x = Math.floor(Number(message.x));
+    const y = Math.floor(Number(message.y));
+    const z = Math.floor(Number(message.z));
+
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return;
+    if (y < 0) return;
+
+    const dx = Math.sign(Number(message.dx) || 0);
+    const dz = Math.sign(Number(message.dz) || 0);
+    if (Math.abs(dx) + Math.abs(dz) !== 1) return;
+
+    // Only blocks the player is standing next to may be pushed.
+    if (Math.abs(player.x - (x + 0.5)) > 3 || Math.abs(player.z - (z + 0.5)) > 3) return;
+    if (Math.abs(player.y - y) > 3) return;
+
+    const serverWorld = getServerWorld();
+    const block = Block.getById(serverWorld.getBlockAt(x, y, z));
+    if (block === null || typeof block.onPushedByEntity !== 'function') return;
+
+    try {
+        block.onPushedByEntity(serverWorld, x, y, z, dx, dz);
+    } catch (e) {
+        log.error('Server', `Failed to push block at ${x},${y},${z}: ${e.message}`);
+    }
+}
+
 export {
     handlePacket,
+    handlePushBlock,
     cleanupPlayerChunks,
     respawnPlayer,
     flushSaveWorld,

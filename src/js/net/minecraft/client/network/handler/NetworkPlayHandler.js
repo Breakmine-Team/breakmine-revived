@@ -10,6 +10,7 @@ import ClientConfirmTransactionPacket from "../packet/play/client/ClientConfirmT
 import ClientOffGridRequestPacket from "../packet/play/client/ClientOffGridRequestPacket.js";
 import { applyOffGridState, applyOffGridUpdate } from "../../render/OffGridClientSync.js";
 import ItemEntity from "../../entity/ItemEntity.js";
+import Block from "../../world/block/Block.js";
 
 export default class NetworkPlayHandler extends PacketHandler {
 
@@ -21,6 +22,7 @@ export default class NetworkPlayHandler extends PacketHandler {
         this.profile = profile;
 
         this.playerInfoMap = new Map();
+        this.pendingBlockMoves = new Map();
     }
 
     handleKeepAlive(packet) {
@@ -355,6 +357,10 @@ export default class NetworkPlayHandler extends PacketHandler {
         let typeId = blockState >> 4;
         let blockData = blockState & 0xF;
 
+        if (this.smoothBlockChange(position.getX(), position.getY(), position.getZ(), typeId)) {
+            return;
+        }
+
         let playerX = Math.floor(this.minecraft.player.x);
         let playerY = Math.floor(this.minecraft.player.y);
         let playerZ = Math.floor(this.minecraft.player.z);
@@ -372,6 +378,79 @@ export default class NetworkPlayHandler extends PacketHandler {
         }
 
         this.minecraft.world.setBlockAtNoEvents(position.getX(), position.getY(), position.getZ(), typeId, blockData);
+    }
+
+    // A server announces a block move as two block changes: the source turns
+    // into air, then the block appears in the next cell. Pair them up and play
+    // the same slide the local simulation uses, so falls and pushes are smooth
+    // online as well.
+    smoothBlockChange(x, y, z, typeId) {
+        const world = this.minecraft ? this.minecraft.world : null;
+        if (!world || typeof world.animateBlockMove !== "function") return false;
+        if (world.isFieldLocalWorld === true) return false;
+
+        const now = typeof performance !== "undefined" && typeof performance.now === "function"
+            ? performance.now()
+            : Date.now();
+
+        for (const [key, entry] of this.pendingBlockMoves) {
+            if (now - entry.time > 250) {
+                this.pendingBlockMoves.delete(key);
+            }
+        }
+
+        if (typeId === 0) {
+            const currentId = world.getBlockAt(x, y, z);
+            if (currentId === 0) return false;
+
+            const block = Block.getById(currentId);
+            if (block === null) return false;
+            if (typeof block.startFall !== "function" && typeof block.onPushedByEntity !== "function") {
+                return false;
+            }
+
+            this.pendingBlockMoves.set(x + "," + y + "," + z, {
+                x: x,
+                y: y,
+                z: z,
+                blockId: currentId,
+                data: world.getBlockDataAt(x, y, z),
+                time: now
+            });
+
+            // Keep the cell empty underneath; the animation draws the block.
+            world.setBlockAtNoEvents(x, y, z, 0, 0);
+            return true;
+        }
+
+        for (const [key, entry] of this.pendingBlockMoves) {
+            if (entry.blockId !== typeId) continue;
+
+            const dx = x - entry.x;
+            const dy = y - entry.y;
+            const dz = z - entry.z;
+
+            const isFall = dx === 0 && dz === 0 && dy < 0;
+            const isSlide = dy === 0 && Math.abs(dx) + Math.abs(dz) === 1;
+            if (!isFall && !isSlide) continue;
+
+            this.pendingBlockMoves.delete(key);
+
+            const duration = isFall ? Math.min(700, 80 + Math.abs(dy) * 80) : 220;
+
+            if (world.animateBlockMove(entry.x, entry.y, entry.z, x, y, z, duration, {
+                fromServer: true,
+                allowNonSolid: true,
+                blockId: entry.blockId,
+                data: entry.data
+            })) {
+                return true;
+            }
+
+            break;
+        }
+
+        return false;
     }
 
     handleSignTextUpdate(packet) {

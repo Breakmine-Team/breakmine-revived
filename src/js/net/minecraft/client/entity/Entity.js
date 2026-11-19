@@ -1,6 +1,7 @@
 import BoundingBox from "../../util/BoundingBox.js";
 import MathHelper from "../../util/MathHelper.js";
 import Random from "../../util/Random.js";
+import Block from "../world/block/Block.js";
 
 export default class Entity {
 
@@ -140,7 +141,45 @@ export default class Entity {
         return this.boundingBox.height() * 0.8;
     }
 
+    pushBlocksInPath(targetX, targetZ) {
+        if (Math.abs(targetX) < 0.001 && Math.abs(targetZ) < 0.001) return;
+
+        const world = this.world;
+        if (!world || typeof world.getBlockAt !== "function") return;
+        if (world.isFieldLocalWorld === true) return;
+        if (!world.minecraft || world.minecraft.player !== this) return;
+
+        let dirX = 0;
+        let dirZ = 0;
+        if (Math.abs(targetX) >= Math.abs(targetZ)) {
+            dirX = targetX > 0 ? 1 : -1;
+        } else {
+            dirZ = targetZ > 0 ? 1 : -1;
+        }
+
+        const probe = this.boundingBox.expand(targetX, 0.0, targetZ).offset(dirX * 0.02, 0.0, dirZ * 0.02);
+
+        const minX = MathHelper.floor(probe.minX + 0.001);
+        const maxX = MathHelper.floor(probe.maxX - 0.001);
+        const minY = MathHelper.floor(probe.minY + 0.001);
+        const maxY = MathHelper.floor(probe.maxY - 0.001);
+        const minZ = MathHelper.floor(probe.minZ + 0.001);
+        const maxZ = MathHelper.floor(probe.maxZ - 0.001);
+
+        for (let x = minX; x <= maxX; x++) {
+            for (let y = minY; y <= maxY; y++) {
+                for (let z = minZ; z <= maxZ; z++) {
+                    const block = Block.getById(world.getBlockAt(x, y, z));
+                    if (block === null || typeof block.onPushedByEntity !== "function") continue;
+                    block.onPushedByEntity(world, x, y, z, dirX, dirZ);
+                }
+            }
+        }
+    }
+
     moveCollide(targetX, targetY, targetZ) {
+        this.pushBlocksInPath(targetX, targetZ);
+
         let originalTargetX = targetX;
         let originalTargetY = targetY;
         let originalTargetZ = targetZ;

@@ -48,6 +48,7 @@ export default class World {
 
         this.blockTickQueue = [];
         this.scheduledBlockTicks = new Map();
+        this.blockAnimations = [];
 
         this.neighborUpdateQueue = [];
         this.processingNeighborUpdates = false;
@@ -353,6 +354,13 @@ export default class World {
     }
 
     scheduleBlockTick(x, y, z, delay) {
+        // Networked sessions never run the local block tick loop, so a queued
+        // tick here would only pile up.
+        if (this.minecraft && typeof this.minecraft.isSingleplayer === "function"
+            && !this.minecraft.isSingleplayer()) {
+            return;
+        }
+
         let key = `${x},${y},${z}`;
         let tickTime = this.time + delay;
         this.scheduledBlockTicks.set(key, { x, y, z, tickTime });
@@ -368,6 +376,80 @@ export default class World {
                 this.scheduledBlockTicks.delete(key);
                 this.tickBlock(tick.x, tick.y, tick.z);
             }
+        }
+    }
+
+    
+    animateBlockMove(x, y, z, toX, toY, toZ, duration = 150, options = {}) {
+        // Movement is simulated locally, so only run it where block ticks run.
+        // Moves the server announced are animated everywhere.
+        if (options.fromServer !== true
+            && this.minecraft && typeof this.minecraft.isSingleplayer === "function"
+            && !this.minecraft.isSingleplayer()) {
+            return false;
+        }
+
+        if (y < 0 || y >= World.TOTAL_HEIGHT) return false;
+        if (toY < 0 || toY >= World.TOTAL_HEIGHT) return false;
+        if (this.chunkProvider === null) return false;
+        if (!this.chunkExists(x >> 4, z >> 4) || !this.chunkExists(toX >> 4, toZ >> 4)) return false;
+
+        const blockId = options.blockId !== undefined ? options.blockId : this.getBlockAt(x, y, z);
+        if (!blockId) return false;
+
+        const destinationId = this.getBlockAt(toX, toY, toZ);
+        if (destinationId !== 0) {
+            const destinationBlock = Block.getById(destinationId);
+            const canReplace = options.allowNonSolid === true
+                && destinationBlock !== null
+                && !destinationBlock.isSolid();
+            if (!canReplace) return false;
+        }
+
+        for (const animation of this.blockAnimations) {
+            if (animation.toX === toX && animation.toY === toY && animation.toZ === toZ) return false;
+            if (animation.toX === x && animation.toY === y && animation.toZ === z) return false;
+        }
+
+        const data = options.data !== undefined ? options.data : (this.getBlockDataAt(x, y, z) || 0);
+        this.setBlockAt(x, y, z, 0, 0);
+
+        this.blockAnimations.push({
+            blockId: blockId,
+            data: data,
+            fromX: x,
+            fromY: y,
+            fromZ: z,
+            toX: toX,
+            toY: toY,
+            toZ: toZ,
+            startTime: typeof performance !== "undefined" && typeof performance.now === "function"
+                ? performance.now()
+                : Date.now(),
+            duration: duration
+        });
+
+        return true;
+    }
+
+    
+    finishBlockAnimation(animation) {
+        const index = this.blockAnimations.indexOf(animation);
+        if (index !== -1) {
+            this.blockAnimations.splice(index, 1);
+        }
+
+        if (this.chunkProvider === null) return;
+        if (!this.chunkExists(animation.toX >> 4, animation.toZ >> 4)) return;
+
+        if (this.getBlockAt(animation.toX, animation.toY, animation.toZ) === 0) {
+            this.setBlockAt(animation.toX, animation.toY, animation.toZ, animation.blockId, animation.data);
+
+            // Keep falling blocks cascading one step at a time.
+            this.scheduleBlockTick(animation.toX, animation.toY, animation.toZ, 0);
+        } else if (this.chunkExists(animation.fromX >> 4, animation.fromZ >> 4)
+            && this.getBlockAt(animation.fromX, animation.fromY, animation.fromZ) === 0) {
+            this.setBlockAt(animation.fromX, animation.fromY, animation.fromZ, animation.blockId, animation.data);
         }
     }
 

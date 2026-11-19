@@ -16,6 +16,7 @@ import TranslucentMeshBatcher from "./TranslucentMeshBatcher.js";
 import GuiFunctions from "../gui/screens/GuiFunctions.js";
 import SignTextRenderer from "./SignTextRenderer.js";
 import WeatherRenderer from "./WeatherRenderer.js";
+import BlockAnimationRenderer from "./BlockAnimationRenderer.js";
 
 
 
@@ -259,6 +260,9 @@ export default class WorldRenderer {
         this.textureMoon.minFilter = THREE.NearestFilter;
 
         this.blockRenderer = new BlockRenderer(this);
+
+        this.blockAnimationRenderer = new BlockAnimationRenderer(minecraft);
+        this.scene.add(this.blockAnimationRenderer.group);
         
         this.getTextureAtlas = () => this.textureAtlas;
         this.getTextureCoords = (textureName) => this.textureAtlas.getTextureCoords(textureName);
@@ -483,6 +487,8 @@ export default class WorldRenderer {
         this.updateStructureSelectionOutline();
 
         this.updateBlockPlacePreview(partialTicks);
+
+        this.blockAnimationRenderer.update();
 
         if (this.minecraft.roadBuilder) {
             this.minecraft.roadBuilder.updatePreview(this, player);

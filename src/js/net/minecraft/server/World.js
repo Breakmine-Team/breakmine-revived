@@ -85,6 +85,31 @@ class ServerWorld {
         this.broadcastBlockChange(x, y, z, type, metadata);
     }
 
+    // Moves a block between two cells. The source is cleared first so clients
+    // receive "air, then the block", which is what makes them animate the move.
+    applyBlockMove(fromX, fromY, fromZ, toX, toY, toZ) {
+        if (fromX === toX && fromY === toY && fromZ === toZ) return false;
+        if (toY < 0) return false;
+
+        const blockId = this.getBlockAt(fromX, fromY, fromZ);
+        if (!blockId) return false;
+
+        const destinationId = this.getBlockAt(toX, toY, toZ);
+        if (destinationId !== 0) {
+            const destinationBlock = Block.getById(destinationId);
+            if (destinationBlock === null || destinationBlock.isSolid()) return false;
+        }
+
+        const data = this.getBlockDataAt(fromX, fromY, fromZ) || 0;
+
+        this.setBlockAt(fromX, fromY, fromZ, 0, 0);
+        this._set(toX, toY, toZ, blockId, data);
+
+        this.scheduleNeighborTicks(toX, toY, toZ);
+        this.notifyNeighborBlockChange(toX, toY, toZ);
+        return true;
+    }
+
     onBlockChanged(x, y, z) {
         this.broadcastBlockChange(x, y, z, getBlockAt(x, y, z), getBlockMetadata(x, y, z));
     }

@@ -39,6 +39,9 @@ export default class BlockConcretePowder extends BlockSand {
         }
 
         if (!world.isSolidBlockAt(x, y - 1, z)) {
+            if (this.startFall(world, x, y, z)) return;
+
+            // Worlds without block movement (off-grid fields) fall one cell at a time.
             let typeId = world.getBlockAt(x, y, z);
             let blockData = world.getBlockDataAt(x, y, z);
 

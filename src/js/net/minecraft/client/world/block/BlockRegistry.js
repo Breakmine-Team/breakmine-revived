@@ -89,6 +89,7 @@ import BlockBluestoneBlock from "./type/BlockBlustoneBlock.js";
 import BlockBluestonePusher from "./type/BlockBluestonePusher.js";
 import BlockBluestoneStickyPusher from "./type/BlockBluestoneStickyPusher.js";
 import BlockBluestonePusherHead from "./type/BlockBluestonePusherHead.js";
+import BlockPushBlock from "./type/BlockPushBlock.js";
 import BlockBluestoneStickyPusherHead from "./type/BlockBluestoneStickyPusherHead.js";
 import BlockBluestoneRepeater from "./type/BlockBluestoneRepeater.js";
 import BlockBluestoneMemoryCell from "./type/BlockBluestoneMemoryCell.js";
@@ -705,6 +706,7 @@ export class BlockRegistry {
 
         BlockRegistry.CCTV_CAMERA = new BlockCctvCamera(406, 0);
         BlockRegistry.ITEM_CCTV_VIEWER = new ItemCctvViewer(407, 'spyglass', 'CCTV Viewer');
+        BlockRegistry.PUSH_BLOCK = new BlockPushBlock(422, 0);
 
         for (const [key, val] of Object.entries(BlockRegistry)) {
             if (val && typeof val === "object" && val.id !== undefined) {

@@ -1,7 +1,7 @@
 import { initWorld, saveWorld, getSubChunkStore, loadCurrentWorld, getWorldTime, tickWorldTime, setBlockInventory, getBlockInventories, getCurrentWorldName, setActiveDimension, getBlockAt } from './world.js';
 import { tickAllFurnaces, broadcastFurnaceChanges } from './Furnace.js';
 import { sendTimeUpdate, sendWeatherUpdate, sendChatMessage, sendPlayerListEntry } from './packets.js';
-import { handlePacket, cleanupPlayerChunks, respawnPlayer, flushSaveWorld } from './handlers.js';
+import { handlePacket, handlePushBlock, cleanupPlayerChunks, respawnPlayer, flushSaveWorld } from './handlers.js';
 import { tickWeather, getWeatherVersion, getWeatherState } from './weather.js';
 import { createConnectionGate } from './security.js';
 import { verifyConnection } from './security.js';
@@ -250,6 +250,8 @@ export function onConnection(ws, req) {
                 savePlayerData(player);
             } else if (payload && payload.type === 'structurePaste') {
                 handleStructurePaste(player, payload);
+            } else if (payload && payload.type === 'pushBlock') {
+                handlePushBlock(player, payload);
             } else if (payload && payload.type === 'modMessage') {
                 if (player.username && typeof payload.modId === 'string' && payload.modId.length <= 64) {
                     handleModMessage(player, payload.modId, payload.payload);
