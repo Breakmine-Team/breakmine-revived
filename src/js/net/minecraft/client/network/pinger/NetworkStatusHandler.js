@@ -14,7 +14,11 @@ export default class NetworkStatusHandler extends PacketHandler {
         this.callback(packet.object);
     }
 
-    onDisconnect() {
+    onDisconnect(reason, wasConnected) {
+        // A server that never answered must not take over the screen: the
+        // server list already shows it as unreachable. Only a ping connection
+        // that opened and then dropped is worth reporting.
+        if (!wasConnected) return;
         this.minecraft.displayScreen(new GuiDisconnected("NetworkManager lost"));
     }
 

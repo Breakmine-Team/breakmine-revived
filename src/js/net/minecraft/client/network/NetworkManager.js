@@ -63,7 +63,8 @@ export default class NetworkManager {
         this.address = address;
         this.port = port;
         this.useProxy = !!proxy;
-        this.tunnelServerUrl = typeof address === 'string' && address.startsWith('tunnel://')
+        this.isTunnel = typeof address === 'string' && address.startsWith('tunnel://');
+        this.tunnelServerUrl = this.isTunnel
             ? (this.minecraft?.settings?.tunnelServer || null)
             : null;
         this._protocolFallbacks = [];
@@ -552,12 +553,34 @@ export default class NetworkManager {
         console.error("[Network] Error: " + event.data);
     }
 
-    _onClose(event) {
-        if (this.connected) {
-            this.networkHandler.onDisconnect();
+    /** Human readable reason for a closed connection, for the disconnect screen. */
+    _disconnectReason(event) {
+        const reason = event && typeof event.reason === 'string' ? event.reason.trim() : '';
+        if (reason.length > 0) {
+            return reason;
         }
 
+        if (this.isTunnel) {
+            return event && event.code === 1003
+                ? "Tunnel not found or expired"
+                : "Could not reach the tunnel server";
+        }
+
+        return "Disconnected from server";
+    }
+
+    _onClose(event) {
+        const reason = this._disconnectReason(event);
+        const wasConnected = this.connected;
+
         this.connected = false;
+
+        // Also report closes that happen before login finishes (a failed
+        // tunnel join, a refused server, a dead proxy). Without this the
+        // player was left staring at "Connecting to server..." forever.
+        if (!this.closedIntentionally) {
+            this.networkHandler?.onDisconnect?.(reason, wasConnected);
+        }
 
         this.minecraft?.capeManager?.reset();
 

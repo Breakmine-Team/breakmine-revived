@@ -84,10 +84,17 @@ export default class NetworkLoginHandler extends PacketHandler {
         this.networkManager.setCompressionThreshold(packet.getCompressionThreshold());
     }
 
-    onDisconnect() {
-        if (this.networkManager.minecraft.isInGame()) {
-            this.networkManager.minecraft.displayScreen(new GuiDisconnected(this.disconnectReason || "Disconnected from server"));
+    onDisconnect(reason, wasConnected) {
+        if (this.networkManager.closedIntentionally || this.disconnectScreenShown) {
+            return;
         }
+        this.disconnectScreenShown = true;
+
+        // A failure before login completed (tunnel gone, server unreachable,
+        // connection dropped) still needs a screen; otherwise the join hangs
+        // on "Connecting to server..." with nothing to tell the player.
+        const message = this.disconnectReason || reason || "Disconnected from server";
+        this.networkManager.minecraft.displayScreen(new GuiDisconnected(message));
     }
 
 }

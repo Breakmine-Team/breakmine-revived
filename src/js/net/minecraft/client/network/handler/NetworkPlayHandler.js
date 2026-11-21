@@ -485,16 +485,16 @@ export default class NetworkPlayHandler extends PacketHandler {
         this.showDisconnectScreen();
     }
 
-    onDisconnect() {
+    onDisconnect(reason) {
         if (this.networkManager && this.networkManager.closedIntentionally) {
             return;
         }
-        this.showDisconnectScreen();
+        this.showDisconnectScreen(reason);
     }
 
     
-    showDisconnectScreen() {
-        const screen = new GuiDisconnected(this.disconnectReason || "Disconnected from server");
+    showDisconnectScreen(reason) {
+        const screen = new GuiDisconnected(this.disconnectReason || reason || "Disconnected from server");
         this.minecraft.displayScreen(screen);
 
         if (this.disconnectTeardownStarted) {
