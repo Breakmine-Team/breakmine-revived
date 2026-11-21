@@ -35,6 +35,7 @@ export default class GameSettings {
 
         this.thirdPersonView = 0;
         this.fov = 70;
+        this.guiScale = 'auto';
         this.resolution = 1;
         this.viewBobbing = true;
         this.ambientOcclusion = true;

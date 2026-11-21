@@ -52,7 +52,7 @@ export default class ContainerCreative extends Container {
         
         Block.blocks.forEach((block) => {
             if (block.inventoryTab && block.inventoryTab.id === tabIndex) {
-                if (block.id !== 99 && block.id !== 43 && block.id !== -1 && block.id !== 59) {
+                if (block.id !== -1) {
                     this.itemList.push(block.getId());
                 }
             }
@@ -68,8 +68,8 @@ export default class ContainerCreative extends Container {
         this.itemList = [];
 
         Block.blocks.forEach((block) => {
-            if (!block.id || block.id === 99) return;
-            if (block.id === 43 || block.id === -1 || block.id === 59) return;
+            if (!block.id) return;
+            if (block.id === -1) return;
 
             if (EnumCreativeInventoryTab.isHidden(block.inventoryTab)) return;
 
@@ -183,11 +183,11 @@ export default class ContainerCreative extends Container {
 
     initItems(offset) {
         Block.blocks.forEach((block) => {
-            if (!block.id || block.id === 99) return;
+            if (!block.id) return;
             if (EnumCreativeInventoryTab.isHidden(block.inventoryTab)) return;
 
             if (Minecraft.MODE !== 1) {
-                if (block.id !== 43 && block.id !== -1 && block.id !== 59 && block.id > offset) {
+                if (block.id !== -1 && block.id > offset) {
                     this.itemList.push(block.getId());
                 }
             } else if (block.id > offset) {

@@ -956,6 +956,11 @@ export default class GameWindow {
         for (scale = 1; wrapperWidth / (scale + 1) >= minWidth && wrapperHeight / (scale + 1) >= minHeight; scale++) {
         }
 
+        const guiScale = Number(this.minecraft.settings.guiScale);
+        if (Number.isInteger(guiScale) && guiScale >= 1 && guiScale <= 3) {
+            scale = guiScale;
+        }
+
         this.scaleFactor = scale;
         this.width = Math.ceil(wrapperWidth / scale);
         this.height = Math.ceil(wrapperHeight / scale);

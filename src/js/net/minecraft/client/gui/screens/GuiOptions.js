@@ -180,6 +180,18 @@ export default class GuiOptions extends GuiScreen {
                         tooltip: "How much the game should be scaled by.\n1.0x is full res and 0.5x is half.",
                         onchange: (_value, mc) => mc.window.applyWorldResolution()
                     },
+                    {
+                        name: "GUI Scale",
+                        settingKey: "guiScale",
+                        type: "list",
+                        options: [
+                            { key: "auto", name: "Auto" },
+                            { key: "1", name: "1" },
+                            { key: "2", name: "2" },
+                            { key: "3", name: "3" }
+                        ],
+                        onchange: (_value, mc) => mc.window.updateWindowSize()
+                    },
                 ]
             }
         ];
