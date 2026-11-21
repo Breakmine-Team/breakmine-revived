@@ -7,6 +7,7 @@ import BlockLeave from "./type/BlockLeave.js";
 import BlockWater from "./type/BlockWater.js";
 import BlockSand from "./type/BlockSand.js";
 import BlockTorch from "./type/BlockTorch.js";
+import BlockBurntTorch from "./type/BlockBurntTorch.js";
 import Sound from "./sound/Sound.js";
 import Block from "./Block.js";
 import BlockPortal from "./type/BlockPortal.js";
@@ -265,6 +266,7 @@ export class BlockRegistry {
         BlockRegistry.WATER = new BlockWater(9, 7);
         BlockRegistry.SAND = new BlockSand(12, 8);
         BlockRegistry.TORCH = new BlockTorch(50, 9);
+        BlockRegistry.BURNT_TORCH = new BlockBurntTorch(498, 0);
         BlockRegistry.GRASS_PATH = new BlockGrassPath(19, 15);
 
         BlockRegistry.FARMLAND = new BlockFarmland(258, 0);
@@ -575,6 +577,38 @@ export class BlockRegistry {
         BlockRegistry.BLACK_TERRACOTTA = new BlockTerracotta(187, 0, "black_terracotta", "Black Terracotta");
 
         BlockRegistry.TAN_WOOL = new BlockWool(57, 0, "tan_wool", "Tan Wool");
+
+        // Concrete and wool stairs/slabs. Each one borrows the colour block's
+        // texture (stairs via the source block id, slabs via the texture name).
+        const colourBlocks = [
+            ["White", "white"], ["Orange", "orange"], ["Magenta", "magenta"],
+            ["Light Blue", "light_blue"], ["Yellow", "yellow"], ["Lime", "lime"],
+            ["Pink", "pink"], ["Gray", "gray"], ["Light Gray", "light_gray"],
+            ["Cyan", "cyan"], ["Purple", "purple"], ["Blue", "blue"],
+            ["Brown", "brown"], ["Green", "green"], ["Red", "red"], ["Black", "black"],
+        ];
+
+        let concreteStairId = 430;
+        let concreteSlabId = 446;
+        let woolStairId = 462;
+        let woolSlabId = 478;
+
+        for (const [label, key] of colourBlocks) {
+            const upperKey = key.toUpperCase();
+            const concrete = BlockRegistry[`${upperKey}_CONCRETE`];
+            const wool = BlockRegistry[`${upperKey}_WOOL`];
+            const concreteOptions = { hardness: 0.8, tool: 'pickaxe', sound: Block.sounds.stone };
+            const woolOptions = { hardness: 0.8, tool: null, sound: Block.sounds.cloth };
+
+            BlockRegistry[`${upperKey}_CONCRETE_STAIRS`] = new BlockStair(concreteStairId++, 0, concrete.id, `${label} Concrete`, concreteOptions);
+            BlockRegistry[`${upperKey}_CONCRETE_SLAB`] = new BlockSlab(concreteSlabId++, 0, `${key}_concrete`, `${label} Concrete Slab`, Block.sounds.stone, concreteOptions);
+
+            BlockRegistry[`${upperKey}_WOOL_STAIRS`] = new BlockStair(woolStairId++, 0, wool.id, `${label} Wool`, woolOptions);
+            BlockRegistry[`${upperKey}_WOOL_SLAB`] = new BlockSlab(woolSlabId++, 0, `${key}_wool`, `${label} Wool Slab`, Block.sounds.cloth, woolOptions);
+        }
+
+        BlockRegistry.TAN_WOOL_STAIRS = new BlockStair(496, 0, BlockRegistry.TAN_WOOL.id, "Tan Wool", { hardness: 0.8, tool: null, sound: Block.sounds.cloth });
+        BlockRegistry.TAN_WOOL_SLAB = new BlockSlab(497, 0, "tan_wool", "Tan Wool Slab", Block.sounds.cloth, { hardness: 0.8, tool: null });
 
         BlockRegistry.PAINTING_SALAD_PLATE = new BlockPainting(284, 0, "salad_plate", "Salad Plate");
         BlockRegistry.PAINTING_DEPTH = new BlockPainting(286, 0, "depth", "Depth");

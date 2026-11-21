@@ -9,7 +9,20 @@ export default class ParticleRenderer {
         this.particles = [];
     }
 
+    // 'all', 'minimal' (fewer particles per burst) or 'off'.
+    getParticleMode() {
+        const mode = this.minecraft ? this.minecraft.settings?.particles : null;
+        return mode === "minimal" || mode === "off" ? mode : "all";
+    }
+
+    clearParticles() {
+        this.particles.length = 0;
+    }
+
     spawnParticle(particle) {
+        if (this.getParticleMode() === "off") {
+            return;
+        }
         this.particles.push(particle);
     }
 
@@ -26,6 +39,10 @@ export default class ParticleRenderer {
     }
 
     renderParticles(cameraEntity, partialTicks) {
+        if (this.getParticleMode() === "off") {
+            return;
+        }
+
         let yaw = cameraEntity.prevRotationYaw + (cameraEntity.rotationYaw - cameraEntity.prevRotationYaw) * partialTicks;
         let pitch = cameraEntity.prevRotationPitch + (cameraEntity.rotationPitch - cameraEntity.prevRotationPitch) * partialTicks;
 
@@ -45,7 +62,13 @@ export default class ParticleRenderer {
         if (!block) {
             return;
         }
-        let range = 4;
+
+        const mode = this.getParticleMode();
+        if (mode === "off") {
+            return;
+        }
+
+        let range = mode === "minimal" ? 2 : 4;
         for (let offsetX = 0; offsetX < range; offsetX++) {
             for (let offsetY = 0; offsetY < range; offsetY++) {
                 for (let offsetZ = 0; offsetZ < range; offsetZ++) {

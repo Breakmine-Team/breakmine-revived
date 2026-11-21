@@ -19,19 +19,53 @@ export default class GuiOptions extends GuiScreen {
         this.pauseGame = true;
         this.previousScreen = previousScreen;
 
-        this.pages = this._normalizePages(pagesOrItems || this._defaultPages());
+        this.categories = this._normalizeCategories(pagesOrItems || this._defaultCategories());
+        this.items = [];
+        for (const category of this.categories) {
+            for (const item of category.items) {
+                this.items.push(item);
+            }
+        }
 
-        this.itemsPerPage = options.itemsPerPage !== undefined ? options.itemsPerPage : 5;
+        this.rows = [];
+        this.listButtons = [];
 
-        this.pages = this._autoChunk(this.pages, this.itemsPerPage);
+        this.amountScrolled = 0;
+        this.isDragging = false;
+        this.dragOffsetY = 0;
 
-        this.currentPage = 0;
+        this.scrollBarWidth = 6;
+        this.scrollBarMinThumb = 12;
+        this.scrollStep = 20;
+
     }
 
-    _defaultPages() {
+    _defaultCategories() {
         return [
             {
-                title: "Options",
+                title: "",
+                items: [
+                    {
+                        name: "Controls...",
+                        type: "action",
+                        action: () => this.minecraft.displayScreen(new GuiControls(this))
+                    },
+                    {
+                        name: "Language",
+                        settingKey: "language",
+                        type: "list",
+                        options: I18n.getLanguageOptions(),
+                        tooltip: "Choose the language used by the game UI",
+                        onchange: (value, mc) => {
+                            mc.settings.language = value;
+                            I18n.setLanguage(value);
+                            mc.settings.save();
+                        }
+                    }
+                ]
+            },
+            {
+                title: "Graphics",
                 items: [
                     {
                         name: "Ambient Occlusion",
@@ -41,9 +75,11 @@ export default class GuiOptions extends GuiScreen {
                         onchange: (_v, mc) => mc.worldRenderer.rebuildAll()
                     },
                     {
-                        name: "View Bobbing",
-                        settingKey: "viewBobbing",
-                        type: "toggle"
+                        name: "Render Distance",
+                        settingKey: "viewDistance",
+                        type: "slider",
+                        min: 2,
+                        max: 16
                     },
                     {
                         name: "FOV",
@@ -53,43 +89,76 @@ export default class GuiOptions extends GuiScreen {
                         max: 110
                     },
                     {
-                        name: "Render Distance",
-                        settingKey: "viewDistance",
+                        name: "Resolution",
+                        settingKey: "resolution",
                         type: "slider",
-                        min: 2,
-                        max: 16
+                        min: 10,
+                        max: 100,
+                        toSlider: (value) => Math.round(Math.min(1, Math.max(0.1, Number(value) || 1)) * 100),
+                        fromSlider: (value) => value / 100,
+                        display: (name, value) => `${name}: ${(value / 100).toFixed(1)}x`,
+                        onchange: (_value, mc) => mc.window.applyWorldResolution()
                     },
                     {
-                        name: "Controls...",
-                        type: "action",
-                        action: () => this.minecraft.displayScreen(new GuiControls(this))
+                        name: "Clouds",
+                        settingKey: "clouds",
+                        type: "list",
+                        options: [
+                            { key: "fancy", name: "Fancy" },
+                            { key: "fast", name: "Fast" }
+                        ],
+                        onchange: (value, mc) => {
+                            if (mc.world) mc.world.setCloudMode(value);
+                        }
                     },
                     {
-                        name: "Show Nino servers",
-                        settingKey: "showNino",
+                        name: "Transparent Leaves",
+                        settingKey: "fancyLeaves",
+                        type: "toggle",
+                        onchange: (value, mc) => {
+                            BlockLeave.setFancyLeaves(value);
+                            mc.worldRenderer.rebuildAll();
+                        }
+                    },
+                    {
+                        name: "Particles",
+                        settingKey: "particles",
+                        type: "list",
+                        options: [
+                            { key: "all", name: "All" },
+                            { key: "minimal", name: "Minimal" },
+                            { key: "off", name: "Off" }
+                        ],
+                        onchange: (value, mc) => {
+                            if (value === "off") mc.particleRenderer.clearParticles();
+                        }
+                    },
+                    {
+                        name: "Fog Type",
+                        settingKey: "fogType",
+                        type: "list",
+                        options: [
+                            { key: "modern", name: "Modern" },
+                            { key: "classic", name: "Classic" }
+                        ],
+                        tooltip: "Modern: Gradual fog\nClassic: Exponential fog"
+                    },
+                    {
+                        name: "Shadows",
+                        settingKey: "shadows",
+                        type: "toggle",
+                        tooltip: "This feature can cause lag and\nis still in development.",
+                        onchange: (_v, mc) => mc.worldRenderer.setShadowsEnabled(_v)
+                    },
+                ]
+            },
+            {
+                title: "Gameplay",
+                items: [
+                    {
+                        name: "View Bobbing",
+                        settingKey: "viewBobbing",
                         type: "toggle"
-                    },
-                    {
-                        name: "FPS Overlay",
-                        settingKey: "showFps",
-                        type: "toggle"
-                    },
-                    {
-                        name: "Version Overlay",
-                        settingKey: "showVersion",
-                        type: "toggle"
-                    },
-                    {
-                        name: "API URL",
-                        settingKey: "apiUrl",
-                        type: "text",
-                        tooltip: "Default: api.breakmine.com\n§7Don't trust random API URLs!\n§7They could be stealing passwords! >:["
-                    },
-                    {
-                        name: "Tunnel URL",
-                        settingKey: "tunnelServer",
-                        type: "text",
-                        tooltip: "Default: tunnel.breakmine.com\n§7Don't trust random Tunnel URLs!"
                     },
                     {
                         name: "Dynamic Lighting",
@@ -110,75 +179,21 @@ export default class GuiOptions extends GuiScreen {
                         type: "slider",
                         min: 10,
                         max: 200
+                    }
+                ]
+            },
+            {
+                title: "Interface",
+                items: [
+                    {
+                        name: "FPS Overlay",
+                        settingKey: "showFps",
+                        type: "toggle"
                     },
                     {
-                        name: "Fog Type",
-                        settingKey: "fogType",
-                        type: "list",
-                        options: [
-                            { key: "modern", name: "Modern" },
-                            { key: "classic", name: "Classic" }
-                        ],
-                        tooltip: "Modern: Gradual fog\nClassic: Exponential fog"
-                    },
-                    {
-                        name: "Clouds",
-                        settingKey: "clouds",
-                        type: "list",
-                        options: [
-                            { key: "fancy", name: "Fancy" },
-                            { key: "fast", name: "Fast" }
-                        ],
-                        onchange: (value, mc) => {
-                            if (mc.world) mc.world.setCloudMode(value);
-                        }
-                    },
-                    {
-                        name: "Shadows",
-                        settingKey: "shadows",
-                        type: "toggle",
-                        tooltip: "This feature can cause lag and\nis still in development.",
-                        onchange: (_v, mc) => mc.worldRenderer.setShadowsEnabled(_v)
-                    },
-                    {
-                        name: "Realms",
-                        settingKey: "showRealmsButton",
-                        type: "toggle",
-                        tooltip: "Show the Realms button on the main menu"
-                    },
-                    {
-                        name: "Language",
-                        settingKey: "language",
-                        type: "list",
-                        options: I18n.getLanguageOptions(),
-                        tooltip: "Choose the language used by the game UI",
-                        onchange: (value, mc) => {
-                            mc.settings.language = value;
-                            I18n.setLanguage(value);
-                            mc.settings.save();
-                        }
-                    },
-                    {
-                        name: "Fancy Leaves",
-                        settingKey: "fancyLeaves",
-                        type: "toggle",
-                        tooltip: "Render translucent leaves.\nDisable for better performance in forests.",
-                        onchange: (value, mc) => {
-                            BlockLeave.setFancyLeaves(value);
-                            mc.worldRenderer.rebuildAll();
-                        }
-                    },
-                    {
-                        name: "Resolution",
-                        settingKey: "resolution",
-                        type: "slider",
-                        min: 10,
-                        max: 100,
-                        toSlider: (value) => Math.round(Math.min(1, Math.max(0.1, Number(value) || 1)) * 100),
-                        fromSlider: (value) => value / 100,
-                        display: (name, value) => `${name}: ${(value / 100).toFixed(1)}x`,
-                        tooltip: "How much the game should be scaled by.\n1.0x is full res and 0.5x is half.",
-                        onchange: (_value, mc) => mc.window.applyWorldResolution()
+                        name: "Version Overlay",
+                        settingKey: "showVersion",
+                        type: "toggle"
                     },
                     {
                         name: "GUI Scale",
@@ -191,149 +206,226 @@ export default class GuiOptions extends GuiScreen {
                             { key: "3", name: "3" }
                         ],
                         onchange: (_value, mc) => mc.window.updateWindowSize()
+                    }
+                ]
+            },
+            {
+                title: "Miscellaneous",
+                items: [
+                    {
+                        name: "Show Nino servers",
+                        settingKey: "showNino",
+                        type: "toggle"
                     },
+                    {
+                        name: "Realms",
+                        settingKey: "showRealmsButton",
+                        type: "toggle",
+                        tooltip: "Show the Realms button on the main menu"
+                    },
+                    {
+                        name: "API URL",
+                        settingKey: "apiUrl",
+                        type: "text",
+                        tooltip: "Default: api.breakmine.com\n§7Don't trust random API URLs!\n§7They could be stealing passwords! >:["
+                    },
+                    {
+                        name: "Tunnel URL",
+                        settingKey: "tunnelServer",
+                        type: "text",
+                        tooltip: "Default: tunnel.breakmine.com\n§7Don't trust random Tunnel URLs!"
+                    }
                 ]
             }
         ];
     }
 
-    _normalizePages(input) {
+    _normalizeCategories(input) {
         if (!Array.isArray(input) || input.length === 0) {
-            return [{ title: "Settings", items: [] }];
+            return [];
         }
-        const looksLikePage = (p) =>
-            p && typeof p === "object" && Array.isArray(p.items);
 
-        if (!looksLikePage(input[0])) {
-            return [{ title: "Settings", items: input }];
+        const looksLikeCategory = (entry) =>
+            entry && typeof entry === "object" && Array.isArray(entry.items);
+
+        if (!looksLikeCategory(input[0])) {
+            return [{ title: "", items: input }];
         }
-        return input;
-    }
 
-    _autoChunk(pages, itemsPerPage) {
-        if (!itemsPerPage || itemsPerPage <= 0) return pages;
-
-        const out = [];
-        for (const page of pages) {
-            const items = page.items || [];
-            if (items.length <= itemsPerPage) {
-                out.push(page);
-                continue;
-            }
-            const chunkCount = Math.ceil(items.length / itemsPerPage);
-            for (let i = 0; i < chunkCount; i++) {
-                const slice = items.slice(i * itemsPerPage, (i + 1) * itemsPerPage);
-                out.push({
-                    title: page.title,
-                    items: slice
-                });
-            }
-        }
-        return out;
+        return input.map((category) => ({
+            title: typeof category.title === "string" ? category.title : "",
+            items: Array.isArray(category.items) ? category.items : []
+        }));
     }
 
     init() {
         super.init();
-        this._buildPage();
-    }
-
-    _contentTop() {
-        const titleH = this.pages.length > 1 ? 34 : 22;
-        const total = titleH + this.itemsPerPage * 24 + 4 + 20;
-        return Math.max(4, Math.min(40, this.height - total - 4));
-    }
-
-    _buildPage() {
-        this.buttonList = [];
-        this.selectedButtonIndex = -1;
-
-        const page = this.pages[this.currentPage];
-        if (!page) return;
 
         const settings = this.minecraft.settings;
-        const mobile = this.minecraft.window.mobileDevice;
 
-        const buttonWidth = 200;
-        const itemHeight = 24;
-        const startX = this.width / 2 - buttonWidth / 2;
-        const startY = mobile
-            ? this._contentTop() + (this.pages.length > 1 ? 34 : 22)
-            : this.height / 2 - 60;
+        this.listWidth = Math.min(200, this.width - 20);
+        this.listX = Math.floor((this.width - this.listWidth) / 2);
+        this.rowHeight = 20;
+        this.rowGap = 4;
+        this.headerHeight = 12;
+        this.headerGap = 2;
+        this.categoryGap = 6;
 
-        const items = page.items || [];
-
-        for (let i = 0; i < items.length; i++) {
-            const item = items[i];
-            const y = startY + i * itemHeight;
-            const button = this._createItemButton(item, startX, y, buttonWidth, 20, settings);
-            this.buttonList.push(button);
+        this.top = 34;
+        this.footerY = this.height - 28;
+        this.bottom = this.footerY - 10;
+        if (this.bottom < this.top + this.rowHeight) {
+            this.bottom = Math.min(this.height - 20, this.top + this.rowHeight);
         }
 
-        const navY = startY + this.itemsPerPage * itemHeight + (mobile ? 4 : 10);
+        this.rows = [];
+        this.listButtons = [];
+        this.amountScrolled = 0;
 
-        const createDoneButton = (x, y, width) => new GuiButton(this.minecraft, "Done", x, y, width, 20, () => {
-            for (const b of this.buttonList) {
-                if (b instanceof GuiStringButton && b.editing) {
-                    b.confirmEdit();
+        let y = 4;
+        for (const category of this.categories) {
+            if (!category.items || category.items.length === 0) {
+                continue;
+            }
+
+            if (category.title) {
+                if (this.rows.length > 0) {
+                    y += this.categoryGap;
                 }
-            }
-            this.minecraft.displayScreen(this.previousScreen);
-        });
-
-        if (mobile && this.pages.length > 1) {
-            const doneWidth = 56;
-            const gap = 8;
-            const navButtonWidth = Math.floor((buttonWidth - doneWidth - gap * 2) / 2);
-
-            const prevButton = new GuiButton(this.minecraft, "< Prev", startX, navY, navButtonWidth, 20, () => {
-                this.currentPage--;
-                this._buildPage();
-                this.selectFirstEnabledButton();
-            });
-            prevButton.setEnabled(this.currentPage > 0);
-            this.buttonList.push(prevButton);
-
-            const nextButton = new GuiButton(this.minecraft, "Next >", startX + navButtonWidth + gap, navY, navButtonWidth, 20, () => {
-                this.currentPage++;
-                this._buildPage();
-                this.selectFirstEnabledButton();
-            });
-            nextButton.setEnabled(this.currentPage < this.pages.length - 1);
-            this.buttonList.push(nextButton);
-
-            this.buttonList.push(createDoneButton(startX + navButtonWidth * 2 + gap * 2, navY, doneWidth));
-        } else if (mobile) {
-            this.buttonList.push(createDoneButton(startX, navY, buttonWidth));
-        } else {
-            const navButtonWidth = Math.floor((buttonWidth - 8) / 2);
-
-            if (this.pages.length > 1) {
-                const prevButton = new GuiButton(this.minecraft, "< Prev", startX, navY, navButtonWidth, 20, () => {
-                    this.currentPage--;
-                    this._buildPage();
-                    this.selectFirstEnabledButton();
-                });
-                prevButton.setEnabled(this.currentPage > 0);
-                this.buttonList.push(prevButton);
-
-                const nextButton = new GuiButton(this.minecraft, "Next >", startX + navButtonWidth + 8, navY, navButtonWidth, 20, () => {
-                    this.currentPage++;
-                    this._buildPage();
-                    this.selectFirstEnabledButton();
-                });
-                nextButton.setEnabled(this.currentPage < this.pages.length - 1);
-                this.buttonList.push(nextButton);
+                this.rows.push({ kind: "header", offset: y, height: this.headerHeight, title: category.title });
+                y += this.headerHeight + this.headerGap;
             }
 
-            this.buttonList.push(createDoneButton(startX, navY + 26, buttonWidth));
+            for (const item of category.items) {
+                const button = this._createItemButton(item, this.listX, 0, this.listWidth, this.rowHeight, settings);
+                this.rows.push({ kind: "setting", offset: y, height: this.rowHeight, button: button, item: item });
+                y += this.rowHeight + this.rowGap;
+            }
+        }
+        this.contentHeight = y + 4;
+
+        for (const row of this.rows) {
+            if (!row.button) {
+                continue;
+            }
+            row.button.minecraft = this.minecraft;
+            row.button.isListButton = true;
+            this.buttonList.push(row.button);
+            this.listButtons.push(row.button);
         }
 
-        for (let i = 0; i < items.length; i++) {
-            const item = items[i];
-            if (item.tooltip) {
-                const y = startY + i * itemHeight;
-                this.buttonList.push(new GuiTooltip(this.minecraft, item.tooltip, startX, y, buttonWidth, 20));
+        this.buttonList.push(new GuiButton(this.minecraft, "Done", this.listX, this.footerY, this.listWidth, 20, () => {
+            this.confirmPendingEdits();
+            this.minecraft.displayScreen(this.previousScreen);
+        }));
+
+        this.clampScroll();
+    }
+
+    confirmPendingEdits() {
+        for (const button of this.buttonList) {
+            if (button instanceof GuiStringButton && button.editing) {
+                button.confirmEdit();
             }
+        }
+    }
+
+    rowY(row) {
+        return Math.floor(this.top + row.offset - this.amountScrolled);
+    }
+
+    getContentHeight() {
+        return this.contentHeight;
+    }
+
+    getMaxScroll() {
+        return Math.max(0, this.contentHeight - (this.bottom - this.top));
+    }
+
+    clampScroll() {
+        const max = this.getMaxScroll();
+        if (this.amountScrolled < 0) this.amountScrolled = 0;
+        if (this.amountScrolled > max) this.amountScrolled = max;
+    }
+
+    getScrollBarBounds() {
+        const trackTop = this.top;
+        const trackBottom = this.bottom;
+        const trackHeight = trackBottom - trackTop;
+        const contentHeight = this.getContentHeight();
+        const max = this.getMaxScroll();
+
+        let thumbHeight;
+        if (contentHeight <= trackHeight || trackHeight <= 0) {
+            thumbHeight = trackHeight;
+        } else {
+            thumbHeight = Math.max(
+                this.scrollBarMinThumb,
+                Math.floor(trackHeight * trackHeight / contentHeight)
+            );
+            if (thumbHeight > trackHeight) thumbHeight = trackHeight;
+        }
+
+        let thumbY;
+        if (max <= 0) {
+            thumbY = trackTop;
+        } else {
+            const usable = trackHeight - thumbHeight;
+            thumbY = trackTop + Math.floor((this.amountScrolled / max) * usable);
+        }
+
+        return {
+            x: this.width - this.scrollBarWidth - 2,
+            y: thumbY,
+            width: this.scrollBarWidth,
+            height: thumbHeight,
+            trackTop,
+            trackBottom,
+            trackHeight,
+            visible: max > 0
+        };
+    }
+
+    setScrollFromThumbY(thumbY, sb) {
+        const usable = sb.trackHeight - sb.height;
+        if (usable <= 0) {
+            this.amountScrolled = 0;
+            return;
+        }
+        const relativeY = thumbY - sb.trackTop;
+        const ratio = Math.max(0, Math.min(1, relativeY / usable));
+        this.amountScrolled = ratio * this.getMaxScroll();
+    }
+
+    ensureFocusVisible() {
+        const button = this.selectedButtonIndex >= 0 ? this.buttonList[this.selectedButtonIndex] : null;
+        if (!button || !button.isListButton) {
+            return;
+        }
+
+        const row = this.rows.find(entry => entry.button === button);
+        if (!row) {
+            return;
+        }
+
+        const viewport = this.bottom - this.top;
+        const rowY = this.rowY(row);
+
+        if (rowY < this.top) {
+            this.amountScrolled = row.offset;
+        } else if (rowY + row.height > this.bottom) {
+            this.amountScrolled = row.offset + row.height - viewport;
+        }
+
+        this.clampScroll();
+    }
+
+    updateListPositions() {
+        for (const row of this.rows) {
+            if (!row.button) {
+                continue;
+            }
+            row.button.y = this.rowY(row);
         }
     }
 
@@ -404,7 +496,7 @@ export default class GuiOptions extends GuiScreen {
                 if (label) {
                     const originalRender = field.render.bind(field);
                     field.render = (stack, mouseX, mouseY, partialTicks) => {
-                        this.drawString(stack, label, x, y + height / 2 - 4, 0xFFFFFF);
+                        this.drawString(stack, label, x, field.y + field.height / 2 - 4, 0xFFFFFF);
                         originalRender(stack, mouseX, mouseY, partialTicks);
                     };
                 }
@@ -423,27 +515,190 @@ export default class GuiOptions extends GuiScreen {
     drawScreen(stack, mouseX, mouseY, partialTicks) {
         this.drawDefaultBackground(stack);
 
-        const page = this.pages[this.currentPage];
-        const title = (page && page.title) || "Settings";
-        const top = this._contentTop();
-        const titleY = this.minecraft.window.mobileDevice ? top : 40;
-        this.drawCenteredString(stack, title, this.width / 2, titleY);
+        this.clampScroll();
+        this.updateListPositions();
 
-        if (this.pages.length > 1) {
-            const pageIndicator = `${this.currentPage + 1}/${this.pages.length}`;
-            const indicatorY = this.minecraft.window.mobileDevice ? top + 12 : 52;
-            this.drawCenteredString(stack, pageIndicator, this.width / 2, indicatorY);
+        this.drawCenteredString(stack, "Options", this.width / 2, 16);
+
+        stack.save();
+        stack.beginPath();
+        stack.rect(0, this.top, this.width, this.bottom - this.top);
+        stack.clip();
+
+        this.drawRect(stack, 0, this.top, this.width, this.bottom, "#000000", 0.45);
+
+        for (const row of this.rows) {
+            const rowY = this.rowY(row);
+
+            if (rowY + row.height < this.top || rowY > this.bottom) {
+                continue;
+            }
+
+            if (row.kind === "header") {
+                this.drawString(stack, row.title, this.listX + 2, rowY + 2, 0xAAAAAA);
+                continue;
+            }
+
+            if (row.button) {
+                row.button.render(stack, mouseX, mouseY, partialTicks);
+            }
         }
 
-        super.drawScreen(stack, mouseX, mouseY, partialTicks);
+        stack.restore();
+
+        this.drawEdgeFades(stack, 0, this.width, this.top, this.bottom);
+
+        for (const button of this.buttonList) {
+            if (button.isListButton) {
+                continue;
+            }
+            if (!button.minecraft) {
+                button.minecraft = this.minecraft;
+            }
+            button.render(stack, mouseX, mouseY, partialTicks);
+        }
+
+        this.drawTooltips(stack, mouseX, mouseY, partialTicks);
+        this.drawScrollBar(stack, mouseX, mouseY);
+    }
+
+    drawTooltips(stack, mouseX, mouseY, partialTicks) {
+        if (mouseY < this.top || mouseY > this.bottom) {
+            return;
+        }
+        if (mouseX < this.listX || mouseX > this.listX + this.listWidth) {
+            return;
+        }
+
+        for (const row of this.rows) {
+            if (!row.item || !row.item.tooltip) {
+                continue;
+            }
+
+            const rowY = this.rowY(row);
+            if (mouseY < rowY || mouseY > rowY + row.height) {
+                continue;
+            }
+
+            if (!row.tooltipWidget) {
+                row.tooltipWidget = new GuiTooltip(this.minecraft, row.item.tooltip, this.listX, rowY, this.listWidth, row.height);
+            }
+
+            row.tooltipWidget.x = this.listX;
+            row.tooltipWidget.y = rowY;
+            row.tooltipWidget.width = this.listWidth;
+            row.tooltipWidget.height = row.height;
+
+            row.tooltipWidget.render(stack, mouseX, mouseY, partialTicks);
+            return;
+        }
+    }
+
+    drawScrollBar(stack, mouseX, mouseY) {
+        const sb = this.getScrollBarBounds();
+        if (!sb.visible) {
+            return;
+        }
+
+        this.drawRect(stack, sb.x, sb.trackTop, sb.x + sb.width, sb.trackBottom, "rgba(0, 0, 0, 0.4)");
+
+        const isHover =
+            mouseX >= sb.x && mouseX <= sb.x + sb.width &&
+            mouseY >= sb.y && mouseY <= sb.y + sb.height;
+        const thumbColor = (isHover || this.isDragging) ? "rgb(210, 210, 210)" : "rgb(150, 150, 150)";
+        this.drawRect(stack, sb.x, sb.y, sb.x + sb.width, sb.y + sb.height, thumbColor);
+    }
+
+    mouseClicked(mouseX, mouseY, mouseButton) {
+        if (this.handleScrollBarClick(mouseX, mouseY)) {
+            return;
+        }
+
+        const overList = mouseY >= this.top && mouseY <= this.bottom;
+
+        for (const button of this.buttonList) {
+            if (!button.isMouseOver(mouseX, mouseY)) {
+                continue;
+            }
+            if (button.isListButton && !overList) {
+                continue;
+            }
+            button.mouseClicked(mouseX, mouseY, mouseButton);
+        }
+    }
+
+    handleScrollBarClick(mouseX, mouseY) {
+        const sb = this.getScrollBarBounds();
+        if (!sb.visible) {
+            return false;
+        }
+        if (mouseX < sb.x || mouseX > sb.x + sb.width) {
+            return false;
+        }
+        if (mouseY < sb.trackTop || mouseY > sb.trackBottom) {
+            return false;
+        }
+
+        if (mouseY < sb.y || mouseY > sb.y + sb.height) {
+            this.setScrollFromThumbY(mouseY - sb.height / 2, sb);
+            this.dragOffsetY = mouseY - this.getScrollBarBounds().y;
+        } else {
+            this.dragOffsetY = mouseY - sb.y;
+        }
+
+        this.isDragging = true;
+        return true;
+    }
+
+    mouseDragged(mouseX, mouseY, mouseButton) {
+        if (this.isDragging) {
+            this.setScrollFromThumbY(mouseY - this.dragOffsetY, this.getScrollBarBounds());
+            return;
+        }
+
+        for (const button of this.buttonList) {
+            button.mouseDragged(mouseX, mouseY, mouseButton);
+        }
+    }
+
+    mouseReleased(mouseX, mouseY, mouseButton) {
+        this.isDragging = false;
+        this.dragOffsetY = 0;
+
+        for (const button of this.buttonList) {
+            button.mouseReleased(mouseX, mouseY, mouseButton);
+        }
+    }
+
+    mouseScrolled(mouseX, mouseY, amount) {
+        if (amount === 0) {
+            return;
+        }
+        if (mouseY < this.top || mouseY > this.bottom) {
+            return;
+        }
+
+        const delta = Math.max(Math.min(amount, 1), -1);
+        this.amountScrolled += delta * this.scrollStep;
+        this.clampScroll();
+    }
+
+    onScroll(mouseX, mouseY, amount) {
+        this.mouseScrolled(mouseX, mouseY, amount);
+    }
+
+    keyTyped(key, character) {
+        const handled = super.keyTyped(key, character);
+
+        if (this.minecraft.settings.tvmode) {
+            this.ensureFocusVisible();
+        }
+
+        return handled;
     }
 
     onClose() {
-        for (const b of this.buttonList) {
-            if (b instanceof GuiStringButton && b.editing) {
-                b.confirmEdit();
-            }
-        }
+        this.confirmPendingEdits();
         this.minecraft.settings.save();
     }
 }

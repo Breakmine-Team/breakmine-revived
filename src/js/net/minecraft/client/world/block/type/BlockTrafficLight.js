@@ -1,4 +1,5 @@
 import Block from "../Block.js";
+import BlockPole from "./BlockPole.js";
 import EnumCreativeInventoryTab from "../../../gui/EnumCreativeInventoryTab.js";
 
 const FACING_NORTH = 2;
@@ -16,6 +17,7 @@ export default class BlockTrafficLight extends Block {
         this.inventoryTab = EnumCreativeInventoryTab.DECORATION;
 
         this.noFaceCull = true;
+        this.isTrafficLight = true;
     }
 
     getTextureForFace(face) {
@@ -85,6 +87,14 @@ export default class BlockTrafficLight extends Block {
 
     onRender(world, x, y, z, blockRenderer) {
         blockRenderer.renderTrafficLight(world, x, y, z);
+
+        // The model already carries the upright mast, so only the horizontal
+        // arms are needed to bridge this light to neighbouring poles and lights.
+        const arms = BlockPole.getConnectionParts(world, x, y, z, BlockPole.AXIS_Y);
+        if (arms.length > 0) {
+            blockRenderer.renderParts(world, arms, x, y, z);
+        }
+
         return true;
     }
 

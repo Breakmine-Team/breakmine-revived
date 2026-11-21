@@ -129,6 +129,7 @@ export default class CraftingRegistry {
         ]);
         this.registerDyeRecipes();
         this.registerConcretePowderRecipes();
+        this.registerColourBuildingRecipes();
         this.registerWoodRecipes();
         this.registerOreRecipes();
         this.registerBluestoneRecipes();
@@ -169,6 +170,28 @@ export default class CraftingRegistry {
                 GRAVEL, GRAVEL, GRAVEL, GRAVEL,
                 B[`ITEM_${key}_DYE`].id,
             ]);
+        }
+    }
+
+    static registerColourBuildingRecipes() {
+        const B = BlockRegistry;
+        const colors = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink', 'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black', 'tan'];
+        for (const color of colors) {
+            const key = color.toUpperCase();
+            for (const family of ['CONCRETE', 'WOOL']) {
+                const block = B[`${key}_${family}`];
+                const stairs = B[`${key}_${family}_STAIRS`];
+                const slab = B[`${key}_${family}_SLAB`];
+                if (!block || !stairs || !slab) continue;
+                this.registerShapedRecipe(stairs.id, 4, 3, 3, [
+                    block.id, 0,        0,
+                    block.id, block.id, 0,
+                    block.id, block.id, block.id
+                ]);
+                this.registerShapedRecipe(slab.id, 6, 3, 1, [
+                    block.id, block.id, block.id
+                ]);
+            }
         }
     }
 

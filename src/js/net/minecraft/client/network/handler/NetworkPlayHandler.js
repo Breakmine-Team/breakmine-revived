@@ -6,6 +6,7 @@ import PlayerControllerMultiplayer from "../controller/PlayerControllerMultiplay
 import ClientPlayerPositionRotationPacket from "../packet/play/client/ClientPlayerPositionRotationPacket.js";
 import PlayerEntity from "../../entity/PlayerEntity.js";
 import ServerAnimationPacket from "../packet/play/server/ServerAnimationPacket.js";
+import ServerBlockEffectPacket from "../packet/play/server/ServerBlockEffectPacket.js";
 import ClientConfirmTransactionPacket from "../packet/play/client/ClientConfirmTransactionPacket.js";
 import ClientOffGridRequestPacket from "../packet/play/client/ClientOffGridRequestPacket.js";
 import { applyOffGridState, applyOffGridUpdate } from "../../render/OffGridClientSync.js";
@@ -290,6 +291,40 @@ export default class NetworkPlayHandler extends PacketHandler {
                     entity.swingArm();
                     break;
             }
+        }
+    }
+
+    // Another player broke or placed a block nearby: replay the local effects
+    // (break particles / block sound) so their actions are visible to us.
+    handleBlockEffect(packet) {
+        const world = this.minecraft.world;
+        const player = this.minecraft.player;
+        if (!world || !player) return;
+
+        const position = packet.getBlockPosition();
+        const x = position.getX();
+        const y = position.getY();
+        const z = position.getZ();
+
+        const dx = x + 0.5 - player.x;
+        const dy = y + 0.5 - player.y;
+        const dz = z + 0.5 - player.z;
+        if (dx * dx + dy * dy + dz * dz > 64) return;
+
+        const block = Block.getById(packet.getBlockId());
+        if (!block || typeof block.getSound !== "function") return;
+
+        const sound = block.getSound();
+        const action = packet.getAction();
+        if (action === ServerBlockEffectPacket.BREAK) {
+            this.minecraft.soundManager.playSound(
+                sound.getBreakSound(), x + 0.5, y + 0.5, z + 0.5, 1.0, sound.getPitch()
+            );
+            this.minecraft.particleRenderer.spawnBlockBreakParticle(world, x, y, z, null, block);
+        } else {
+            this.minecraft.soundManager.playSound(
+                sound.getStepSound(), x + 0.5, y + 0.5, z + 0.5, 1.0, sound.getPitch()
+            );
         }
     }
 

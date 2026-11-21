@@ -14,7 +14,8 @@ const RECIPES = {
     24: { resultTypeId: 86, resultCount: 1 },  
     21: { resultTypeId: 90, resultCount: 1 },  
     12: { resultTypeId: 20, resultCount: 1 },  
-    4:  { resultTypeId: 1,  resultCount: 1 }   
+    4:  { resultTypeId: 1,  resultCount: 1 },  
+    50: { resultTypeId: 498, resultCount: 1 }   
 };
 
 function isFuel(typeId) { return FUEL_VALUES[typeId] !== undefined; }

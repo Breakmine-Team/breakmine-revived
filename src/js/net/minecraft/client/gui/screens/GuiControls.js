@@ -359,6 +359,8 @@ export default class GuiControls extends GuiScreen {
 
         stack.restore();
 
+        this.drawEdgeFades(stack, 0, this.width, this.top, this.bottom);
+
         for (const button of this.buttonList) {
             if (button.isListButton) {
                 continue;

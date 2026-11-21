@@ -283,7 +283,7 @@ export default class GuiMainMenu extends GuiScreen {
         const discordMouseOver = mouseX > this.width - 2 - this.discordLinkWidth && mouseY > this.height - 31 && mouseY < this.height - 21;
         this.drawRightString(stack, discordText, this.width - 2, this.height - 30, discordMouseOver ? 0x5865F2ff : 0xFFFFFFff);
 
-        this.drawRightString(stack, "Updated at " + Minecraft.TIMESTAMP, this.width - 2, this.height - 20, 0xFFFFFFff);
+        this.drawRightString(stack, "Built on " + Minecraft.TIMESTAMP, this.width - 2, this.height - 20, 0xFFFFFFff);
 
         this.drawString(stack, "Breakmine " + Minecraft.VERSION, 2, this.height - 10, 0xFFFFFFff);
 

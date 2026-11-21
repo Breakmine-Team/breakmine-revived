@@ -197,6 +197,29 @@ function sendBlockChange(ws, x, y, z, blockState) {
     ws.send(makePacket(0x23, data.subarray(0, offset)));
 }
 
+const BLOCK_EFFECT_PACKET_ID = 0x24;
+const BLOCK_EFFECT_BREAK = 0;
+const BLOCK_EFFECT_PLACE = 1;
+
+// Another player's break/place, so nearby clients can replay its particles and
+// block sound (the block change itself carries no effects).
+function createBlockEffectPacket(x, y, z, blockId, action) {
+    const data = Buffer.alloc(16);
+    let offset = 0;
+
+    let xPacked = BigInt(x) & ((1n << 26n) - 1n);
+    let yPacked = BigInt(y) & ((1n << 12n) - 1n);
+    let zPacked = BigInt(z) & ((1n << 26n) - 1n);
+
+    let packedPos = (xPacked << 38n) | (yPacked << 26n) | zPacked;
+
+    writeLongBE(packedPos, data, offset); offset += 8;
+    offset += writeVarInt(data, blockId >>> 0, offset);
+    data.writeUInt8(action & 0xFF, offset); offset += 1;
+
+    return makePacket(BLOCK_EFFECT_PACKET_ID, data.subarray(0, offset));
+}
+
 function sendSignTextUpdate(ws, x, y, z, text) {
     const str = String(text || '');
     const data = Buffer.alloc(8 + 5 + Buffer.byteLength(str));
@@ -558,6 +581,9 @@ export {
     sendWeatherUpdate,
     sendPlayerPositionLook,
     sendBlockChange,
+    createBlockEffectPacket,
+    BLOCK_EFFECT_BREAK,
+    BLOCK_EFFECT_PLACE,
     sendSignTextUpdate,
     sendChatMessage,
     createSpawnPlayerPacket,

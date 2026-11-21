@@ -26,6 +26,9 @@ import {
     sendPlayerListData,
     createDisconnectPacket,
     sendBlockChange,
+    createBlockEffectPacket,
+    BLOCK_EFFECT_BREAK,
+    BLOCK_EFFECT_PLACE,
     sendSignTextUpdate,
     createEntityMetadataPacket,
     createAnimationPacket
@@ -687,6 +690,8 @@ function handlePlayerDigging(player, buffer, offset) {
             sendBlockChange(p.ws, x, y, z, blockState);
         }
 
+        broadcastBlockEffect(player, x, y, z, prevBlockId, BLOCK_EFFECT_BREAK);
+
         broadcastAnimation(player);
     }
 }
@@ -777,6 +782,8 @@ function handleBlockPlacement(player, buffer, offset) {
                 for (const p of getPlayers().values()) {
                     sendBlockChange(p.ws, x, y, z, blockState);
                 }
+
+                broadcastBlockEffect(player, x, y, z, heldItemId, BLOCK_EFFECT_PLACE);
             }
             return;
         }
@@ -800,7 +807,8 @@ function handleBlockPlacement(player, buffer, offset) {
         }
 
         const targetBlock = Block.getById(targetId);
-        if (isInteractiveBlock(targetBlock)) {
+        // Sneaking bypasses block activation; the client places normally instead.
+        if (!player.isSneaking && isInteractiveBlock(targetBlock)) {
             const interactAction = emitServerBlockAction('interact', player, x, y, z, {
                 currentBlockId: heldItemId,
                 face: direction
@@ -930,6 +938,8 @@ function handleBlockPlacement(player, buffer, offset) {
             }
         }
 
+        broadcastBlockEffect(player, placeX, placeY, placeZ, blockId, BLOCK_EFFECT_PLACE);
+
         broadcastAnimation(player);
     }
 }
@@ -950,6 +960,32 @@ function broadcastEntityMetadata(player) {
     for (const [eid, p] of players) {
         if (eid === player.eid) continue;
         if (!canSee(p, player)) continue;
+        p.ws.send(packet);
+    }
+}
+
+const BLOCK_EFFECT_RANGE = 8;
+
+// Replay another player's break/place effects, but only for players close
+// enough to see the block (< 8 blocks), and never for the actor.
+function broadcastBlockEffect(source, x, y, z, blockId, action) {
+    if (!blockId) return;
+
+    const packet = createBlockEffectPacket(x, y, z, blockId, action);
+    const centerX = x + 0.5;
+    const centerY = y + 0.5;
+    const centerZ = z + 0.5;
+    const maxDistanceSq = BLOCK_EFFECT_RANGE * BLOCK_EFFECT_RANGE;
+
+    for (const p of getPlayers().values()) {
+        if (p === source || p.ws?.readyState !== 1) continue;
+        if ((p.dimension ?? 0) !== (source.dimension ?? 0)) continue;
+
+        const dx = p.x - centerX;
+        const dy = p.y - centerY;
+        const dz = p.z - centerZ;
+        if (dx * dx + dy * dy + dz * dz > maxDistanceSq) continue;
+
         p.ws.send(packet);
     }
 }

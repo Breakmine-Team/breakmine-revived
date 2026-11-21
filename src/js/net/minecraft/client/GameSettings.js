@@ -59,6 +59,7 @@ export default class GameSettings {
         this.showFps = false;
         this.showVersion = false;
         this.dynamicLights = false;
+        this.particles = 'all';
         this.showPreview = true;
         this.remoteSensitivity = 100;
 

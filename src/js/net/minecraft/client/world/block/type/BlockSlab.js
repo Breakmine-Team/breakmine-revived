@@ -4,7 +4,7 @@ import EnumBlockFace from "../../../../util/EnumBlockFace.js";
 
 export default class BlockSlab extends Block {
 
-    constructor(id, textureSlotId, textureName, displayName, sound = null) {
+    constructor(id, textureSlotId, textureName, displayName, sound = null, options = {}) {
         super(id, textureSlotId);
         this.textureName = textureName;
         this.description = displayName;
@@ -13,6 +13,12 @@ export default class BlockSlab extends Block {
         if (sound) {
             this.sound = sound;
         }
+        if (options.hardness !== undefined) this.hardness = options.hardness;
+        if (options.tool !== undefined) this.tool = options.tool;
+    }
+
+    getPreferredToolType() {
+        return this.tool ?? null;
     }
 
     isHalf() {

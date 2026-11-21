@@ -146,37 +146,40 @@ export default class GuiServerSlot extends GuiButton {
         this.drawString(stack, '§8' + this.worldDetails, slotX + 38, slotY + 22, GRAY, true, false);
 
         let pingIconBounds = null;
-        if (!this.isJsonProtocol()) {
-            try {
-                const iconW = 10;
-                const iconH = 7;
-                const gap = 1;
-                const drawX = slotX + this.width - iconW - 2;
-                const drawY = slotY;
-                const padding = 5;
-                pingIconBounds = { x: drawX - padding, y: drawY - padding, width: iconW + padding * 2, height: iconH + padding * 2 };
+        try {
+            const iconW = 10;
+            const iconH = 7;
+            const gap = 1;
+            const drawX = slotX + this.width - iconW - 2;
+            const drawY = slotY;
+            const padding = 5;
+            pingIconBounds = { x: drawX - padding, y: drawY - padding, width: iconW + padding * 2, height: iconH + padding * 2 };
 
-                if (this.isPinging) {
-                    const step = Math.floor((performance.now() - this.pingingStartedAt) / 100) % 8;
-                    const frame = step < 5 ? step + 1 : 9 - step;
-                    const pingingTexture = this.getTexture(`gui/pinging_${frame}.png`);
-                    if (pingingTexture) {
-                        this.drawSprite(stack, pingingTexture, 0, 0, 10, 8, drawX, drawY - 1, 10, 8);
-                    }
-                } else {
-                    const pingTexture = this.getTexture("gui/ping.png");
-                    if (pingTexture) {
-                        const index = this.pingIcon === null || this.pingIcon === undefined
-                            ? 5
-                            : Math.max(0, Math.min(5, this.pingIcon));
-                        const spriteX = 0;
-                        const spriteY = index * (iconH + gap);
-
-                        this.drawSprite(stack, pingTexture, spriteX, spriteY, iconW, iconH, drawX, drawY, iconW, iconH);
-                    }
+            if (this.isJsonProtocol()) {
+                const errorTexture = this.getTexture("gui/ping-error.png");
+                if (errorTexture) {
+                    this.drawSprite(stack, errorTexture, 0, 0, iconW, iconH, drawX, drawY, iconW, iconH);
                 }
-            } catch (e) {
+            } else if (this.isPinging) {
+                const step = Math.floor((performance.now() - this.pingingStartedAt) / 100) % 8;
+                const frame = step < 5 ? step + 1 : 9 - step;
+                const pingingTexture = this.getTexture(`gui/pinging_${frame}.png`);
+                if (pingingTexture) {
+                    this.drawSprite(stack, pingingTexture, 0, 0, 10, 8, drawX, drawY - 1, 10, 8);
+                }
+            } else {
+                const pingTexture = this.getTexture("gui/ping.png");
+                if (pingTexture) {
+                    const index = this.pingIcon === null || this.pingIcon === undefined
+                        ? 5
+                        : Math.max(0, Math.min(5, this.pingIcon));
+                    const spriteX = 0;
+                    const spriteY = index * (iconH + gap);
+
+                    this.drawSprite(stack, pingTexture, spriteX, spriteY, iconW, iconH, drawX, drawY, iconW, iconH);
+                }
             }
+        } catch (e) {
         }
 
         if (pingIconBounds && this.isMouseOverPingIcon(mouseX, mouseY, pingIconBounds)) {
@@ -406,11 +409,14 @@ export default class GuiServerSlot extends GuiButton {
     }
 
     getPingTooltipText() {
+        if (this.isJsonProtocol()) {
+            return "QuickJSON";
+        }
         if (this.isPinging) {
             return "Pinging...";
         }
         if (this.pingMs === null || this.pingMs < 0) {
-            return "(no connection)";
+            return "Ping failed";
         }
         return `${Math.max(0, Math.round(this.pingMs))}ms`;
     }

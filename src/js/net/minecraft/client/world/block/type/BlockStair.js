@@ -9,17 +9,22 @@ export default class BlockStair extends Block {
     static SOUTH = 2;
     static NORTH = 3;
 
-    constructor(id, textureSlotId, woodId, description) {
+    constructor(id, textureSlotId, woodId, description, options = {}) {
         super(id, textureSlotId);
         this.woodId = woodId;
         this.description = description + " Stairs";
         this.hardness = 2.0;
         this.multipart = true;
         this.noFaceCull = true;
+
+        this.tool = 'axe';
+        if (options.hardness !== undefined) this.hardness = options.hardness;
+        if (options.sound) this.sound = options.sound;
+        if (options.tool !== undefined) this.tool = options.tool;
     }
 
     getPreferredToolType() {
-        return 'axe';
+        return this.tool;
     }
 
     getAmbientOcclusion() {

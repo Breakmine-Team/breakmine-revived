@@ -2025,7 +2025,9 @@ export default class Minecraft {
                     let queryWorld = field ? field.createLocalWorld() : this.world;
 
                     let blockCheck = Block.getById(queryWorld.getBlockAt(hitResult.x, hitResult.y, hitResult.z));
-                    if (this.isInteractiveBlock(blockCheck)) {
+                    // Sneaking suppresses block activation, so the click falls
+                    // through to placing the held block against it.
+                    if (!this.player.isSneaking() && this.isInteractiveBlock(blockCheck)) {
                         let interactAction = this.emitBlockAction('interact', hitResult.x, hitResult.y, hitResult.z, {
                             world: queryWorld,
                             face: this.getFaceValue(hitResult.face),
