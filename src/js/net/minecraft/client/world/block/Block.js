@@ -10,6 +10,10 @@ export default class Block {
 
     static sounds = {};
 
+    // Selection ray for blocks that opt into setSelectionBoxFull: the whole
+    // 1x1x1 cell is pickable even when the block is rendered as a smaller shape.
+    static FULL_SELECTION_BOX = new BoundingBox(0.0, 0.0, 0.0, 1.0, 1.0, 1.0);
+
     static handHardnessMultiplier = 1.0;
 
     constructor(id, textureSlotId = id) {
@@ -23,6 +27,8 @@ export default class Block {
         this.description = null;
         this.shiftDescription = null;
 
+        this.setSelectionBoxFull = false;
+
         this.hardness = 1.0;
 
         Block.blocks.set(id, this);
@@ -30,6 +36,11 @@ export default class Block {
         this.path = false;
         this.noFaceCull = false;
         this.multipart = false;
+
+        // Blocks whose mesh must be animated even when their current rotation
+        // is zero. Their section mesh would otherwise be built as static and
+        // never rebuilt when power reaches them from another subchunk.
+        this.alwaysAnimated = false;
 
         this.renderInside = null;
 
@@ -292,6 +303,10 @@ export default class Block {
     }
 
     collisionRayTrace(world, x, y, z, start, end) {
+        if (this.setSelectionBoxFull === true) {
+            return this.raytraceBoundingBox(Block.FULL_SELECTION_BOX, x, y, z, start, end);
+        }
+
         if (this.multipart && this.usesMultipartShape()) {
             let multipart = this.getMultipart(world, x, y, z);
             if (Array.isArray(multipart) && multipart.length > 0) {

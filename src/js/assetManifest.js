@@ -151,7 +151,9 @@ export const atlasBlockTextures = [
     "bluestoneObserverBackOff.png", "oak_planks_sticky.png",
     "bluestoneRepeaterTopOff.png", "bluestoneRepeaterTopOn.png", "lever.png",
     "cobblestone_lever_base.png", "snow.png", "grass_block_snow.png",
-    "tnt_side.png", "tnt_bottom.png", "tnt_top.png", "bluestoneMemoryTopOn.png",
+    "tnt_side.png", "tnt_bottom.png", "tnt_top.png", "bluestoneMemoryTopOn.png", 
+    "window_planks.png", "window_planks_2.png", "window_planks_3.png", "window_planks_4.png",
+    "window_planks_5.png",
     "bluestoneMemoryTopOff.png", "bluestoneMemoryTopSetOffResetOffOn.png",
     "bluestoneMemoryTopSetOnResetOff.png", "bluestoneMemoryTopSetOnResetOnOff.png",
     "bluestoneMemoryTopSetOffResetOn.png",
@@ -213,7 +215,11 @@ export const modelAssets = [
     "model/barrier/model.obj",
     "model/barrier/texture.png",
     "model/trafficlight/model.obj",
-    "model/trafficlight/texture.png"
+    "model/trafficlight/texture.png",
+    "model/trafficlight/none.png",
+    "model/trafficlight/red.png",
+    "model/trafficlight/yellow.png",
+    "model/trafficlight/green.png"
 ];
 
 

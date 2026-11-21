@@ -20,6 +20,7 @@ export default class BlockShaftPart extends Block {
         this.sound = Block.sounds.stone;
 
         this.isShaftPart = true;
+        this.alwaysAnimated = true;
     }
 
     getAmbientOcclusion() {

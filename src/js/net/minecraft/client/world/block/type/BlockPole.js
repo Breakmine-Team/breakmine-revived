@@ -2,65 +2,66 @@ import Block from "../Block.js";
 import BoundingBox from "../../../../util/BoundingBox.js";
 import EnumCreativeInventoryTab from "../../../gui/EnumCreativeInventoryTab.js";
 
-const PX = 1 / 16;
-
-// 2x2 pixels wide, centred in the block.
-const POLE_MIN = PX * 7;
-const POLE_MAX = PX * 9;
-
-const POLE_COLOR = 0x939393;
-
-// Rendered as a flat white texture that is tinted to POLE_COLOR.
-const POLE_TEXTURE = "blank_white";
-
-class PolePart {
-    getTextureForFace() {
-        return POLE_TEXTURE;
-    }
-
-    getRotationForFace() {
-        return 0;
-    }
-
-    getColor() {
-        return POLE_COLOR;
-    }
-
-    isTranslucent() {
-        return false;
-    }
-
-    // The pole is thin, so it must not hide the faces of neighbouring blocks.
-    occludesNeighborFaces() {
-        return false;
-    }
-}
-
-const POLE_PART = new PolePart();
-
-const CORE = new BoundingBox(POLE_MIN, 0, POLE_MIN, POLE_MAX, 1, POLE_MAX);
-
-const SIDES = [
-    {dx: -1, dz: 0},
-    {dx: 1, dz: 0},
-    {dx: 0, dz: -1},
-    {dx: 0, dz: 1}
-];
-
-function armBoundingBox(dx, dz) {
-    if (dx === -1) {
-        return new BoundingBox(0, POLE_MIN, POLE_MIN, POLE_MIN, POLE_MAX, POLE_MAX);
-    }
-    if (dx === 1) {
-        return new BoundingBox(POLE_MAX, POLE_MIN, POLE_MIN, 1, POLE_MAX, POLE_MAX);
-    }
-    if (dz === -1) {
-        return new BoundingBox(POLE_MIN, POLE_MIN, 0, POLE_MAX, POLE_MAX, POLE_MIN);
-    }
-    return new BoundingBox(POLE_MIN, POLE_MIN, POLE_MAX, POLE_MAX, POLE_MAX, 1);
-}
-
 export default class BlockPole extends Block {
+    static PX = 1 / 16;
+    static POLE_MIN = BlockPole.PX * 7;
+    static POLE_MAX = BlockPole.PX * 9;
+    static POLE_COLOR = 0x939393;
+    static POLE_TEXTURE = "blank_white";
+
+    static CORE = new BoundingBox(BlockPole.POLE_MIN, 0, BlockPole.POLE_MIN, BlockPole.POLE_MAX, 1, BlockPole.POLE_MAX);
+    static ARM_WEST = new BoundingBox(0, BlockPole.POLE_MIN, BlockPole.POLE_MIN, BlockPole.POLE_MIN, BlockPole.POLE_MAX, BlockPole.POLE_MAX);
+    static ARM_EAST = new BoundingBox(BlockPole.POLE_MAX, BlockPole.POLE_MIN, BlockPole.POLE_MIN, 1, BlockPole.POLE_MAX, BlockPole.POLE_MAX);
+    static ARM_NORTH = new BoundingBox(BlockPole.POLE_MIN, BlockPole.POLE_MIN, 0, BlockPole.POLE_MAX, BlockPole.POLE_MAX, BlockPole.POLE_MIN);
+    static ARM_SOUTH = new BoundingBox(BlockPole.POLE_MIN, BlockPole.POLE_MIN, BlockPole.POLE_MAX, BlockPole.POLE_MAX, BlockPole.POLE_MAX, 1);
+
+    static POLE_PART = {
+        getTextureForFace() {
+            return BlockPole.POLE_TEXTURE;
+        },
+
+        getRotationForFace() {
+            return 0;
+        },
+
+        getColor() {
+            return BlockPole.POLE_COLOR;
+        },
+
+        isTranslucent() {
+            return false;
+        },
+
+        occludesNeighborFaces() {
+            return false;
+        }
+    };
+
+    static SIDES = [
+        { dx: -1, dz: 0, bbox: BlockPole.ARM_WEST },
+        { dx: 1, dz: 0, bbox: BlockPole.ARM_EAST },
+        { dx: 0, dz: -1, bbox: BlockPole.ARM_NORTH },
+        { dx: 0, dz: 1, bbox: BlockPole.ARM_SOUTH }
+    ];
+
+    static armBoundingBox(dx, dz) {
+        if (dx === -1) return BlockPole.ARM_WEST;
+        if (dx === 1) return BlockPole.ARM_EAST;
+        if (dz === -1) return BlockPole.ARM_NORTH;
+        return BlockPole.ARM_SOUTH;
+    }
+
+    static refreshNeighbors(world, x, y, z) {
+        if (!world || typeof world.onBlockChanged !== "function") {
+            return;
+        }
+
+        for (const { dx, dz } of BlockPole.SIDES) {
+            world.onBlockChanged(x + dx, y, z + dz);
+        }
+        world.onBlockChanged(x, y - 1, z);
+        world.onBlockChanged(x, y + 1, z);
+    }
 
     constructor(id, textureSlotId) {
         super(id, textureSlotId);
@@ -69,18 +70,19 @@ export default class BlockPole extends Block {
         this.sound = Block.sounds.stone;
         this.inventoryTab = EnumCreativeInventoryTab.DECORATION;
 
-        this.boundingBox = CORE;
+        this.boundingBox = BlockPole.CORE;
         this.multipart = true;
         this.noFaceCull = true;
         this.isPole = true;
+        this.setSelectionBoxFull = true;
     }
 
     getTextureForFace() {
-        return POLE_TEXTURE;
+        return BlockPole.POLE_TEXTURE;
     }
 
     getColor() {
-        return POLE_COLOR;
+        return BlockPole.POLE_COLOR;
     }
 
     getAmbientOcclusion() {
@@ -95,45 +97,31 @@ export default class BlockPole extends Block {
         return 0;
     }
 
-    // Vertical poles line up through the full-height core, horizontal ones join
-    // through a 2x2 arm at mid height so neighbours read as one continuous run.
     getMultipart(world, x, y, z) {
         const parts = [
-            ["blockClass", 0, {block: POLE_PART, bbox: CORE}]
+            ["blockClass", 0, { block: BlockPole.POLE_PART, bbox: BlockPole.CORE }]
         ];
 
         if (world === null || world === undefined) {
             return parts;
         }
 
-        for (const {dx, dz} of SIDES) {
+        for (const { dx, dz, bbox } of BlockPole.SIDES) {
             const neighbor = Block.getById(world.getBlockAt(x + dx, y, z + dz));
             if (neighbor === null || neighbor.isPole !== true) {
                 continue;
             }
-            parts.push(["blockClass", 0, {block: POLE_PART, bbox: armBoundingBox(dx, dz)}]);
+            parts.push(["blockClass", 0, { block: BlockPole.POLE_PART, bbox }]);
         }
 
         return parts;
     }
 
     onBlockAdded(world, x, y, z) {
-        this.refreshNeighbors(world, x, y, z);
+        BlockPole.refreshNeighbors(world, x, y, z);
     }
 
     onBlockRemoved(world, x, y, z) {
-        this.refreshNeighbors(world, x, y, z);
-    }
-
-    refreshNeighbors(world, x, y, z) {
-        if (!world || typeof world.onBlockChanged !== "function") {
-            return;
-        }
-
-        for (const {dx, dz} of SIDES) {
-            world.onBlockChanged(x + dx, y, z + dz);
-        }
-        world.onBlockChanged(x, y - 1, z);
-        world.onBlockChanged(x, y + 1, z);
+        BlockPole.refreshNeighbors(world, x, y, z);
     }
 }

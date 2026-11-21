@@ -36,6 +36,53 @@ export default class BlockTrafficLight extends Block {
         }
     }
 
+    // Metadata is a single 4-bit value shared with the network format.
+    // Entry [facing, state] for each metadata value; values 2-5 keep the
+    // original facing-only metadata working, those blocks just have no light on.
+    static DATA_LAYOUT = [
+        [2, 1], [3, 1],
+        [2, 0], [3, 0], [4, 0], [5, 0],
+        [4, 1], [5, 1],
+        [2, 2], [3, 2], [4, 2], [5, 2],
+        [2, 3], [3, 3], [4, 3], [5, 3]
+    ];
+
+    static getFacing(data) {
+        return BlockTrafficLight.DATA_LAYOUT[(data || 0) & 15][0];
+    }
+
+    static getLightState(data) {
+        return BlockTrafficLight.DATA_LAYOUT[(data || 0) & 15][1];
+    }
+
+    static encodeData(facing, state) {
+        const index = BlockTrafficLight.DATA_LAYOUT
+            .findIndex(entry => entry[0] === facing && entry[1] === state);
+        return index === -1 ? facing : index;
+    }
+
+    getLightValue(world, x, y, z) {
+        if (!world || typeof x !== 'number') {
+            return 0;
+        }
+        return BlockTrafficLight.getLightState(world.getBlockDataAt(x, y, z)) === 0 ? 0 : 10;
+    }
+
+    onMouseButton(world, x, y, z, button) {
+        if (button !== 2) {
+            return false;
+        }
+
+        const data = world.getBlockDataAt(x, y, z) || 0;
+        const facing = BlockTrafficLight.getFacing(data);
+        const nextState = (BlockTrafficLight.getLightState(data) + 1) & 3;
+        world.setBlockDataAt(x, y, z, BlockTrafficLight.encodeData(facing, nextState));
+
+        world.minecraft?.player?.swingArm?.();
+        world.minecraft?.soundManager?.playGuiClick?.();
+        return true;
+    }
+
     onRender(world, x, y, z, blockRenderer) {
         blockRenderer.renderTrafficLight(world, x, y, z);
         return true;

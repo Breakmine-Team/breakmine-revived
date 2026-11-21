@@ -9,7 +9,7 @@ export default class BlockStructureMarker extends Block {
         this.textureName = textureName;
         this.hardness = 0.5;
         this.sound = Block.sounds.stone;
-        this.inventoryTab = EnumCreativeInventoryTab.BUILDING_BLOCKS;
+        this.inventoryTab = EnumCreativeInventoryTab.DEBUG;
     }
 
     getTextureForFace(face) {

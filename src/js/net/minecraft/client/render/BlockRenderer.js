@@ -8,6 +8,7 @@ import BlockRenderType from "../../util/BlockRenderType.js";
 import Tessellator from "./Tessellator.js";
 import MathHelper from "../../util/MathHelper.js";
 import Block from "../world/block/Block.js";
+import BlockTrafficLight from "../world/block/type/BlockTrafficLight.js";
 import BoundingBox from "../../util/BoundingBox.js";
 import { BlockRegistry } from "../world/block/BlockRegistry.js";
 import * as THREE from "../../../../../../libraries/three.module.js";
@@ -16,7 +17,7 @@ import EnumCreativeInventoryTab from "../gui/EnumCreativeInventoryTab.js";
 import getTrafficConeModel, { getTrafficConeTexture } from "./model/TrafficConeModel.js";
 import getSnailModel, { getSnailTexture } from "./model/SnailModel.js";
 import getTrafficBarrierModel, { getTrafficBarrierTexture } from "./model/TrafficBarrierModel.js";
-import getTrafficLightModel, { getTrafficLightTexture } from "./model/TrafficLightModel.js";
+import getTrafficLightModel, { getTrafficLightTexture, TRAFFIC_LIGHT_STATES } from "./model/TrafficLightModel.js";
 
 
 
@@ -48,7 +49,9 @@ export default class BlockRenderer {
         this.modelTessellator = this.createModelTessellator(getTrafficConeTexture());
         this.barrierModelTessellator = this.createModelTessellator(getTrafficBarrierTexture());
         this.snailModelTessellator = this.createModelTessellator(getSnailTexture());
-        this.trafficLightModelTessellator = this.createModelTessellator(getTrafficLightTexture());
+        this.trafficLightTessellators = TRAFFIC_LIGHT_STATES.map(
+            state => this.createModelTessellator(getTrafficLightTexture(state))
+        );
         this.modelPassActive = false;
 
         this.rotatingTessellator = new Tessellator();
@@ -138,7 +141,11 @@ export default class BlockRenderer {
         const angleY = Number(rotation.y) || 0;
         const angleZ = Number(rotation.z) || 0;
 
-        return angleX === 0 && angleY === 0 && angleZ === 0 ? null : {x: angleX, y: angleY, z: angleZ};
+        if (angleX === 0 && angleY === 0 && angleZ === 0 && block.alwaysAnimated !== true) {
+            return null;
+        }
+
+        return {x: angleX, y: angleY, z: angleZ};
     }
 
     
@@ -1358,18 +1365,19 @@ export default class BlockRenderer {
 
     renderTrafficLight(world, x, y, z) {
         const data = world === null ? 2 : world.getBlockDataAt(x, y, z);
-        let facing = data & 7;
-        if (facing === 0) {
-            facing = 2;
-        }
+        const facing = BlockTrafficLight.getFacing(data);
 
         const rotation = facing === 3 ? Math.PI
             : facing === 4 ? Math.PI / 2
             : facing === 5 ? -Math.PI / 2
             : 0;
 
+        const state = BlockTrafficLight.getLightState(data);
+        const tessellator = this.trafficLightTessellators[state]
+            ?? this.trafficLightTessellators[0];
+
         this.renderCustomModel(
-            this.trafficLightModelTessellator,
+            tessellator,
             getTrafficLightModel(),
             world, x, y, z, rotation
         );

@@ -12,7 +12,7 @@ export default class EnumCreativeInventoryTab {
 
     static FACTORIO = new EnumCreativeInventoryTab("Factorio", 9, 342);
 
-    static SURVIVAL_INVENTORY = new EnumCreativeInventoryTab("Survival Inventory", 10, 32);
+    static SURVIVAL_INVENTORY = new EnumCreativeInventoryTab("", 10, 32);
 
     static SEARCH = new EnumCreativeInventoryTab("Search", 999, 20);
     static BOOKMARKS = new EnumCreativeInventoryTab("Bookmarks", 998, 20);

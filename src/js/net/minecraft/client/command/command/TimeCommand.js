@@ -28,7 +28,7 @@ export default class TimeCommand extends Command {
                 if (value === "day") {
                     value = 1000;
                 } else if (value === "night") {
-                    value = 13000;
+                    value = 16000;
                 } else {
                     return false;
                 }

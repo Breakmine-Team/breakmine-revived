@@ -1721,16 +1721,21 @@ export default class WorldRenderer {
             if (typeId !== 0) {
                 let block = Block.getById(typeId);
 
-                let boxes = world.getBlockCollisionBoxesAt(x, y, z);
-                if (boxes.length === 0 && block) {
-                    let bboxWorld = (hitResult.fieldCell && world.offGridField)
-                        ? world.offGridField.createLocalWorld() : world;
-                    let bbox = block.getBoundingBox(bboxWorld, x, y, z);
-                    if (bbox) {
-                        boxes = [new BoundingBox(
-                            x + bbox.minX, y + bbox.minY, z + bbox.minZ,
-                            x + bbox.maxX, y + bbox.maxY, z + bbox.maxZ
-                        )];
+                let boxes;
+                if (block && block.setSelectionBoxFull === true) {
+                    boxes = [new BoundingBox(x, y, z, x + 1, y + 1, z + 1)];
+                } else {
+                    boxes = world.getBlockCollisionBoxesAt(x, y, z);
+                    if (boxes.length === 0 && block) {
+                        let bboxWorld = (hitResult.fieldCell && world.offGridField)
+                            ? world.offGridField.createLocalWorld() : world;
+                        let bbox = block.getBoundingBox(bboxWorld, x, y, z);
+                        if (bbox) {
+                            boxes = [new BoundingBox(
+                                x + bbox.minX, y + bbox.minY, z + bbox.minZ,
+                                x + bbox.maxX, y + bbox.maxY, z + bbox.maxZ
+                            )];
+                        }
                     }
                 }
 
@@ -1751,7 +1756,6 @@ export default class WorldRenderer {
 
         this.lastHitResult = hitResult;
     }
-
     
     updateBlockHitBoxOutline(segments) {
         const needed = segments.length * 6;

@@ -47,6 +47,8 @@ import ItemBucketEmpty from "./type/ItemBucketEmpty.js";
 import BlockBush from "./type/BlockBush.js";
 import BlockFence from "./type/BlockFence.js";
 import BlockTable from "./type/BlockTable.js";
+import BlockChair from "./type/BlockChair.js";
+import BlockBench from "./type/BlockBench.js";
 import BlockWoodPanel from "./type/BlockWoodPanel.js";
 import BlockDebugSpinner from "./type/BlockDebugSpinner.js";
 import SoundGrass from "./sound/SoundGrass.js";
@@ -259,6 +261,7 @@ export class BlockRegistry {
         BlockRegistry.JUNGLE_LEAVES = new BlockLeave(250, 0, "jungle", "Jungle Leaves");
         BlockRegistry.ACACIA_LEAVES = new BlockLeave(251, 0, "acacia", "Acacia Leaves");
         BlockRegistry.GLASS = new BlockGlass(20, 12);
+        BlockRegistry.BOARDED_GLASS = new BlockGlass(423, 0, true);
         BlockRegistry.WATER = new BlockWater(9, 7);
         BlockRegistry.SAND = new BlockSand(12, 8);
         BlockRegistry.TORCH = new BlockTorch(50, 9);
@@ -370,6 +373,8 @@ export class BlockRegistry {
         BlockRegistry.WOOD_SLAB = new BlockSlab(71, 0, "oak_planks", "Oak Slab", Block.sounds.wood);
         BlockRegistry.FENCE = new BlockFence(36, 0, "oak", 5);
         BlockRegistry.OAK_TABLE = new BlockTable(357, 0, "oak", BlockRegistry.WOOD.id, "Oak");
+        BlockRegistry.OAK_CHAIR = new BlockChair(328, 0, "oak", BlockRegistry.WOOD.id, "Oak");
+        BlockRegistry.OAK_BENCH = new BlockBench(333, 0, "oak", BlockRegistry.WOOD.id, "Oak");
         BlockRegistry.OAK_DOOR = new BlockDoor(160, 0);
         BlockRegistry.OAK_DOOR_TOP = new BlockDoor(161, 0);
         BlockRegistry.ITEM_OAK_DOOR_PLACER = new ItemDoorPlacer(162, 0, "Oak Door", BlockRegistry.OAK_DOOR, 'oak_door')
@@ -397,6 +402,8 @@ export class BlockRegistry {
         BlockRegistry.SPRUCE_SLAB = new BlockSlab(72, 0, "spruce_planks", "Spruce Slab", Block.sounds.wood);
         BlockRegistry.SPRUCE_FENCE = new BlockFence(60, 0, "spruce", 58);
         BlockRegistry.SPRUCE_TABLE = new BlockTable(358, 0, "spruce", BlockRegistry.SPRUCE_PLANKS.id, "Spruce");
+        BlockRegistry.SPRUCE_CHAIR = new BlockChair(329, 0, "spruce", BlockRegistry.SPRUCE_PLANKS.id, "Spruce");
+        BlockRegistry.SPRUCE_BENCH = new BlockBench(334, 0, "spruce", BlockRegistry.SPRUCE_PLANKS.id, "Spruce");
 
         BlockRegistry.BIRCH_LOG = new BlockLog(62, 0, "birch", "Birch Log");
         BlockRegistry.BIRCH_LOG_BARK = new BlockLogBark(240, 0, "birch", "Birch Bark");
@@ -405,6 +412,8 @@ export class BlockRegistry {
         BlockRegistry.BIRCH_SLAB = new BlockSlab(73, 0, "birch_planks", "Birch Slab", Block.sounds.wood);
         BlockRegistry.BIRCH_FENCE = new BlockFence(63, 0, "birch", 61);
         BlockRegistry.BIRCH_TABLE = new BlockTable(359, 0, "birch", BlockRegistry.BIRCH_PLANKS.id, "Birch");
+        BlockRegistry.BIRCH_CHAIR = new BlockChair(330, 0, "birch", BlockRegistry.BIRCH_PLANKS.id, "Birch");
+        BlockRegistry.BIRCH_BENCH = new BlockBench(335, 0, "birch", BlockRegistry.BIRCH_PLANKS.id, "Birch");
 
         BlockRegistry.JUNGLE_LOG = new BlockLog(65, 0, "jungle", "Jungle Log");
         BlockRegistry.JUNGLE_LOG_BARK = new BlockLogBark(241, 0, "jungle", "Jungle Bark");
@@ -413,6 +422,8 @@ export class BlockRegistry {
         BlockRegistry.JUNGLE_SLAB = new BlockSlab(74, 0, "jungle_planks", "Jungle Slab", Block.sounds.wood);
         BlockRegistry.JUNGLE_FENCE = new BlockFence(66, 0, "jungle", 64);
         BlockRegistry.JUNGLE_TABLE = new BlockTable(360, 0, "jungle", BlockRegistry.JUNGLE_PLANKS.id, "Jungle");
+        BlockRegistry.JUNGLE_CHAIR = new BlockChair(331, 0, "jungle", BlockRegistry.JUNGLE_PLANKS.id, "Jungle");
+        BlockRegistry.JUNGLE_BENCH = new BlockBench(336, 0, "jungle", BlockRegistry.JUNGLE_PLANKS.id, "Jungle");
 
         BlockRegistry.ACACIA_LOG = new BlockLog(68, 0, "acacia", "Acacia Log");
         BlockRegistry.ACACIA_LOG_BARK = new BlockLogBark(242, 0, "acacia", "Acacia Bark");
@@ -421,6 +432,8 @@ export class BlockRegistry {
         BlockRegistry.ACACIA_SLAB = new BlockSlab(75, 0, "acacia_planks", "Acacia Slab", Block.sounds.wood);
         BlockRegistry.ACACIA_FENCE = new BlockFence(69, 0, "acacia", 67);
         BlockRegistry.ACACIA_TABLE = new BlockTable(361, 0, "acacia", BlockRegistry.ACACIA_PLANKS.id, "Acacia");
+        BlockRegistry.ACACIA_CHAIR = new BlockChair(332, 0, "acacia", BlockRegistry.ACACIA_PLANKS.id, "Acacia");
+        BlockRegistry.ACACIA_BENCH = new BlockBench(337, 0, "acacia", BlockRegistry.ACACIA_PLANKS.id, "Acacia");
         
         BlockRegistry.COBBLE_STONE = new BlockCobblestone(4, 14);
         BlockRegistry.COBBLESTONE_STAIRS = new BlockStair(155, 0, 4, "Cobblestone");
