@@ -306,7 +306,7 @@ export default class GuiMainMenu extends GuiScreen {
     }
 
     drawLogo(stack, x, y, width = 274, height = 42) {
-        this.drawSprite(stack, this.textureLogo, 0, 0, 1024, 128, x, y, width, height);
+        this.drawSprite(stack, this.textureLogo, 0, 0, 1024, 128, x, y + 5, width, height);
     }
 
     drawSplash(stack) {
