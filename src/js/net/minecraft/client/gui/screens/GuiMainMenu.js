@@ -255,7 +255,7 @@ export default class GuiMainMenu extends GuiScreen {
     drawScreen(stack, mouseX, mouseY, partialTicks) {
         const mobile = this.minecraft.window.mobileDevice;
         let logoWidth = mobile ? 200 : 274;
-        let logoHeight = Math.round(logoWidth * (158 / 1024)); 
+        let logoHeight = Math.round(logoWidth * (128 / 1024)); 
         let x = this.width / 2 - logoWidth / 2;
         let y = mobile ? 10 : 30;
 
@@ -306,7 +306,7 @@ export default class GuiMainMenu extends GuiScreen {
     }
 
     drawLogo(stack, x, y, width = 274, height = 42) {
-        this.drawSprite(stack, this.textureLogo, 0, 0, 1024, 158, x, y, width, height);
+        this.drawSprite(stack, this.textureLogo, 0, 0, 1024, 128, x, y, width, height);
     }
 
     drawSplash(stack) {
