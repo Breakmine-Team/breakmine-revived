@@ -56,6 +56,8 @@ export default class World {
         this.blockEntities = new Map();
 
         this.offGridField = null;
+        this.extraOffGridFields = [];
+        this.rayTraceOffGridField = null;
 
         this.rayTraceFieldCell = false;
 
@@ -148,8 +150,10 @@ export default class World {
 
         this.processBlockTicks();
 
-        if (this.offGridField !== null && this.offGridField.cells.size > 0) {
-            this.offGridField.tickBlocks();
+        for (const field of this.getOffGridFields()) {
+            if (field.cells.size > 0) {
+                field.tickBlocks();
+            }
         }
 
         BearingDrive.tickWorld(this);
@@ -474,15 +478,19 @@ export default class World {
             }
         }
 
-        if (includeOffGrid && this.offGridField !== null && this.offGridField.cells.size > 0) {
-            this.offGridField.addCollisionBoxes(region, boundingBoxList);
+        if (includeOffGrid) {
+            for (const field of this.getOffGridFields()) {
+                if (field.cells.size > 0) {
+                    field.addCollisionBoxes(region, boundingBoxList);
+                }
+            }
         }
 
         return boundingBoxList;
     }
 
     getBlockCollisionBoxesAt(x, y, z, query = null) {
-        if (this.offGridField !== null && this.offGridField.covers(x, y, z)) {
+        if (this.getOffGridFieldAt(x, y, z) !== null) {
             return [];
         }
 
@@ -627,8 +635,12 @@ export default class World {
             }
         }
 
-        if (includeOffGrid && this.offGridField !== null && this.offGridField.cells.size > 0) {
-            this.offGridField.addCollisionBoxes(region, boundingBoxList);
+        if (includeOffGrid) {
+            for (const field of this.getOffGridFields()) {
+                if (field.cells.size > 0) {
+                    field.addCollisionBoxes(region, boundingBoxList);
+                }
+            }
         }
 
         return boundingBoxList;
@@ -886,8 +898,9 @@ export default class World {
         let oldTypeId = this.getBlockAt(x, y, z);
         let oldBlock = Block.getById(oldTypeId);
 
-        if (this.offGridField !== null && this.offGridField.covers(x, y, z)) {
-            this.offGridField.applyWrite(x, y, z, type, data);
+        const coveringField = this.getOffGridFieldAt(x, y, z);
+        if (coveringField !== null) {
+            coveringField.applyWrite(x, y, z, type, data);
             return;
         }
 
@@ -1173,8 +1186,9 @@ export default class World {
     }
 
     setBlockDataAt(x, y, z, data) {
-        if (this.offGridField !== null && this.offGridField.covers(x, y, z)) {
-            this.offGridField.applyWrite(x, y, z, this.offGridField.getBlockAt(x, y, z), data);
+        const dataField = this.getOffGridFieldAt(x, y, z);
+        if (dataField !== null) {
+            dataField.applyWrite(x, y, z, dataField.getBlockAt(x, y, z), data);
             return;
         }
 
@@ -1186,9 +1200,32 @@ export default class World {
         }
     }
 
+    getOffGridFields() {
+        const fields = [];
+        if (this.offGridField !== null) {
+            fields.push(this.offGridField);
+        }
+        for (const field of this.extraOffGridFields) {
+            if (field && field.cells.size > 0) {
+                fields.push(field);
+            }
+        }
+        return fields;
+    }
+
+    getOffGridFieldAt(x, y, z) {
+        for (const field of this.getOffGridFields()) {
+            if (field.covers(x, y, z)) {
+                return field;
+            }
+        }
+        return null;
+    }
+
     getBlockAt(x, y, z) {
-        if (this.offGridField !== null && !this.offGridField.isPosed()) {
-            const fieldTypeId = this.offGridField.getBlockAt(x, y, z);
+        for (const field of this.getOffGridFields()) {
+            if (field.isPosed()) continue;
+            const fieldTypeId = field.getBlockAt(x, y, z);
             if (fieldTypeId !== -1) return fieldTypeId;
         }
         let chunkSection = this.getChunkAtBlock(x, y, z);
@@ -1196,8 +1233,9 @@ export default class World {
     }
 
     getBlockDataAt(x, y, z) {
-        if (this.offGridField !== null && !this.offGridField.isPosed()) {
-            const fieldData = this.offGridField.getBlockDataAt(x, y, z);
+        for (const field of this.getOffGridFields()) {
+            if (field.isPosed()) continue;
+            const fieldData = field.getBlockDataAt(x, y, z);
             if (fieldData !== -1) return fieldData;
         }
         let chunkSection = this.getChunkAtBlock(x, y, z);
@@ -1254,36 +1292,45 @@ export default class World {
 
     
     rayTraceBlocks(from, to, slab = false) {
-        const field = this.offGridField;
-        if (field === null || field.cells.size === 0 || !field.isPosed()) {
-            return this.traceWorldRay(from, to, slab);
+        let best = this.traceWorldRay(from, to, slab);
+        let bestDistance = best !== null && typeof best !== "number"
+            ? from.squareDistanceTo(best.vector)
+            : Infinity;
+
+        for (const field of this.getOffGridFields()) {
+            if (field.cells.size === 0 || !field.isPosed()) continue;
+
+            const hit = field.rayTrace(from, to, slab);
+            if (hit === null) continue;
+            if (typeof hit === "number") return hit;
+
+            const distance = from.squareDistanceTo(hit.vector);
+            if (distance < bestDistance) {
+                hit.fieldCell = true;
+                hit.offGridField = field;
+                best = hit;
+                bestDistance = distance;
+            }
         }
 
-        const fieldHit = field.rayTrace(from, to, slab);
-        if (fieldHit === null) return this.traceWorldRay(from, to, slab);
-        if (typeof fieldHit === "number") return fieldHit;
-
-        const worldHit = this.traceWorldRay(from, to, slab);
-        if (worldHit === null) return fieldHit;
-        if (typeof worldHit === "number") return worldHit;
-
-        const fieldDistance = from.squareDistanceTo(fieldHit.vector);
-        const worldDistance = from.squareDistanceTo(worldHit.vector);
-        return fieldDistance <= worldDistance ? fieldHit : worldHit;
+        return best;
     }
 
     
     getRayTraceBlockAt(x, y, z) {
-        const field = this.offGridField;
-        if (field !== null && field.cells.size > 0 && field.covers(x, y, z)) {
+        const field = this.getOffGridFieldAt(x, y, z);
+        if (field !== null && field.cells.size > 0) {
             if (field.isPosed()) {
                 this.rayTraceFieldCell = false;
+                this.rayTraceOffGridField = null;
                 return 0;
             }
             this.rayTraceFieldCell = true;
+            this.rayTraceOffGridField = field;
             return field.getBlockAt(x, y, z);
         }
         this.rayTraceFieldCell = false;
+        this.rayTraceOffGridField = null;
         return this.getBlockAt(x, y, z);
     }
 
@@ -1303,6 +1350,7 @@ export default class World {
             let hit = block.collisionRayTrace(this, x, y, z, from, to);
             if (hit != null) {
                 hit.fieldCell = this.rayTraceFieldCell;
+                hit.offGridField = this.rayTraceFieldCell ? this.rayTraceOffGridField : null;
                 if (slab) {
                     if (hit.face === EnumBlockFace.TOP) {
                         return 0;
@@ -1422,6 +1470,7 @@ export default class World {
                 let hit = block.collisionRayTrace(this, x, y, z, from, to);
                 if (hit != null) {
                     hit.fieldCell = this.rayTraceFieldCell;
+                hit.offGridField = this.rayTraceFieldCell ? this.rayTraceOffGridField : null;
                     if (slab) {
                         if (hit.face === EnumBlockFace.TOP) {
                             return 0;
@@ -1675,8 +1724,10 @@ export default class World {
     }
 
     getTotalLightAt(x, y, z) {
-        if (this.offGridField !== null && !this.offGridField.isPosed() && this.offGridField.covers(x, y, z)) {
-            return 15;
+        for (const field of this.getOffGridFields()) {
+            if (!field.isPosed() && field.covers(x, y, z)) {
+                return 15;
+            }
         }
 
         if (!this.blockExists(x, y, z)) {

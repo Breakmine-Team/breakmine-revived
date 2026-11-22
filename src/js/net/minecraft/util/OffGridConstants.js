@@ -10,6 +10,8 @@ export const OFF_GRID_STATE_PACKET_ID = 0x60;
 export const OFF_GRID_UPDATE_PACKET_ID = 0x61;
 export const OFF_GRID_REQUEST_PACKET_ID = 0x62;
 export const OFF_GRID_CELL_PACKET_ID = 0x63;
+export const OFF_GRID_BEARING_PACKET_ID = 0x64;
+export const OFF_GRID_BEARING_CELL_PACKET_ID = 0x65;
 
 
 export const OFF_GRID_UPDATE_SET_CELL = 0;

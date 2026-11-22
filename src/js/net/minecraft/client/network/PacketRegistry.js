@@ -55,6 +55,12 @@ import ServerOffGridStatePacket from "./packet/play/server/ServerOffGridStatePac
 import ServerOffGridUpdatePacket from "./packet/play/server/ServerOffGridUpdatePacket.js";
 import ClientOffGridRequestPacket from "./packet/play/client/ClientOffGridRequestPacket.js";
 import ClientOffGridCellPacket from "./packet/play/client/ClientOffGridCellPacket.js";
+import ClientOffGridBearingPacket from "./packet/play/client/ClientOffGridBearingPacket.js";
+import ClientOffGridBearingCellPacket from "./packet/play/client/ClientOffGridBearingCellPacket.js";
+import {
+    OFF_GRID_BEARING_CELL_PACKET_ID,
+    OFF_GRID_BEARING_PACKET_ID
+} from "../../util/OffGridConstants.js";
 import {
     OFF_GRID_CELL_PACKET_ID,
     OFF_GRID_REQUEST_PACKET_ID,
@@ -129,6 +135,8 @@ export default class PacketRegistry {
         this.registerClient(ProtocolState.PLAY, 0x1F, ClientModListPacket);
         this.registerClient(ProtocolState.PLAY, OFF_GRID_REQUEST_PACKET_ID, ClientOffGridRequestPacket);
         this.registerClient(ProtocolState.PLAY, OFF_GRID_CELL_PACKET_ID, ClientOffGridCellPacket);
+        this.registerClient(ProtocolState.PLAY, OFF_GRID_BEARING_PACKET_ID, ClientOffGridBearingPacket);
+        this.registerClient(ProtocolState.PLAY, OFF_GRID_BEARING_CELL_PACKET_ID, ClientOffGridBearingCellPacket);
     }
 
     registerClient(state, id, packet) {

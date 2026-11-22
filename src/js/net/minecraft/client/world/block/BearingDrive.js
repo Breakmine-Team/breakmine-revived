@@ -1,24 +1,69 @@
 import Block from "./Block.js";
 import ShaftDrive from "./ShaftDrive.js";
-import { getOrBindField } from "../../render/OffGridClientSync.js";
+import { sendBearingPose, sendBearingCell } from "../../render/OffGridClientSync.js";
+import OffGridBlockField from "../../render/OffGridBlockField.js";
 
 export default class BearingDrive {
 
-    
     static MAX_CELLS = 64;
 
-    
     static MAX_VISITED = 256;
 
-    
     static DEGREES_PER_RPM = 0.3;
 
-    
     static RELEASE_TICKS = 10;
 
     static groups = new WeakMap();
 
     static bearings = new WeakMap();
+
+    static fields = new WeakMap();
+
+    
+    static getField(world, x, y, z) {
+        let fields = BearingDrive.fields.get(world);
+        if (!fields) {
+            fields = new Map();
+            BearingDrive.fields.set(world, fields);
+        }
+
+        const key = BearingDrive.keyOf(x, y, z);
+        let field = fields.get(key);
+        if (field) {
+            return field;
+        }
+
+        field = new OffGridBlockField(world.minecraft || null);
+        field._suppressCellSync = true;
+        field.isolateNeighbors = true;
+        field.bind(world, world.offGridField !== null);
+        fields.set(key, field);
+        return field;
+    }
+
+    static dropField(world, x, y, z) {
+        const fields = world ? BearingDrive.fields.get(world) : null;
+        if (!fields) {
+            return;
+        }
+
+        const key = BearingDrive.keyOf(x, y, z);
+        const field = fields.get(key);
+        if (!field) {
+            return;
+        }
+
+        fields.delete(key);
+        field.dispose();
+    }
+
+    
+    static VERTICAL = Object.freeze({
+        normal: Object.freeze({x: 0, y: 1, z: 0}),
+        axis: "y",
+        axisIndex: 0,
+        sign: 1
+    });
 
     
     static stepFor(rpm, direction) {
@@ -37,6 +82,29 @@ export default class BearingDrive {
     static getGroup(world, x, y, z) {
         const groups = world ? BearingDrive.groups.get(world) : null;
         return groups ? groups.get(BearingDrive.keyOf(x, y, z)) || null : null;
+    }
+
+    
+    static attachmentOf(block, data) {
+        if (block && typeof block.getBearingAttachment === "function") {
+            const attachment = block.getBearingAttachment(data);
+            if (attachment && attachment.normal) {
+                return attachment;
+            }
+        }
+
+        return BearingDrive.VERTICAL;
+    }
+
+    static sameAttachment(group, attachment) {
+        if (!group || !attachment || !attachment.normal) {
+            return true;
+        }
+
+        return group.axis === attachment.axis &&
+            group.normal.x === attachment.normal.x &&
+            group.normal.y === attachment.normal.y &&
+            group.normal.z === attachment.normal.z;
     }
 
     
@@ -94,10 +162,20 @@ export default class BearingDrive {
                 continue;
             }
 
+            const data = typeof world.getBlockDataAt === "function"
+                ? world.getBlockDataAt(pos.x, pos.y, pos.z)
+                : 0;
+            const attachment = BearingDrive.attachmentOf(block, data);
+
             let group = BearingDrive.getGroup(world, pos.x, pos.y, pos.z);
 
+            if (group !== null && !BearingDrive.sameAttachment(group, attachment)) {
+                BearingDrive.release(world, pos.x, pos.y, pos.z);
+                group = null;
+            }
+
             if (group !== null &&
-                (group.field !== world.offGridField || !BearingDrive.stillCarried(group))) {
+                (group.field.world !== world || !BearingDrive.stillCarried(group))) {
                 BearingDrive.release(world, pos.x, pos.y, pos.z);
                 group = null;
             }
@@ -108,7 +186,7 @@ export default class BearingDrive {
 
             if (Number.isFinite(rpm) && rpm > 0) {
                 if (group === null) {
-                    group = BearingDrive.attach(world, pos.x, pos.y, pos.z);
+                    group = BearingDrive.attach(world, pos.x, pos.y, pos.z, attachment);
                 }
                 if (group !== null) {
                     group.idle = 0;
@@ -124,13 +202,14 @@ export default class BearingDrive {
     }
 
     
-    static collect(world, x, y, z) {
+    static collect(world, x, y, z, attachment = BearingDrive.VERTICAL) {
         const cells = [];
         if (!world || typeof world.getBlockAt !== "function") {
             return cells;
         }
 
-        const start = {x: x, y: y + 1, z: z};
+        const normal = attachment.normal || BearingDrive.VERTICAL.normal;
+        const start = {x: x + normal.x, y: y + normal.y, z: z + normal.z};
         const seen = new Set([BearingDrive.keyOf(start.x, start.y, start.z)]);
         const queue = [start];
         let visited = 0;
@@ -181,20 +260,20 @@ export default class BearingDrive {
     }
 
     
-    static attach(world, x, y, z) {
+    static attach(world, x, y, z, attachment = BearingDrive.VERTICAL) {
         if (!world || BearingDrive.getGroup(world, x, y, z) !== null) {
             return null;
         }
 
-        const field = getOrBindField(world.minecraft || null);
-        if (!field || field.cells.size > 0) {
+        const cells = BearingDrive.collect(world, x, y, z, attachment);
+        if (cells.length === 0) {
+            // A powered bearing with nothing on it retries every tick; don't
+            // build and throw away a whole field (and scene node) each time.
+            BearingDrive.dropField(world, x, y, z);
             return null;
         }
 
-        const cells = BearingDrive.collect(world, x, y, z);
-        if (cells.length === 0) {
-            return null;
-        }
+        const field = BearingDrive.getField(world, x, y, z);
 
         field._suppressCellSync = true;
 
@@ -206,10 +285,25 @@ export default class BearingDrive {
             field.fill(cell.x, cell.y, cell.z, 1, 1, 1, cell.typeId, cell.data);
         }
 
-        const pivot = {x: x + 0.5, y: y + 1, z: z + 0.5};
+        const normal = attachment.normal || BearingDrive.VERTICAL.normal;
+        const pivot = {
+            x: x + 0.5 + normal.x * 0.5,
+            y: y + 0.5 + normal.y * 0.5,
+            z: z + 0.5 + normal.z * 0.5
+        };
         field.setPose({x: 0, y: 0, z: 0}, {x: 0, y: 0, z: 0}, pivot);
 
-        const group = {cells: cells, live: new Map(), field: field, pivot: pivot, idle: 0};
+        const group = {
+            cells: cells,
+            live: new Map(),
+            field: field,
+            pivot: pivot,
+            idle: 0,
+            axis: attachment.axis,
+            axisIndex: attachment.axisIndex,
+            sign: attachment.sign,
+            normal: {x: normal.x, y: normal.y, z: normal.z}
+        };
         for (const cell of cells) {
             group.live.set(BearingDrive.keyOf(cell.x, cell.y, cell.z), {
                 x: cell.x, y: cell.y, z: cell.z,
@@ -218,12 +312,17 @@ export default class BearingDrive {
             });
         }
 
-        field.onCellEdit = (ex, ey, ez, typeId, data) => {
+        field.onCellEdit = (ex, ey, ez, typeId, data, fromNetwork) => {
             const cellKey = BearingDrive.keyOf(ex, ey, ez);
             if (typeId > 0) {
                 group.live.set(cellKey, {x: ex, y: ey, z: ez, typeId: typeId, data: data || 0});
             } else {
                 group.live.delete(cellKey);
+            }
+
+            
+            if (!fromNetwork) {
+                sendBearingCell(world.minecraft || null, x, y, z, ex, ey, ez, typeId, data || 0);
             }
         };
 
@@ -234,7 +333,19 @@ export default class BearingDrive {
         }
         groups.set(BearingDrive.keyOf(x, y, z), group);
 
+        BearingDrive.syncPose(world, group, x, y, z);
+
         return group;
+    }
+
+    
+    static syncPose(world, group, x, y, z) {
+        if (!world || !group || !group.field) {
+            return;
+        }
+
+        const angle = Number(group.field.rotation[group.axis]) || 0;
+        sendBearingPose(world.minecraft || null, x, y, z, group.axisIndex, angle, group.pivot);
     }
 
     
@@ -243,11 +354,12 @@ export default class BearingDrive {
         const field = group === null ? null : group.field;
         const step = BearingDrive.stepFor(rpm, direction);
 
-        if (!field || field !== world.offGridField || step === 0) {
+        if (!field || field.world !== world || step === 0) {
             return false;
         }
 
-        field.rotate(step, "y");
+        field.rotate(step * (group.sign < 0 ? -1 : 1), group.axis || "y");
+        BearingDrive.syncPose(world, group, x, y, z);
         return true;
     }
 
@@ -265,13 +377,15 @@ export default class BearingDrive {
         }
         groups.delete(key);
 
-        const field = group.field !== null && group.field === world.offGridField
+        const field = group.field !== null && group.field.world === world
             ? group.field : null;
         if (field) {
             field.onCellEdit = null;
             field._suppressCellSync = false;
 
             field.setPose({x: 0, y: 0, z: 0}, {x: 0, y: 0, z: 0}, null);
+
+            sendBearingPose(world.minecraft || null, x, y, z, group.axisIndex, 0, group.pivot);
         }
 
         for (const cell of group.live.values()) {
@@ -294,6 +408,8 @@ export default class BearingDrive {
                 field.applyWrite(cell.x, cell.y, cell.z, 0, 0, true);
             }
         }
+
+        BearingDrive.dropField(world, x, y, z);
 
         return true;
     }

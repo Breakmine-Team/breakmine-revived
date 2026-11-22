@@ -3,6 +3,8 @@ import OffGridBlockRenderer from "./OffGridBlockRenderer.js";
 import Block from "../world/block/Block.js";
 import { BlockRegistry } from "../world/block/BlockRegistry.js";
 import ClientOffGridCellPacket from "../network/packet/play/client/ClientOffGridCellPacket.js";
+import ClientOffGridBearingPacket from "../network/packet/play/client/ClientOffGridBearingPacket.js";
+import ClientOffGridBearingCellPacket from "../network/packet/play/client/ClientOffGridBearingCellPacket.js";
 import {
     OFF_GRID_UPDATE_ADD_GHOST,
     OFF_GRID_UPDATE_CLEAR_FIELD,
@@ -27,6 +29,23 @@ function attachCellSync(minecraft, field) {
         if (!networkManager || !networkManager.isConnected()) return;
         networkHandler.sendPacket(new ClientOffGridCellPacket(x, y, z, typeId, data));
     };
+}
+
+function sendBearingPose(minecraft, x, y, z, axis, angle, pivot) {
+    const networkHandler = minecraft?.playerController?.getNetworkHandler?.();
+    if (!networkHandler) return;
+    const networkManager = networkHandler.getNetworkManager?.();
+    if (!networkManager || !networkManager.isConnected()) return;
+    networkHandler.sendPacket(new ClientOffGridBearingPacket(x, y, z, axis, angle, pivot));
+}
+
+function sendBearingCell(minecraft, x, y, z, cellX, cellY, cellZ, typeId, data) {
+    const networkHandler = minecraft?.playerController?.getNetworkHandler?.();
+    if (!networkHandler) return;
+    const networkManager = networkHandler.getNetworkManager?.();
+    if (!networkManager || !networkManager.isConnected()) return;
+    networkHandler.sendPacket(new ClientOffGridBearingCellPacket(
+        x, y, z, cellX, cellY, cellZ, typeId, data));
 }
 
 function getOrBindField(minecraft) {
@@ -113,7 +132,17 @@ function applyOffGridUpdate(minecraft, update) {
         case OFF_GRID_UPDATE_POSE: {
             const field = minecraft.offGridBlockField;
             if (!field || field.world !== minecraft.world) return;
-            field.setPose(update.rotation, update.offset, update.pivot);
+            const numberOrZero = (value) => typeof value === 'number' && Number.isFinite(value) ? value : 0;
+            field.offset = {
+                x: numberOrZero(update.offset && update.offset.x),
+                y: numberOrZero(update.offset && update.offset.y),
+                z: numberOrZero(update.offset && update.offset.z)
+            };
+            field.pivot = update.pivot && Number.isFinite(update.pivot.x) &&
+                Number.isFinite(update.pivot.y) && Number.isFinite(update.pivot.z)
+                ? {x: update.pivot.x, y: update.pivot.y, z: update.pivot.z}
+                : field.pivot;
+            field.setRotation(update.rotation);
             return;
         }
 
@@ -147,6 +176,8 @@ function applyOffGridUpdate(minecraft, update) {
 
 export {
     getOrBindField,
+    sendBearingPose,
+    sendBearingCell,
     getOrBindRenderer,
     applyOffGridState,
     applyOffGridUpdate

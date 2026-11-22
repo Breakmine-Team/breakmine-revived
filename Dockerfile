@@ -19,7 +19,7 @@ COPY scripts/ ./scripts/
 COPY src/ ./src/
 COPY libraries/ ./libraries/
 COPY .well-known/ ./.well-known/
-COPY index.html style.css loading.gif catalog.json openapi.json api-docs.html _headers CNAME serve.json ./
+COPY index.html style.css loading.gif catalog.json openapi.json api-docs.html _headers CNAME serve.json manifest.webmanifest sw.js ./
 RUN node scripts/build-assets.js \
     && node scripts/build-site.js
 

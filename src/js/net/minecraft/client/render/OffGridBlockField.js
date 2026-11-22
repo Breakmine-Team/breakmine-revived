@@ -58,27 +58,58 @@ export default class OffGridBlockField {
 
         this._suppressCellSync = false;
 
+        this.isolateNeighbors = false;
+
         this.onCellEdit = null;
     }
 
     
-    bind(world) {
-        if (this.world !== null && this.world !== world && this.world.offGridField === this) {
-            this.world.offGridField = null;
+    bind(world, extra = false) {
+        if (this.world !== null && this.world !== world) {
+            this.unbindFromWorld();
         }
+
         this.world = world;
         if (world) {
-            world.offGridField = this;
+            if (!Array.isArray(world.extraOffGridFields)) {
+                world.extraOffGridFields = [];
+            }
+            if (extra) {
+                if (!world.extraOffGridFields.includes(this)) {
+                    world.extraOffGridFields.push(this);
+                }
+            } else if (world.offGridField !== this) {
+                const previous = world.offGridField;
+                if (previous && previous.cells.size > 0 &&
+                    !world.extraOffGridFields.includes(previous)) {
+                    world.extraOffGridFields.push(previous);
+                }
+                world.offGridField = this;
+            }
         }
         this.attachToScene();
+    }
+
+    unbindFromWorld() {
+        const world = this.world;
+        if (!world) return;
+
+        if (world.offGridField === this) {
+            world.offGridField = null;
+        }
+
+        if (Array.isArray(world.extraOffGridFields)) {
+            const index = world.extraOffGridFields.indexOf(this);
+            if (index !== -1) {
+                world.extraOffGridFields.splice(index, 1);
+            }
+        }
     }
 
     
     dispose() {
         this.clear();
-        if (this.world && this.world.offGridField === this) {
-            this.world.offGridField = null;
-        }
+        this.unbindFromWorld();
         this.world = null;
         if (this.group.parent) {
             this.group.parent.remove(this.group);
@@ -170,7 +201,7 @@ export default class OffGridBlockField {
 
         if (typeof this.onCellEdit === "function") {
             try {
-                this.onCellEdit(x, y, z, typeId ? typeId : 0, typeId ? (data || 0) : 0);
+                this.onCellEdit(x, y, z, typeId ? typeId : 0, typeId ? (data || 0) : 0, fromNetwork);
             } catch (e) {
                 console.error(`offGridField cell edit hook error at ${x},${y},${z}:`, e);
             }
@@ -283,6 +314,29 @@ export default class OffGridBlockField {
         }
 
         this.initializeBlockStates();
+    }
+
+    
+    setRotation(rotation) {
+        const numberOrZero = (value) => typeof value === 'number' && Number.isFinite(value) ? value : 0;
+        const wasPosed = this.isPosed();
+
+        this.rotation = {
+            x: numberOrZero(rotation && rotation.x),
+            y: numberOrZero(rotation && rotation.y),
+            z: numberOrZero(rotation && rotation.z)
+        };
+
+        this.applyTransform();
+
+        if (wasPosed !== this.isPosed()) {
+            const bounds = this.getBounds();
+            if (bounds) {
+                this.markWorldSectionsDirty(
+                    bounds.minX, bounds.minY, bounds.minZ,
+                    bounds.maxX, bounds.maxY, bounds.maxZ);
+            }
+        }
     }
 
     
@@ -639,14 +693,22 @@ export default class OffGridBlockField {
 
     
     rotate(degrees, axis) {
+        const wasPosed = this.isPosed();
+
         this.rotation[axis] = (this.rotation[axis] || 0) + degrees;
         this.applyTransform();
 
-        const bounds = this.getBounds();
-        if (bounds) {
-            this.markWorldSectionsDirty(
-                bounds.minX, bounds.minY, bounds.minZ,
-                bounds.maxX, bounds.maxY, bounds.maxZ);
+        // World chunk meshes skip posed fields entirely (World.getBlockAt), so
+        // a chunk's geometry only depends on the field while it sits flush with
+        // the world. Re-marking every rotation tick re-meshed whole chunks 20
+        // times a second for nothing.
+        if (wasPosed !== this.isPosed()) {
+            const bounds = this.getBounds();
+            if (bounds) {
+                this.markWorldSectionsDirty(
+                    bounds.minX, bounds.minY, bounds.minZ,
+                    bounds.maxX, bounds.maxY, bounds.maxZ);
+            }
         }
     }
 
@@ -1326,12 +1388,14 @@ export default class OffGridBlockField {
         const readLocalBlock = (x, y, z) => {
             const cell = cellAt(x, y, z);
             if (cell) return cell.typeId;
+            if (field.isolateNeighbors) return 0;
             const w = toWorldInt(x, y, z);
             return outOfWorld(w) ? 0 : realWorld.getBlockAt(w.x, w.y, w.z);
         };
         const readLocalData = (x, y, z) => {
             const cell = cellAt(x, y, z);
             if (cell) return cell.data;
+            if (field.isolateNeighbors) return 0;
             const w = toWorldInt(x, y, z);
             return outOfWorld(w) ? 0 : realWorld.getBlockDataAt(w.x, w.y, w.z);
         };
@@ -1347,6 +1411,7 @@ export default class OffGridBlockField {
                 const cellBlock = Block.getById(cell.typeId) || BlockRegistry.get(cell.typeId);
                 return !!cellBlock && !cellBlock.multipart && cellBlock.isSolid();
             }
+            if (field.isolateNeighbors) return false;
             const w = toWorldInt(x, y, z);
             return outOfWorld(w) ? false : realWorld.isSolidBlockAt(w.x, w.y, w.z);
         };

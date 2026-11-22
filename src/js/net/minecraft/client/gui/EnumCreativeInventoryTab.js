@@ -10,7 +10,7 @@ export default class EnumCreativeInventoryTab {
     static MODS = new EnumCreativeInventoryTab("Not Listed", 99998);
     static NOTLISTED = new EnumCreativeInventoryTab("Not Listed", 99999);
 
-    static FACTORIO = new EnumCreativeInventoryTab("Factorio", 9, 342);
+    static FACTORIO = new EnumCreativeInventoryTab("Rotational Machines", 9, 343);
 
     static SURVIVAL_INVENTORY = new EnumCreativeInventoryTab("", 10, 32);
 

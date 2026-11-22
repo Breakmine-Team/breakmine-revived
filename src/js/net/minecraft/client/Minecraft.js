@@ -314,7 +314,7 @@ export default class Minecraft {
                 return null;
             }
 
-            const field = hit.fieldCell && this.world.offGridField;
+            const field = hit.offGridField || (hit.fieldCell && this.world.offGridField);
             const typeId = field
                 ? field.getBlockAt(hit.x, hit.y, hit.z)
                 : this.world.getBlockAt(hit.x, hit.y, hit.z);
@@ -1556,8 +1556,8 @@ export default class Minecraft {
             this.lastBlockPos = { x: hitResult.x, y: hitResult.y, z: hitResult.z };
         }
 
-        let miningField = hitResult.fieldCell && this.world.offGridField
-            ? this.world.offGridField : null;
+        let miningField = hitResult.offGridField ||
+            (hitResult.fieldCell ? this.world.offGridField : null);
         let typeId = miningField
             ? miningField.getBlockAt(hitResult.x, hitResult.y, hitResult.z)
             : this.world.getBlockAt(hitResult.x, hitResult.y, hitResult.z);
@@ -1656,8 +1656,9 @@ export default class Minecraft {
     }
 
     breakTargetBlock(hitResult, typeId) {
-        let isFieldHit = !!(hitResult.fieldCell && this.world.offGridField);
-        const actionWorld = isFieldHit ? this.world.offGridField.createLocalWorld() : this.world;
+        const hitField = this.getHitField(hitResult);
+        let isFieldHit = !!hitField;
+        const actionWorld = hitField ? hitField.createLocalWorld() : this.world;
         const breakAction = this.emitBlockAction('break', hitResult.x, hitResult.y, hitResult.z, {
             world: actionWorld,
             metadata: actionWorld.getBlockDataAt(hitResult.x, hitResult.y, hitResult.z),
@@ -1693,9 +1694,7 @@ export default class Minecraft {
         this.soundManager.playSoundMono(soundName, 1.0, 1.0);
 
         this.particleRenderer.spawnBlockBreakParticle(this.world, hitResult.x, hitResult.y, hitResult.z,
-            hitResult.fieldCell && this.world.offGridField
-                ? this.world.offGridField.getParticlePose()
-                : null,
+            hitField ? hitField.getParticlePose() : null,
             isFieldHit ? block : null);
 
         this.soundManager.playSoundMono('random.pop', 1.0, 1.0);
@@ -1879,8 +1878,7 @@ export default class Minecraft {
 
                 if (hitResult != null) {
                     if (this.player.creative) {
-                        let field = hitResult.fieldCell && this.world.offGridField
-                            ? this.world.offGridField : null;
+                        let field = this.getHitField(hitResult);
 
                         if (field) {
                             let cellId = field.getBlockAt(hitResult.x, hitResult.y, hitResult.z);
@@ -1956,8 +1954,7 @@ export default class Minecraft {
 
             if (button === 1 && this.player.creative) {
                 if (hitResult != null) {
-                    let field = hitResult.fieldCell && this.world.offGridField
-                        ? this.world.offGridField : null;
+                    let field = this.getHitField(hitResult);
                     let typeId = field
                         ? field.getBlockAt(hitResult.x, hitResult.y, hitResult.z)
                         : this.world.getBlockAt(hitResult.x, hitResult.y, hitResult.z);
@@ -1995,8 +1992,9 @@ export default class Minecraft {
                         z = hitResult.z + hitResult.face.z;
                     }
                     let itemWorld = this.world;
-                    if (hitResult != null && hitResult.fieldCell && this.world.offGridField) {
-                        itemWorld = this.world.offGridField.createLocalWorld();
+                    const itemField = this.getHitField(hitResult);
+                    if (itemField) {
+                        itemWorld = itemField.createLocalWorld();
                     }
 
                     let heldBlock = Block.getById(heldItem.getType());
@@ -2021,7 +2019,7 @@ export default class Minecraft {
                     let y = hitResult.y + hitResult.face.y;
                     let z = hitResult.z + hitResult.face.z;
 
-                    let field = hitResult.fieldCell ? this.world.offGridField : null;
+                    let field = this.getHitField(hitResult);
                     let queryWorld = field ? field.createLocalWorld() : this.world;
 
                     let blockCheck = Block.getById(queryWorld.getBlockAt(hitResult.x, hitResult.y, hitResult.z));
@@ -2224,6 +2222,11 @@ export default class Minecraft {
 
     getSession() {
         return this.session;
+    }
+
+    getHitField(hit) {
+        if (!hit) return null;
+        return hit.offGridField || (hit.fieldCell ? this.world.offGridField : null);
     }
 
     isSingleplayer() {

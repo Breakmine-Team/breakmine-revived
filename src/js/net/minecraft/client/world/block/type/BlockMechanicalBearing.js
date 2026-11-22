@@ -95,6 +95,16 @@ export default class BlockMechanicalBearing extends BlockShaftPart {
         return ShaftRenderer.AXIS.Y;
     }
 
+    
+    getBearingAttachment(data) {
+        return {
+            normal: {x: 0, y: 1, z: 0},
+            axis: "y",
+            axisIndex: 0,
+            sign: 1
+        };
+    }
+
     getMultipart(world, x, y, z) {
         BearingDrive.register(world, x, y, z);
 
@@ -114,11 +124,10 @@ export default class BlockMechanicalBearing extends BlockShaftPart {
 
     
     getRenderRotation(world, x, y, z, data, tick) {
-        const field = world ? world.offGridField : null;
         const group = world ? BearingDrive.getGroup(world, x, y, z) : null;
 
-        if (field && group !== null && group.field === field) {
-            return {x: 0, y: field.rotation.y, z: 0};
+        if (group !== null && group.field) {
+            return {x: 0, y: group.field.rotation.y, z: 0};
         }
 
         return super.getRenderRotation(world, x, y, z, data, tick);

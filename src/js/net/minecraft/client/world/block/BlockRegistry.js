@@ -117,6 +117,7 @@ import BlockFlintCardoor from "./type/BlockFlintCardoor.js";
 import BlockObsidian from "./type/BlockObsidian.js";
 import BlockCryingObsidian from "./type/BlockCryingObsidian.js";
 import ItemFlint from "./type/ItemFlint.js";
+import ItemSlimeball from "./type/ItemSlimeball.js";
 import ItemKnife from "./type/ItemKnife.js";
 import ItemFlintAndSteel from "./type/ItemFlintAndSteel.js";
 import BlockTNT from "./type/BlockTNT.js";
@@ -135,6 +136,7 @@ import BlockGearbox from "./type/BlockGearbox.js";
 import BlockWaterWheel from "./type/BlockWaterWheel.js";
 import BlockLargeCog from "./type/BlockLargeCog.js";
 import BlockMechanicalBearing from "./type/BlockMechanicalBearing.js";
+import BlockHorizontalBearing from "./type/BlockHorizontalBearing.js";
 import BlockBluestoneTorch from "./type/BlockBluestoneTorch.js";
 import BlockTurntable from "./type/BlockTurntable.js";
 import BlockCctvCamera from "./type/BlockCctvCamera.js";
@@ -712,6 +714,7 @@ export class BlockRegistry {
         BlockRegistry.OBSIDIAN = new BlockObsidian(256, 0);
         BlockRegistry.CRYING_OBSIDIAN = new BlockCryingObsidian(257, 0);
         BlockRegistry.FLINT = new ItemFlint(235, 0, "flint", "Flint");
+        BlockRegistry.ITEM_SLIMEBALL = new ItemSlimeball(425, 0);
         BlockRegistry.FLINT_AND_STEEL = new ItemFlintAndSteel(236, 0, "flint_and_steel", "Flint and Steel");
         BlockRegistry.TNT = new BlockTNT(237, 0, "tnt", "TNT");
 
@@ -732,6 +735,7 @@ export class BlockRegistry {
         BlockRegistry.TURNTABLE = new BlockTurntable(348, 0);
         BlockRegistry.LARGE_COG = new BlockLargeCog(349, 0);
         BlockRegistry.MECHANICAL_BEARING = new BlockMechanicalBearing(350, 0);
+        BlockRegistry.HORIZONTAL_BEARING = new BlockHorizontalBearing(424, 0);
         BlockRegistry.BLUESTONE_TORCH = new BlockBluestoneTorch(351, 0);
         BlockRegistry.GEARSHIFT = new BlockGearshift(408, 0);
         BlockRegistry.CLUTCH = new BlockClutch(409, 0);

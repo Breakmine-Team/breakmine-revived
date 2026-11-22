@@ -183,8 +183,10 @@ export default class ChunkSection {
         }
 
         const animationTick = ChunkSection.animationTick();
-        const overlay = this.world.offGridField;
-        const checkOverlay = overlay !== null && !overlay.isPosed();
+        const overlays = typeof this.world.getOffGridFields === "function"
+            ? this.world.getOffGridFields()
+            : (this.world.offGridField ? [this.world.offGridField] : []);
+        const checkOverlay = overlays.length > 0;
         const sectionX = this.x * ChunkSection.SIZE;
         const sectionY = this.y * ChunkSection.SIZE;
         const sectionZ = this.z * ChunkSection.SIZE;
@@ -207,7 +209,8 @@ export default class ChunkSection {
 
                     const absoluteZ = sectionZ + z;
 
-                    if (checkOverlay && overlay.covers(absoluteX, absoluteY, absoluteZ)) {
+                    if (checkOverlay && overlays.some((field) =>
+                        field.cells.size > 0 && field.covers(absoluteX, absoluteY, absoluteZ))) {
                         continue;
                     }
 

@@ -586,8 +586,8 @@ export default class WorldRenderer {
             }
         }
 
-        const field = this.minecraft.world && this.minecraft.world.offGridField;
-        if (field && field.regions) {
+        const world = this.minecraft.world;
+        for (const field of world ? world.getOffGridFields() : []) {
             for (const region of field.regions.values()) {
                 for (const child of region.group.children) {
                     if (child.isMesh && child.userData.isTranslucent) {
@@ -1714,8 +1714,8 @@ export default class WorldRenderer {
 
             let world = this.minecraft.world;
 
-            let field = (hitResult.fieldCell && world.offGridField)
-                ? world.offGridField : null;
+            let field = hitResult.offGridField ||
+                (hitResult.fieldCell ? world.offGridField : null);
             let typeId = field ? field.getBlockAt(x, y, z) : world.getBlockAt(x, y, z);
 
             if (typeId !== 0) {
@@ -1727,8 +1727,7 @@ export default class WorldRenderer {
                 } else {
                     boxes = world.getBlockCollisionBoxesAt(x, y, z);
                     if (boxes.length === 0 && block) {
-                        let bboxWorld = (hitResult.fieldCell && world.offGridField)
-                            ? world.offGridField.createLocalWorld() : world;
+                        let bboxWorld = field ? field.createLocalWorld() : world;
                         let bbox = block.getBoundingBox(bboxWorld, x, y, z);
                         if (bbox) {
                             boxes = [new BoundingBox(
@@ -1841,7 +1840,7 @@ export default class WorldRenderer {
 
         let world = this.minecraft.world;
 
-        let field = hitResult.fieldCell ? world.offGridField : null;
+        let field = hitResult.offGridField || (hitResult.fieldCell ? world.offGridField : null);
         let queryWorld = field ? field.createLocalWorld() : world;
 
         if (field) {

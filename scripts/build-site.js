@@ -21,7 +21,12 @@ const FILES = [
     'openapi.json',
     'api-docs.html',
     '_headers',
-    'CNAME'
+    'CNAME',
+    // Progressive web app. The worker and the manifest must sit at the site
+    // root: a worker only controls pages below its own URL, and the manifest's
+    // relative start_url/scope/icons resolve against its location.
+    'manifest.webmanifest',
+    'sw.js'
 ];
 
 fs.rmSync(outDir, { recursive: true, force: true });

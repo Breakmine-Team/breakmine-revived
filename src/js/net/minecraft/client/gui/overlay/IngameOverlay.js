@@ -172,7 +172,7 @@ export default class IngameOverlay extends Gui {
         const hit = player.rayTrace(5, partialTicks);
         if (!hit) return;
 
-        const field = (hit.fieldCell && world.offGridField) ? world.offGridField : null;
+        const field = hit.offGridField || (hit.fieldCell ? world.offGridField : null);
         const typeId = field ? field.getBlockAt(hit.x, hit.y, hit.z) : world.getBlockAt(hit.x, hit.y, hit.z);
         if (!typeId) return;
 

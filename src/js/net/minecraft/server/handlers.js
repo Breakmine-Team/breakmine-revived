@@ -37,15 +37,20 @@ import config from './config.js';
 import Logger from './logger.js';
 import { isBanned, describeBan } from './bans.js';
 import getServerWorld from './World.js';
+import { getBlockAt as getServerBlockAt } from './world.js';
 import { getWeatherState } from './weather.js';
 import { emitBlockAction } from './ServerModLoader.js';
 import Block from '../client/world/block/Block.js';
 import { NO_MODULES } from '../util/environment.js';
 import {
+    OFF_GRID_BEARING_CELL_PACKET_ID,
+    OFF_GRID_BEARING_PACKET_ID,
     OFF_GRID_CELL_PACKET_ID,
     OFF_GRID_REQUEST_PACKET_ID
 } from '../util/OffGridConstants.js';
 import {
+    applyBearingCell as applyOffGridBearingCell,
+    applyBearingPose as applyOffGridBearingPose,
     applyCellEdit as applyOffGridCellEdit,
     broadcastCellEdit as broadcastOffGridCellEdit,
     sendState as sendOffGridState
@@ -552,6 +557,16 @@ function handlePlayPacket(player, packetId, buffer, offset) {
             break;
         }
 
+        case OFF_GRID_BEARING_PACKET_ID: { 
+            handleOffGridBearingPose(player, buffer, offset);
+            break;
+        }
+
+        case OFF_GRID_BEARING_CELL_PACKET_ID: {
+            handleOffGridBearingCell(player, buffer, offset);
+            break;
+        }
+
 
     }
 }
@@ -594,6 +609,94 @@ function handleOffGridCellEdit(player, buffer, offset) {
     broadcastOffGridCellEdit(x, y, z, typeId === 0 ? 0 : typeId, typeId === 0 ? 0 : data);
 }
 
+function handleOffGridBearingPose(player, buffer, offset) {
+    if (isSpectator(player)) {
+        return;
+    }
+
+    ensureReadable(buffer, offset, 4);
+    const x = buffer.readInt32BE(offset);
+    offset += 4;
+
+    let y;
+    let bytes;
+    [y, bytes] = readVarInt(buffer, offset);
+    y = y >>> 0;
+    offset += bytes;
+
+    ensureReadable(buffer, offset, 4);
+    const z = buffer.readInt32BE(offset);
+    offset += 4;
+
+    ensureReadable(buffer, offset, 17);
+    const axis = buffer.readUInt8(offset) & 3;
+    const angle = buffer.readFloatBE(offset + 1);
+    const pivot = {
+        x: buffer.readFloatBE(offset + 5),
+        y: buffer.readFloatBE(offset + 9),
+        z: buffer.readFloatBE(offset + 13)
+    };
+
+    const block = Block.getById(getServerBlockAt(x, y, z));
+    if (!block || typeof block.getBearingAttachment !== 'function') {
+        return;
+    }
+
+    applyOffGridBearingPose(x, y, z, axis, angle, pivot, player);
+}
+
+
+function handleOffGridBearingCell(player, buffer, offset) {
+    if (isSpectator(player)) {
+        return;
+    }
+
+    setActiveDimension(player.dimension ?? 0);
+
+    ensureReadable(buffer, offset, 4);
+    const x = buffer.readInt32BE(offset);
+    offset += 4;
+
+    let y;
+    let bytes;
+    [y, bytes] = readVarInt(buffer, offset);
+    y = y >>> 0;
+    offset += bytes;
+
+    ensureReadable(buffer, offset, 4);
+    const z = buffer.readInt32BE(offset);
+    offset += 4;
+
+    ensureReadable(buffer, offset, 4);
+    const cellX = buffer.readInt32BE(offset);
+    offset += 4;
+
+    let cellY;
+    [cellY, bytes] = readVarInt(buffer, offset);
+    cellY = cellY >>> 0;
+    offset += bytes;
+
+    ensureReadable(buffer, offset, 4);
+    const cellZ = buffer.readInt32BE(offset);
+    offset += 4;
+
+    let typeId;
+    [typeId, bytes] = readVarInt(buffer, offset);
+    typeId = typeId >>> 0;
+    offset += bytes;
+
+    ensureReadable(buffer, offset, 1);
+    const data = buffer.readUInt8(offset) & 0xF;
+
+    const block = Block.getById(getServerBlockAt(x, y, z));
+    if (!block || typeof block.getBearingAttachment !== 'function') {
+        return;
+    }
+
+    if (applyOffGridBearingCell(x, y, z, cellX, cellY, cellZ, typeId, data)) {
+        safeSaveWorld();
+    }
+}
 
 function getHeldItemId(player) {
     const inventory = player.inventory;

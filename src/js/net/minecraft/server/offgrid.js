@@ -12,11 +12,12 @@
 
 import Block from '../client/world/block/Block.js';
 import { BlockRegistry } from '../client/world/block/BlockRegistry.js';
-import { OFF_GRID_MAX_CELLS, OFF_GRID_MAX_DIM, OFF_GRID_MAX_GHOSTS, OFF_GRID_PROTOCOL_VERSION, OFF_GRID_UPDATE_SET_CELL, OFF_GRID_WORLD_HEIGHT } from '../util/OffGridConstants.js';
+import { OFF_GRID_MAX_CELLS, OFF_GRID_MAX_DIM, OFF_GRID_MAX_GHOSTS, OFF_GRID_PROTOCOL_VERSION, OFF_GRID_UPDATE_POSE, OFF_GRID_UPDATE_SET_CELL, OFF_GRID_WORLD_HEIGHT } from '../util/OffGridConstants.js';
 import fs from '../client/fs/ServerFs.js';
 import path from '../util/path.js';
 import Logger from './logger.js';
 import { registerWorldLifecycle } from './world.js';
+import getServerWorld from './World.js';
 import { getPlayers } from './players.js';
 import { createOffGridStatePacket, createOffGridUpdatePacket } from './packets.js';
 
@@ -347,6 +348,75 @@ function broadcastCellEdit(x, y, z, typeId, data) {
         action: OFF_GRID_UPDATE_SET_CELL,
         x, y, z, typeId, data
     });
+}
+
+function broadcastUpdateExcept(exclude, update) {
+    const packet = createOffGridUpdatePacket(update);
+    for (const player of getPlayers().values()) {
+        if (player === exclude) continue;
+        if (player.ws && player.ws.readyState === 1) {
+            player.ws.send(packet);
+        }
+    }
+}
+
+
+
+
+
+
+
+
+export function applyBearingCell(x, y, z, cellX, cellY, cellZ, typeId, data = 0) {
+    if (!Number.isInteger(x) || !Number.isInteger(y) || !Number.isInteger(z)) return false;
+    if (!Number.isInteger(cellX) || !Number.isInteger(cellY) || !Number.isInteger(cellZ)) return false;
+    if (!Number.isInteger(typeId) || typeId < 0) return false;
+    if (cellY < 0 || cellY >= OFF_GRID_WORLD_HEIGHT) return false;
+    if (Math.abs(cellX - x) > 64 || Math.abs(cellY - y) > 64 || Math.abs(cellZ - z) > 64) return false;
+    if (typeId !== 0 && !isValidBlockId(typeId)) return false;
+
+    const world = getServerWorld();
+    if (!world) return false;
+
+    const current = world.getBlockAt(cellX, cellY, cellZ);
+    if (typeId === 0) {
+        if (current === 0) return false;
+    } else if (current !== 0 && current !== typeId) {
+        return false;
+    }
+
+    world.setBlockAt(cellX, cellY, cellZ, typeId, typeId === 0 ? 0 : Math.trunc(data) & 0xF);
+
+    if (typeId !== 0) {
+        world.scheduleNeighborTicks(cellX, cellY, cellZ);
+        world.notifyNeighborBlockChange(cellX, cellY, cellZ);
+    }
+
+    return true;
+}
+
+
+export function applyBearingPose(x, y, z, axis, angle, pivot, source = null) {
+    if (!isFiniteNumber(angle)) return false;
+
+    const axisName = axis === 1 ? 'x' : axis === 2 ? 'z' : 'y';
+    field.rotation[axisName] = ((angle % 360) + 360) % 360;
+
+    const nextPivot = normalizePivot(pivot);
+    if (nextPivot !== null) {
+        field.pivot = nextPivot;
+    }
+
+    dirty = true;
+
+    broadcastUpdateExcept(source, {
+        action: OFF_GRID_UPDATE_POSE,
+        rotation: { ...field.rotation },
+        offset: { ...field.offset },
+        pivot: field.pivot ? { ...field.pivot } : null
+    });
+
+    return true;
 }
 
 

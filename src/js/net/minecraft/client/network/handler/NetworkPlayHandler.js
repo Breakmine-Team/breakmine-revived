@@ -392,6 +392,18 @@ export default class NetworkPlayHandler extends PacketHandler {
         let typeId = blockState >> 4;
         let blockData = blockState & 0xF;
 
+        // A cell carried by an off-grid field owns that position; writing the
+        // server's copy into the world would leave a hidden block behind that
+        // still culls the faces of its neighbours.
+        const world = this.minecraft.world;
+        const field = world && typeof world.getOffGridFieldAt === "function"
+            ? world.getOffGridFieldAt(position.getX(), position.getY(), position.getZ())
+            : null;
+        if (field) {
+            field.applyRemoteWrite(position.getX(), position.getY(), position.getZ(), typeId, blockData);
+            return;
+        }
+
         if (this.smoothBlockChange(position.getX(), position.getY(), position.getZ(), typeId)) {
             return;
         }

@@ -192,7 +192,7 @@ export const atlasItemTextures = [
     "yellow_dye.png", "lime_dye.png", "pink_dye.png", "gray_dye.png",
     "light_gray_dye.png", "cyan_dye.png", "purple_dye.png", "blue_dye.png",
     "brown_dye.png", "green_dye.png", "red_dye.png", "black_dye.png",
-    "flint.png", "flint_and_steel.png",
+    "flint.png", "flint_and_steel.png", "slime_ball.png",
     "seeds_wheat.png", "wheat.png",
     "carrot.png", "potato.png", "beetroot.png", "beetroot_seeds.png",
     "cabbage.png", "tomato.png", "tomato_seeds.png",
