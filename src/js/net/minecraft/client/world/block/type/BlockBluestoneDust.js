@@ -21,6 +21,10 @@ export default class BlockBluestoneDust extends Block {
         return [BlockRegistry.ITEM_BLUESTONE_DUST_PLACER.getId(), 1];
     }
 
+    getMiddleClick() {
+        return BlockRegistry.ITEM_BLUESTONE_DUST_PLACER;
+    }
+
     _isBluestoneWire(block) {
         return !!(block && (block.isBluestoneDust || block.isBluestoneRod));
     }

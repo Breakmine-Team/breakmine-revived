@@ -97,6 +97,7 @@ import BlockBluestonePusherHead from "./type/BlockBluestonePusherHead.js";
 import BlockPushBlock from "./type/BlockPushBlock.js";
 import BlockBluestoneStickyPusherHead from "./type/BlockBluestoneStickyPusherHead.js";
 import BlockBluestoneRepeater from "./type/BlockBluestoneRepeater.js";
+import BlockBluestoneClock from "./type/BlockBluestoneClock.js";
 import BlockBluestoneMemoryCell from "./type/BlockBluestoneMemoryCell.js";
 import BlockBluestoneObserver from "./type/BlockBluestoneObserver.js";
 import BlockBluestoneAdjustingLamp from "./type/BlockBluestoneAdjustingLamp.js";
@@ -712,6 +713,7 @@ export class BlockRegistry {
         BlockRegistry.BLUESTONE_PUSHER = new BlockBluestonePusher(166, 0, 167, "bluestone_pusher", "Bluestone Pusher");
         BlockRegistry.BLUESTONE_PUSHER_HEAD = new BlockBluestonePusherHead(167, 0, "bluestone_pusher_head", "Bluestone Pusher Head");
         BlockRegistry.BLUESTONE_REPEATER = new BlockBluestoneRepeater(168, 0, "bluestone_repeater", "Bluestone Repeater");
+        BlockRegistry.BLUESTONE_CLOCK = new BlockBluestoneClock(494, 0, "bluestone_clock", "Bluestone Clock");
         BlockRegistry.BLUESTONE_MEMORY_CELL = new BlockBluestoneMemoryCell(182, 0, "bluestone_memory_cell", "Bluestone Memory Cell");
         BlockRegistry.BLUESTONE_OBSERVER = new BlockBluestoneObserver(169, 0, "bluestone_observer", "Bluestone Observer");  
         BlockRegistry.BLUESTONE_STICKY_PUSHER = new BlockBluestoneStickyPusher(170, 0, "bluestone_sticky_pusher", "Sticky Bluestone Pusher");

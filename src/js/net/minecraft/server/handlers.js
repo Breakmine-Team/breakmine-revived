@@ -36,7 +36,7 @@ import {
 import config from './config.js';
 import Logger from './logger.js';
 import { isBanned, describeBan } from './bans.js';
-import getServerWorld from './World.js';
+import getServerWorld, { setBlockActionEmitter } from './World.js';
 import { getBlockAt as getServerBlockAt } from './world.js';
 import { getWeatherState } from './weather.js';
 import { emitBlockAction } from './ServerModLoader.js';
@@ -466,6 +466,9 @@ function handlePlayPacket(player, packetId, buffer, offset) {
 
         case 0x04: { 
             ensureReadable(buffer, offset, 25);
+            if (Date.now() < (player.teleportGraceUntil || 0)) {
+                break;
+            }
             player.x = buffer.readDoubleBE(offset);
             player.y = buffer.readDoubleBE(offset + 8);
             player.z = buffer.readDoubleBE(offset + 16);
@@ -487,6 +490,9 @@ function handlePlayPacket(player, packetId, buffer, offset) {
 
         case 0x06: { 
             ensureReadable(buffer, offset, 33);
+            if (Date.now() < (player.teleportGraceUntil || 0)) {
+                break;
+            }
             player.x = buffer.readDoubleBE(offset);
             player.y = buffer.readDoubleBE(offset + 8);
             player.z = buffer.readDoubleBE(offset + 16);
@@ -697,6 +703,8 @@ function handleOffGridBearingCell(player, buffer, offset) {
         safeSaveWorld();
     }
 }
+
+setBlockActionEmitter((action, data) => emitBlockAction(action, data));
 
 function getHeldItemId(player) {
     const inventory = player.inventory;
@@ -1150,6 +1158,9 @@ const BOB_PORTAL_ID = 417;
 const OBSIDIAN_ID = 256;
 const BOB_FRAME_ID = 416;
 const PORTAL_COOLDOWN_MS = 3000;
+// Movement packets already in flight when a dimension change is sent must not
+// drag the player back onto the portal they just came out of.
+const PORTAL_GRACE_MS = 750;
 
 // Every portal frame block lights a portal that leads to its own dimension.
 const PORTAL_FRAMES = [
@@ -1243,12 +1254,23 @@ function checkPortalTravel(player) {
     const py = Math.floor(player.y);
     const pz = Math.floor(player.z);
 
-    if (getBlockAt(px, py, pz, dimension) !== PORTAL_ID && getBlockAt(px, py + 1, pz, dimension) !== PORTAL_ID
-        && getBlockAt(px, py, pz, dimension) !== BOB_PORTAL_ID && getBlockAt(px, py + 1, pz, dimension) !== BOB_PORTAL_ID) {
+    const feetId = getBlockAt(px, py, pz, dimension);
+    const headId = getBlockAt(px, py + 1, pz, dimension);
+    const inPortal = feetId === PORTAL_ID || headId === PORTAL_ID
+        || feetId === BOB_PORTAL_ID || headId === BOB_PORTAL_ID;
+
+    if (!inPortal) {
+        player.portalArmed = true;
         return;
     }
 
-    const portalId = getBlockAt(px, py, pz, dimension) === BOB_PORTAL_ID || getBlockAt(px, py + 1, pz, dimension) === BOB_PORTAL_ID
+    // A player who arrived standing on a portal (or saved inside one) has to
+    // step out before it can send them back, so arrival never bounces them.
+    if (player.portalArmed === false) {
+        return;
+    }
+
+    const portalId = feetId === BOB_PORTAL_ID || headId === BOB_PORTAL_ID
         ? BOB_PORTAL_ID
         : PORTAL_ID;
 
@@ -1270,29 +1292,50 @@ function travelToDimension(player, targetDimension) {
     const ty = Math.max(4, Math.min(Math.floor(player.y), targetDimension === NETHER_DIMENSION ? 100 : 200));
 
     const targetPortalId = targetDimension === BOB_DIMENSION ? BOB_PORTAL_ID : PORTAL_ID;
-    const targetFloorId = targetDimension === BOB_DIMENSION ? BOB_FRAME_ID : OBSIDIAN_ID;
+    const targetFrameId = targetDimension === BOB_DIMENSION ? BOB_FRAME_ID : OBSIDIAN_ID;
 
-    for (let dx = 0; dx < 4; dx++) {
-        for (let dz = 0; dz < 2; dz++) {
-            for (let dy = 0; dy < 5; dy++) {
-                addWorldChange(tx + dx, ty + dy, tz + dz, 0, 0, targetDimension);
+    // Build the same 4 wide x 5 tall frame a player would build by hand, with
+    // the 2x3 portal plane inside it, plus a landing platform in front. The
+    // old code only placed a floor and a floating 2x3 portal wall, which is
+    // why auto-generated portals had no frame and the wrong shape.
+    const left = tx - 1;
+    const right = tx + 2;
+    const bottom = ty - 1;
+    const top = ty + 3;
+
+    for (let x = left; x <= right; x++) {
+        for (let z = tz; z <= tz + 2; z++) {
+            for (let y = ty; y <= top; y++) {
+                addWorldChange(x, y, z, 0, 0, targetDimension);
             }
-            addWorldChange(tx + dx, ty - 1, tz + dz, targetFloorId, 0, targetDimension);
+            addWorldChange(x, bottom, z, targetFrameId, 0, targetDimension);
         }
     }
 
-    for (let dx = 0; dx < 2; dx++) {
-        for (let dy = 0; dy < 3; dy++) {
-            addWorldChange(tx + dx, ty + dy, tz, targetPortalId, 0, targetDimension);
+    for (let x = left; x <= right; x++) {
+        addWorldChange(x, top, tz, targetFrameId, 0, targetDimension);
+    }
+    for (let y = ty; y <= ty + 2; y++) {
+        addWorldChange(left, y, tz, targetFrameId, 0, targetDimension);
+        addWorldChange(right, y, tz, targetFrameId, 0, targetDimension);
+    }
+
+    for (let x = tx; x <= tx + 1; x++) {
+        for (let y = ty; y <= ty + 2; y++) {
+            addWorldChange(x, y, tz, targetPortalId, 0, targetDimension);
         }
     }
 
     player.dimension = targetDimension;
-    player.x = tx + 2.5;
+    // Stand two blocks clear of the portal plane, on the platform, so the
+    // arrival position cannot immediately drop the player back in a portal.
+    player.x = tx + 0.5;
     player.y = ty;
-    player.z = tz + 0.5;
+    player.z = tz + 2.5;
     player.onGround = false;
     player.portalCooldown = Date.now() + PORTAL_COOLDOWN_MS;
+    player.portalArmed = false;
+    player.teleportGraceUntil = Date.now() + PORTAL_GRACE_MS;
 
     playerChunks.set(player.eid, new Set());
     savePlayerData(player);

@@ -1,3 +1,4 @@
+import EnumBlockFace from "../../../../util/EnumBlockFace.js";
 import EnumCreativeInventoryTab from "../../../gui/EnumCreativeInventoryTab.js";
 import Block from "../Block.js";
 import BlockEntityBluestoneLamp from "../entity/BlockEntityBluestoneLamp.js";
@@ -22,15 +23,15 @@ export default class BlockBluestoneLamp extends Block {
 
     isPowered(world, x, y, z) {
         const neighbors = [
-            [x + 1, y, z],
-            [x - 1, y, z],
-            [x, y, z + 1],
-            [x, y, z - 1],
-            [x, y - 1, z],
-            [x, y + 1, z],
+            [x + 1, y, z, EnumBlockFace.WEST],
+            [x - 1, y, z, EnumBlockFace.EAST],
+            [x, y, z + 1, EnumBlockFace.NORTH],
+            [x, y, z - 1, EnumBlockFace.SOUTH],
+            [x, y - 1, z, EnumBlockFace.TOP],
+            [x, y + 1, z, EnumBlockFace.BOTTOM],
         ];
 
-        for (const [nx, ny, nz] of neighbors) {
+        for (const [nx, ny, nz, neighborFace] of neighbors) {
             const blockId = world.getBlockAt(nx, ny, nz);
             if (blockId === undefined || blockId === null || blockId === -1) continue;
 
@@ -38,7 +39,7 @@ export default class BlockBluestoneLamp extends Block {
             if (!block) continue;
 
             if (typeof block.getPower === 'function') {
-                if (block.getPower(world, nx, ny, nz) > 0) return true;
+                if (block.getPower(world, nx, ny, nz, neighborFace) > 0) return true;
             } else if (block.isPowerSource) {
                 return true;
             }

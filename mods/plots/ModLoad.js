@@ -253,10 +253,28 @@ export default class ModLoad {
             });
         }
 
+        // Liquid spreading carries the source cell instead of a player, so it
+        // may only continue while it stays inside the plot it came from. This
+        // keeps water placed just outside a plot from flowing in, while still
+        // letting a plot's owner flood their own plot.
+        function liquidFlowAllowed(event, plot) {
+            const source = event.sourcePos;
+            if (!source) return false;
+            return getPlotAt(store.plots, source.x, source.z) === plot;
+        }
+
         function guardBuild(event) {
             if (!loaded) return;
             const plot = getPlotAt(store.plots, event.x, event.z);
-            if (!plot || canBuild(plot, event.username) || isSuperOperator(event.username)) return;
+            if (!plot) return;
+
+            if (event.liquidFlow === true) {
+                if (liquidFlowAllowed(event, plot)) return;
+                event.cancel();
+                return;
+            }
+
+            if (canBuild(plot, event.username) || isSuperOperator(event.username)) return;
             event.cancel();
             denyBuild(event.username, plot);
         }
@@ -264,7 +282,15 @@ export default class ModLoad {
         function guardClientBuild(event) {
             if (!loaded) return;
             const plot = getPlotAt(store.plots, event.x, event.z);
-            if (!plot || canBuild(plot, event.username) || isSuperOperator(event.username)) return;
+            if (!plot) return;
+
+            if (event.liquidFlow === true) {
+                if (liquidFlowAllowed(event, plot)) return;
+                event.cancel();
+                return;
+            }
+
+            if (canBuild(plot, event.username) || isSuperOperator(event.username)) return;
             event.cancel();
             client.addMessageToChat(`§c${plot.owner}'s plot.`);
         }

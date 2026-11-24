@@ -1660,6 +1660,8 @@ export default class Minecraft {
             face: options.face ?? null,
             metadata: options.metadata ?? targetMetadata,
             offGrid: !!options.offGrid,
+            liquidFlow: options.liquidFlow === true,
+            sourcePos: options.sourcePos ?? null,
             world,
             minecraft: this
         }) || { action, canceled: false };
@@ -1971,8 +1973,9 @@ export default class Minecraft {
                     if (typeId > 0) {
                         let block = Block.getById(typeId);
                         if (block === null) return;
-                        let pickedItemId = block.pickedItem();
-                        if (pickedItemId === null) return;
+                        let picked = block.getMiddleClick();
+                        if (!picked) return;
+                        let pickedItemId = typeof picked === 'number' ? picked : picked.getId();
                         for (let i = 0; i < 9; i++) {
                             let itemStack = this.player.inventory.getItemInSlot(i);
                             if (!itemStack.isEmpty() && itemStack.getType() === pickedItemId) {
@@ -1984,7 +1987,7 @@ export default class Minecraft {
                             }
                         }
 
-                        this.player.inventory.setItemInSelectedSlot(typeId);
+                        this.player.inventory.setItemInSelectedSlot(pickedItemId);
                     }
                 }
             }

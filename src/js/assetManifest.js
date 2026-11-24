@@ -153,6 +153,7 @@ export const atlasBlockTextures = [
     "bluestoneObserverFront.png", "bluestoneObserverBackOn.png",
     "bluestoneObserverBackOff.png", "oak_planks_sticky.png",
     "bluestoneRepeaterTopOff.png", "bluestoneRepeaterTopOn.png", "lever.png",
+    "bluestoneClockOff.png", "bluestoneClockOn.png",
     "cobblestone_lever_base.png", "snow.png", "grass_block_snow.png",
     "tnt_side.png", "tnt_bottom.png", "tnt_top.png", "bluestoneMemoryTopOn.png", 
     "window_planks.png", "window_planks_2.png", "window_planks_3.png", "window_planks_4.png",

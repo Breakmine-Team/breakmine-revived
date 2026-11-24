@@ -242,6 +242,13 @@ export default class Block {
         return this.id;
     }
 
+    // The block picked by creative middle-click. Defaults to this block and
+    // follows pickedItem() overrides (bed head -> bed item, pusher head, etc.).
+    getMiddleClick() {
+        const picked = this.pickedItem();
+        return picked === this.id ? this : Block.getById(picked);
+    }
+
     getLightValue(world, x, y, z) {
         return 0;
     }

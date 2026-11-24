@@ -18,6 +18,12 @@ const TICK_MS = 50;
 
 
 
+let blockActionEmitter = null;
+
+export function setBlockActionEmitter(emitter) {
+    blockActionEmitter = typeof emitter === 'function' ? emitter : null;
+}
+
 const MINECRAFT_STUB = {
     displayScreen: () => {},
     soundManager: { playSoundMono: () => {} },
@@ -69,6 +75,29 @@ class ServerWorld {
         this._set(x, y, z, getBlockAt(x, y, z), data);
     }
 
+
+    // Used by liquid spreading to run the same mod guards as a player
+    // placement. Returns false when a mod vetoes the change.
+    canChangeBlockAt(x, y, z, type, options = {}) {
+        if (typeof blockActionEmitter !== 'function') {
+            return true;
+        }
+
+        const event = blockActionEmitter('place', {
+            action: 'place',
+            username: '',
+            x, y, z,
+            pos: { x, y, z },
+            placePos: { x, y, z },
+            currentBlockId: type,
+            currentBlock: Block.getById(type),
+            world: this,
+            minecraft: null,
+            ...options
+        });
+
+        return !event?.canceled;
+    }
 
     setBlockAt(x, y, z, type, data) {
         this._set(x, y, z, type, data === undefined ? 0 : data);
