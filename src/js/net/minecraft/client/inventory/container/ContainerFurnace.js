@@ -36,8 +36,23 @@ export default class ContainerFurnace extends Container {
     }
 
     tick() {
+        const before = this.getSlotsSignature();
         ContainerFurnace.tickFurnace(this.tileEntity, this.blockPosition, this.minecraft?.world);
-        this.dirty = true;
+
+        // Rebuilding the item renderer every tick makes the slot contents flicker,
+        // so only invalidate it when the smelting actually changed a slot.
+        if (this.getSlotsSignature() !== before) {
+            this.dirty = true;
+        }
+    }
+
+    getSlotsSignature() {
+        let signature = "";
+        for (let i = 0; i < 3; i++) {
+            const stack = this.tileEntity.getItemInSlot(i);
+            signature += stack.getType() + ":" + stack.getCount() + ";";
+        }
+        return signature;
     }
 
     static tickFurnace(inv, blockPosition, world) {

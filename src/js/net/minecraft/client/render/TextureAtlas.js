@@ -6,6 +6,11 @@ export default class TextureAtlas {
 
     static ANIMATION_FRAME_MS = 100;
 
+    // Per-texture overrides for how long each frame is shown (in ms).
+    static ANIMATION_FRAME_MS_OVERRIDES = new Map([
+        ["furnace_front_on", 250]
+    ]);
+
     constructor(minecraft, texturePath = "terrain/pack/minecraft/textures/blocks/") {
         this.minecraft = minecraft;
         this.texturePath = texturePath;
@@ -113,7 +118,8 @@ export default class TextureAtlas {
                         y,
                         frames: frameCount,
                         frame: 0,
-                        elapsed: 0
+                        elapsed: 0,
+                        frameMs: TextureAtlas.ANIMATION_FRAME_MS_OVERRIDES.get(textureName) ?? TextureAtlas.ANIMATION_FRAME_MS
                     });
                 } else if (span > 1) {
                     ctx.drawImage(image, 0, 0, size, size, x, y, size, size);
@@ -177,10 +183,11 @@ export default class TextureAtlas {
         let changed = false;
 
         for (const animation of this.animatedTextures.values()) {
+            const frameMs = animation.frameMs ?? TextureAtlas.ANIMATION_FRAME_MS;
             animation.elapsed += deltaMs;
-            if (animation.elapsed < TextureAtlas.ANIMATION_FRAME_MS) continue;
+            if (animation.elapsed < frameMs) continue;
 
-            animation.elapsed %= TextureAtlas.ANIMATION_FRAME_MS;
+            animation.elapsed %= frameMs;
             animation.frame = (animation.frame + 1) % animation.frames;
 
             const sourceY = animation.frame * this.textureSize;

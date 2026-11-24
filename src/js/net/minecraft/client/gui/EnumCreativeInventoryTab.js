@@ -3,7 +3,8 @@ export default class EnumCreativeInventoryTab {
     static BUILDING_BLOCKS = new EnumCreativeInventoryTab("Building Blocks", 1, 2);
     static DECORATION = new EnumCreativeInventoryTab("Decoration", 2, 49);
     static BLUESTONE = new EnumCreativeInventoryTab("Bluestone", 3, 181);
-    static FACTORIO = new EnumCreativeInventoryTab("Machines", 4, 343);
+    static FACTORIO = new EnumCreativeInventoryTab("Factorio", 4, 343);
+    static MACHINES = new EnumCreativeInventoryTab("Machines", 12, 34);
     static MISC = new EnumCreativeInventoryTab("Miscellaneous", 5, 327);
 
     static FOODSTUFFS = new EnumCreativeInventoryTab("Foodstuffs", 6, 84);

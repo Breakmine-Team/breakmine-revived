@@ -92,10 +92,6 @@ export default class GuiContainerFurnace extends GuiContainer {
         }
     }
 
-    updateScreen() {
-        this.container.dirty = true;
-    }
-
     drawScreen(stack, mouseX, mouseY, partialTicks) {
         super.drawScreen(stack, mouseX, mouseY, partialTicks);
     }

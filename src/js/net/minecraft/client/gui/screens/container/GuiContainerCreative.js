@@ -49,8 +49,8 @@ export default class GuiContainerCreative extends GuiContainer {
         this._lastScrollTime = 0;
         this._scrollCooldownMs = 100;
 
-        this.topRowTabs = 5;
-        this.tabsPerPage = 6;
+        this.topRowTabs = 6;
+        this.tabsPerPage = 7;
         this.selectedTabIndex = 1;
         this.allTabs = [];
 
@@ -136,9 +136,9 @@ export default class GuiContainerCreative extends GuiContainer {
     }
 
     getTabX(slotIndex) {
-        if (slotIndex >= 1 && slotIndex <= 5) {
+        if (slotIndex >= 1 && slotIndex <= 6) {
             return this.x + 28 * (slotIndex - 1);
-        } else if (slotIndex === 6) {
+        } else if (slotIndex === 7) {
             return this.x + 169;
         }
         return this.x;
@@ -148,7 +148,7 @@ export default class GuiContainerCreative extends GuiContainer {
         const destX = this.getTabX(index + 1);
         if (index === 0) {
             return {destX, sourceX: 0};
-        } else if (index === 5) {
+        } else if (index === this.tabsPerPage - 1) {
             return {destX, sourceX: 156};
         }
         return {destX, sourceX: 26};
