@@ -101,8 +101,17 @@ export default class CraftingRegistry {
             BlockRegistry.ITEM_STICK.id, 0, BlockRegistry.ITEM_STICK.id,
             BlockRegistry.ITEM_STICK.id, 0, BlockRegistry.ITEM_STICK.id
         ]);
+        this.registerShapedRecipe(BlockRegistry.WARNING_CONCRETE.id, 4, 2, 2, [
+            BlockRegistry.BLACK_CONCRETE.id, BlockRegistry.YELLOW_CONCRETE.id,
+            BlockRegistry.YELLOW_CONCRETE.id, BlockRegistry.BLACK_CONCRETE.id
+        ]);
         this.registerShapedRecipe(BlockRegistry.ITEM_BUCKET_EMPTY.id, 1, 3, 2, [
             BlockRegistry.ITEM_IRON.id, 0, BlockRegistry.ITEM_IRON.id,
+            0, BlockRegistry.ITEM_IRON.id, 0
+        ]);
+        this.registerShapedRecipe(BlockRegistry.ITEM_COMPASS.id, 1, 3, 3, [
+            0, BlockRegistry.ITEM_IRON.id, 0,
+            BlockRegistry.ITEM_IRON.id, BlockRegistry.ITEM_BLUESTONE_DUST_PLACER.id, BlockRegistry.ITEM_IRON.id,
             0, BlockRegistry.ITEM_IRON.id, 0
         ]);
         this.registerShapedRecipe(BlockRegistry.FURNACE.id, 1, 3, 3, [
@@ -126,6 +135,11 @@ export default class CraftingRegistry {
         ]);
         this.registerShapelessRecipe(BlockRegistry.FLINT_AND_STEEL.id, 1, [
             BlockRegistry.FLINT.id, BlockRegistry.ITEM_IRON.id,
+        ]);
+        this.registerShapedRecipe(BlockRegistry.POLISHED_URANIUM.id, 1, 3, 3, [
+            BlockRegistry.ITEM_URANIUM.id, BlockRegistry.ITEM_URANIUM.id, BlockRegistry.ITEM_URANIUM.id,
+            BlockRegistry.ITEM_URANIUM.id, BlockRegistry.ITEM_URANIUM.id, BlockRegistry.ITEM_URANIUM.id,
+            BlockRegistry.ITEM_URANIUM.id, BlockRegistry.ITEM_URANIUM.id, BlockRegistry.ITEM_URANIUM.id
         ]);
         this.registerDyeRecipes();
         this.registerConcretePowderRecipes();

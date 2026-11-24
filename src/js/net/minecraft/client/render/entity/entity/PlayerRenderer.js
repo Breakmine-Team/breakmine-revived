@@ -2,6 +2,7 @@ import ModelPlayer from "../../model/model/ModelPlayer.js";
 import { createCapeGeometry } from "../../CapeGeometry.js";
 import EntityRenderer from "../EntityRenderer.js";
 import Block from "../../../world/block/Block.js";
+import BlockRenderType from "../../../../util/BlockRenderType.js";
 import Tessellator from "../../Tessellator.js";
 import * as AuthLib from "../../../network/AuthLib.js";
 import * as THREE from "../../../../../../../../libraries/three.module.js";
@@ -31,6 +32,8 @@ export default class PlayerRenderer extends EntityRenderer {
         this.capeAngle = 0;
 
         this.handModel = null;
+        this.heldItemMesh = null;
+        this.heldItemTextureName = null;
         this.firstPersonGroup = new THREE.Object3D();
         this.worldRenderer.overlay.add(this.firstPersonGroup);
 
@@ -126,6 +129,9 @@ export default class PlayerRenderer extends EntityRenderer {
     }
 
     rebuild(entity) {
+        this.heldItemMesh = null;
+        this.heldItemTextureName = null;
+
         let isSelf = entity === this.worldRenderer.minecraft.player;
         let firstPerson = this.worldRenderer.minecraft.settings.thirdPersonView === 0;
         let itemStack = firstPerson && isSelf ? this.worldRenderer.itemToRender : entity.inventory.getItemInSelectedSlot();
@@ -167,6 +173,11 @@ export default class PlayerRenderer extends EntityRenderer {
                         itemMesh.material.depthTest = false;
                         itemMesh.material.depthWrite = false;
                         itemMesh.renderOrder = 1;
+
+                        this.heldItemMesh = itemMesh;
+                        this.heldItemTextureName = block.getRenderType() === BlockRenderType.ITEM
+                            ? this.worldRenderer.blockRenderer.getHeldItemTextureName(block, entity)
+                            : null;
                     }
                 }
             }
@@ -186,6 +197,21 @@ export default class PlayerRenderer extends EntityRenderer {
             capeService.onRendererRebuilt?.(this, entity);
         } else {
             this.buildCape(entity);
+        }
+    }
+
+    updateHeldItemTexture(entity) {
+        if (!this.heldItemMesh || !this.heldItemTextureName) return;
+
+        const itemStack = entity.inventory.getItemInSelectedSlot();
+        const block = Block.getById(itemStack.getType());
+        if (!block || block.getRenderType() !== BlockRenderType.ITEM) return;
+
+        const textureName = this.worldRenderer.blockRenderer.getHeldItemTextureName(block, entity);
+        if (textureName === this.heldItemTextureName) return;
+
+        if (this.worldRenderer.blockRenderer.updateSpriteItemTexture(this.heldItemMesh.material?.map, textureName)) {
+            this.heldItemTextureName = textureName;
         }
     }
 
@@ -265,6 +291,7 @@ export default class PlayerRenderer extends EntityRenderer {
 
         super.render(entity, partialTicks);
 
+        this.updateHeldItemTexture(entity);
         this.updateCape(entity);
 
         const capeService = this.worldRenderer.minecraft.modLoader?.getService('cape_plus');

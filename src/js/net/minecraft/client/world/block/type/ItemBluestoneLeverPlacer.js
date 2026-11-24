@@ -8,7 +8,7 @@ export default class ItemBluestoneLeverPlacer extends ItemGeneric {
 
     constructor(id, textureSlotId, description) {
         super(id, textureSlotId, description);
-        this.inventoryTab = EnumCreativeInventoryTab.MACHINES;
+        this.inventoryTab = EnumCreativeInventoryTab.BLUESTONE;
     }
 
     getTextureForFace(face) {

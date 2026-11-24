@@ -12,7 +12,7 @@ export default class BlockBluestoneMemoryCell extends Block {
         this.hardness = 0.2;
         this.isBluestoneConsumer = true;
         this.isPowerSource = false; 
-        this.inventoryTab = EnumCreativeInventoryTab.MACHINES;
+        this.inventoryTab = EnumCreativeInventoryTab.BLUESTONE;
         this.noFaceCull = true;
     }
 

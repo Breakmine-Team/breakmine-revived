@@ -50,7 +50,7 @@ export default class GuiContainerCreative extends GuiContainer {
         this._scrollCooldownMs = 100;
 
         this.topRowTabs = 5;
-        this.tabsPerPage = 7;
+        this.tabsPerPage = 6;
         this.selectedTabIndex = 1;
         this.allTabs = [];
 
@@ -67,10 +67,12 @@ export default class GuiContainerCreative extends GuiContainer {
 
         super.init();
 
-        this.searchField = new GuiTextField(this.x + 79, this.y + 5, 86, 9, false, true);
+        this.searchField = new GuiTextField(this.x + 80, this.y + 5, 86, 9, false, true);
         this.searchField.enabled = true;
         this.searchField.renderBackground = false;
         this.searchField.noShadow = true;
+        this.searchField.customTextColor = 0xffffff;
+        this.searchField.textOffsetY = 1;
         this.searchField.maxLength = 40;
         this.searchField.isFocused = true;
         this.searchField.renderE = false;
@@ -112,32 +114,44 @@ export default class GuiContainerCreative extends GuiContainer {
 
         this.allTabs.sort((a, b) => a.id - b.id);
     }
-
     
     getTabRows() {
-        const pinnedTabs = [EnumCreativeInventoryTab.SEARCH, EnumCreativeInventoryTab.BOOKMARKS]
-            .map(tab => this.allTabs.find(builtin => builtin.id === tab.id));
+        const searchTab = this.allTabs.find(tab => tab.id === EnumCreativeInventoryTab.SEARCH.id);
         const survivalTab = this.allTabs.find(tab => tab.id === EnumCreativeInventoryTab.SURVIVAL_INVENTORY.id);
-        const flow = this.allTabs.filter(tab => tab !== survivalTab && !pinnedTabs.includes(tab));
+        const flow = this.allTabs.filter(tab => tab !== survivalTab && tab !== searchTab);
 
         const top = flow.slice(0, this.topRowTabs);
-        while (top.length < this.tabsPerPage - 2) {
+        while (top.length < this.tabsPerPage - 1) {
             top.push(null);
         }
+        top.push(searchTab ?? null);
 
-        top.push(pinnedTabs[0] ?? null, pinnedTabs[1] ?? null);
-
-        const bottom = flow.slice(this.topRowTabs, this.topRowTabs + this.tabsPerPage - 1);
-
-        if (survivalTab) {
-            while (bottom.length < this.tabsPerPage - 1) {
-                bottom.push(null);
-            }
-            bottom.length = this.tabsPerPage - 1;
-            bottom.push(survivalTab);
+        const bottom = flow.slice(this.topRowTabs, this.topRowTabs + (this.tabsPerPage - 1));
+        while (bottom.length < this.tabsPerPage - 1) {
+            bottom.push(null);
         }
+        bottom.push(survivalTab ?? null);
 
         return {top, bottom};
+    }
+
+    getTabX(slotIndex) {
+        if (slotIndex >= 1 && slotIndex <= 5) {
+            return this.x + 28 * (slotIndex - 1);
+        } else if (slotIndex === 6) {
+            return this.x + 169;
+        }
+        return this.x;
+    }
+
+    getTabPosition(index) {
+        const destX = this.getTabX(index + 1);
+        if (index === 0) {
+            return {destX, sourceX: 0};
+        } else if (index === 5) {
+            return {destX, sourceX: 156};
+        }
+        return {destX, sourceX: 26};
     }
 
     mouseClicked(mouseX, mouseY, button) {
@@ -170,47 +184,26 @@ export default class GuiContainerCreative extends GuiContainer {
         super.mouseReleased(mouseX, mouseY, button);
         this.isScrolling = false;
     }
-
     
-    getTabX(tabId) {
-        let tabX = this.x;
-        if (tabId >= 2 && tabId <= 5) {
-            tabX += 26 * (tabId - 1);
-        } else if (tabId === 6) {
-            tabX += 143;
-        } else if (tabId === 7) {
-            tabX += 143 + 26;
+    getSlotItemRenderWorld(slot) {
+        if (!this.isSurvivalTab() && slot.inventory === GuiContainerCreative.inventory) {
+            return null;
         }
-        return tabX;
+
+        return this.minecraft.world;
     }
 
-    
-    getTabPosition(index) {
-        if (index >= 1 && index <= 4) {
-            return {destX: this.x + 26 * index, sourceX: 26};
-        } else if (index === 5) {
-            return {destX: this.x + 143, sourceX: 26};
-        } else if (index === 6) {
-            return {destX: this.x + 143 + 26, sourceX: 156};
-        }
-        return {destX: this.x, sourceX: 0};
-    }
-
-    
     isSurvivalTab() {
         return this.selectedTabIndex === EnumCreativeInventoryTab.SURVIVAL_INVENTORY.id;
     }
-
     
     isSearchTab() {
         return this.selectedTabIndex === EnumCreativeInventoryTab.SEARCH.id;
     }
 
-    
     isBookmarksTab() {
         return this.selectedTabIndex === EnumCreativeInventoryTab.BOOKMARKS.id;
     }
-
     
     handleTabClick(mouseX, mouseY) {
         const tabY = this.y + this.inventoryHeight - 4;
@@ -230,7 +223,6 @@ export default class GuiContainerCreative extends GuiContainer {
 
         return false;
     }
-
     
     selectTabAt(tabs, mouseX) {
         for (let i = 0; i < tabs.length; i++) {
@@ -397,7 +389,9 @@ export default class GuiContainerCreative extends GuiContainer {
                     "creative_tab_" + tab.id + row.suffix,
                     block,
                     this.getTabX(i + 1) + 13,
-                    row.y + (isSelected ? row.selectedOffset : row.normalOffset)
+                    row.y + (isSelected ? row.selectedOffset : row.normalOffset),
+                    1,
+                    null
                 );
             }
         }
@@ -412,7 +406,7 @@ export default class GuiContainerCreative extends GuiContainer {
         this.drawString(stack, gotName ?? `Unnamed tab #${this.selectedTabIndex}`, this.x + 8, this.y + 6, 0x404040, false);
 
         if (this.isSearchTab() && this.searchField && this.searchField.getText().length === 0) {
-            this.drawString(stack, "Search...", this.searchField.x + 2, this.searchField.y + this.searchField.height / 2 - 4, 0x808080, false);
+            this.drawString(stack, "Search...", this.searchField.x + 2, this.searchField.y + this.searchField.height / 2 - 3, 0x808080, false);
         }
     }
 

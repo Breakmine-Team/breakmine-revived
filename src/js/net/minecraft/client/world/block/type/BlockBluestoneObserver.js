@@ -10,7 +10,7 @@ export default class BlockBluestoneObserver extends Block {
         this.description = "Bluestone Observer";
         this.hardness = 0.5;
         this.isPowerSource = false;
-        this.inventoryTab = EnumCreativeInventoryTab.MACHINES;
+        this.inventoryTab = EnumCreativeInventoryTab.BLUESTONE;
     }
 
     isSolid() { return true; }

@@ -177,6 +177,7 @@ export default class Minecraft {
 
         this.soundManager = new SoundManager();
         this.musicManager = new MusicManager();
+        this.applyAudioVolumes();
 
         this.voiceChat = new VoiceChatManager(this);
 
@@ -375,6 +376,23 @@ export default class Minecraft {
     init() {
         this.running = true;
         this.requestNextFrame();
+    }
+
+    applyAudioVolumes() {
+        const settings = this.settings;
+        const masterVolume = settings.getMasterVolume();
+
+        if (this.soundManager) {
+            this.soundManager.setVolumeSettings(
+                masterVolume,
+                settings.getBlocksVolume(),
+                settings.getMiscVolume()
+            );
+        }
+
+        if (this.musicManager) {
+            this.musicManager.setVolume(masterVolume * settings.getMusicVolume());
+        }
     }
 
     async loadWorld(world) {
@@ -1299,18 +1317,10 @@ export default class Minecraft {
             return;
         }
 
-        if (screen && (screen.constructor.name === "GuiPrelaunch" || screen.constructor.name === "GuiLicense")) {
-            document.title = "Breakmine | Pre-launch Environment";
-        } else {
-            document.title = "Breakmine";
-        }
+        document.title = `Breakmine ${Minecraft.VERSION.split('-')[0]}`;
 
         if (Boolean(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname === '[::1]' )) {
-            document.title = document.title + " (localhost)";
-        }
-
-        if (this.isElectron()) {
-            document.title = "Breakmine" + " (" + Version.VERSION + ", " + Version.TIMESTAMP + ")";
+            document.title = document.title + " (Dev)";
         }
 
         if (screen === null && !this.isInGame()) {

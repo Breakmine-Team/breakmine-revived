@@ -16,6 +16,11 @@ export default class SoundManager {
 
         this.disabled = false;
 
+        this.masterVolume = 1;
+        this.blocksVolume = 1;
+        this.miscVolume = 1;
+        this.masterGain = null;
+
         this._soundsUnavailable = false;
 
         this._consecutiveFailures = 0;
@@ -46,6 +51,64 @@ export default class SoundManager {
         return (typeof base64Assets !== 'undefined' && base64Assets[assetKey])
             ? base64Assets[assetKey]
             : `src/resources/${assetKey}`;
+    }
+
+    static getSoundCategory(name) {
+        if (typeof name !== 'string') {
+            return 'misc';
+        }
+        // Grass and glass reuse the random pool for break sounds.
+        if (name === 'random.grass' || name === 'random.glass' || name === 'explode') {
+            return 'blocks';
+        }
+        return /^(step|dig|block)(\.|$)/.test(name) ? 'blocks' : 'misc';
+    }
+
+    clampVolume(value, fallback = 1) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) {
+            return fallback;
+        }
+        return Math.max(0, Math.min(1, number));
+    }
+
+    getCategoryGain(name) {
+        return SoundManager.getSoundCategory(name) === 'blocks'
+            ? this.blocksVolume
+            : this.miscVolume;
+    }
+
+    // Full multiplier for audio elements that bypass the master gain node.
+    getVolume(name) {
+        return this.clampVolume(this.masterVolume) * this.clampVolume(this.getCategoryGain(name));
+    }
+
+    setVolumeSettings(masterVolume, blocksVolume, miscVolume) {
+        this.masterVolume = this.clampVolume(masterVolume);
+        this.blocksVolume = this.clampVolume(blocksVolume);
+        this.miscVolume = this.clampVolume(miscVolume);
+
+        if (this.masterGain && this.audioListener) {
+            try {
+                this.masterGain.gain.setTargetAtTime(this.masterVolume, this.audioListener.context.currentTime, 0.05);
+            } catch (e) {
+            }
+        }
+
+        if (this.clickAudio) {
+            this.clickAudio.volume = this.getVolume('gui.click');
+        }
+    }
+
+    // Continuous ambience (rain, radiation, synthesized thunder) is routed through
+    // this node so the master slider reaches it too.
+    getMasterGain(context) {
+        if (!this.masterGain) {
+            this.masterGain = context.createGain();
+            this.masterGain.gain.value = this.masterVolume;
+            this.masterGain.connect(context.destination);
+        }
+        return this.masterGain;
     }
 
     create(worldRenderer) {
@@ -193,7 +256,7 @@ export default class SoundManager {
                 sound.panner.positionY.setValueAtTime(pos.y, sound.context.currentTime);
                 sound.panner.positionZ.setValueAtTime(pos.z, sound.context.currentTime);
 
-                sound.setVolume(volume * 10);
+                sound.setVolume(volume * 10 * this.getVolume(name));
                 sound.filters[0].frequency.setValueAtTime(12000 * pitch, sound.context.currentTime);
 
                 sound.offset = 0;
@@ -212,6 +275,7 @@ export default class SoundManager {
             return;
         }
         try {
+            this.clickAudio.volume = this.getVolume('gui.click');
             this.clickAudio.currentTime = 0;
             this.clickAudio.play();
         } catch (e) {
@@ -277,11 +341,109 @@ export default class SoundManager {
         source.connect(highpass);
         highpass.connect(lowpass);
         lowpass.connect(gain);
-        gain.connect(context.destination);
+        gain.connect(this.getMasterGain(context));
         source.start();
 
         this.rainSource = source;
         this.rainGain = gain;
+    }
+
+    setRadiationStrength(strength) {
+        if (this.disabled) {
+            return;
+        }
+
+        const context = this.audioListener ? this.audioListener.context : null;
+        if (!context) {
+            return;
+        }
+
+        const value = Math.max(0, Math.min(1, Number(strength) || 0));
+        this.radiationUpdatedAt = performance.now();
+
+        if (!this.radiationGain) {
+            if (value <= 0.001) {
+                return;
+            }
+            try {
+                this.createRadiationSound(context);
+            } catch (e) {
+                return;
+            }
+        }
+
+        try {
+            if (value > 0.001 && context.state === 'suspended') {
+                context.resume().catch(() => {});
+            }
+            this.radiationGain.gain.setTargetAtTime(value * 0.12, context.currentTime, 0.25);
+        } catch (e) {
+        }
+    }
+
+    // Continuous hiss made from white noise pushed up into the high end, so it
+    // reads as electric crackle rather than the low rumble used for rain.
+    createRadiationSound(context) {
+        const rate = context.sampleRate;
+        const length = Math.floor(rate * 2);
+        const buffer = context.createBuffer(1, length, rate);
+        const data = buffer.getChannelData(0);
+
+        // Irregular decaying impulses read as a Geiger counter crackle. A
+        // smooth white-noise bed is what made the old version sound like rain.
+        let envelope = 0;
+        for (let i = 0; i < length; i++) {
+            if (Math.random() < 0.00055) {
+                envelope = 0.5 + Math.random() * 0.5;
+            }
+
+            if (envelope > 0.0005) {
+                data[i] = (Math.random() * 2 - 1) * envelope;
+                envelope *= 0.9915;
+            } else {
+                envelope = 0;
+            }
+
+            // Barely-there sizzle so the gaps between clicks are not dead air.
+            data[i] += (Math.random() * 2 - 1) * 0.012;
+        }
+
+        const source = context.createBufferSource();
+        source.buffer = buffer;
+        source.loop = true;
+        source.playbackRate.value = 1.15;
+
+        const highpass = context.createBiquadFilter();
+        highpass.type = 'highpass';
+        highpass.frequency.value = 1500;
+        highpass.Q.value = 0.6;
+
+        const lowpass = context.createBiquadFilter();
+        lowpass.type = 'lowpass';
+        lowpass.frequency.value = 11000;
+
+        const gain = context.createGain();
+        gain.gain.value = 0;
+
+        source.connect(highpass);
+        highpass.connect(lowpass);
+        lowpass.connect(gain);
+        gain.connect(this.getMasterGain(context));
+        source.start();
+
+        this.radiationSource = source;
+        this.radiationGain = gain;
+
+        // The overlay stops calling us when the player leaves the world, so the
+        // hiss has to fade out on its own instead of hanging at the last level.
+        this.radiationWatchdog = setInterval(() => {
+            if (!this.radiationGain) {
+                return;
+            }
+            if (performance.now() - this.radiationUpdatedAt > 600) {
+                this.radiationGain.gain.setTargetAtTime(0, context.currentTime, 0.2);
+            }
+        }, 250);
     }
 
     // Always uses the distant thunder sample for now; the close sample stays
@@ -304,7 +466,7 @@ export default class SoundManager {
 
         try {
             const audio = new Audio(this.resolveAsset(asset));
-            audio.volume = strength;
+            audio.volume = this.clampVolume(strength * this.getVolume('random.thunder'));
             audio.playbackRate = 0.96 + Math.random() * 0.08;
             audio.addEventListener('error', fallback, { once: true });
             audio.play().catch(fallback);
@@ -343,7 +505,7 @@ export default class SoundManager {
 
             const gain = context.createGain();
             const now = context.currentTime;
-            const peak = Math.max(0, Math.min(1, volume)) * 0.5;
+            const peak = Math.max(0, Math.min(1, volume)) * 0.5 * this.miscVolume;
 
             gain.gain.setValueAtTime(0, now);
             gain.gain.linearRampToValueAtTime(peak, now + 0.04);
@@ -351,7 +513,7 @@ export default class SoundManager {
 
             source.connect(lowpass);
             lowpass.connect(gain);
-            gain.connect(context.destination);
+            gain.connect(this.getMasterGain(context));
             source.start(now);
             source.stop(now + 2.4);
         } catch (e) {
@@ -365,7 +527,7 @@ export default class SoundManager {
 
         try {
             const audio = new Audio(this.resolveAsset(CAVE_SOUND_ASSET));
-            audio.volume = Math.max(0, Math.min(1, volume));
+            audio.volume = this.clampVolume(volume * this.getVolume('random.cave'));
             audio.play().catch(() => {});
         } catch (e) {
         }
@@ -390,13 +552,14 @@ export default class SoundManager {
         }
 
         try {
+            const playbackVolume = this.clampVolume(volume * this.getVolume(name));
             let audio = new Audio(soundSrc);
-            audio.volume = volume;
+            audio.volume = playbackVolume;
             audio.playbackRate = pitch;
             if (soundSrc !== plainSrc) {
                 audio.addEventListener('error', () => {
                     let fallback = new Audio(plainSrc);
-                    fallback.volume = volume;
+                    fallback.volume = playbackVolume;
                     fallback.playbackRate = pitch;
                     fallback.play().catch(() => {});
                 }, { once: true });

@@ -16,7 +16,7 @@ export default class BlockBluestoneTorch extends BlockTorch {
         super(id, textureSlotId);
 
         this.description = "Bluestone Torch";
-        this.inventoryTab = EnumCreativeInventoryTab.MACHINES;
+        this.inventoryTab = EnumCreativeInventoryTab.BLUESTONE;
 
         this.isPowerSource = true;
     }

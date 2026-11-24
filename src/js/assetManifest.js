@@ -2,6 +2,7 @@ export const uiTextures = [
     "misc/grasscolor.png",
     "misc/rain.png",
     "gui/font.png",
+    "gui/font-alt.png",
     "gui/accented.png",
     "gui/gui.png",
     "gui/background.png",
@@ -131,6 +132,7 @@ export const atlasBlockTextures = [
     "redstone_dust_line0.png", "redstone_dust_line1.png", "redstone_dust_cross.png",
     "redstone_dust_overlay.png", "none.png", "sapphire_ore.png", "sapphire_block.png",
     "bluestone_ore.png", "slime_block_nontransparent.png", "wire.png",
+    "uranium_ore.png", "raw_uranium.png", "polished_uranium.png",
     "stonebrick.png", "dark_stonebrick.png", "oak_door_top.png", "oak_door_bottom.png",
     "glass_door_top.png", "glass_door_bottom.png", "ladder.png",
     "bed_head_top.png", "bed_head_side.png", "bed_head_end.png",
@@ -159,7 +161,7 @@ export const atlasBlockTextures = [
     "bluestoneMemoryTopSetOnResetOff.png", "bluestoneMemoryTopSetOnResetOnOff.png",
     "bluestoneMemoryTopSetOffResetOn.png",
     "ice.png", "packed_ice.png", "blue_ice.png", "cheese.png", "bob.png",
-    "farmland.png", "farmland_moist.png",
+    "farmland.png", "farmland_moist.png", "warning.png", "bob_side.png",
     "wheat_stage0.png", "wheat_stage1.png", "wheat_stage2.png", "wheat_stage3.png",
     "wheat_stage4.png", "wheat_stage5.png", "wheat_stage6.png", "wheat_stage7.png",
     "carrots_stage0.png", "carrots_stage1.png", "carrots_stage2.png", "carrots_stage3.png",
@@ -187,7 +189,7 @@ export const atlasItemTextures = [
     "apple.png", "bread.png", "burger.png", "stick.png", "iron_ingot.png", "coal.png",
     "diamond.png", "emerald.png", "gold_ingot.png", "uranium_ingot.png", "bucket.png",
     "water_bucket.png", "lava_bucket.png", "oak_sign.png", "oak_door.png", "glass_door.png",
-    "clay_ball.png",
+    "clay_ball.png", "bluestone.png",
     "white_dye.png", "orange_dye.png", "magenta_dye.png", "light_blue_dye.png",
     "yellow_dye.png", "lime_dye.png", "pink_dye.png", "gray_dye.png",
     "light_gray_dye.png", "cyan_dye.png", "purple_dye.png", "blue_dye.png",
@@ -198,6 +200,7 @@ export const atlasItemTextures = [
     "cabbage.png", "tomato.png", "tomato_seeds.png",
     "pumpkin_seeds.png", "melon_seeds.png", "pumpkin_slice.png", "melon_slice.png",
     "pumpkin_pie.png", "pumpkin_soup.png", "chorus_fruit.png",
+    ...Array.from({length: 32}, (_, i) => `compass_${String(i).padStart(2, "0")}.png`),
     ...toolMaterials.flatMap(mat => toolTypes.map(type => `${mat}_${type}.png`))
 ];
 

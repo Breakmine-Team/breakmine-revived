@@ -35,6 +35,10 @@ export default class GameSettings {
 
         this.thirdPersonView = 0;
         this.fov = 70;
+        this.masterVolume = 1;
+        this.musicVolume = 0.25;
+        this.blocksVolume = 1;
+        this.miscVolume = 1;
         this.guiScale = 'auto';
         this.resolution = 1;
         this.viewBobbing = true;
@@ -94,6 +98,30 @@ export default class GameSettings {
     getRemoteSensitivity() {
         const value = Number(this.remoteSensitivity);
         return Number.isFinite(value) && value > 0 ? value : 100;
+    }
+
+    getMasterVolume() {
+        return this._getVolume('masterVolume', 1);
+    }
+
+    getMusicVolume() {
+        return this._getVolume('musicVolume', 0.25);
+    }
+
+    getBlocksVolume() {
+        return this._getVolume('blocksVolume', 1);
+    }
+
+    getMiscVolume() {
+        return this._getVolume('miscVolume', 1);
+    }
+
+    _getVolume(key, fallback) {
+        const value = Number(this[key]);
+        if (!Number.isFinite(value)) {
+            return fallback;
+        }
+        return Math.max(0, Math.min(1, value));
     }
 
     load() {

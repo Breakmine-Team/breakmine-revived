@@ -1,16 +1,9 @@
-
-
-
-
-
-
 export const FONT_ICONS = {
     0xE100: 0xC8, 
     0xE101: 0xCB, 
     0xE102: 0xCD, 
     0xE103: 0xD3, 
     0xE104: 0xCA,
-    // The very top-right cell of font.png (row 0, column 15).
     0xE105: 0x0130
 };
 

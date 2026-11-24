@@ -1,3 +1,4 @@
+import EnumCreativeInventoryTab from "../../../gui/EnumCreativeInventoryTab.js";
 import Block from "../Block.js";
 
 export default class BlockLogBark extends Block {
@@ -9,6 +10,7 @@ export default class BlockLogBark extends Block {
         this.hardness = 2.0;
 
         this.sound = Block.sounds.wood;
+        this.inventoryTab = EnumCreativeInventoryTab.BUILDING_BLOCKS;
     }
     
     getPreferredToolType() {

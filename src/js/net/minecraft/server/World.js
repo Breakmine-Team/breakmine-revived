@@ -215,7 +215,7 @@ class ServerWorld {
             }
 
             if (steps >= 16384) {
-                console.warn("notifyNeighborBlockChange: propagation cascade capped after 16384 steps (oscillating redstone circuit?)");
+                console.warn("notifyNeighborBlockChange: propagation cascade capped after 16384 steps (oscillating bluestone circuit?)");
             }
         } finally {
             this.neighborUpdateQueue = [];

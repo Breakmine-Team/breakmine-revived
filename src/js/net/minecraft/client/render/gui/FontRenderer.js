@@ -58,6 +58,7 @@ export default class FontRenderer {
 
         this.isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
         this.texture = minecraft.resources["gui/font.png"];
+        this.textureAlt = minecraft.resources["gui/font-alt.png"];
 
         this.accentedTexture = minecraft.resources["gui/accented.png"];
 

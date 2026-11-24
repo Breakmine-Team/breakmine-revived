@@ -1,5 +1,6 @@
 import Block from "../Block.js";
 import EnumBlockFace from "../../../../util/EnumBlockFace.js";
+import EnumCreativeInventoryTab from "../../../gui/EnumCreativeInventoryTab.js";
 
 export default class BlockLog extends Block {
 
@@ -10,6 +11,7 @@ export default class BlockLog extends Block {
         this.hardness = 2.0;
 
         this.sound = Block.sounds.wood;
+        this.inventoryTab = EnumCreativeInventoryTab.BUILDING_BLOCKS;
     }
     
     getPlacementMetadata(world, x, y, z, face, yaw = 0) {

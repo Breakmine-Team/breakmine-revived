@@ -10,6 +10,13 @@ import PlayerListOverlay from "./PlayerListOverlay.js";
 import Keyboard from "../../../util/Keyboard.js";
 import GuiFunctions from "../screens/GuiFunctions.js";
 
+// Seconds of continuous exposure before the vignette reaches full thickness.
+const RADIATION_VIGNETTE_FULL = 20;
+// Grace period before the first tick of damage, then 1 HP per interval.
+const RADIATION_DAMAGE_DELAY = 1.5;
+const RADIATION_DAMAGE_INTERVAL = 2.5;
+const RADIATION_DAMAGE_THRESHOLD = 0.5;
+
 export default class IngameOverlay extends Gui {
 
     constructor(minecraft, window) {
@@ -35,9 +42,21 @@ export default class IngameOverlay extends Gui {
 
         this.statusText = "";
         this.statusTextUntil = 0;
+
+        this.uraniumStaticIntensity = 0;
+        this.uraniumStaticTarget = 0;
+        this.uraniumStaticCheckedAt = 0;
+        this.uraniumStaticFrameAt = 0;
+        this.uraniumStaticCanvas = null;
+
+        this.radiationExposure = 0;
+        this.radiationDamageTimer = 0;
+        this.radiationLastUpdateAt = 0;
     }
 
     render(stack, mouseX, mouseY, partialTicks) {
+        this.renderUraniumStatic(stack);
+
         if (GuiFunctions.isGuiHidden()) {
             if (this.minecraft.settings.debugOverlay) {
                 stack.drawImage(this.window.canvasDebug, 0, 0);
@@ -107,7 +126,152 @@ export default class IngameOverlay extends Gui {
         this.minecraft.modLoader?.emitOverlayText(this, stack);
     }
 
-    
+    renderUraniumStatic(stack) {
+        const now = performance.now();
+
+        if (now - this.uraniumStaticCheckedAt > 250) {
+            this.uraniumStaticCheckedAt = now;
+            this.uraniumStaticTarget = this.getUraniumProximity();
+        }
+
+        this.uraniumStaticIntensity += (this.uraniumStaticTarget - this.uraniumStaticIntensity) * 0.08;
+
+        this.minecraft.soundManager?.setRadiationStrength(this.uraniumStaticIntensity);
+
+        if (this.uraniumStaticIntensity < 0.01) {
+            return;
+        }
+
+        if (this.uraniumStaticCanvas === null) {
+            this.uraniumStaticCanvas = document.createElement('canvas');
+            this.uraniumStaticCanvas.width = 256;
+            this.uraniumStaticCanvas.height = 256;
+        }
+
+        if (now - this.uraniumStaticFrameAt > 60) {
+            this.uraniumStaticFrameAt = now;
+            this.buildUraniumStatic();
+        }
+
+        // Draw in device pixels so the grain is one texture pixel per screen pixel
+        // instead of being stretched by the GUI scale factor.
+        stack.save();
+        stack.setTransform(1, 0, 0, 1, 0, 0);
+        stack.globalAlpha = Math.min(0.9, this.uraniumStaticIntensity * 0.9);
+        stack.fillStyle = stack.createPattern(this.uraniumStaticCanvas, 'repeat');
+        stack.fillRect(0, 0, stack.canvas.width, stack.canvas.height);
+
+        stack.globalAlpha = 1;
+
+        // Cool blue vignette; the clear centre shrinks as the source gets closer
+        // and keeps closing in the longer a survivor stays exposed.
+        const width = stack.canvas.width;
+        const height = stack.canvas.height;
+        const exposure = Math.min(1, this.radiationExposure / RADIATION_VIGNETTE_FULL);
+        const vignetteAlpha = Math.min(0.95, this.uraniumStaticIntensity * 0.65 + exposure * 0.35);
+        const clearRadius = Math.max(0.05, 0.45 - this.uraniumStaticIntensity * 0.2 - exposure * 0.22);
+        const vignette = stack.createRadialGradient(
+            width / 2, height / 2, Math.min(width, height) * clearRadius,
+            width / 2, height / 2, Math.hypot(width, height) * 0.55
+        );
+        vignette.addColorStop(0, 'rgba(20, 60, 170, 0)');
+        vignette.addColorStop(0.55, 'rgba(20, 55, 160, ' + (vignetteAlpha * 0.35).toFixed(3) + ')');
+        vignette.addColorStop(1, 'rgba(5, 20, 80, ' + vignetteAlpha.toFixed(3) + ')');
+        stack.fillStyle = vignette;
+        stack.fillRect(0, 0, width, height);
+        stack.restore();
+    }
+
+    getUraniumProximity() {
+        const player = this.minecraft.player;
+        const world = this.minecraft.world;
+        if (!player || !world || typeof world.getBlockAt !== 'function') return 0;
+
+        const radius = 8;
+        const playerX = Math.floor(player.x);
+        const playerY = Math.floor(player.y + player.getEyeHeight());
+        const playerZ = Math.floor(player.z);
+        let intensity = 0;
+
+        for (let dx = -radius; dx <= radius; dx++) {
+            for (let dy = -radius; dy <= radius; dy++) {
+                for (let dz = -radius; dz <= radius; dz++) {
+                    const distSq = dx * dx + dy * dy + dz * dz;
+                    if (distSq > radius * radius) continue;
+
+                    const block = Block.getById(world.getBlockAt(playerX + dx, playerY + dy, playerZ + dz));
+                    if (!block || block.isUranium !== true) continue;
+
+                    // Blocks declare their own strength; ore and raw uranium are
+                    // hot enough to saturate the effect well inside the radius.
+                    const strength = typeof block.radioactivity === "number" ? block.radioactivity : 1;
+                    const falloff = 1 - Math.sqrt(distSq) / radius;
+                    intensity = Math.max(intensity, strength * falloff);
+                }
+            }
+        }
+
+        return Math.min(1, intensity);
+    }
+
+    // Survival-only radiation sickness: the longer the player stays inside a
+    // strong field the thicker the vignette gets, and health drains until death.
+    tickRadiation() {
+        const now = performance.now();
+        const dt = this.radiationLastUpdateAt === 0
+            ? 0
+            : Math.min(0.5, (now - this.radiationLastUpdateAt) / 1000);
+        this.radiationLastUpdateAt = now;
+
+        const player = this.minecraft.player;
+        if (!player || player.creative || player.spectator) {
+            this.radiationExposure = 0;
+            this.radiationDamageTimer = 0;
+            return;
+        }
+
+        if (player.isDead || this.uraniumStaticIntensity < RADIATION_DAMAGE_THRESHOLD) {
+            this.radiationExposure = Math.max(0, this.radiationExposure - dt * 0.5);
+            this.radiationDamageTimer = 0;
+            return;
+        }
+
+        this.radiationExposure = Math.min(RADIATION_VIGNETTE_FULL, this.radiationExposure + dt);
+
+        if (this.radiationExposure < RADIATION_DAMAGE_DELAY) {
+            return;
+        }
+
+        this.radiationDamageTimer += dt;
+        if (this.radiationDamageTimer < RADIATION_DAMAGE_INTERVAL) {
+            return;
+        }
+
+        this.radiationDamageTimer -= RADIATION_DAMAGE_INTERVAL;
+        player.typeOfDeath = 'died of radiation poisoning';
+        player.health = Math.max(0, player.health - 1);
+        player.sendHealthUpdate?.();
+    }
+
+    buildUraniumStatic() {
+        const canvas = this.uraniumStaticCanvas;
+        const context = canvas.getContext('2d');
+        const image = context.createImageData(canvas.width, canvas.height);
+        const data = image.data;
+        // Denser grain the closer the player is to a source.
+        const density = 0.12 + this.uraniumStaticIntensity * 0.25;
+
+        for (let i = 0; i < data.length; i += 4) {
+            if (Math.random() > density) continue;
+            data[i] = 20 + Math.random() * 70;
+            data[i + 1] = 90 + Math.random() * 110;
+            data[i + 2] = 180 + Math.random() * 75;
+            data[i + 3] = 60 + Math.random() * 195;
+        }
+
+        context.putImageData(image, 0, 0);
+    }
+
     renderVoiceIndicator(stack) {
         const voiceChat = this.minecraft.voiceChat;
         if (!voiceChat) return;
@@ -134,6 +298,7 @@ export default class IngameOverlay extends Gui {
     }
 
     onTick() {
+        this.tickRadiation();
         this.chatOverlay.onTick();
 
         if (this.minecraft.settings.debugOverlay) {

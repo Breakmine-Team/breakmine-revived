@@ -17,6 +17,8 @@ export default class FirstPersonItemRenderer {
         this.scene.add(this.cameraGroup);
         this.itemId = -1;
         this.generatedItem = false;
+        this.textureName = null;
+        this.spriteTexture = null;
         this.poseMatrix = new THREE.Matrix4();
         this.transformMatrix = new THREE.Matrix4();
         this.viewportSize = new THREE.Vector2();
@@ -35,6 +37,8 @@ export default class FirstPersonItemRenderer {
         }
         this.itemId = -1;
         this.generatedItem = false;
+        this.textureName = null;
+        this.spriteTexture = null;
     }
 
     rebuild(itemStack, brightness) {
@@ -69,6 +73,9 @@ export default class FirstPersonItemRenderer {
         model.traverse(node => {
             if (!node.isMesh) return;
             node.material = node.material.clone();
+            if (this.generatedItem && node.material.map) {
+                this.spriteTexture = node.material.map;
+            }
             if (node.geometry?.getAttribute('aTileRect')) {
                 Tessellator.applyTileWrap(node.material);
             }
@@ -79,11 +86,26 @@ export default class FirstPersonItemRenderer {
         displayGroup.add(model);
         this.armTransformGroup.add(displayGroup);
         this.itemId = itemStack.getType();
+        this.textureName = this.generatedItem
+            ? this.worldRenderer.blockRenderer.getHeldItemTextureName(block)
+            : null;
     }
 
     update(itemStack, brightness, equipProgress, swingProgress, partialTicks, currentSwing = null, usingItem = null) {
+        const block = Block.getById(itemStack.getType());
+        const textureName = block && block.getRenderType() === BlockRenderType.ITEM
+            ? this.worldRenderer.blockRenderer.getHeldItemTextureName(block)
+            : null;
+
         if (this.itemId !== itemStack.getType() || this.armTransformGroup.children.length === 0) {
             this.rebuild(itemStack, brightness);
+        } else if (textureName !== null && textureName !== this.textureName) {
+            if (this.spriteTexture
+                && this.worldRenderer.blockRenderer.updateSpriteItemTexture(this.spriteTexture, textureName)) {
+                this.textureName = textureName;
+            } else {
+                this.rebuild(itemStack, brightness);
+            }
         }
 
         this.cameraGroup.visible = true;

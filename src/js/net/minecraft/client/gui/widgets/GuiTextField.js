@@ -14,6 +14,9 @@ export default class GuiTextField extends GuiButton {
         this.maxLength = 80;
         this.renderBackground = true;
         this.centered = false;
+        this.customTextColor = null;
+        this.textOffsetY = 0;
+        this.maxWidth = null;
 
         this.renderE = true;
         this.cursorPosition = 0;
@@ -28,7 +31,7 @@ export default class GuiTextField extends GuiButton {
         this.isFocused = this.alwaysFocused || this.isFocused;
         
         let cursorVisible = this.isFocused && Math.floor(this.cursorCounter / 6) % 2 === 0;
-        let textColor = this.noShadow ? 0x000000 : (this.enabled ? 0xffffff : 0x707070ff);
+        let textColor = this.customTextColor ?? (this.noShadow ? 0x000000 : (this.enabled ? 0xffffff : 0x707070ff));
 
         if (this.renderBackground) {
             this.drawRect(stack, this.x - 1, this.y - 1, this.x + this.width + 1, this.y + this.height + 1, '#5f5f60');
@@ -36,28 +39,36 @@ export default class GuiTextField extends GuiButton {
         }
 
         let textX;
+        let scrollX = 0;
+        const caretOffset = this.getStringWidth(stack, this.text.substring(0, this.cursorPosition), true);
+        const textWidth = this.getStringWidth(stack, this.text, true);
         if (this.centered) {
-            const textWidth = this.getStringWidth(stack, this.text, true);
             textX = this.x + (this.width - textWidth) / 2;
         } else {
-            textX = this.x + 2;
+            const visibleWidth = Math.max(0, this.width - 4);
+            scrollX = Math.max(0, Math.min(Math.max(0, textWidth - visibleWidth), caretOffset - visibleWidth));
+            textX = this.x + 2 - scrollX;
         }
-        this.drawString(stack, this.text, textX, this.y + this.height / 2 - 4, textColor, !this.noShadow, false);
 
-        
+        stack.save();
+        stack.beginPath();
+        stack.rect(this.x, this.y - 1, this.width, this.height + 2);
+        stack.clip();
+
+        this.drawString(stack, this.text, textX, this.y + this.height / 2 - 4 + this.textOffsetY, textColor, !this.noShadow, false);
+
+
         if (cursorVisible) {
-            let textBeforeCursor = this.text.substring(0, this.cursorPosition);
-            let cursorOffset = this.getStringWidth(stack, textBeforeCursor, true);
-            
             let cursorX;
             if (this.centered) {
-                const textWidth = this.getStringWidth(stack, this.text, true);
-                cursorX = this.x + (this.width - textWidth) / 2 + cursorOffset;
+                cursorX = this.x + (this.width - textWidth) / 2 + caretOffset;
             } else {
-                cursorX = this.x + 2 + cursorOffset;
+                cursorX = this.x + 2 + caretOffset - scrollX;
             }
-            this.drawString(stack, "_", cursorX, this.y + this.height / 2 - 3, textColor);
+            this.drawString(stack, "_", cursorX, this.y + this.height / 2 - 3, textColor, !this.noShadow);
         }
+
+        stack.restore();
     }
 
     setText(newText) {
@@ -70,8 +81,23 @@ export default class GuiTextField extends GuiButton {
         if (this.text.length > this.maxLength) {
             this.text = this.text.substring(0, this.maxLength);
         }
+
+        while (this.text.length > 0 && !this.fitsWidth(this.text)) {
+            this.text = this.text.substring(0, this.text.length - 1);
+        }
         
         this.cursorPosition = this.text.length;
+    }
+
+    // Max pixel width of the text, measured on the actual (variable width) glyphs
+    fitsWidth(text) {
+        if (this.maxWidth === null || this.maxWidth === undefined) {
+            return true;
+        }
+        if (!this.minecraft || !this.minecraft.fontRenderer) {
+            return true;
+        }
+        return this.getStringWidth(null, text, true) <= this.maxWidth;
     }
 
     setFocused(focused) {
@@ -142,7 +168,21 @@ export default class GuiTextField extends GuiButton {
 
         if (key === "KeyV" && this.controlPressed) {
             this.minecraft.window.getClipboardText().then(text => {
-                this.text += text;
+                const room = this.maxLength - this.text.length;
+                if (room <= 0 || !text) return;
+
+                const before = this.text.substring(0, this.cursorPosition);
+                const after = this.text.substring(this.cursorPosition);
+                let inserted = "";
+                for (const character of Array.from(text)) {
+                    if (inserted.length >= room) break;
+                    if (!this.fitsWidth(before + inserted + character + after)) break;
+                    inserted += character;
+                }
+                if (inserted.length === 0) return;
+
+                this.text = before + inserted + after;
+                this.cursorPosition += inserted.length;
             });
             return;
         }
@@ -158,11 +198,14 @@ export default class GuiTextField extends GuiButton {
         }
 
         if (this.text.length < this.maxLength) {
-            this.text = this.text.substring(0, this.cursorPosition) + 
-                        character + 
-                        this.text.substring(this.cursorPosition);
-            this.cursorPosition++;
-            this.cursorCounter = 0;
+            const newText = this.text.substring(0, this.cursorPosition) + 
+                            character + 
+                            this.text.substring(this.cursorPosition);
+            if (this.fitsWidth(newText)) {
+                this.text = newText;
+                this.cursorPosition++;
+                this.cursorCounter = 0;
+            }
         }
     }
 

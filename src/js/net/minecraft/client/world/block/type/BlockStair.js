@@ -1,6 +1,7 @@
 import Block from "../Block.js";
 import EnumBlockFace from "../../../../util/EnumBlockFace.js";
 import BoundingBox from "../../../../util/BoundingBox.js";
+import EnumCreativeInventoryTab from "../../../gui/EnumCreativeInventoryTab.js";
 
 export default class BlockStair extends Block {
 
@@ -21,6 +22,7 @@ export default class BlockStair extends Block {
         if (options.hardness !== undefined) this.hardness = options.hardness;
         if (options.sound) this.sound = options.sound;
         if (options.tool !== undefined) this.tool = options.tool;
+        this.inventoryTab = EnumCreativeInventoryTab.BUILDING_BLOCKS;
     }
 
     getPreferredToolType() {

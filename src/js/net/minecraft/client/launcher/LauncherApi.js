@@ -2,6 +2,7 @@ import * as AuthLib from "../network/AuthLib.js";
 import GameProfile from "../../util/GameProfile.js";
 import Session from "../../util/Session.js";
 import GuiMainMenu from "../gui/screens/GuiMainMenu.js";
+import ServerPinger from "../network/pinger/ServerPinger.js";
 import { Version } from "../../../../../resources/version.js";
 
 /**
@@ -16,6 +17,10 @@ import { Version } from "../../../../../resources/version.js";
 
 const API_VERSION = 1;
 const MAX_QUEUED_EVENTS = 100;
+const MODS_SITE = "https://mods.breakmine.com";
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // wiki/app.py MAX_FILE_SIZE
+const TEMP_UPLOAD_TTL_SECONDS = 300; // wiki/app.py /tempmod timer
+const PING_TIMEOUT_MS = 10000;
 
 const MESSAGE_CALL = "breakmine:launcher:call";
 const MESSAGE_RESULT = "breakmine:launcher:result";
@@ -69,6 +74,17 @@ export default class LauncherApi {
             ["mods.setEnabled", (params) => this.setModEnabled(params)],
             ["mods.installZip", (params) => this.installModZip(params)],
             ["mods.uninstall", (params) => this.uninstallMod(params)],
+            ["mods.readPackage", (params) => this.readModPackage(params)],
+            ["mods.upload", (params) => this.uploadModPackage(params)],
+            ["mods.download", (params) => this.downloadModPackage(params)],
+            ["mods.searchSite", (params) => this.searchSiteMods(params)],
+            ["mods.openUploadPage", () => this.openModUploadPage()],
+            ["mods.openFolder", () => this.openModFolder()],
+            ["server.getPlayers", () => this.getServerPlayers()],
+            ["server.getInfo", () => this.getServerInfo()],
+            ["server.ping", (params) => this.pingServer(params)],
+            ["discord.getInfo", () => this.getDiscordInfo()],
+            ["discord.openLogin", () => this.openDiscordLogin()],
             ["game.getState", () => this.getGameState()],
             ["events.drain", () => this.drainEvents()],
         ]);
@@ -104,6 +120,23 @@ export default class LauncherApi {
                 setEnabled: (params) => this.setModEnabled(params),
                 installZip: (params) => this.installModZip(params),
                 uninstall: (params) => this.uninstallMod(params),
+                readPackage: (params) => this.readModPackage(params),
+                upload: (params) => this.uploadModPackage(params),
+                download: (params) => this.downloadModPackage(params),
+                searchSite: (params) => this.searchSiteMods(params),
+                openUploadPage: () => this.openModUploadPage(),
+                openFolder: () => this.openModFolder(),
+            },
+
+            server: {
+                getPlayers: () => this.getServerPlayers(),
+                getInfo: () => this.getServerInfo(),
+                ping: (params) => this.pingServer(params),
+            },
+
+            discord: {
+                getInfo: () => this.getDiscordInfo(),
+                openLogin: () => this.openDiscordLogin(),
             },
 
             game: {
@@ -302,6 +335,276 @@ export default class LauncherApi {
 
         await this.minecraft.modLoader.uninstallMod(modId);
         return this.listMods();
+    }
+
+    /**
+     * Rebuilds the installed mod's files into a .zip and returns it as base64,
+     * so the launcher can upload the package to a mod site without needing to
+     * know how Patchwork stores mods on disk.
+     */
+    async readModPackage({ id } = {}) {
+        const loader = this.minecraft ? this.minecraft.modLoader : null;
+        const modId = String(id || "").trim();
+
+        if (!loader) {
+            throw new Error("The mod loader is not running.");
+        }
+        if (!modId) {
+            throw new Error("mods.readPackage requires 'id'.");
+        }
+        if (typeof loader._fsForMod !== "function" || typeof loader._ensureJSZip !== "function") {
+            throw new Error("This build cannot export mod packages.");
+        }
+
+        const filesystem = await loader._fsForMod(modId);
+        const prefix = `mods/${modId}/`;
+        const files = await filesystem.listDir(prefix);
+        const JSZip = await loader._ensureJSZip();
+        const zip = new JSZip();
+
+        for (const path of files) {
+            const entry = path.startsWith(prefix) ? path.substring(prefix.length) : path;
+            const text = await filesystem.loadFile(path);
+            if (typeof text === "string") {
+                zip.file(entry, text);
+                continue;
+            }
+
+            const bytes = typeof filesystem.loadBinaryFile === "function"
+                ? await filesystem.loadBinaryFile(path)
+                : null;
+            if (bytes) {
+                zip.file(entry, bytes);
+            }
+        }
+
+        const base64 = await zip.generateAsync({ type: "base64" });
+        return {
+            id: modId,
+            filename: `${modId}.zip`,
+            base64: base64,
+        };
+    }
+
+    async openModFolder() {
+        const bridge = typeof window !== "undefined" ? window.modsBridge : null;
+
+        if (!bridge || typeof bridge.openFolder !== "function") {
+            throw new Error("Opening the mods folder requires the desktop launcher.");
+        }
+
+        await bridge.openFolder();
+        return { opened: true };
+    }
+
+    // --- Mod site -------------------------------------------------------------
+
+    /**
+     * Stages a package on mods.breakmine.com through its unauthenticated
+     * `/tempmod/upload/<id>` route, which keeps the file for five minutes.
+     * Publishing it as a catalogue entry still goes through the site's
+     * session-authenticated `/upload` form (`mods.openUploadPage`).
+     */
+    async uploadModPackage({ id, base64, filename } = {}) {
+        if (!base64) {
+            throw new Error("mods.upload requires 'base64' (the .zip contents).");
+        }
+
+        const bytes = base64ToBytes(base64);
+        if (bytes.length === 0) {
+            throw new Error("The uploaded package is empty.");
+        }
+        if (bytes.length > MAX_UPLOAD_BYTES) {
+            throw new Error(`The uploaded package is larger than ${MAX_UPLOAD_BYTES} bytes.`);
+        }
+
+        const uploadId = String(id || `launcher_${Date.now().toString(36)}`).replace(/[^a-zA-Z0-9_-]/g, "");
+        if (!uploadId) {
+            throw new Error("'id' must contain letters, numbers, '_' or '-'.");
+        }
+
+        const form = new FormData();
+        form.append("file", new Blob([bytes], { type: "application/zip" }), filename || `${uploadId}.zip`);
+
+        const response = await fetch(`${MODS_SITE}/tempmod/upload/${uploadId}`, {
+            method: "POST",
+            body: form,
+        });
+        const message = await response.text();
+
+        if (!response.ok) {
+            throw new Error(message || `Upload failed with HTTP ${response.status}.`);
+        }
+
+        return {
+            id: uploadId,
+            url: `${MODS_SITE}/tempmod/download/${uploadId}`,
+            message: message,
+            expiresInSeconds: TEMP_UPLOAD_TTL_SECONDS,
+        };
+    }
+
+    async downloadModPackage({ id } = {}) {
+        const downloadId = String(id || "").replace(/[^a-zA-Z0-9_-]/g, "");
+        if (!downloadId) {
+            throw new Error("mods.download requires 'id'.");
+        }
+
+        const response = await fetch(`${MODS_SITE}/tempmod/download/${downloadId}`);
+        if (!response.ok) {
+            throw new Error(`Package '${downloadId}' is gone or expired (HTTP ${response.status}).`);
+        }
+
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        let binary = "";
+        for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+
+        return { id: downloadId, base64: btoa(binary), size: bytes.length };
+    }
+
+    async searchSiteMods({ q, cat } = {}) {
+        const url = new URL(`${MODS_SITE}/api/mods`);
+        if (q) url.searchParams.set("q", String(q));
+        if (cat) url.searchParams.set("cat", String(cat));
+
+        const response = await fetch(url, { headers: { Accept: "application/json" } });
+        const data = await response.json().catch(() => null);
+
+        if (!response.ok) {
+            throw new Error((data && data.error) || `The mod site returned HTTP ${response.status}.`);
+        }
+
+        return data;
+    }
+
+    openModUploadPage() {
+        return this.openExternal(`${MODS_SITE}/upload`);
+    }
+
+    openExternal(url) {
+        const windowRef = this.minecraft ? this.minecraft.window : null;
+
+        if (windowRef && typeof windowRef.openUrl === "function") {
+            windowRef.openUrl(url, true);
+            return { opened: true, url: url };
+        }
+
+        if (typeof window !== "undefined" && typeof window.open === "function") {
+            window.open(url, "_blank", "noopener");
+            return { opened: true, url: url };
+        }
+
+        throw new Error("This environment cannot open external links.");
+    }
+
+    // --- Server ---------------------------------------------------------------
+
+    getServerPlayers() {
+        const handler = this.minecraft?.playerController?.getNetworkHandler?.();
+        const playerInfoMap = handler && typeof handler.getPlayerInfoMap === "function"
+            ? handler.getPlayerInfoMap()
+            : null;
+        const players = [];
+
+        if (playerInfoMap && typeof playerInfoMap.forEach === "function") {
+            playerInfoMap.forEach((info, uuid) => {
+                if (!info || !info.profile) {
+                    return;
+                }
+
+                players.push({
+                    uuid: String(uuid),
+                    username: typeof info.profile.getUsername === "function"
+                        ? info.profile.getUsername()
+                        : String(info.profile.username || ""),
+                    displayName: info.displayName ?? null,
+                    gameType: info.gameType ?? 0,
+                    ping: info.ping ?? 0,
+                });
+            });
+        }
+
+        players.sort((a, b) => a.username.localeCompare(b.username));
+
+        return {
+            connected: !!playerInfoMap,
+            count: players.length,
+            players: players,
+        };
+    }
+
+    getServerInfo() {
+        const networkManager = this.minecraft?.playerController?.getNetworkHandler?.()?.getNetworkManager?.();
+        const singleplayer = typeof this.minecraft?.isSingleplayer === "function"
+            ? this.minecraft.isSingleplayer()
+            : true;
+
+        return {
+            singleplayer: singleplayer,
+            connected: !!networkManager || singleplayer,
+            address: singleplayer ? null : (networkManager?.address ?? null),
+            port: networkManager?.port ?? null,
+        };
+    }
+
+    pingServer({ address, port } = {}) {
+        const host = String(address || "").trim();
+        if (!host) {
+            throw new Error("server.ping requires 'address'.");
+        }
+
+        const serverPort = Number(port) > 0 ? Number(port) : 25565;
+
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                reject(new Error(`Ping to ${host}:${serverPort} timed out.`));
+            }, PING_TIMEOUT_MS);
+
+            try {
+                const pinger = new ServerPinger(this.minecraft);
+                pinger.ping(host, serverPort, (status) => {
+                    clearTimeout(timer);
+                    resolve(status === undefined ? null : status);
+                });
+            } catch (error) {
+                clearTimeout(timer);
+                reject(error);
+            }
+        });
+    }
+
+    // --- Discord --------------------------------------------------------------
+
+    /**
+     * The mods app's session-based Discord OAuth entry point. The launcher can
+     * open it in a browser; linking is finished by Discord + the Flask session,
+     * so there is no token exchange for the launcher to perform.
+     */
+    discordLoginUrl() {
+        return `${MODS_SITE}/login/discord`;
+    }
+
+    getDiscordInfo() {
+        const state = this.minecraft?.gameState?.snapshot?.() || null;
+        const account = this.getAccount();
+        const inGame = !!state && (state.state === "ingame" || state.state === "paused" || state.state === "gui");
+        const bridge = typeof window !== "undefined" ? window.modsBridge : null;
+
+        return {
+            loginUrl: this.discordLoginUrl(),
+            richPresence: !!(bridge && typeof bridge.reportGameState === "function"),
+            details: !inGame
+                ? "Main Menu"
+                : (state.singleplayer ? "Singleplayer" : "Multiplayer"),
+            state: account ? `Playing as ${account.username}` : null,
+            paused: inGame ? !!state.paused : false,
+        };
+    }
+
+    openDiscordLogin() {
+        return this.openExternal(this.discordLoginUrl());
     }
 
     // --- Game state -----------------------------------------------------------

@@ -9,7 +9,7 @@ export default class BlockBluestoneBulb extends Block {
         this.description = "Bluestone Bulb";
         this.hardness = 0.3;
         this.isBluestoneConsumer = true;
-        this.inventoryTab = EnumCreativeInventoryTab.MACHINES;
+        this.inventoryTab = EnumCreativeInventoryTab.BLUESTONE;
     }
 
     hasBlockEntity() { return true; }

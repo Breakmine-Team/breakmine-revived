@@ -43,13 +43,15 @@ export default class GuiSign extends GuiScreen {
         const signY = this.height / 2 - signHeight / 2;
         const totalTextHeight = 4 * 10; 
         const startY = signY + (signHeight - totalTextHeight) / 2 + 2; 
-        const fieldWidth = Math.floor(signWidth * 0.8); 
+        const signTextPadding = 3; // px of free space on each side of the sign
+        const fieldWidth = signWidth - signTextPadding * 2; 
         for (let i = 0; i < 4; i++) {
             const textField = new GuiTextField(this.width / 2 - fieldWidth / 2, startY + i * 10, fieldWidth, 10);
+            textField.minecraft = this.minecraft;
+            textField.maxWidth = fieldWidth;
             textField.setText(lines[i]);
-            textField.maxLength = 25; 
+            textField.cursorPosition = textField.text.length; 
             textField.isFocused = (i === 0);
-            textField.cursorPosition = lines[i].length;
             textField.renderBackground = false; 
             textField.centered = true; 
             textField.noShadow = true; 

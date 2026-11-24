@@ -12,7 +12,7 @@ export default class BlockBluestoneRod extends BlockBluestoneDust {
         super(id, textureSlotId);
         this.description = "Bluestone Rod";
         this.hardness = 0.5;
-        this.inventoryTab = EnumCreativeInventoryTab.MACHINES;
+        this.inventoryTab = EnumCreativeInventoryTab.BLUESTONE;
         this.isBluestoneRod = true;
         this.multipart = true;
     }

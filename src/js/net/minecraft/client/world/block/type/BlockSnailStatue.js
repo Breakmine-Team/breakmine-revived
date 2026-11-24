@@ -9,7 +9,7 @@ export default class BlockSnailStatue extends Block {
         this.description = "Snail Statue";
         this.hardness = 0.3;
         this.sound = Block.sounds.stone;
-        this.inventoryTab = EnumCreativeInventoryTab.DECORATION;
+        this.inventoryTab = EnumCreativeInventoryTab.MISC;
 
         this.noFaceCull = true;
     }

@@ -24,6 +24,10 @@ export default class GuiContainer extends GuiScreen {
         return true;
     }
 
+    getSlotItemRenderWorld(slot) {
+        return this.minecraft.world;
+    }
+
     init() {
         super.init();
 
@@ -81,7 +85,7 @@ export default class GuiContainer extends GuiScreen {
                 if (block && block.getDescription()) {
                     let slotX = this.x + this.hoverSlot.x;
                     let slotY = this.y + this.hoverSlot.y;
-                    let tooltipText = `${block.getDescription()}\n${this.getShiftTooltipText(block)}§8${BlockRegistry.getNamespacedKeyFromId(hoveredTypeId)}\n§9${block.mod ?? "Unknown Mod"}§r`;
+                    let tooltipText = `${block.getDescription()}\n${this.getShiftTooltipText(block)}§8${BlockRegistry.getNamespacedKeyFromId(hoveredTypeId)} (#${hoveredTypeId})\n§9${block.mod ?? "Unknown Mod"}§r`;
                     let tooltip = new GuiTooltip(this.minecraft, tooltipText, slotX, slotY, 16, 16);
                     tooltip.render(stack, mouseX, mouseY, partialTicks);
                 }
@@ -176,7 +180,8 @@ export default class GuiContainer extends GuiScreen {
                     block,
                     x + 8,
                     y + 8,
-                    isMouseOver ? 1.5 : 1
+                    isMouseOver ? 1.5 : 1,
+                    this.getSlotItemRenderWorld(slot)
                 );
             }
         }

@@ -34,6 +34,7 @@ export default class WorldGenerator extends Generator {
         this.EMERALD_ORE_ID = BlockRegistry.EMERALD_ORE.getId();
         this.SAPPHIRE_ORE_ID = BlockRegistry.SAPPHIRE_ORE.getId();
         this.BLUESTONE_ORE_ID = BlockRegistry.BLUESTONE_ORE.getId();
+        this.URANIUM_ORE_ID = BlockRegistry.URANIUM_ORE.getId();
         this.SNOW_ID = BlockRegistry.SNOW.getId();
 
         this.COMMON_FLOWER_IDS = [
@@ -356,6 +357,7 @@ export default class WorldGenerator extends Generator {
         this.generateOreVein(primer, this.EMERALD_ORE_ID, 6, 156, 256, 2);
         this.generateOreVein(primer, this.SAPPHIRE_ORE_ID, 4, 0, 32, 2);
         this.generateOreVein(primer, this.BLUESTONE_ORE_ID, 20, 0, 153, 24);
+        this.generateOreVein(primer, this.URANIUM_ORE_ID, 6, 0, 24, 3);
     }
 
     generateOreVein(primer, oreId, veinSize, minY, maxY, attempts) {

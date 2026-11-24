@@ -127,11 +127,11 @@ export default class ItemRenderer {
         }
     }
 
-    renderItemInGui(groupId, renderId, block, x, y, brightness = 1) {
+    renderItemInGui(groupId, renderId, block, x, y, brightness = 1, world = this.minecraft.world) {
         if (block.getRenderType() === BlockRenderType.BLOCK) {
             this._renderBlockInGui(groupId, renderId, block, x, y, brightness);
         } else {
-            this._renderSpriteInGui(groupId, renderId, block, x, y, brightness);
+            this._renderSpriteInGui(groupId, renderId, block, x, y, brightness, world);
         }
     }
 
@@ -167,9 +167,9 @@ export default class ItemRenderer {
         }
     }
 
-    _renderSpriteInGui(groupId, renderId, block, x, y, brightness) {
+    _renderSpriteInGui(groupId, renderId, block, x, y, brightness, world = this.minecraft.world) {
         let pairId = groupId + ':' + renderId;
-        let textureName = block.getTextureForFace(EnumBlockFace.NORTH);
+        let textureName = block.getTextureForFace(EnumBlockFace.NORTH, undefined, 0, 0, 0, world);
         let existing = this.itemSprites.get(pairId);
 
         if (existing && existing.block.getId() === block.getId()

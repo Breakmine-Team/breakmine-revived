@@ -10,6 +10,7 @@ import BlockTorch from "./type/BlockTorch.js";
 import BlockBurntTorch from "./type/BlockBurntTorch.js";
 import Sound from "./sound/Sound.js";
 import Block from "./Block.js";
+import EnumCreativeInventoryTab from "../../gui/EnumCreativeInventoryTab.js";
 import BlockPortal from "./type/BlockPortal.js";
 import BlockBobPortal from "./type/BlockBobPortal.js";
 import BlockChorusPlant from "./type/BlockChorusPlant.js";
@@ -24,6 +25,7 @@ import BlockGravel from "./type/BlockGravel.js";
 import BlockCobblestone from "./type/BlockCobblestone.js";
 import BlockGrassPath from "./type/BlockGrassPath.js";
 import BlockStoneLike from "./type/BlockStoneLike.js";
+import BlockRawUranium from "./type/BlockRawUranium.js";
 import BlockCraftingTable from "./type/BlockCraftingTable.js";
 import BlockBookshelf from "./type/BlockBookshelf.js";
 import BlockHellstone from "./type/BlockHellstone.js";
@@ -141,6 +143,7 @@ import BlockBluestoneTorch from "./type/BlockBluestoneTorch.js";
 import BlockTurntable from "./type/BlockTurntable.js";
 import BlockCctvCamera from "./type/BlockCctvCamera.js";
 import ItemCctvViewer from "./type/ItemCctvViewer.js";
+import ItemCompass from "./type/ItemCompass.js";
 
 export class BlockRegistry {
 
@@ -464,6 +467,18 @@ export class BlockRegistry {
         BlockRegistry.SAPPHIRE_ORE = new BlockStoneLike(81, 0, "sapphire_ore", "Sapphire Ore");
         BlockRegistry.SAPPHIRE_BLOCK = new BlockStoneLike(82, 0, "sapphire_block", "Sapphire Block");
         BlockRegistry.BLUESTONE_ORE = new BlockStoneLike(176, 0, "bluestone_ore", "Bluestone Ore", 3.0, [176, 1], 'iron');
+        BlockRegistry.BLUESTONE_ORE.inventoryTab = EnumCreativeInventoryTab.BLUESTONE;
+
+        BlockRegistry.URANIUM_ORE = new BlockStoneLike(500, 0, "uranium_ore", "Uranium Ore", 3.5, [501, 1], 'iron');
+        BlockRegistry.RAW_URANIUM = new BlockRawUranium(501, 0);
+        BlockRegistry.POLISHED_URANIUM = new BlockStoneLike(502, 0, "polished_uranium", "Polished Uranium", 3.0, [502, 1], 'iron');
+
+        BlockRegistry.URANIUM_ORE.isUranium = true;
+        BlockRegistry.URANIUM_ORE.radioactivity = 0.5;
+        BlockRegistry.RAW_URANIUM.isUranium = true;
+        BlockRegistry.RAW_URANIUM.radioactivity = 1;
+        BlockRegistry.POLISHED_URANIUM.isUranium = true;
+        BlockRegistry.POLISHED_URANIUM.radioactivity = 0.3;
 
         BlockRegistry.CRAFTING_TABLE = new BlockCraftingTable(31, 0);
         BlockRegistry.BOOKSHELF = new BlockBookshelf(353, 0);
@@ -575,6 +590,7 @@ export class BlockRegistry {
 
         BlockRegistry.BLACK_WOOL = new BlockWool(53, 0, "black_wool", "Black Wool");
         BlockRegistry.BLACK_CONCRETE = new BlockConcrete(137, 0, "black_concrete", "Black Concrete");
+        BlockRegistry.WARNING_CONCRETE = new BlockConcrete(423, 0, "warning", "Warning Concrete");
         BlockRegistry.BLACK_CONCRETE_POWDER = new BlockConcretePowder(233, 0, "black_concrete_powder", "Black Concrete Powder", 137);
         BlockRegistry.BLACK_TERRACOTTA = new BlockTerracotta(187, 0, "black_terracotta", "Black Terracotta");
 
@@ -757,6 +773,7 @@ export class BlockRegistry {
 
         BlockRegistry.CCTV_CAMERA = new BlockCctvCamera(406, 0);
         BlockRegistry.ITEM_CCTV_VIEWER = new ItemCctvViewer(407, 'spyglass', 'CCTV Viewer');
+        BlockRegistry.ITEM_COMPASS = new ItemCompass(499);
         BlockRegistry.PUSH_BLOCK = new BlockPushBlock(422, 0);
 
         for (const [key, val] of Object.entries(BlockRegistry)) {

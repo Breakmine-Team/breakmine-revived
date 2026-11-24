@@ -12,7 +12,7 @@ export default class BlockBluestoneAdjustingLamp extends Block {
         this.description = "Adjustable Bluestone Lamp";
         this.hardness = 0.3;
         this.isBluestoneConsumer = true;
-        this.inventoryTab = EnumCreativeInventoryTab.MACHINES;
+        this.inventoryTab = EnumCreativeInventoryTab.BLUESTONE;
     }
 
     hasBlockEntity() { return true; }

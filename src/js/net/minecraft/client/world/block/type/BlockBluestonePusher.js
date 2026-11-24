@@ -11,7 +11,7 @@ export default class BlockBluestonePusher extends Block {
         this.hardness = 0.3;
         this.isBluestoneConsumer = true;
         this.isPusher = true;
-        this.inventoryTab = EnumCreativeInventoryTab.MACHINES;
+        this.inventoryTab = EnumCreativeInventoryTab.BLUESTONE;
         this.headBlockId = headBlockId; 
     }
 

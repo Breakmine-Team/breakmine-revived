@@ -13,7 +13,7 @@ export default class BlockBluestoneStickyPusher extends BlockBluestonePusher {
         this.hardness = 0.3;
         this.isBluestoneConsumer = true;
         this.isPusher = true;
-        this.inventoryTab = EnumCreativeInventoryTab.MACHINES;
+        this.inventoryTab = EnumCreativeInventoryTab.BLUESTONE;
     }
 
     pickedItem() { return this.id; }

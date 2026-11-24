@@ -8,6 +8,7 @@ import GuiListButton from "../widgets/GuiListButton.js";
 import GuiTextField from "../widgets/GuiTextField.js";
 import GuiTooltip from "../widgets/GuiTooltip.js";
 import GuiControls from "./GuiControls.js";
+import GuiSound from "./GuiSound.js";
 import I18n from "../../i18n/I18n.js";
 import BlockLeave from "../../world/block/type/BlockLeave.js";
 
@@ -49,6 +50,11 @@ export default class GuiOptions extends GuiScreen {
                         name: "Controls...",
                         type: "action",
                         action: () => this.minecraft.displayScreen(new GuiControls(this))
+                    },
+                    {
+                        name: "Sound...",
+                        type: "action",
+                        action: () => this.minecraft.displayScreen(new GuiSound(this))
                     },
                     {
                         name: "Language",

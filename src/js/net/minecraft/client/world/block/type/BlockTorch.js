@@ -13,6 +13,7 @@ export default class BlockTorch extends Block {
 
         this.boundingBox = new BoundingBox(0.4, 0.0, 0.4, 0.6, 0.6, 0.6);
 
+        this.inventoryTab = EnumCreativeInventoryTab.BUILDING_BLOCKS;
         this.sound = Block.sounds.wood;
 
         this.dataFaces = [

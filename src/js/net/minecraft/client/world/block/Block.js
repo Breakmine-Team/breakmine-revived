@@ -16,6 +16,11 @@ export default class Block {
 
     static handHardnessMultiplier = 1.0;
 
+    // Placement rotation modes: set this.rotationType in a block constructor
+    // to get yaw-based facing metadata for free.
+    static ROTATION_NONE = 0;
+    static ROTATION_HORIZONTAL = 1;
+
     constructor(id, textureSlotId = id) {
         this.id = id;
         this.textureSlotId = textureSlotId;
@@ -44,11 +49,13 @@ export default class Block {
 
         this.renderInside = null;
 
-        this.inventoryTab = EnumCreativeInventoryTab.BUILDING_BLOCKS;
+        this.inventoryTab = EnumCreativeInventoryTab.MISC;
 
         this.mod = "Breakmine";
 
         this.hasBlockEntityFlag = false;
+
+        this.rotationType = Block.ROTATION_NONE;
     }
 
     hasBlockEntity() {
@@ -295,10 +302,26 @@ export default class Block {
     }
 
     onBlockPlaced(world, x, y, z, face) {
+        if (this.rotationType === Block.ROTATION_NONE || !world) {
+            return;
+        }
 
+        const player = world.minecraft?.player;
+        if (!player || world.getBlockAt(x, y, z) !== this.id) {
+            return;
+        }
+
+        world.setBlockDataAt(x, y, z, this.getPlacementMetadata(
+            world, x, y, z, face, player.rotationYaw
+        ));
     }
 
     getPlacementMetadata(world, x, y, z, face, yaw = 0) {
+        if (this.rotationType === Block.ROTATION_HORIZONTAL) {
+            const dirIndex = Math.floor((yaw * 4 / 360) + 0.5) & 3;
+            return [2, 5, 3, 4][dirIndex];
+        }
+
         return 0;
     }
 

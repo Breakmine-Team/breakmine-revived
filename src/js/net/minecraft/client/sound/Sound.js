@@ -58,8 +58,13 @@ export default class Sound {
             }
         }
 
+        const soundManager = Sound.minecraft?.soundManager;
+        const volumeScale = soundManager && typeof soundManager.getVolume === 'function'
+            ? soundManager.getVolume(soundName)
+            : 1;
+
         const audio = new Audio(url);
-        audio.volume = volume;
+        audio.volume = Math.max(0, Math.min(1, volume * volumeScale));
         audio.playbackRate = pitch;
         audio.play();
     }

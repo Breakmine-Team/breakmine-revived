@@ -31,7 +31,7 @@ export default class MusicManager {
         this.netherTracks = [];
         this.endTracks = [];
 
-        this.volume = 0.5;
+        this.volume = 0.25;
         this.fadeTime = 2000;
         this.gapTime = 5000;
 
@@ -106,6 +106,15 @@ export default class MusicManager {
         this.tracks = list;
         this.currentCategory = category;
         this.playNext();
+    }
+
+    setVolume(volume) {
+        const value = Number(volume);
+        this.volume = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
+
+        if (this.currentTrack) {
+            this.currentTrack.volume = this.volume;
+        }
     }
 
     switchWhenReady(category) {

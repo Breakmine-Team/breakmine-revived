@@ -85,7 +85,7 @@ export default class GuiMainMenu extends GuiScreen {
             realmsButton.drawButton = function(stack, enabled, mouseOver, x, y, width, height) {
                 this.drawRect(stack, x, y, x + width, y + height, "#000000");
                 const gradient = stack.createLinearGradient(x, y + 1, x, y + height - 1);
-                if (mouseOver && false) {
+                if (mouseOver && false) {  // for later, when I add an actual Realms service.
                     gradient.addColorStop(1, "#6326a8");
                     gradient.addColorStop(0, "#8c4dd4");
                 } else {
@@ -116,6 +116,7 @@ export default class GuiMainMenu extends GuiScreen {
             }));
         }
 
+        // Patchwork's buttons
         const modButtons = this.minecraft.modLoader?.getGuiButtons('main-menu', this) || [];
         this.buttonList.push(...modButtons);
 
@@ -278,10 +279,10 @@ export default class GuiMainMenu extends GuiScreen {
             this.drawRightString(stack, "Play at breakmine.com!", this.width - 2, 26, 0xFFFFFFff);
         }
 
-        const discordText = "Join Discord";
-        this.discordLinkWidth = this.getStringWidth(stack, discordText) + 4;
-        const discordMouseOver = mouseX > this.width - 2 - this.discordLinkWidth && mouseY > this.height - 31 && mouseY < this.height - 21;
-        this.drawRightString(stack, discordText, this.width - 2, this.height - 30, discordMouseOver ? 0x5865F2ff : 0xFFFFFFff);
+        //const discordText = "Join Discord";
+        //this.discordLinkWidth = this.getStringWidth(stack, discordText) + 4;
+        //const discordMouseOver = mouseX > this.width - 2 - this.discordLinkWidth && mouseY > this.height - 31 && mouseY < this.height - 21;
+        //this.drawRightString(stack, discordText, this.width - 2, this.height - 30, discordMouseOver ? 0x5865F2ff : 0xFFFFFFff);
 
         this.drawRightString(stack, "Built on " + Minecraft.TIMESTAMP, this.width - 2, this.height - 20, 0xFFFFFFff);
 
@@ -332,11 +333,11 @@ export default class GuiMainMenu extends GuiScreen {
     mouseClicked(mouseX, mouseY, mouseButton) {
         super.mouseClicked(mouseX, mouseY, mouseButton);
 
-        let discordMouseOver = mouseX > this.width - 2 - (this.discordLinkWidth || 70) && mouseY > this.height - 31 && mouseY < this.height - 21;
-        if (discordMouseOver) {
-            this.minecraft.window.openUrl("https://discord.gg/JtNgEjx9hC", true);
-            return;
-        }
+        //let discordMouseOver = mouseX > this.width - 2 - (this.discordLinkWidth || 70) && mouseY > this.height - 31 && mouseY < this.height - 21;
+        //if (discordMouseOver) {
+        //    this.minecraft.window.openUrl("https://discord.gg/JtNgEjx9hC", true);
+        //    return;
+        //}
 
         let mouseOver = mouseX > this.width - 190 && mouseY > this.height - 10;
         if (mouseOver) {

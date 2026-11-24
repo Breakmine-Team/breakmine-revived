@@ -1704,8 +1704,33 @@ export default class BlockRenderer {
     }
 
     
+    getHeldItemTextureName(block, holder = null) {
+        return block.getTextureForFace(EnumBlockFace.NORTH, undefined, 0, 0, 0, this.worldRenderer.minecraft.world, holder);
+    }
+
+    updateSpriteItemTexture(texture, textureName) {
+        const atlas = this.worldRenderer.textureAtlas;
+        if (!texture || !texture.image || !atlas || !atlas.isLoaded() || !atlas.canvas) {
+            return false;
+        }
+
+        const coords = atlas.textureMap.get(textureName);
+        if (!coords) {
+            return false;
+        }
+
+        const canvas = texture.image;
+        const context = canvas.getContext("2d");
+        const size = atlas.textureSize;
+        context.imageSmoothingEnabled = false;
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(atlas.canvas, coords.x, coords.y, size, size, 0, 0, canvas.width, canvas.height);
+        texture.needsUpdate = true;
+        return true;
+    }
+
     createHeldItemSprite(block) {
-        const texture = this.getSpriteItemTexture(block.getTextureForFace(EnumBlockFace.NORTH));
+        const texture = this.getSpriteItemTexture(this.getHeldItemTextureName(block));
         if (texture === null) {
             return null;
         }

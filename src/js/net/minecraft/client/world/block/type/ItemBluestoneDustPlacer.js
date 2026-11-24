@@ -8,11 +8,11 @@ export default class ItemBluestoneDustPlacer extends ItemGeneric {
 
     constructor(id, textureSlotId, description) {
         super(id, textureSlotId, description);
-        this.inventoryTab = EnumCreativeInventoryTab.MACHINES;
+        this.inventoryTab = EnumCreativeInventoryTab.BLUESTONE;
     }
 
     getTextureForFace(face) {
-        return 'bluestoneDust0000';
+        return 'bluestone';
     }
 
     onUse(world, x, y, z, itemstack, hitFace) {

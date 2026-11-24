@@ -1,5 +1,6 @@
 import Block from "../Block.js";
 import BoundingBox from "../../../../util/BoundingBox.js";
+import EnumCreativeInventoryTab from "../../../gui/EnumCreativeInventoryTab.js";
 
 export default class BlockTable extends Block {
 
@@ -11,6 +12,7 @@ export default class BlockTable extends Block {
         this.hardness = 2;
         this.multipart = true;
         this.noFaceCull = true;
+        this.inventoryTab = EnumCreativeInventoryTab.BUILDING_BLOCKS;
         this.sound = Block.sounds.wood;
     }
 

@@ -1,4 +1,5 @@
 import Block from "../Block.js";
+import EnumCreativeInventoryTab from "../../../gui/EnumCreativeInventoryTab.js";
 
 export default class BlockMoldyBeans extends Block {
 
@@ -8,6 +9,7 @@ export default class BlockMoldyBeans extends Block {
         this.hardness = 0.5;
 
         this.sound = Block.sounds.gravel;
+        this.inventoryTab = EnumCreativeInventoryTab.BUILDING_BLOCKS;
     }
 
     getTextureForFace(face) {
