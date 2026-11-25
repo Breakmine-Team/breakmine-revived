@@ -655,6 +655,7 @@ export class BlockRegistry {
         BlockRegistry.ITEM_COAL = new ItemGeneric(87, 'coal', 'Coal');
         BlockRegistry.ITEM_DIAMOND = new ItemGeneric(88, 'diamond', 'Diamond');
         BlockRegistry.ITEM_EMERALD = new ItemGeneric(89, 'emerald', 'Emerald');
+        BlockRegistry.ITEM_SAPPHIRE = new ItemGeneric(495, 'sapphire', 'Sapphire');
         BlockRegistry.ITEM_GOLD = new ItemGeneric(90, 'gold_ingot', 'Gold Ingot');
         BlockRegistry.ITEM_URANIUM = new ItemGeneric(243, 'uranium_ingot', 'Uranium Ingot');
         BlockRegistry.ITEM_CLAY_BALL = new ItemGeneric(188, 'clay_ball', 'Clay Ball');

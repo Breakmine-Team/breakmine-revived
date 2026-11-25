@@ -188,7 +188,7 @@ const toolTypes = ['pickaxe', 'sword', 'shovel', 'axe', 'hoe', 'knife'];
 
 export const atlasItemTextures = [
     "apple.png", "bread.png", "burger.png", "stick.png", "iron_ingot.png", "coal.png",
-    "diamond.png", "emerald.png", "gold_ingot.png", "uranium_ingot.png", "bucket.png",
+    "diamond.png", "emerald.png", "sapphire.png", "gold_ingot.png", "uranium_ingot.png", "bucket.png",
     "water_bucket.png", "lava_bucket.png", "oak_sign.png", "oak_door.png", "glass_door.png",
     "clay_ball.png", "bluestone.png",
     "white_dye.png", "orange_dye.png", "magenta_dye.png", "light_blue_dye.png",

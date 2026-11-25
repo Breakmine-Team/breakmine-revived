@@ -37,6 +37,11 @@ export default class CraftingRegistry {
             ]);
             this.registerShapelessRecipe(BlockRegistry['ITEM_' + ore.toUpperCase()].id, 9, [BlockRegistry[ore.toUpperCase() + '_BLOCK'].id]);
         }
+        this.registerShapedRecipe(BlockRegistry.SAPPHIRE_BLOCK.id, 1, 3, 3, [
+            BlockRegistry.ITEM_SAPPHIRE.id, BlockRegistry.ITEM_SAPPHIRE.id, BlockRegistry.ITEM_SAPPHIRE.id,
+            BlockRegistry.ITEM_SAPPHIRE.id, BlockRegistry.ITEM_SAPPHIRE.id, BlockRegistry.ITEM_SAPPHIRE.id,
+            BlockRegistry.ITEM_SAPPHIRE.id, BlockRegistry.ITEM_SAPPHIRE.id, BlockRegistry.ITEM_SAPPHIRE.id
+        ]);
     }
 
     static registerWoodRecipes() {
@@ -76,6 +81,250 @@ export default class CraftingRegistry {
                 0, BlockRegistry.ITEM_STICK.id, 0
             ]);
         }
+    }
+
+    static registerWoodExtras() {
+        const B = BlockRegistry;
+        const S = B.ITEM_STICK.id;
+        const variants = [
+            { planks: B.WOOD.id, stairs: B.OAK_STAIRS.id, fence: B.FENCE.id, table: B.OAK_TABLE.id, chair: B.OAK_CHAIR.id, bench: B.OAK_BENCH.id },
+            { planks: B.SPRUCE_PLANKS.id, stairs: B.SPRUCE_STAIRS.id, fence: B.SPRUCE_FENCE.id, table: B.SPRUCE_TABLE.id, chair: B.SPRUCE_CHAIR.id, bench: B.SPRUCE_BENCH.id },
+            { planks: B.BIRCH_PLANKS.id, stairs: B.BIRCH_STAIRS.id, fence: B.BIRCH_FENCE.id, table: B.BIRCH_TABLE.id, chair: B.BIRCH_CHAIR.id, bench: B.BIRCH_BENCH.id },
+            { planks: B.JUNGLE_PLANKS.id, stairs: B.JUNGLE_STAIRS.id, fence: B.JUNGLE_FENCE.id, table: B.JUNGLE_TABLE.id, chair: B.JUNGLE_CHAIR.id, bench: B.JUNGLE_BENCH.id },
+            { planks: B.ACACIA_PLANKS.id, stairs: B.ACACIA_STAIRS.id, fence: B.ACACIA_FENCE.id, table: B.ACACIA_TABLE.id, chair: B.ACACIA_CHAIR.id, bench: B.ACACIA_BENCH.id }
+        ];
+
+        for (const v of variants) {
+            this.registerShapedRecipe(v.stairs, 6, 3, 3, [
+                v.planks, 0, 0,
+                v.planks, v.planks, 0,
+                v.planks, v.planks, v.planks
+            ]);
+            this.registerShapedRecipe(v.fence, 3, 3, 2, [
+                v.planks, S, v.planks,
+                v.planks, S, v.planks
+            ]);
+            this.registerShapedRecipe(v.table, 1, 3, 3, [
+                v.planks, v.planks, v.planks,
+                0, S, 0,
+                0, S, 0
+            ]);
+            this.registerShapedRecipe(v.chair, 1, 2, 2, [
+                v.planks, v.planks,
+                v.planks, S
+            ]);
+            this.registerShapedRecipe(v.bench, 1, 3, 2, [
+                v.planks, v.planks, v.planks,
+                S, 0, S
+            ]);
+        }
+
+        this.registerShapedRecipe(B.ITEM_OAK_DOOR_PLACER.id, 1, 3, 2, [
+            B.WOOD.id, B.WOOD.id, B.WOOD.id,
+            B.WOOD.id, B.WOOD.id, B.WOOD.id
+        ]);
+        this.registerShapedRecipe(B.ITEM_GLASS_DOOR_PLACER.id, 1, 3, 2, [
+            B.GLASS.id, B.GLASS.id, B.GLASS.id,
+            B.GLASS.id, B.ITEM_IRON.id, B.GLASS.id
+        ]);
+    }
+
+    static registerBuildingRecipes() {
+        const B = BlockRegistry;
+        const P = B.WOOD.id;
+        const S = B.ITEM_STICK.id;
+        const IRON = B.ITEM_IRON.id;
+        const DUST = B.BLUESTONE_DUST.id;
+        const COBBLE = B.COBBLE_STONE.id;
+        const STONE = B.STONE.id;
+
+        this.registerShapedRecipe(B.COBBLESTONE_STAIRS.id, 6, 3, 3, [
+            COBBLE, 0, 0,
+            COBBLE, COBBLE, 0,
+            COBBLE, COBBLE, COBBLE
+        ]);
+        this.registerShapedRecipe(B.MOSSY_COBBLESTONE_STAIRS.id, 6, 3, 3, [
+            B.MOSSY_COBBLESTONE.id, 0, 0,
+            B.MOSSY_COBBLESTONE.id, B.MOSSY_COBBLESTONE.id, 0,
+            B.MOSSY_COBBLESTONE.id, B.MOSSY_COBBLESTONE.id, B.MOSSY_COBBLESTONE.id
+        ]);
+        this.registerShapedRecipe(B.BRICK_STAIRS.id, 6, 3, 3, [
+            B.BRICK.id, 0, 0,
+            B.BRICK.id, B.BRICK.id, 0,
+            B.BRICK.id, B.BRICK.id, B.BRICK.id
+        ]);
+
+        this.registerShapedRecipe(B.STONEBRICK.id, 4, 2, 2, [
+            STONE, STONE,
+            STONE, STONE
+        ]);
+        this.registerShapelessRecipe(B.DARK_STONEBRICK.id, 4, [
+            B.STONEBRICK.id, B.STONEBRICK.id, B.STONEBRICK.id, B.STONEBRICK.id,
+            B.ITEM_COAL.id
+        ]);
+        this.registerShapedRecipe(B.BRICK.id, 1, 3, 3, [
+            B.ITEM_CLAY_BALL.id, B.ITEM_CLAY_BALL.id, B.ITEM_CLAY_BALL.id,
+            B.ITEM_CLAY_BALL.id, B.ITEM_COAL.id, B.ITEM_CLAY_BALL.id,
+            B.ITEM_CLAY_BALL.id, B.ITEM_CLAY_BALL.id, B.ITEM_CLAY_BALL.id
+        ]);
+
+        this.registerShapedRecipe(B.BOOKSHELF.id, 1, 3, 3, [
+            P, P, P,
+            B.ITEM_WHEAT.id, B.ITEM_WHEAT.id, B.ITEM_WHEAT.id,
+            P, P, P
+        ]);
+        this.registerShapedRecipe(B.WOOD_PANEL.id, 2, 2, 1, [P, P]);
+        this.registerShapelessRecipe(B.BED.id, 1, [
+            B.WHITE_WOOL.id, B.WHITE_WOOL.id, B.WHITE_WOOL.id,
+            P, P, P
+        ]);
+        this.registerShapedRecipe(B.CLOCK.id, 1, 3, 3, [
+            0, B.ITEM_GOLD.id, 0,
+            B.ITEM_GOLD.id, B.ITEM_SAPPHIRE.id, B.ITEM_GOLD.id,
+            0, B.ITEM_GOLD.id, 0
+        ]);
+        this.registerShapedRecipe(B.TNT.id, 1, 3, 3, [
+            B.SAND.id, DUST, B.SAND.id,
+            DUST, B.ITEM_COAL.id, DUST,
+            B.SAND.id, DUST, B.SAND.id
+        ]);
+        this.registerShapedRecipe(B.SLIME.id, 1, 3, 3, [
+            B.ITEM_SLIMEBALL.id, B.ITEM_SLIMEBALL.id, B.ITEM_SLIMEBALL.id,
+            B.ITEM_SLIMEBALL.id, B.ITEM_SLIMEBALL.id, B.ITEM_SLIMEBALL.id,
+            B.ITEM_SLIMEBALL.id, B.ITEM_SLIMEBALL.id, B.ITEM_SLIMEBALL.id
+        ]);
+        this.registerShapedRecipe(B.PAINTING_SALAD_PLATE.id, 1, 3, 3, [
+            S, S, S,
+            S, B.ITEM_GREEN_DYE.id, S,
+            S, S, S
+        ]);
+        this.registerShapedRecipe(B.PAINTING_DEPTH.id, 1, 3, 3, [
+            S, S, S,
+            S, B.ITEM_BLUE_DYE.id, S,
+            S, S, S
+        ]);
+
+        this.registerShapedRecipe(B.COUNTER.id, 1, 3, 2, [
+            P, P, P,
+            STONE, STONE, STONE
+        ]);
+        this.registerShapelessRecipe(B.DRAWER_COUNTER.id, 1, [B.COUNTER.id, B.CHEST.id]);
+        this.registerShapelessRecipe(B.OVEN_COUNTER.id, 1, [B.COUNTER.id, B.FURNACE.id]);
+
+        this.registerShapedRecipe(B.TRAFFIC_CONE.id, 1, 1, 3, [
+            B.ITEM_ORANGE_DYE.id,
+            B.ORANGE_CONCRETE.id,
+            B.ORANGE_CONCRETE.id
+        ]);
+        this.registerShapedRecipe(B.TRAFFIC_BARRIER.id, 1, 3, 2, [
+            B.WHITE_CONCRETE.id, B.ORANGE_CONCRETE.id, B.WHITE_CONCRETE.id,
+            IRON, IRON, IRON
+        ]);
+        this.registerShapedRecipe(B.TRAFFIC_LIGHT.id, 1, 3, 3, [
+            0, B.BLACK_CONCRETE.id, 0,
+            B.RED_CONCRETE.id, B.YELLOW_CONCRETE.id, B.LIME_CONCRETE.id,
+            0, IRON, 0
+        ]);
+        this.registerShapedRecipe(B.POLE.id, 2, 1, 2, [IRON, IRON]);
+
+        this.registerShapedRecipe(B.PAVEMENT_BLACK.id, 4, 2, 2, [
+            B.BLACK_CONCRETE.id, B.BLACK_CONCRETE.id,
+            B.BLACK_CONCRETE.id, B.BLACK_CONCRETE.id
+        ]);
+        this.registerShapedRecipe(B.PAVEMENT_WHITE.id, 4, 2, 2, [
+            B.WHITE_CONCRETE.id, B.WHITE_CONCRETE.id,
+            B.WHITE_CONCRETE.id, B.WHITE_CONCRETE.id
+        ]);
+        this.registerShapelessRecipe(B.PAVEMENT_BLACK_SLOPE.id, 1, [B.PAVEMENT_BLACK.id]);
+        this.registerShapelessRecipe(B.PAVEMENT_WHITE_SLOPE.id, 1, [B.PAVEMENT_WHITE.id]);
+
+        this.registerShapedRecipe(B.SCAFFOLDING.id, 6, 3, 3, [
+            S, S, S,
+            S, P, S,
+            S, 0, S
+        ]);
+        this.registerShapedRecipe(B.SNAIL_STATUE.id, 1, 3, 3, [
+            STONE, STONE, STONE,
+            STONE, B.ITEM_SLIMEBALL.id, STONE,
+            STONE, STONE, STONE
+        ]);
+        this.registerShapelessRecipe(B.LOGIC.id, 1, [STONE, DUST]);
+        this.registerShapedRecipe(B.CCTV_CAMERA.id, 1, 2, 2, [
+            IRON, B.GLASS.id,
+            B.GLASS.id, DUST
+        ]);
+        this.registerShapelessRecipe(B.FLINT_CARDOOR.id, 1, [
+            B.FLINT.id, B.FLINT.id, B.FLINT.id, B.FLINT.id, IRON
+        ]);
+
+        this.registerShapedRecipe(B.BLUESTONE_TORCH.id, 4, 1, 2, [
+            B.ITEM_BLUESTONE_DUST_PLACER.id,
+            S
+        ]);
+        this.registerShapelessRecipe(B.ITEM_BLUESTONE_LEVER_PLACER.id, 1, [S, COBBLE]);
+        this.registerShapedRecipe(B.BLUESTONE_ROD_PILLAR.id, 2, 1, 2, [
+            B.BLUESTONE_ROD.id,
+            B.BLUESTONE_ROD.id
+        ]);
+
+        this.registerShapelessRecipe(B.SHAFT.id, 2, [P, P, P]);
+        this.registerShapedRecipe(B.GEAR.id, 1, 3, 3, [
+            0, P, 0,
+            P, B.SHAFT.id, P,
+            0, P, 0
+        ]);
+        this.registerShapelessRecipe(B.GEARBOX.id, 1, [B.GEAR.id, P, P, P, P]);
+        this.registerShapelessRecipe(B.VERTICAL_GEARBOX.id, 1, [B.GEARBOX.id, B.SHAFT.id]);
+        this.registerShapedRecipe(B.LARGE_COG.id, 1, 3, 3, [
+            P, P, P,
+            P, B.GEAR.id, P,
+            P, P, P
+        ]);
+        this.registerShapedRecipe(B.WATER_WHEEL.id, 1, 3, 3, [
+            P, P, P,
+            P, B.SHAFT.id, P,
+            P, P, P
+        ]);
+        this.registerShapelessRecipe(B.TURNTABLE.id, 1, [B.GEAR.id, B.SHAFT.id, P, P]);
+        this.registerShapelessRecipe(B.MECHANICAL_BEARING.id, 1, [B.GEAR.id, IRON, IRON, IRON, IRON]);
+        this.registerShapelessRecipe(B.HORIZONTAL_BEARING.id, 1, [B.MECHANICAL_BEARING.id, IRON]);
+        this.registerShapelessRecipe(B.GEARSHIFT.id, 1, [B.GEAR.id, COBBLE, DUST]);
+        this.registerShapelessRecipe(B.CLUTCH.id, 1, [B.GEAR.id, COBBLE, B.ITEM_SLIMEBALL.id]);
+
+        this.registerShapelessRecipe(B.GLASS.id, 1, [B.SAND.id, B.ITEM_COAL.id]);
+        this.registerShapelessRecipe(B.TERRACOTTA.id, 1, [B.CLAY.id, B.ITEM_COAL.id]);
+        this.registerShapedRecipe(B.BOB.id, 1, 3, 3, [
+            STONE, STONE, STONE,
+            STONE, B.ITEM_BROWN_DYE.id, STONE,
+            STONE, STONE, STONE
+        ]);
+
+        this.registerShapedRecipe(B.WHITE_WOOL.id, 1, 2, 2, [
+            B.ITEM_WHEAT.id, B.ITEM_WHEAT.id,
+            B.ITEM_WHEAT.id, B.ITEM_WHEAT.id
+        ]);
+        const colours = ['orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink', 'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'];
+        for (const colour of colours) {
+            const key = colour.toUpperCase();
+            this.registerShapelessRecipe(B[`${key}_WOOL`].id, 1, [
+                B.WHITE_WOOL.id, B[`ITEM_${key}_DYE`].id
+            ]);
+            this.registerShapelessRecipe(B[`${key}_CONCRETE`].id, 1, [B[`${key}_CONCRETE_POWDER`].id]);
+            this.registerShapelessRecipe(B[`${key}_TERRACOTTA`].id, 8, [
+                B.TERRACOTTA.id, B.TERRACOTTA.id, B.TERRACOTTA.id, B.TERRACOTTA.id,
+                B.TERRACOTTA.id, B.TERRACOTTA.id, B.TERRACOTTA.id, B.TERRACOTTA.id,
+                B[`ITEM_${key}_DYE`].id
+            ]);
+        }
+        this.registerShapelessRecipe(B.TAN_WOOL.id, 1, [
+            B.WHITE_WOOL.id, B.ITEM_ORANGE_DYE.id, B.ITEM_YELLOW_DYE.id
+        ]);
+        this.registerShapelessRecipe(B.WHITE_CONCRETE.id, 1, [B.WHITE_CONCRETE_POWDER.id]);
+        this.registerShapelessRecipe(B.WHITE_TERRACOTTA.id, 8, [
+            B.TERRACOTTA.id, B.TERRACOTTA.id, B.TERRACOTTA.id, B.TERRACOTTA.id,
+            B.TERRACOTTA.id, B.TERRACOTTA.id, B.TERRACOTTA.id, B.TERRACOTTA.id,
+            B.ITEM_WHITE_DYE.id
+        ]);
     }
 
     static registerAllRecipes() {
@@ -145,9 +394,11 @@ export default class CraftingRegistry {
         this.registerConcretePowderRecipes();
         this.registerColourBuildingRecipes();
         this.registerWoodRecipes();
+        this.registerWoodExtras();
         this.registerOreRecipes();
         this.registerBluestoneRecipes();
         this.registerToolRecipes();
+        this.registerBuildingRecipes();
     }
 
     static registerDyeRecipes() {
@@ -311,6 +562,12 @@ export default class CraftingRegistry {
         this.registerShapedRecipe(REPEATER, 1, 3, 3, [
             0, ROD, 0,
             STONE, DUST, STONE,
+            STONE, STONE, STONE
+        ]);
+
+        this.registerShapedRecipe(BlockRegistry.BLUESTONE_CLOCK.id, 1, 3, 3, [
+            0, BlockRegistry.ITEM_SAPPHIRE.id, 0,
+            STONE, REPEATER, STONE,
             STONE, STONE, STONE
         ]);
 
