@@ -293,6 +293,9 @@ export default class GuiMainMenu extends GuiScreen {
         let mouseOver = mouseX > this.width - 190 && mouseY > this.height - 10;
         this.drawRightString(stack, "SpinningCubes & Others under SCLv1", this.width - 2, this.height - 10, mouseOver ? 0xFF00FFFF : 0xFFFFFFff);
         
+        // Beta-quality software warning
+        this.drawString(stack, "Breakmine is beta-quality software,", 2, 2, 0x00000000, false);
+        this.drawString(stack, "expect bugs, crashes, and incomplete features.", 2, 2 + 10, 0x00000000, false);
 
         super.drawScreen(stack, mouseX, mouseY, partialTicks);
 

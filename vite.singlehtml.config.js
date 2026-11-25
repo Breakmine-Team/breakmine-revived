@@ -64,12 +64,26 @@ function inlineMysteryClipPlugin() {
     };
 }
 
+/**
+ * A single-file page is opened from disk or served on its own, so the icon
+ * links that point at src/resources (or at breakmine.com) have nothing to load.
+ * Embed the .ico as a data URI instead, and rewrite every <link rel="icon"> /
+ * "shortcut icon" / "apple-touch-icon" tag to it.
+ */
 function inlineFaviconPlugin() {
+    const iconPath = path.resolve(__dirname, "src/resources/favicon.ico");
+
     return {
         name: "inline-favicon",
         transformIndexHtml(html) {
-            // Replace favicon link with data URI if possible, or remove it
-            return html.replace(/<link[^>]*rel=["']shortcut icon["'][^>]*>/gi, '');
+            if (!fs.existsSync(iconPath)) return html;
+            const dataUri = "data:image/x-icon;base64," + fs.readFileSync(iconPath).toString("base64");
+
+            return html.replace(/<link\b[^>]*>/gi, (tag) => {
+                const rel = /rel=["'](shortcut icon|icon|apple-touch-icon)["']/i.exec(tag);
+                if (!rel) return tag;
+                return `<link rel="${rel[1]}" type="image/x-icon" href="${dataUri}">`;
+            });
         },
         closeBundle() {
             // Delete the favicon file that was generated

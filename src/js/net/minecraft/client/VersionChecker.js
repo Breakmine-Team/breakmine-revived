@@ -11,6 +11,36 @@ export function stripGitHash(version) {
     return version.trim().replace(/-[0-9a-f]{7,40}$/i, "");
 }
 
+/**
+ * Compares two game versions ("1.6.3b-7e24527", "1.6.3b", "1.6.4") component
+ * by component. Returns a positive number when `a` is newer than `b`, a
+ * negative number when it is older, and 0 when they are the same version.
+ * A letter suffix (the "b" in "1.6.3b") counts as newer than no suffix.
+ */
+export function compareVersions(a, b) {
+    const split = (version) => stripGitHash(version).split(".");
+    const partsA = split(a);
+    const partsB = split(b);
+    const length = Math.max(partsA.length, partsB.length);
+
+    for (let i = 0; i < length; i++) {
+        const partA = partsA[i] || "0";
+        const partB = partsB[i] || "0";
+        const matchA = /^(\d*)([a-z]*)$/i.exec(partA) || [partA, "0", partA];
+        const matchB = /^(\d*)([a-z]*)$/i.exec(partB) || [partB, "0", partB];
+
+        const numberA = parseInt(matchA[1], 10) || 0;
+        const numberB = parseInt(matchB[1], 10) || 0;
+        if (numberA !== numberB) return numberA - numberB;
+
+        const suffixA = (matchA[2] || "").toLowerCase();
+        const suffixB = (matchB[2] || "").toLowerCase();
+        if (suffixA !== suffixB) return suffixA > suffixB ? 1 : -1;
+    }
+
+    return 0;
+}
+
 export function parseVersionSource(source) {
     if (typeof source !== "string") return "";
     const match = source.match(/static\s+VERSION\s*=\s*["']([^"']+)["']/);
@@ -55,7 +85,7 @@ export async function checkForUpdate() {
         const latest = await fetchLatestVersion();
         result.latest = latest;
         result.latestClean = stripGitHash(latest);
-        result.available = latest !== current;
+        result.available = compareVersions(latest, current) > 0;
     } catch (err) {
         result.error = (err && err.message) || String(err);
     }

@@ -4,6 +4,7 @@ export const uiTextures = [
     "gui/font.png",
     "gui/font-alt.png",
     "gui/accented.png",
+    "gui/section.png",
     "gui/gui.png",
     "gui/background.png",
     "gui/icons.png",
