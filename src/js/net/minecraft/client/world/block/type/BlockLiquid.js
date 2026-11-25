@@ -196,6 +196,14 @@ export default class BlockLiquid extends Block {
     }
 
     flowInto(world, x, y, z, levelData, source = null) {
+        // Contraption cells live in an off-grid field, not in the chunk, and
+        // everything written there is handed back to the world as a real block
+        // when the contraption stops. A single source would otherwise pour a
+        // waterfall out of a rotating bearing, so liquids stay put on them.
+        if (world && world.isFieldLocalWorld === true) {
+            return;
+        }
+
         if (!this.canSpreadTo(world, x, y, z, source)) {
             return;
         }

@@ -52,15 +52,15 @@ function broadcastBlockChange(x, y, z, typeId) {
 
 function snapshotState(player) {
     const healths = new Map();
+    const positions = new Map();
     for (const [eid, p] of getPlayers()) {
         healths.set(eid, p.health);
+        positions.set(eid, { x: p.x, y: p.y, z: p.z });
     }
     return {
-        x: player.x,
-        y: player.y,
-        z: player.z,
         gamemode: player.gamemode,
-        healths
+        healths,
+        positions
     };
 }
 
@@ -243,6 +243,16 @@ export function createCommandContext(player, commandHandler) {
             }
             return null;
         },
+        getPlayers: () => {
+            const adapters = [];
+            for (const p of getPlayers().values()) {
+                if (!p.ws || p.ws.readyState !== 1) {
+                    continue;
+                }
+                adapters.push(p === player ? playerAdapter : createPlayerAdapter(p));
+            }
+            return adapters;
+        },
         broadcastEntitySpawn: (entity) => {
             const msg = JSON.stringify({
                 type: 'spawnEntity',
@@ -307,12 +317,21 @@ export function syncCommandState(player, context) {
 
     let changed = false;
 
-    if (player.x !== before.x || player.y !== before.y || player.z !== before.z) {
-        sendPlayerPositionLook(player);
-        const packet = createEntityTeleportPacket(player);
-        for (const [eid, p] of getPlayers()) {
-            if (eid !== player.eid && p.ws.readyState === 1 && canSee(p, player)) {
-                p.ws.send(packet);
+    // Commands such as /tp can move other players too, so compare everyone.
+    for (const [eid, p] of getPlayers()) {
+        const oldPosition = before.positions.get(eid);
+        if (!oldPosition || (p.x === oldPosition.x && p.y === oldPosition.y && p.z === oldPosition.z)) {
+            continue;
+        }
+
+        if (p.ws.readyState === 1) {
+            sendPlayerPositionLook(p);
+        }
+
+        const packet = createEntityTeleportPacket(p);
+        for (const [otherEid, other] of getPlayers()) {
+            if (otherEid !== eid && other.ws.readyState === 1 && canSee(other, p)) {
+                other.ws.send(packet);
             }
         }
         changed = true;
