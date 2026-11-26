@@ -75,11 +75,11 @@ export default class Minecraft {
     static VERSION = getDisplayVersion(Version.VERSION);
     static TIMESTAMP = Version.TIMESTAMP;
     static PATCHWORK_VERSION = Version.PATCHWORK_VERSION;
-    static URL_GITHUB = "https://codeberg.org/BreakmineDevelopers/breakmine_revived";
+    static URL_GITHUB = "https://codeberg.org/BreakmineDevelopers/breakmine_revived"; // deprecated!
     static PROTOCOL_VERSION = 47; 
 
     static PROXY = {
-        "url": "ws://127.0.0.1:25565"
+        "url": "ws://127.0.0.1:25565" // deprecated!
     };
 
     

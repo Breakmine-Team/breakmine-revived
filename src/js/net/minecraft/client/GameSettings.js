@@ -1,3 +1,5 @@
+import { IS_BETA_CHANNEL } from "./BetaVersion.js";
+
 export default class GameSettings {
 
     constructor() {
@@ -58,8 +60,8 @@ export default class GameSettings {
         this.showChunkBoundaries = false;
         this.showEntityBoundingBoxes = false;
         this.serverAddress = '';
-        this.apiUrl = 'api.breakmine.com';
-        this.tunnelServer = 'tunnel.breakmine.com';
+        this.apiUrl = IS_BETA_CHANNEL ? 'apibeta.breakmine.com': 'api.breakmine.com';
+        this.tunnelServer = IS_BETA_CHANNEL ? 'tunnelbeta.breakmine.com': 'tunnel.breakmine.com';
         this.showNino = true;
         this.proxyAddress = '';
         this.safePlacing = false;
