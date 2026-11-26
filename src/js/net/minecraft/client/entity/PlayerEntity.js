@@ -651,13 +651,23 @@ export default class PlayerEntity extends EntityLiving {
         this.fallDistance = 0;
         this.wasOnGround = false;
 
+        let spawnX = 0;
+        let spawnY = 64;
+        let spawnZ = 0;
+
         if (this.world.spawn && this.world.spawn.x !== undefined) {
-            this.setPosition(this.world.spawn.x, this.world.spawn.y, this.world.spawn.z);
+            spawnX = this.world.spawn.x;
+            spawnY = this.world.spawn.y;
+            spawnZ = this.world.spawn.z;
         } else if (this.world.spawnX !== undefined) {
-            this.setPosition(this.world.spawnX, this.world.spawnY, this.world.spawnZ);
-        } else {
-            this.setPosition(0, 64, 0);
+            spawnX = this.world.spawnX;
+            spawnY = this.world.spawnY;
+            spawnZ = this.world.spawnZ;
         }
+
+        // Respawning is a teleport: snap the previous position as well, or the
+        // camera interpolates the whole distance from where the player died.
+        this.setPositionAndRotation(spawnX, spawnY, spawnZ, this.rotationYaw, this.rotationPitch);
 
         this.motionX = 0;
         this.motionY = 0;

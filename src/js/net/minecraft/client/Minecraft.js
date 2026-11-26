@@ -1119,6 +1119,20 @@ export default class Minecraft {
         return this.window.isLocked() && this.currentScreen === null;
     }
 
+    // True while the game is waiting for the browser to capture the cursor.
+    // Only meaningful with the Pointerlock Delay option on: the player clicked
+    // back into the game (so it wants the cursor captured) but the pointer lock
+    // has not been granted yet, and mouse movement must not turn the camera.
+    isWaitingForPointerLock() {
+        if (!this.settings.pointerLockDelay || this.settings.tvmode) {
+            return false;
+        }
+        if (this.window.mobileDevice || !this.isInGame() || this.currentScreen !== null) {
+            return false;
+        }
+        return this.window.isLocked() && !this.window.isCursorLockedToCanvas();
+    }
+
     isInGame() {
         return this.world !== null && this.worldRenderer !== null && this.player !== null;
     }
@@ -1273,19 +1287,40 @@ export default class Minecraft {
         this.updateGameState();
     }
 
+    // Mouse movement arrives once per frame, but the camera interpolates the
+    // angles captured at the previous and current tick. Turning only the current
+    // angle made the view advance in bursts on every tick instead of following
+    // the mouse, and made it snap when a large delta was replayed. Moving the
+    // previous angles by the same amount keeps the interpolation span and lets
+    // the camera turn immediately at frame rate.
+    applyLookInput(deltaX, deltaY, sensitivity) {
+        const player = this.player;
+        if (!player) {
+            return;
+        }
+
+        const yawBefore = player.rotationYaw;
+        const pitchBefore = player.rotationPitch;
+
+        player.turn(deltaX, deltaY, sensitivity);
+
+        player.prevRotationYaw += player.rotationYaw - yawBefore;
+        player.prevRotationPitch += player.rotationPitch - pitchBefore;
+    }
+
     onRender(partialTicks) {
         if (this.isInGame()) {
-            if (this.hasInGameFocus()) {
+            if (this.hasInGameFocus() && !this.isWaitingForPointerLock()) {
                 let deltaX = this.window.pullMouseMotionX();
                 let deltaY = this.window.pullMouseMotionY();
                 if (deltaX !== 0 || deltaY !== 0) {
-                    this.player.turn(deltaX, deltaY);
+                    this.applyLookInput(deltaX, deltaY);
                 }
 
                 let remoteX = this.window.pullRemoteMotionX();
                 let remoteY = this.window.pullRemoteMotionY();
                 if (remoteX !== 0 || remoteY !== 0) {
-                    this.player.turn(remoteX, remoteY, this.settings.getRemoteSensitivity());
+                    this.applyLookInput(remoteX, remoteY, this.settings.getRemoteSensitivity());
                 }
             }
 

@@ -71,7 +71,15 @@ export default class NetworkPlayHandler extends PacketHandler {
         }
 
         if (this.minecraft.player) {
-            this.minecraft.player.setPosition(world.spawnX, world.spawnY, world.spawnZ);
+            // Snap the previous position with it: ticks do not run while the
+            // loading screen is up, so a plain setPosition would leave the
+            // camera sweeping between the old spot and spawn until the first
+            // tick after joining.
+            const player = this.minecraft.player;
+            player.setPositionAndRotation(
+                world.spawnX, world.spawnY, world.spawnZ,
+                player.rotationYaw, player.rotationPitch
+            );
         }
     }
 

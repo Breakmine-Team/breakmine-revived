@@ -20,12 +20,20 @@ export default class World {
     static TOTAL_HEIGHT = ChunkSection.SIZE * 16; 
 
     static COLLISION_EPSILON = 0.001;
+    // Locally created entities (dropped items, ragdolls) are numbered from a
+    // range the server never uses for player entity ids.
+    static LOCAL_ENTITY_ID_START = 0x40000000;
 
     constructor(minecraft) {
         this.minecraft = minecraft;
 
         this.entities = [];
-        this.nextEntityId = 3;
+        // Server entity ids start at 1 and increment on every join. Numbering
+        // local entities from 3 as well made a ragdoll restored on join reuse
+        // the joining player's id, and addEntity removes the old holder of an
+        // id - which silently deleted the local player from the world and left
+        // the camera interpolating towards a stale previous position.
+        this.nextEntityId = World.LOCAL_ENTITY_ID_START;
 
         this.ticks = 0;
 

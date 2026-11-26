@@ -1993,8 +1993,14 @@ export default class WorldRenderer {
 
         const blockData = this.getBlockPlacementData(block, hitResult);
 
+        // Rotatable blocks take their facing from the player's yaw inside
+        // onBlockPlaced, which getBlockPlacementData does not cover. Without
+        // it in the key, turning on the spot while the target block and face
+        // stay the same left the ghost in its old orientation.
+        const rotationIndex = Math.floor((player.rotationYaw * 4 / 360) + 0.5) & 3;
+
         if (!field && this.blockPreviewMeshes.length > 0
-            && this.isPreviewCurrent(world, typeId, x, y, z, hitResult.face, blockData)) {
+            && this.isPreviewCurrent(world, typeId, x, y, z, hitResult.face, blockData, rotationIndex)) {
             this.updateBlockPreviewPulse();
             this.blockPreviewGroup.visible = true;
             return;
@@ -2053,7 +2059,7 @@ export default class WorldRenderer {
 
         this.blockPreviewMeshes = previewMeshes;
         if (!field) {
-            this.rememberPreview(world, typeId, x, y, z, hitResult.face, blockData);
+            this.rememberPreview(world, typeId, x, y, z, hitResult.face, blockData, rotationIndex);
         }
 
         this.updateBlockPreviewPulse();
@@ -2061,7 +2067,7 @@ export default class WorldRenderer {
     }
 
     
-    isPreviewCurrent(world, typeId, x, y, z, face, blockData) {
+    isPreviewCurrent(world, typeId, x, y, z, face, blockData, rotationIndex) {
         const key = this.previewKey;
         if (this.previewKeyValid !== true || this.previewWorld !== world || key === null) {
             return false;
@@ -2070,13 +2076,14 @@ export default class WorldRenderer {
         if (key[0] !== typeId || key[1] !== x || key[2] !== y || key[3] !== z) {
             return false;
         }
-        if (key[4] !== face.x || key[5] !== face.y || key[6] !== face.z || key[7] !== blockData) {
+        if (key[4] !== face.x || key[5] !== face.y || key[6] !== face.z || key[7] !== blockData
+            || key[8] !== rotationIndex) {
             return false;
         }
 
         for (let i = 0; i < PREVIEW_NEIGHBOUR_OFFSETS.length; i++) {
             const offset = PREVIEW_NEIGHBOUR_OFFSETS[i];
-            if (key[8 + i] !== world.getBlockAt(x + offset[0], y + offset[1], z + offset[2])) {
+            if (key[9 + i] !== world.getBlockAt(x + offset[0], y + offset[1], z + offset[2])) {
                 return false;
             }
         }
@@ -2084,9 +2091,9 @@ export default class WorldRenderer {
         return true;
     }
 
-    rememberPreview(world, typeId, x, y, z, face, blockData) {
+    rememberPreview(world, typeId, x, y, z, face, blockData, rotationIndex) {
         if (this.previewKey === null) {
-            this.previewKey = new Float64Array(8 + PREVIEW_NEIGHBOUR_OFFSETS.length);
+            this.previewKey = new Float64Array(9 + PREVIEW_NEIGHBOUR_OFFSETS.length);
         }
 
         const key = this.previewKey;
@@ -2098,10 +2105,11 @@ export default class WorldRenderer {
         key[5] = face.y;
         key[6] = face.z;
         key[7] = blockData;
+        key[8] = rotationIndex;
 
         for (let i = 0; i < PREVIEW_NEIGHBOUR_OFFSETS.length; i++) {
             const offset = PREVIEW_NEIGHBOUR_OFFSETS[i];
-            key[8 + i] = world.getBlockAt(x + offset[0], y + offset[1], z + offset[2]);
+            key[9 + i] = world.getBlockAt(x + offset[0], y + offset[1], z + offset[2]);
         }
 
         this.previewWorld = world;

@@ -220,7 +220,13 @@ export default class GuiOptions extends GuiScreen {
                         type: "slider",
                         min: 10,
                         max: 200
-                    }
+                    },
+                    {
+                        name: "Pointerlock Delay",
+                        settingKey: "pointerLockDelay",
+                        type: "toggle",
+                        tooltip: "Wait for pointerlock before looking around in-game"
+                    },
                 ]
             },
             {

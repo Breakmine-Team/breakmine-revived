@@ -59,6 +59,13 @@ export default class CraftingRegistry {
             [BlockRegistry.JUNGLE_PLANKS.id]: BlockRegistry.JUNGLE_SLAB.id,
             [BlockRegistry.ACACIA_PLANKS.id]: BlockRegistry.ACACIA_SLAB.id
         };
+        const woodToVerticalSlab = {
+            [BlockRegistry.WOOD.id]: BlockRegistry.WOOD_VERTICAL_SLAB.id,
+            [BlockRegistry.SPRUCE_PLANKS.id]: BlockRegistry.SPRUCE_VERTICAL_SLAB.id,
+            [BlockRegistry.BIRCH_PLANKS.id]: BlockRegistry.BIRCH_VERTICAL_SLAB.id,
+            [BlockRegistry.JUNGLE_PLANKS.id]: BlockRegistry.JUNGLE_VERTICAL_SLAB.id,
+            [BlockRegistry.ACACIA_PLANKS.id]: BlockRegistry.ACACIA_VERTICAL_SLAB.id
+        };
         for (const woodBlockId of woodBlockIds) {
             this.registerShapedRecipe(BlockRegistry.CHEST.id, 1, 3, 3, [
                 woodBlockId, woodBlockId, woodBlockId,
@@ -71,6 +78,11 @@ export default class CraftingRegistry {
             ]);
             this.registerShapedRecipe(woodToSlab[woodBlockId], 6, 3, 1, [
                 woodBlockId, woodBlockId, woodBlockId
+            ]);
+            this.registerShapedRecipe(woodToVerticalSlab[woodBlockId], 6, 1, 3, [
+                woodBlockId,
+                woodBlockId,
+                woodBlockId
             ]);
             this.registerShapedRecipe(BlockRegistry.ITEM_STICK.id, 4, 1, 2, [
                 woodBlockId,
@@ -374,12 +386,35 @@ export default class CraftingRegistry {
         this.registerShapedRecipe(BlockRegistry.COBBLESTONE_SLAB.id, 6, 3, 1, [
             BlockRegistry.COBBLE_STONE.id, BlockRegistry.COBBLE_STONE.id, BlockRegistry.COBBLE_STONE.id
         ]);
+        this.registerShapedRecipe(BlockRegistry.COBBLESTONE_WALL.id, 6, 3, 2, [
+            BlockRegistry.COBBLE_STONE.id, BlockRegistry.COBBLE_STONE.id, BlockRegistry.COBBLE_STONE.id,
+            BlockRegistry.COBBLE_STONE.id, BlockRegistry.COBBLE_STONE.id, BlockRegistry.COBBLE_STONE.id
+        ]);
+        this.registerShapedRecipe(BlockRegistry.COBBLESTONE_VERTICAL_SLAB.id, 6, 1, 3, [
+            BlockRegistry.COBBLE_STONE.id,
+            BlockRegistry.COBBLE_STONE.id,
+            BlockRegistry.COBBLE_STONE.id
+        ]);
         this.registerShapedRecipe(BlockRegistry.MOSSY_COBBLESTONE_SLAB.id, 6, 3, 1, [
             BlockRegistry.MOSSY_COBBLESTONE.id, BlockRegistry.MOSSY_COBBLESTONE.id, BlockRegistry.MOSSY_COBBLESTONE.id
         ]);
+        this.registerShapedRecipe(BlockRegistry.MOSSY_COBBLESTONE_VERTICAL_SLAB.id, 6, 1, 3, [
+            BlockRegistry.MOSSY_COBBLESTONE.id,
+            BlockRegistry.MOSSY_COBBLESTONE.id,
+            BlockRegistry.MOSSY_COBBLESTONE.id
+        ]);
         this.registerShapedRecipe(BlockRegistry.BRICK_SLAB.id, 6, 3, 1, [
             BlockRegistry.BRICK.id, BlockRegistry.BRICK.id, BlockRegistry.BRICK.id
-        ])
+        ]);
+        this.registerShapedRecipe(BlockRegistry.BRICK_WALL.id, 6, 3, 2, [
+            BlockRegistry.BRICK.id, BlockRegistry.BRICK.id, BlockRegistry.BRICK.id,
+            BlockRegistry.BRICK.id, BlockRegistry.BRICK.id, BlockRegistry.BRICK.id
+        ]);
+        this.registerShapedRecipe(BlockRegistry.BRICK_VERTICAL_SLAB.id, 6, 1, 3, [
+            BlockRegistry.BRICK.id,
+            BlockRegistry.BRICK.id,
+            BlockRegistry.BRICK.id
+        ]);
         this.registerShapelessRecipe(BlockRegistry.CLAY.id, 1, [
             BlockRegistry.ITEM_CLAY_BALL.id, BlockRegistry.ITEM_CLAY_BALL.id,
             BlockRegistry.ITEM_CLAY_BALL.id, BlockRegistry.ITEM_CLAY_BALL.id
@@ -449,7 +484,22 @@ export default class CraftingRegistry {
                 const block = B[`${key}_${family}`];
                 const stairs = B[`${key}_${family}_STAIRS`];
                 const slab = B[`${key}_${family}_SLAB`];
+                const wall = B[`${key}_${family}_WALL`];
+                const verticalSlab = B[`${key}_${family}_VERTICAL_SLAB`];
                 if (!block || !stairs || !slab) continue;
+                if (wall) {
+                    this.registerShapedRecipe(wall.id, 6, 3, 2, [
+                        block.id, block.id, block.id,
+                        block.id, block.id, block.id
+                    ]);
+                }
+                if (verticalSlab) {
+                    this.registerShapedRecipe(verticalSlab.id, 6, 1, 3, [
+                        block.id,
+                        block.id,
+                        block.id
+                    ]);
+                }
                 this.registerShapedRecipe(stairs.id, 4, 3, 3, [
                     block.id, 0,        0,
                     block.id, block.id, 0,

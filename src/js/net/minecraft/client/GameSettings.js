@@ -76,6 +76,10 @@ export default class GameSettings {
 
         this.tvmode = false;
 
+        // Keep the camera still until the browser has actually captured the
+        // cursor, instead of turning it with whatever movement arrives first.
+        this.pointerLockDelay = false;
+
         this.token = ''; 
         this.username = '';
 

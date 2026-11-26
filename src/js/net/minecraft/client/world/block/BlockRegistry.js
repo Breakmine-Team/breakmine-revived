@@ -51,6 +51,8 @@ import ItemBucketWater from "./type/ItemBucketWater.js";
 import ItemBucketEmpty from "./type/ItemBucketEmpty.js";
 import BlockBush from "./type/BlockBush.js";
 import BlockFence from "./type/BlockFence.js";
+import BlockWall from "./type/BlockWall.js";
+import BlockVerticalSlab from "./type/BlockVerticalSlab.js";
 import BlockTable from "./type/BlockTable.js";
 import BlockChair from "./type/BlockChair.js";
 import BlockBench from "./type/BlockBench.js";
@@ -258,6 +260,17 @@ export class BlockRegistry {
         Block.sounds.glass = new SoundGlass("stone", 1.0);
         Block.sounds.leaves = new Sound("leaves", 1.0);
 
+        // Vertical slabs are separate blocks, so they need ids of their own.
+        // The list keeps them clear of every other block id in use.
+        const verticalSlabIds = [
+            287, 288, 289, 290, 291, 292, 293, 294, 295, 296, 297, 298, 299,
+            300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 310, 311,
+            380, 381, 382, 383, 384, 385, 386, 387, 388, 389, 390, 391,
+            392, 393, 394, 395
+        ];
+        let verticalSlabIdIndex = 0;
+        const nextVerticalSlabId = () => verticalSlabIds[verticalSlabIdIndex++];
+
         BlockRegistry.STONE = new BlockStone(1, 0);
         BlockRegistry.DEBUG_SPINNER = new BlockDebugSpinner(3001, 1);
         BlockRegistry.GRASS = new BlockGrass(2, 1);
@@ -381,6 +394,7 @@ export class BlockRegistry {
         BlockRegistry.WOOD = new BlockWood(5, 10, "oak", "Oak Planks");
         BlockRegistry.OAK_STAIRS = new BlockStair(150, 0, 5, "Oak");
         BlockRegistry.WOOD_SLAB = new BlockSlab(71, 0, "oak_planks", "Oak Slab", Block.sounds.wood);
+        BlockRegistry.WOOD_VERTICAL_SLAB = new BlockVerticalSlab(nextVerticalSlabId(), 0, "oak_planks", "Oak Vertical Slab", Block.sounds.wood);
         BlockRegistry.FENCE = new BlockFence(36, 0, "oak", 5);
         BlockRegistry.OAK_TABLE = new BlockTable(357, 0, "oak", BlockRegistry.WOOD.id, "Oak");
         BlockRegistry.OAK_CHAIR = new BlockChair(328, 0, "oak", BlockRegistry.WOOD.id, "Oak");
@@ -410,6 +424,7 @@ export class BlockRegistry {
         BlockRegistry.SPRUCE_PLANKS = new BlockWood(58, 0, "spruce", "Spruce Planks");
         BlockRegistry.SPRUCE_STAIRS = new BlockStair(151, 0, 58, "Spruce");
         BlockRegistry.SPRUCE_SLAB = new BlockSlab(72, 0, "spruce_planks", "Spruce Slab", Block.sounds.wood);
+        BlockRegistry.SPRUCE_VERTICAL_SLAB = new BlockVerticalSlab(nextVerticalSlabId(), 0, "spruce_planks", "Spruce Vertical Slab", Block.sounds.wood);
         BlockRegistry.SPRUCE_FENCE = new BlockFence(60, 0, "spruce", 58);
         BlockRegistry.SPRUCE_TABLE = new BlockTable(358, 0, "spruce", BlockRegistry.SPRUCE_PLANKS.id, "Spruce");
         BlockRegistry.SPRUCE_CHAIR = new BlockChair(329, 0, "spruce", BlockRegistry.SPRUCE_PLANKS.id, "Spruce");
@@ -420,6 +435,7 @@ export class BlockRegistry {
         BlockRegistry.BIRCH_PLANKS = new BlockWood(61, 0, "birch", "Birch Planks");
         BlockRegistry.BIRCH_STAIRS = new BlockStair(152, 0, 61, "Birch");
         BlockRegistry.BIRCH_SLAB = new BlockSlab(73, 0, "birch_planks", "Birch Slab", Block.sounds.wood);
+        BlockRegistry.BIRCH_VERTICAL_SLAB = new BlockVerticalSlab(nextVerticalSlabId(), 0, "birch_planks", "Birch Vertical Slab", Block.sounds.wood);
         BlockRegistry.BIRCH_FENCE = new BlockFence(63, 0, "birch", 61);
         BlockRegistry.BIRCH_TABLE = new BlockTable(359, 0, "birch", BlockRegistry.BIRCH_PLANKS.id, "Birch");
         BlockRegistry.BIRCH_CHAIR = new BlockChair(330, 0, "birch", BlockRegistry.BIRCH_PLANKS.id, "Birch");
@@ -430,6 +446,7 @@ export class BlockRegistry {
         BlockRegistry.JUNGLE_PLANKS = new BlockWood(64, 0, "jungle", "Jungle Planks");
         BlockRegistry.JUNGLE_STAIRS = new BlockStair(153, 0, 64, "Jungle");
         BlockRegistry.JUNGLE_SLAB = new BlockSlab(74, 0, "jungle_planks", "Jungle Slab", Block.sounds.wood);
+        BlockRegistry.JUNGLE_VERTICAL_SLAB = new BlockVerticalSlab(nextVerticalSlabId(), 0, "jungle_planks", "Jungle Vertical Slab", Block.sounds.wood);
         BlockRegistry.JUNGLE_FENCE = new BlockFence(66, 0, "jungle", 64);
         BlockRegistry.JUNGLE_TABLE = new BlockTable(360, 0, "jungle", BlockRegistry.JUNGLE_PLANKS.id, "Jungle");
         BlockRegistry.JUNGLE_CHAIR = new BlockChair(331, 0, "jungle", BlockRegistry.JUNGLE_PLANKS.id, "Jungle");
@@ -440,6 +457,7 @@ export class BlockRegistry {
         BlockRegistry.ACACIA_PLANKS = new BlockWood(67, 0, "acacia", "Acacia Planks");
         BlockRegistry.ACACIA_STAIRS = new BlockStair(154, 0, 67, "Acacia");
         BlockRegistry.ACACIA_SLAB = new BlockSlab(75, 0, "acacia_planks", "Acacia Slab", Block.sounds.wood);
+        BlockRegistry.ACACIA_VERTICAL_SLAB = new BlockVerticalSlab(nextVerticalSlabId(), 0, "acacia_planks", "Acacia Vertical Slab", Block.sounds.wood);
         BlockRegistry.ACACIA_FENCE = new BlockFence(69, 0, "acacia", 67);
         BlockRegistry.ACACIA_TABLE = new BlockTable(361, 0, "acacia", BlockRegistry.ACACIA_PLANKS.id, "Acacia");
         BlockRegistry.ACACIA_CHAIR = new BlockChair(332, 0, "acacia", BlockRegistry.ACACIA_PLANKS.id, "Acacia");
@@ -448,14 +466,19 @@ export class BlockRegistry {
         BlockRegistry.COBBLE_STONE = new BlockCobblestone(4, 14);
         BlockRegistry.COBBLESTONE_STAIRS = new BlockStair(155, 0, 4, "Cobblestone");
         BlockRegistry.COBBLESTONE_SLAB = new BlockSlab(70, 0, "cobblestone", "Cobblestone Slab", Block.sounds.stone);
+        BlockRegistry.COBBLESTONE_WALL = new BlockWall(379, 0, "cobblestone", "Cobblestone Wall", Block.sounds.stone, { hardness: 2.0 });
+        BlockRegistry.COBBLESTONE_VERTICAL_SLAB = new BlockVerticalSlab(nextVerticalSlabId(), 0, "cobblestone", "Cobblestone Vertical Slab", Block.sounds.stone);
 
         BlockRegistry.MOSSY_COBBLESTONE = new BlockMossyCobblestone(6, 14);
         BlockRegistry.MOSSY_COBBLESTONE_STAIRS = new BlockStair(156, 0, 6, "Mossy Cobblestone");
         BlockRegistry.MOSSY_COBBLESTONE_SLAB = new BlockSlab(76, 0, "mossy_cobblestone", "Mossy Cobblestone Slab", Block.sounds.stone);
+        BlockRegistry.MOSSY_COBBLESTONE_VERTICAL_SLAB = new BlockVerticalSlab(nextVerticalSlabId(), 0, "mossy_cobblestone", "Mossy Cobblestone Vertical Slab", Block.sounds.stone);
 
         BlockRegistry.BRICK = new BlockBrick(33, 0);
         BlockRegistry.BRICK_STAIRS = new BlockStair(157, 0, 33, "Brick");
         BlockRegistry.BRICK_SLAB = new BlockSlab(77, 0, "brick", "Brick Slab", Block.sounds.stone);
+        BlockRegistry.BRICK_WALL = new BlockWall(378, 0, "brick", "Brick Wall", Block.sounds.stone, { hardness: 2.0 });
+        BlockRegistry.BRICK_VERTICAL_SLAB = new BlockVerticalSlab(nextVerticalSlabId(), 0, "brick", "Brick Vertical Slab", Block.sounds.stone);
 
         BlockRegistry.GOLD_ORE = new BlockStoneLike(21, 0, "gold_ore", "Gold Ore", 3.0, [21, 1], 'iron');
         BlockRegistry.DIAMOND_ORE = new BlockStoneLike(22, 0, "diamond_ore", "Diamond Ore", 3.0, [88, 1], 'iron');
@@ -613,6 +636,7 @@ export class BlockRegistry {
 
         let concreteStairId = 430;
         let concreteSlabId = 446;
+        let concreteWallId = 362;
         let woolStairId = 462;
         let woolSlabId = 478;
 
@@ -625,13 +649,17 @@ export class BlockRegistry {
 
             BlockRegistry[`${upperKey}_CONCRETE_STAIRS`] = new BlockStair(concreteStairId++, 0, concrete.id, `${label} Concrete`, concreteOptions);
             BlockRegistry[`${upperKey}_CONCRETE_SLAB`] = new BlockSlab(concreteSlabId++, 0, `${key}_concrete`, `${label} Concrete Slab`, Block.sounds.stone, concreteOptions);
+            BlockRegistry[`${upperKey}_CONCRETE_WALL`] = new BlockWall(concreteWallId++, 0, `${key}_concrete`, `${label} Concrete Wall`, Block.sounds.stone, concreteOptions);
+            BlockRegistry[`${upperKey}_CONCRETE_VERTICAL_SLAB`] = new BlockVerticalSlab(nextVerticalSlabId(), 0, `${key}_concrete`, `${label} Concrete Vertical Slab`, Block.sounds.stone, concreteOptions);
 
             BlockRegistry[`${upperKey}_WOOL_STAIRS`] = new BlockStair(woolStairId++, 0, wool.id, `${label} Wool`, woolOptions);
             BlockRegistry[`${upperKey}_WOOL_SLAB`] = new BlockSlab(woolSlabId++, 0, `${key}_wool`, `${label} Wool Slab`, Block.sounds.cloth, woolOptions);
+            BlockRegistry[`${upperKey}_WOOL_VERTICAL_SLAB`] = new BlockVerticalSlab(nextVerticalSlabId(), 0, `${key}_wool`, `${label} Wool Vertical Slab`, Block.sounds.cloth, woolOptions);
         }
 
         BlockRegistry.TAN_WOOL_STAIRS = new BlockStair(496, 0, BlockRegistry.TAN_WOOL.id, "Tan Wool", { hardness: 0.8, tool: null, sound: Block.sounds.cloth });
         BlockRegistry.TAN_WOOL_SLAB = new BlockSlab(497, 0, "tan_wool", "Tan Wool Slab", Block.sounds.cloth, { hardness: 0.8, tool: null });
+        BlockRegistry.TAN_WOOL_VERTICAL_SLAB = new BlockVerticalSlab(nextVerticalSlabId(), 0, "tan_wool", "Tan Wool Vertical Slab", Block.sounds.cloth, { hardness: 0.8, tool: null });
 
         BlockRegistry.PAINTING_SALAD_PLATE = new BlockPainting(284, 0, "salad_plate", "Salad Plate");
         BlockRegistry.PAINTING_DEPTH = new BlockPainting(286, 0, "depth", "Depth");

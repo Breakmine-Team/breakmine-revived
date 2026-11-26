@@ -111,6 +111,8 @@ export default class IngameOverlay extends Gui {
 
         this.renderStatusText(stack);
 
+        this.renderPointerLockNotice(stack);
+
         this.renderVoiceIndicator(stack);
 
         stack.drawImage(this.window.canvasChat, 0, 0);
@@ -478,6 +480,29 @@ export default class IngameOverlay extends Gui {
         }
 
         return this.statusText;
+    }
+
+    renderPointerLockNotice(stack) {
+        if (!this.minecraft.isWaitingForPointerLock()) {
+            return;
+        }
+
+        const text = "Waiting for pointerlock...";
+        const textWidth = this.getStringWidth(stack, text, true);
+        const centerX = this.window.width / 2;
+        const y = Math.floor(this.window.height / 2 + 12);
+        const padding = 4;
+
+        this.drawRect(
+            stack,
+            centerX - textWidth / 2 - padding,
+            y - padding,
+            centerX + textWidth / 2 + padding,
+            y + FontRenderer.FONT_HEIGHT + padding,
+            "#000000",
+            0.5
+        );
+        this.drawCenteredString(stack, text, centerX, y, 0xFFFFFFFF, false);
     }
 
     renderStatusText(stack) {
