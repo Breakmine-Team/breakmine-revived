@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import { viteSingleFile } from "vite-plugin-singlefile";
 import fs from "fs";
 import path from "path";
+import { betaVersionDefines } from "./scripts/beta-version.js";
 
 function copyResourcesPlugin() {
     return {
@@ -368,6 +369,8 @@ export default defineConfig({
     },
     define: {
         'process.env.SINGLEFILE_BUILD': 'true',
+        // Beta builds show "1.6.9b-p3" (vite.config.js applies the same).
+        ...betaVersionDefines(__dirname),
     },
     optimizeDeps: {
         exclude: [

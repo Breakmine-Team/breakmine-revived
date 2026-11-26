@@ -10,6 +10,7 @@ export default class GameSettings {
         this.keySprinting = 'ControlLeft';
 
         this.keyDrop = 'KeyQ';
+        this.keyRagdoll = 'KeyR';
         this.keyTogglePerspective = 'F5';
         this.keyToggleGui = 'F1';
         this.keyScreenshot = 'F2';

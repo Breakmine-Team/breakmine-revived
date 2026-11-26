@@ -752,20 +752,31 @@ export default class OffGridBlockField {
             return;
         }
 
-        const blend = Number.isFinite(partialTicks)
-            ? Math.max(0, Math.min(1, partialTicks))
-            : 1;
-
-        const pose = this.computePose({
-            x: OffGridBlockField.interpolateDegrees(this.previousRotation.x, this.rotation.x, blend),
-            y: OffGridBlockField.interpolateDegrees(this.previousRotation.y, this.rotation.y, blend),
-            z: OffGridBlockField.interpolateDegrees(this.previousRotation.z, this.rotation.z, blend)
-        });
+        const pose = this.getInterpolatedPoseTransform(partialTicks);
 
         this.group.rotation.set(pose.rotation.x, pose.rotation.y, pose.rotation.z);
         this.group.position.set(pose.position.x, pose.position.y, pose.position.z);
         this.group.updateMatrix();
         this.group.updateMatrixWorld(true);
+    }
+
+    // The block outline and the placement preview are not children of the field
+    // group, so they cannot inherit the interpolated transform above; they ask
+    // for the same in-between pose instead of snapping to the tick pose.
+    getInterpolatedPoseTransform(partialTicks) {
+        if (!this.isPosed()) {
+            return this.computePose();
+        }
+
+        const blend = Number.isFinite(partialTicks)
+            ? Math.max(0, Math.min(1, partialTicks))
+            : 1;
+
+        return this.computePose({
+            x: OffGridBlockField.interpolateDegrees(this.previousRotation.x, this.rotation.x, blend),
+            y: OffGridBlockField.interpolateDegrees(this.previousRotation.y, this.rotation.y, blend),
+            z: OffGridBlockField.interpolateDegrees(this.previousRotation.z, this.rotation.z, blend)
+        });
     }
 
     

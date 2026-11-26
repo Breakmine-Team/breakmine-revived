@@ -310,8 +310,11 @@ export default class PlayerRenderer extends EntityRenderer {
         }
     }
 
+    // The blob is the fallback shadow for when the real shadow map is off; with
+    // shadows turned on the sun already casts the entity's shadow, so drawing
+    // the fake one underneath puts two shadows on the ground.
     renderShadow(entity, partialTicks) {
-        if (!this.worldRenderer.shadowsEnabled) {
+        if (this.worldRenderer.shadowsEnabled) {
             this.shadowGroup.visible = false;
             return;
         }

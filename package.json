@@ -15,6 +15,7 @@
         "build": "node scripts/build-assets.js && vite build",
         "build:single": "node scripts/build-assets.js --include-music && vite build --config vite.singlehtml.config.js && node scripts/publish-single.js",
         "build:offline": "node scripts/build-assets.js --include-music && vite build --config vite.singlehtml.config.js",
+        "publish": "node scripts/publish.js",
         "dist": "node appbuild.js --linux --win",
         "dist:linux": "node appbuild.js --linux",
         "dist:win": "node appbuild.js --win",

@@ -216,6 +216,12 @@ export default class RagdollEntity extends Entity {
     static KICK_SPIN = 0.2;
     static KICK_SPREAD = 0.9;
 
+    // A body grabbed with the right mouse button hangs at arm's length and is
+    // dragged after the crosshair instead of falling.
+    static HOLD_DISTANCE = 2.0;
+    static HOLD_SAG = 0.45;
+    static HOLD_BLEND = 0.35;
+
     constructor(minecraft, world, x, y, z, options = null) {
         super(minecraft, world, -2);
 
@@ -232,6 +238,18 @@ export default class RagdollEntity extends Entity {
         this.touching = false;
         this.settleAnchor = null;
         this.health = RagdollEntity.MAX_HEALTH;
+
+        // The body a player drops when they turn themselves into a ragdoll. It
+        // is not a corpse: it cannot be grabbed or damaged, and its player
+        // follows it instead of it being simulated on its own.
+        this.isPlayerRagdoll = false;
+
+        // While a player carries the body it follows a moving anchor instead of
+        // running physics, and keeps its pose until it is dropped.
+        this.held = false;
+        this.heldAnchor = null;
+        this.heldOffsets = null;
+        this.heldVelocity = new THREE.Vector3();
 
         // Who simulates this body right now (a server entity id, or null when
         // nobody does and the stored pose is just replayed).
@@ -255,12 +273,33 @@ export default class RagdollEntity extends Entity {
         // The body drops where it was clicked instead of standing up and
         // sliding off, so it starts already lying on its back facing a random way.
         const yaw = Math.random() * Math.PI * 2.0;
-        const fall = Math.random() < 0.5 ? Math.PI / 2.0 : -Math.PI / 2.0;
-        const lay = new THREE.Quaternion()
-            .setFromAxisAngle(new THREE.Vector3(0.0, 1.0, 0.0), yaw)
-            .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1.0, 0.0, 0.0), fall));
+        const facing = new THREE.Quaternion()
+            .setFromAxisAngle(new THREE.Vector3(0.0, 1.0, 0.0), yaw);
 
-        this.createBones(x, y, z, lay);
+        let lean = facing;
+
+        if (options && options.standing) {
+            // A player turning themselves into a ragdoll keeps standing for the
+            // first moment and then topples over. A small lean is enough: the
+            // body is balanced, so any lean puts its weight past the feet.
+            const tiltAxis = new THREE.Vector3(Math.random() - 0.5, 0.0, Math.random() - 0.5);
+            if (tiltAxis.lengthSq() < 1e-6) {
+                tiltAxis.set(1.0, 0.0, 0.0);
+            }
+
+            const tilt = 0.1 + Math.random() * 0.08;
+
+            lean = facing.clone().multiply(
+                new THREE.Quaternion().setFromAxisAngle(tiltAxis.normalize(), tilt)
+            );
+        } else {
+            const fall = Math.random() < 0.5 ? Math.PI / 2.0 : -Math.PI / 2.0;
+            lean = facing.clone().multiply(
+                new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1.0, 0.0, 0.0), fall)
+            );
+        }
+
+        this.createBones(x, y, z, lean);
         this.updateBoundingBox();
 
         if (this.remote) {
@@ -390,6 +429,26 @@ export default class RagdollEntity extends Entity {
             bone.prevQuat.copy(bone.quat);
         }
 
+        // A carried body is not simulated: it hangs from the player's hand, so
+        // keep reporting the pose but skip gravity, contacts and sleeping.
+        if (this.held) {
+            this.updateHeld();
+            this.updateBoundingBox();
+
+            if (!this.remote && (this.ticksExisted === 1
+                || this.ticksExisted % RagdollEntity.SYNC_INTERVAL === 0)) {
+                this.sendNetworkState();
+            }
+
+            if (this.y < RagdollEntity.VOID_Y) {
+                this.isDead = true;
+                this.sendNetworkState({type: "ragdoll:remove", id: this.syncId});
+                this.world.removeEntityById(this.id);
+            }
+
+            return;
+        }
+
         // Walking into a body shoves it along and wakes it up if it was frozen.
         // Touching somebody else's body claims its simulation first.
         this.pushFromPlayer();
@@ -497,9 +556,117 @@ export default class RagdollEntity extends Entity {
         this.settleAnchor = this.captureAnchor();
     }
 
+    // A player grabbed the body. Remember the pose it was in, so carrying it
+    // keeps the limbs where they were instead of folding into the hand. The
+    // anchor starts at the body itself: the player's hand then drags it along.
+    grab() {
+        if (this.isDead || this.isPlayerRagdoll) {
+            return false;
+        }
+
+        // Only one client simulates a body, so carrying somebody else's copy
+        // means taking its simulation over first.
+        if (this.remote) {
+            this.claim();
+        }
+
+        this.wake();
+
+        const box = this.boundingBox || this.computeBoundingBox();
+        const x = (box.minX + box.maxX) * 0.5;
+        const y = (box.minY + box.maxY) * 0.5;
+        const z = (box.minZ + box.maxZ) * 0.5;
+
+        this.held = true;
+        this.heldVelocity.set(0.0, 0.0, 0.0);
+        this.heldAnchor = new THREE.Vector3(x, y, z);
+        this.heldOffsets = new Float64Array(this.bones.length * 3);
+
+        for (let i = 0; i < this.bones.length; i++) {
+            const bone = this.bones[i];
+
+            this.heldOffsets[i * 3] = bone.pos.x - x;
+            this.heldOffsets[i * 3 + 1] = bone.pos.y - y;
+            this.heldOffsets[i * 3 + 2] = bone.pos.z - z;
+
+            bone.vel.set(0.0, 0.0, 0.0);
+            bone.angVel.set(0.0, 0.0, 0.0);
+        }
+
+        return true;
+    }
+
+    // Ease the carried body toward a point, so picking it up drags it after the
+    // crosshair instead of snapping it into the hand.
+    holdAt(x, y, z) {
+        if (!this.held || this.heldAnchor === null) {
+            return;
+        }
+
+        const anchor = this.heldAnchor;
+        const blend = RagdollEntity.HOLD_BLEND;
+
+        const nextX = anchor.x + (x - anchor.x) * blend;
+        const nextY = anchor.y + (y - anchor.y) * blend;
+        const nextZ = anchor.z + (z - anchor.z) * blend;
+
+        this.heldVelocity.set(nextX - anchor.x, nextY - anchor.y, nextZ - anchor.z);
+        anchor.set(nextX, nextY, nextZ);
+    }
+
+    updateHeld() {
+        const anchor = this.heldAnchor;
+        const offsets = this.heldOffsets;
+
+        if (anchor === null || offsets === null) {
+            return;
+        }
+
+        for (let i = 0; i < this.bones.length; i++) {
+            const bone = this.bones[i];
+
+            bone.pos.set(
+                anchor.x + offsets[i * 3],
+                anchor.y + offsets[i * 3 + 1],
+                anchor.z + offsets[i * 3 + 2]
+            );
+        }
+    }
+
+    // Let go: the body keeps the speed of the carry, so dropping it while
+    // walking throws it ahead instead of leaving it hanging in mid air.
+    release() {
+        if (!this.held) {
+            return;
+        }
+
+        this.held = false;
+        this.heldAnchor = null;
+        this.heldOffsets = null;
+
+        const speed = this.heldVelocity.length();
+        if (speed > RagdollEntity.MAX_LINEAR_SPEED) {
+            this.heldVelocity.multiplyScalar(RagdollEntity.MAX_LINEAR_SPEED / speed);
+        }
+
+        for (const bone of this.bones) {
+            bone.vel.copy(this.heldVelocity);
+            bone.angVel.set(0.0, 0.0, 0.0);
+        }
+
+        this.heldVelocity.set(0.0, 0.0, 0.0);
+        this.wake();
+    }
+
     // The player does not collide with ragdolls (they are only a pile of bones),
     // so walking into one pushes it aside and curls it around the player.
     pushFromPlayer() {
+        // The player carrying this body would otherwise shove their own limp
+        // body around from the inside every tick.
+        if (this.isPlayerRagdoll) {
+            return;
+        }
+
         const player = this.minecraft && this.minecraft.player;
         if (!player || !player.boundingBox || player.isDead || !this.boundingBox) {
             return;
@@ -573,7 +740,7 @@ export default class RagdollEntity extends Entity {
     // Punching damages the body. The hit still wakes it so a broken block or a
     // settled body reacts, but it is not shoved along the ground any more.
     damage(amount) {
-        if (this.isDead) {
+        if (this.isDead || this.isPlayerRagdoll) {
             return false;
         }
 
@@ -624,6 +791,15 @@ export default class RagdollEntity extends Entity {
         this.sendNetworkState({type: "ragdoll:claim", id: this.syncId});
     }
 
+    // Stop carrying without applying the carry velocity; used when the body is
+    // handed back to another client's simulation.
+    dropHeld() {
+        this.held = false;
+        this.heldAnchor = null;
+        this.heldOffsets = null;
+        this.heldVelocity.set(0.0, 0.0, 0.0);
+    }
+
     adoptLocalSimulation() {
         if (!this.remote) {
             return;
@@ -647,6 +823,10 @@ export default class RagdollEntity extends Entity {
         if (this.remote) {
             return;
         }
+
+        // Another client owns the body now, so whoever was carrying it has to
+        // let go before the snapshots take over.
+        this.dropHeld();
 
         this.remote = true;
         this.remoteTargets = null;
@@ -1102,9 +1282,15 @@ export default class RagdollEntity extends Entity {
         }
 
         const margin = RagdollEntity.CONTACT_MARGIN;
+
+        // A limp body is always resting on or falling onto what is below it, so
+        // ask for the downward shape. Blocks whose collision only exists from
+        // above (scaffolding answers the downward query and nothing else) fell
+        // through the body otherwise, because the ground query has no context.
         return this.world.getCollisionBoxes(
             this.computeBoundingBox().grow(margin, margin, margin),
-            this.collidesWithOffGridField
+            this.collidesWithOffGridField,
+            { downward: true, sneaking: false }
         );
     }
 

@@ -533,7 +533,10 @@ export default class WorldRenderer {
         for (let entity of this.minecraft.world.entities) {
             if (!entity || !entity.renderer) continue;
 
-            if (entity === player && (viewingCamera || this.minecraft.settings.thirdPersonView === 0)) {
+            // A limp player is drawn by the ragdoll renderer, not as a standing
+            // player model.
+            if (entity === player && (viewingCamera || player.ragdollBody
+                || this.minecraft.settings.thirdPersonView === 0)) {
                 continue;
             }
 
@@ -1694,6 +1697,9 @@ export default class WorldRenderer {
         stack.visible = false;
         this.firstPersonItemRenderer.cameraGroup.visible = false;
 
+        // A limp player holds no arm or item up in front of the camera.
+        if (player.ragdollBody) return;
+
         if (this.minecraft.cctvManager?.isViewing()) return;
 
         if (GuiFunctions.isGuiHidden()) return;
@@ -1876,7 +1882,7 @@ export default class WorldRenderer {
                 this.updateBlockHitBoxOutline(segments);
 
                 if (hitResult.fieldCell && field) {
-                    let pose = field.getPoseTransform();
+                    let pose = field.getInterpolatedPoseTransform(partialTicks);
                     this.blockHitBox.position.set(pose.position.x, pose.position.y, pose.position.z);
                     this.blockHitBox.rotation.set(pose.rotation.x, pose.rotation.y, pose.rotation.z);
                 } else {
@@ -2013,7 +2019,7 @@ export default class WorldRenderer {
         this.previewKeyValid = false;
 
         if (field) {
-            let pose = field.getPoseTransform();
+            let pose = field.getInterpolatedPoseTransform(partialTicks);
             this.blockPreviewGroup.position.set(pose.position.x, pose.position.y, pose.position.z);
             this.blockPreviewGroup.rotation.set(pose.rotation.x, pose.rotation.y, pose.rotation.z);
         } else {
@@ -2262,7 +2268,8 @@ export default class WorldRenderer {
         for (let entity of entities) {
             if (!entity) continue;
 
-            if (entity === player && (viewingCamera || this.minecraft.settings.thirdPersonView === 0)) {
+            if (entity === player && (viewingCamera || player.ragdollBody
+                || this.minecraft.settings.thirdPersonView === 0)) {
                 continue;
             }
 

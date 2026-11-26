@@ -60,6 +60,9 @@ export default class PlayerEntity extends EntityLiving {
 
         this.width = 0.6;
         this.height = 1.8;
+
+        // The ragdoll this player is currently limp as, or null.
+        this.ragdollBody = null;
     }
 
     handleInventoryChanged() {
@@ -135,7 +138,35 @@ export default class PlayerEntity extends EntityLiving {
         super.onUpdate();
     }
 
+    followRagdollBody() {
+        const box = this.ragdollBody && this.ragdollBody.boundingBox;
+        if (!box) {
+            return;
+        }
+
+        this.motionX = 0;
+        this.motionY = 0;
+        this.motionZ = 0;
+        this.fallDistance = 0;
+        this.onGround = true;
+
+        this.setPosition(
+            (box.minX + box.maxX) * 0.5,
+            box.minY,
+            (box.minZ + box.maxZ) * 0.5
+        );
+    }
+
     onLivingUpdate() {
+        // Limp: no walking, gravity or fall damage. The camera and the player
+        // follow the ragdoll instead, so the view lies on the floor and tumbles
+        // with the body.
+        if (this.ragdollBody !== null) {
+            this.rotationYawHead = this.rotationYaw;
+            this.followRagdollBody();
+            return;
+        }
+
         this.prevCameraYaw = this.cameraYaw;
         this.prevCameraPitch = this.cameraPitch;
 
@@ -570,6 +601,14 @@ export default class PlayerEntity extends EntityLiving {
     }
 
     getEyeHeight() {
+        // A limp player looks out from just above their body. That is standing
+        // height while the body is still upright after the ragdoll toggle, and
+        // sinks to the floor as the body falls over.
+        const box = this.ragdollBody && this.ragdollBody.boundingBox;
+        if (box) {
+            return Math.max(0.2, Math.min(1.62, box.maxY - this.y + 0.12));
+        }
+
         return this.isSneaking() ? 1.50 : 1.62;
     }
 
@@ -627,6 +666,12 @@ export default class PlayerEntity extends EntityLiving {
 
     die() {
         if (this === this.minecraft.player) {
+            // A limp body is not a death: stop following it before the corpse with
+            // the items takes its place, otherwise respawning would snap back.
+            if (typeof this.minecraft.endPlayerRagdoll === 'function') {
+                this.minecraft.endPlayerRagdoll();
+            }
+
             // The body stays behind as a ragdoll holding everything the player
             // was carrying, and respawning does not keep a second copy.
             if (typeof this.minecraft.spawnPlayerCorpse === 'function') {
@@ -646,6 +691,7 @@ export default class PlayerEntity extends EntityLiving {
     respawn() {
         this.health = 20;
         this.isDead = false;
+        this.ragdollBody = null;
         this.sendHealthUpdate();
 
         this.fallDistance = 0;

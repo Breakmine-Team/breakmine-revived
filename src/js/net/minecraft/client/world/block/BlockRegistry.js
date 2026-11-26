@@ -624,8 +624,9 @@ export class BlockRegistry {
 
         BlockRegistry.TAN_WOOL = new BlockWool(57, 0, "tan_wool", "Tan Wool");
 
-        // Concrete and wool stairs/slabs. Each one borrows the colour block's
-        // texture (stairs via the source block id, slabs via the texture name).
+        // Concrete and wool stairs/slabs/walls. Each one borrows the colour
+        // block's texture (stairs via the source block id, the rest via the
+        // texture name).
         const colourBlocks = [
             ["White", "white"], ["Orange", "orange"], ["Magenta", "magenta"],
             ["Light Blue", "light_blue"], ["Yellow", "yellow"], ["Lime", "lime"],
@@ -639,6 +640,7 @@ export class BlockRegistry {
         let concreteWallId = 362;
         let woolStairId = 462;
         let woolSlabId = 478;
+        let woolWallId = 506;
 
         for (const [label, key] of colourBlocks) {
             const upperKey = key.toUpperCase();
@@ -655,11 +657,13 @@ export class BlockRegistry {
             BlockRegistry[`${upperKey}_WOOL_STAIRS`] = new BlockStair(woolStairId++, 0, wool.id, `${label} Wool`, woolOptions);
             BlockRegistry[`${upperKey}_WOOL_SLAB`] = new BlockSlab(woolSlabId++, 0, `${key}_wool`, `${label} Wool Slab`, Block.sounds.cloth, woolOptions);
             BlockRegistry[`${upperKey}_WOOL_VERTICAL_SLAB`] = new BlockVerticalSlab(nextVerticalSlabId(), 0, `${key}_wool`, `${label} Wool Vertical Slab`, Block.sounds.cloth, woolOptions);
+            BlockRegistry[`${upperKey}_WOOL_WALL`] = new BlockWall(woolWallId++, 0, `${key}_wool`, `${label} Wool Wall`, Block.sounds.cloth, woolOptions);
         }
 
         BlockRegistry.TAN_WOOL_STAIRS = new BlockStair(496, 0, BlockRegistry.TAN_WOOL.id, "Tan Wool", { hardness: 0.8, tool: null, sound: Block.sounds.cloth });
         BlockRegistry.TAN_WOOL_SLAB = new BlockSlab(497, 0, "tan_wool", "Tan Wool Slab", Block.sounds.cloth, { hardness: 0.8, tool: null });
         BlockRegistry.TAN_WOOL_VERTICAL_SLAB = new BlockVerticalSlab(nextVerticalSlabId(), 0, "tan_wool", "Tan Wool Vertical Slab", Block.sounds.cloth, { hardness: 0.8, tool: null });
+        BlockRegistry.TAN_WOOL_WALL = new BlockWall(522, 0, "tan_wool", "Tan Wool Wall", Block.sounds.cloth, { hardness: 0.8, tool: null });
 
         BlockRegistry.PAINTING_SALAD_PLATE = new BlockPainting(284, 0, "salad_plate", "Salad Plate");
         BlockRegistry.PAINTING_DEPTH = new BlockPainting(286, 0, "depth", "Depth");

@@ -22,7 +22,8 @@ export default class BlockWall extends Block {
         this.textureName = textureName;
         this.description = displayName;
         this.hardness = options.hardness ?? 1.8;
-        this.tool = options.tool ?? 'pickaxe';
+        // null means "no preferred tool" (wool), so only undefined falls back.
+        this.tool = options.tool !== undefined ? options.tool : 'pickaxe';
         if (sound) {
             this.sound = sound;
         }

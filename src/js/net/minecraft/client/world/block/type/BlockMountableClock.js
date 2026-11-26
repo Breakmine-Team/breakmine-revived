@@ -72,8 +72,11 @@ export default class BlockMountableClock extends Block {
         return false;
     }
 
+    // The panel is the clock's whole volume. Returning null here left the block
+    // with no collision at all (it is not solid and not a half block either), so
+    // ragdolls and anything else fell straight through a wall mounted clock.
     getCollisionBoundingBox(world, x, y, z) {
-        return null;
+        return this.getBoundingBox(world, x, y, z);
     }
 
     getTextureForFace(face) {
