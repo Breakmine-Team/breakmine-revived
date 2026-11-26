@@ -32,12 +32,21 @@ export default class NetworkPlayHandler extends PacketHandler {
 
     handleJoinGame(packet) {
         this.minecraft.playerController = new PlayerControllerMultiplayer(this.minecraft, this, packet.entityId);
+        this.minecraft.serverEntityId = packet.entityId;
         let world = new WorldClient(this.minecraft);
         world.setWorldType(packet.worldType);
         this.minecraft.worldLoadPromise = this.minecraft.loadWorld(world);
         this.minecraft.ingameOverlay.chatOverlay.clearChat();
 
         this.networkManager.sendPacket(new ClientOffGridRequestPacket());
+
+        // The server keeps ragdoll poses and hands them out on request, so ask
+        // once the world exists and this client can build the bodies.
+        Promise.resolve(this.minecraft.worldLoadPromise).then(() => {
+            if (this.networkManager.isConnected()) {
+                this.networkManager.sendJson({type: 'ragdoll:request'});
+            }
+        });
 
         this.minecraft.capeManager?.onJoin(this.networkManager);
         this.minecraft.cctvManager?.onJoin(this.networkManager);

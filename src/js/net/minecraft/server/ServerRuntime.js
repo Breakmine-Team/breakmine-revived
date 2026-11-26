@@ -11,6 +11,7 @@ import { addPlayer, removePlayer, getPlayerCount, getPlayers, savePlayerData, no
 import Logger from './logger.js';
 import { BlockRegistry } from '../client/world/block/BlockRegistry.js';
 import { handleModMessage, loadServerSideMods } from './ServerModLoader.js';
+import { getRagdoll, listRagdolls, removeRagdoll, setRagdollOwner, storeRagdoll } from './ragdolls.js';
 import { handleStructurePaste } from './structurePaste.js';
 import getServerWorld from './World.js';
 import config from './config.js';
@@ -26,6 +27,97 @@ let started = false;
 let lastWeatherVersion = -1;
 
 const MAX_CAPE_DATA_URL_LENGTH = 512 * 1024;
+
+// Ragdolls are simulated by one client and reported to the server, which keeps
+// the latest pose, hands it to players who join later and stores it with the
+// world. Physics never runs on the server.
+function sendRagdolls(target) {
+    if (!target?.ws || target.ws.readyState !== 1) return;
+
+    for (const state of listRagdolls()) {
+        target.ws.send(JSON.stringify(state));
+    }
+}
+
+function relayRagdolls(player, state) {
+    const message = JSON.stringify(state);
+    for (const peer of getPlayers().values()) {
+        if (peer.eid === player.eid) continue;
+        if (peer.ws.readyState === 1) peer.ws.send(message);
+    }
+}
+
+function broadcastRagdoll(state) {
+    const message = JSON.stringify(state);
+    for (const peer of getPlayers().values()) {
+        if (peer.ws && peer.ws.readyState === 1) {
+            peer.ws.send(message);
+        }
+    }
+}
+
+function handleRagdollMessage(player, payload) {
+    if (!player || player.eid == null) return;
+
+    const id = typeof payload.id === 'string' ? payload.id.slice(0, 64) : '';
+    if (id.length === 0) return;
+
+    const existing = getRagdoll(id);
+
+    if (payload.type === 'ragdoll:remove') {
+        if (existing !== null && existing.owner != null && existing.owner !== player.eid) {
+            return;
+        }
+        if (removeRagdoll(id)) {
+            relayRagdolls(player, {type: 'ragdoll:remove', id: id});
+        }
+        return;
+    }
+
+    // Only the client that currently simulates a body may report its pose.
+    if (existing !== null && existing.owner != null && existing.owner !== player.eid) {
+        return;
+    }
+
+    const state = storeRagdoll(id, payload, player.eid);
+    if (state === null) return;
+
+    relayRagdolls(player, state);
+}
+
+// A client that wants to touch somebody else's ragdoll asks for it first; the
+// server moves the simulation there and tells everyone else to stop running it.
+function handleRagdollClaim(player, payload) {
+    if (!player || player.eid == null) return;
+
+    const id = typeof payload.id === 'string' ? payload.id.slice(0, 64) : '';
+    const state = setRagdollOwner(id, player.eid);
+    if (state === null) return;
+
+    broadcastRagdoll({type: 'ragdoll:owner', id: id, owner: player.eid});
+
+    if (player.ws && player.ws.readyState === 1) {
+        player.ws.send(JSON.stringify(state));
+    }
+}
+
+// When a client leaves, its bodies are handed to another client (round robin)
+// so their physics keeps running instead of freezing in mid air.
+function removeRagdollsFor(player) {
+    if (!player || player.eid == null) return;
+
+    const peers = [...getPlayers().values()].filter((peer) =>
+        peer.eid !== player.eid && peer.ws && peer.ws.readyState === 1);
+
+    let index = 0;
+    for (const state of listRagdolls()) {
+        if (state.owner !== player.eid) continue;
+
+        const nextOwner = peers.length === 0 ? null : peers[index++ % peers.length].eid;
+        setRagdollOwner(state.id, nextOwner);
+        broadcastRagdoll({type: 'ragdoll:owner', id: state.id, owner: nextOwner});
+    }
+}
 
 function isValidCapeDataUrl(value) {
     return value === null || (
@@ -269,6 +361,14 @@ export function onConnection(ws, req) {
                 player.cape = payload.cape;
                 savePlayerData(player);
                 broadcastCapeState(player);
+            } else if (payload && payload.type === 'ragdoll:state') {
+                handleRagdollMessage(player, payload);
+            } else if (payload && payload.type === 'ragdoll:remove') {
+                handleRagdollMessage(player, payload);
+            } else if (payload && payload.type === 'ragdoll:claim') {
+                handleRagdollClaim(player, payload);
+            } else if (payload && payload.type === 'ragdoll:request') {
+                sendRagdolls(player);
             } else if (payload && payload.type === 'cctv:request' && player) {
                 sendCctvState(player);
             } else if (payload && payload.type === 'cctv:pair' && player) {
@@ -355,6 +455,7 @@ export function onConnection(ws, req) {
             gate.onFlush = null;
         }
         if (player.eid !== null) {
+            removeRagdollsFor(player);
             removePlayer(player);
             cleanupPlayerChunks(player.eid);
         }

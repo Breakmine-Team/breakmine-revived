@@ -60,6 +60,8 @@ import GuiPrelaunch from "./gui/screens/GuiPrelaunch.js";
 import GuiFunctions from "./gui/screens/GuiFunctions.js";
 import ItemEntity from "./entity/ItemEntity.js";
 import PlayerEntity from "./entity/PlayerEntity.js";
+import BallEntity from "./entity/BallEntity.js";
+import RagdollEntity from "./entity/RagdollEntity.js";
 import { Version } from "../../../../resources/version.js";
 import { createErrorWindow } from './gui/WindowDraggable.js';
 import * as AuthLib from "./network/AuthLib.js";
@@ -925,6 +927,18 @@ export default class Minecraft {
                 saveData.itemEntities = itemEntities;
             }
 
+            const ragdolls = [];
+            if (this.world.entities) {
+                for (const entity of this.world.entities) {
+                    if (entity instanceof RagdollEntity && !entity.isDead) {
+                        ragdolls.push(entity.serializeState());
+                    }
+                }
+            }
+            if (ragdolls.length > 0) {
+                saveData.ragdolls = ragdolls;
+            }
+
             if (!isServerBacked) {
                 await this._saveWorldToDB(this.currentWorldKey, saveData);
             }
@@ -994,6 +1008,15 @@ export default class Minecraft {
 
             if (saveData.playerInventory && this.player && this.player.inventory) {
                 this.player.inventory.applyNetworkState(saveData.playerInventory);
+            }
+
+            if (Array.isArray(saveData.ragdolls)) {
+                for (const state of saveData.ragdolls) {
+                    const ragdoll = RagdollEntity.fromNetworkState(this, world, state);
+                    if (ragdoll !== null) {
+                        world.addEntity(ragdoll);
+                    }
+                }
             }
         } catch (err) {
             console.error('Failed to load world save:', err);
@@ -1870,6 +1893,14 @@ export default class Minecraft {
 
             if (button === 0) {
                 let entity = this.rayTraceEntity(5, this.timer.partialTicks);
+                if (entity instanceof BallEntity) {
+                    this.kickBall(entity, this.timer.partialTicks);
+                    return;
+                }
+                if (entity instanceof RagdollEntity) {
+                    this.hitRagdoll(entity);
+                    return;
+                }
                 if (entity && entity !== this.player && entity instanceof PlayerEntity && !entity.creative && !entity.spectator) {
                     if (this.player.attackCooldown > 0) {
                         return;
@@ -1879,7 +1910,7 @@ export default class Minecraft {
                     }
                     let damage = this.getAttackDamage();
                     entity.damageEntity(damage, this.player.username);
-                    this.player.attackCooldown = 30;
+                    this.player.attackCooldown = 8; // 400ms at 20 ticks per second
                     if (!this.isSingleplayer()) {
                         const nm = this.playerController.getNetworkHandler().getNetworkManager();
                         if (nm) nm.sendJson({ type: 'attack', target: entity.id, damage: damage, attacker: this.player.username });
@@ -1962,6 +1993,21 @@ export default class Minecraft {
                     }
                 }
                 this.player.swingArm();
+            }
+
+            if (button === 1) {
+                let entity = this.rayTraceEntity(5, this.timer.partialTicks);
+                if (entity instanceof BallEntity) {
+                    this.kickBall(entity, this.timer.partialTicks);
+                    return;
+                }
+                if (entity instanceof RagdollEntity) {
+                    if (entity.remote) {
+                        entity.claim();
+                    }
+                    this.kickRagdoll(entity, this.timer.partialTicks);
+                    return;
+                }
             }
 
             if (button === 1 && this.player.creative) {
@@ -2293,6 +2339,95 @@ export default class Minecraft {
         context.imageSmoothingEnabled = false;
         context.drawImage(image, 0, 0, image.width, image.height);
         return new THREE.CanvasTexture(canvas);
+    }
+
+    kickBall(ball, partialTicks) {
+        // Kick where the player is looking, so aiming at the ball works.
+        let look = this.player.getLook(partialTicks);
+        ball.kick(look.x, look.z);
+        this.player.swingArm();
+    }
+
+    kickRagdoll(ragdoll, partialTicks) {
+        let look = this.player.getLook(partialTicks);
+        ragdoll.kick(look.x, look.z);
+        this.player.swingArm();
+    }
+
+    hitRagdoll(ragdoll) {
+        if (!ragdoll || ragdoll.isDead || this.player.attackCooldown > 0) {
+            return;
+        }
+
+        this.player.attackCooldown = 8; // 400ms at 20 ticks per second
+
+        // Only one client simulates a body; take it over before damaging it so
+        // the health change and the break happen on the copy that reports it.
+        if (ragdoll.remote) {
+            ragdoll.claim();
+        }
+
+        ragdoll.damage(this.getAttackDamage());
+        this.player.swingArm();
+    }
+
+    // Called when a ragdoll runs out of health: it breaks apart and drops what
+    // it was carrying, or its own item when it is just a dummy body.
+    onRagdollBroken(ragdoll) {
+        if (!this.world || !ragdoll) {
+            return;
+        }
+
+        if (Array.isArray(ragdoll.loot) && ragdoll.loot.length > 0) {
+            for (const entry of ragdoll.loot) {
+                this.world.addEntity(new ItemEntity(
+                    this, this.world, entry.id,
+                    ragdoll.x, ragdoll.y + 0.4, ragdoll.z, entry.count
+                ));
+            }
+            return;
+        }
+
+        const item = BlockRegistry.RAGDOLL;
+        if (!item) {
+            return;
+        }
+
+        this.world.addEntity(new ItemEntity(
+            this, this.world, item.id,
+            ragdoll.x, ragdoll.y + 0.2, ragdoll.z
+        ));
+    }
+
+    // A dead player leaves a ragdoll behind that holds their whole inventory;
+    // break it and the items spill out on the floor.
+    spawnPlayerCorpse(player) {
+        if (!this.world || !player || !player.inventory) {
+            return;
+        }
+
+        const loot = [];
+        if (typeof player.inventory.toNetworkState === "function") {
+            const state = player.inventory.toNetworkState();
+            for (const item of Array.isArray(state.items) ? state.items : []) {
+                if (!item || !item.typeId || !item.count) {
+                    continue;
+                }
+
+                loot.push({id: item.typeId, count: item.count});
+            }
+        }
+
+        const ragdoll = new RagdollEntity(this, this.world, player.x, player.y, player.z, {
+            displayName: player.username,
+            loot: loot
+        });
+        this.world.addEntity(ragdoll);
+
+        // The items now live in the corpse, not in a second copy on respawn.
+        if (typeof player.inventory.clear === "function") {
+            player.inventory.clear();
+        }
     }
 
     rayTraceEntity(reach, partialTicks) {

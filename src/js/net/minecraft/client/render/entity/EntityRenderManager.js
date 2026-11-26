@@ -5,6 +5,10 @@ import ItemEntity from "../../entity/ItemEntity.js";
 import ItemRenderer from "./entity/ItemRenderer.js";
 import CreeperEntity from "../../entity/CreeperEntity.js";
 import CreeperRenderer from "./entity/CreeperRenderer.js";
+import BallEntity from "../../entity/BallEntity.js";
+import BallRenderer from "./entity/BallRenderer.js";
+import RagdollEntity from "../../entity/RagdollEntity.js";
+import RagdollRenderer from "./entity/RagdollRenderer.js";
 
 export default class EntityRenderManager {
 
@@ -16,6 +20,8 @@ export default class EntityRenderManager {
         this.push(PlayerEntityMultiplayer, PlayerRenderer);
         this.push(ItemEntity, ItemRenderer);
         this.push(CreeperEntity, CreeperRenderer);
+        this.push(BallEntity, BallRenderer);
+        this.push(RagdollEntity, RagdollRenderer);
     }
 
     push(entityType, entityRenderer) {

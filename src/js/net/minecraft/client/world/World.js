@@ -1261,6 +1261,18 @@ export default class World {
 
     onBlockChanged(x, y, z) {
         this.setModified(x - 1, y - 1, z - 1, x + 1, y + 1, z + 1);
+
+        // Bodies that settled to sleep still have to notice a block being placed
+        // into them or the floor being dug out from under them.
+        if (!this.entities || this.entities.length === 0) {
+            return;
+        }
+
+        for (const entity of this.entities) {
+            if (entity && typeof entity.onBlockChanged === "function") {
+                entity.onBlockChanged(x, y, z);
+            }
+        }
     }
 
     setModified(minX, minY, minZ, maxX, maxY, maxZ) {

@@ -627,6 +627,12 @@ export default class PlayerEntity extends EntityLiving {
 
     die() {
         if (this === this.minecraft.player) {
+            // The body stays behind as a ragdoll holding everything the player
+            // was carrying, and respawning does not keep a second copy.
+            if (typeof this.minecraft.spawnPlayerCorpse === 'function') {
+                this.minecraft.spawnPlayerCorpse(this);
+            }
+
             this.minecraft.displayScreen(new GuiDeath(this));
             if (!this.minecraft.isSingleplayer()) {
                 try {

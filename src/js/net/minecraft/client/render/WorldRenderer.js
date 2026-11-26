@@ -4,6 +4,7 @@ import MathHelper from "../../util/MathHelper.js";
 import Block from "../world/block/Block.js";
 import ItemTool from "../world/block/type/ItemTool.js";
 import BoundingBox from "../../util/BoundingBox.js";
+import BallEntity from "../entity/BallEntity.js";
 import Tessellator, { waterUniforms } from "./Tessellator.js";
 import ChunkSection from "../world/ChunkSection.js";
 import Random from "../../util/Random.js";
@@ -490,6 +491,7 @@ export default class WorldRenderer {
         this.emitRenderHook('renderChunks', { partialTicks, cameraChunkX, cameraChunkZ, player });
 
         this.updateChunkMeshing();
+        const offGridFields = this.interpolateOffGridFields(partialTicks);
         this.renderChunks(cameraChunkX, cameraChunkZ);
         this.updateChunkBoundaryLines(cameraChunkX, cameraChunkZ);
 
@@ -632,6 +634,7 @@ export default class WorldRenderer {
         this.weatherRenderer.update();
 
         this.webRenderer.render(this.scene, this.camera);
+        this.restoreOffGridFields(offGridFields);
 
         this.overlay.updateMatrixWorld(true);
         this.webRenderer.render(this.overlay, this.camera);
@@ -895,6 +898,39 @@ export default class WorldRenderer {
             if (!light.userData.updated) {
                 light.visible = false;
                 light.userData.blockKey = null;
+            }
+        }
+    }
+
+    // Bearings turn their contraptions once per tick; interpolate that pose for
+    // the frame so a spinning machine does not visibly step at 20 Hz.
+    interpolateOffGridFields(partialTicks) {
+        const world = this.minecraft.world;
+        if (!world) {
+            return [];
+        }
+
+        const fields = new Set();
+        if (world.offGridField) fields.add(world.offGridField);
+        if (Array.isArray(world.extraOffGridFields)) {
+            for (const field of world.extraOffGridFields) fields.add(field);
+        }
+
+        for (const field of fields) {
+            if (field && typeof field.interpolateRotation === "function") {
+                field.interpolateRotation(partialTicks);
+            }
+        }
+
+        return [...fields];
+    }
+
+    // Collision, ray tracing and block picking read the field matrix between
+    // frames, so put back the exact tick pose once the frame is drawn.
+    restoreOffGridFields(fields) {
+        for (const field of fields) {
+            if (field && typeof field.applyTransform === "function") {
+                field.applyTransform(false);
             }
         }
     }
@@ -1801,9 +1837,41 @@ export default class WorldRenderer {
         return point(selection.p1) + '|' + point(selection.p2);
     }
 
+    // A ball under the crosshair sits in front of the block the ray reaches
+    // next, so the outline of that block is hidden while aiming at the ball.
+    isBallUnderCrosshair(player, partialTicks, hitResult) {
+        const minecraft = this.minecraft;
+        if (!minecraft || typeof minecraft.rayTraceEntity !== "function"
+            || typeof minecraft.intersectRayAABB !== "function") {
+            return false;
+        }
+
+        const entity = minecraft.rayTraceEntity(5, partialTicks);
+        if (!(entity instanceof BallEntity) || !entity.boundingBox) {
+            return false;
+        }
+
+        if (!hitResult.vector) {
+            return true;
+        }
+
+        const from = player.getPositionEyes(partialTicks);
+        const look = player.getLook(partialTicks);
+        const to = new Vector3(
+            from.x + look.x * 5,
+            from.y + look.y * 5,
+            from.z + look.z * 5
+        );
+        const ballHit = minecraft.intersectRayAABB(from, to, entity.boundingBox.grow(0.1, 0.1, 0.1));
+
+        return ballHit !== null
+            && from.squareDistanceTo(ballHit) < from.squareDistanceTo(hitResult.vector);
+    }
+
     renderBlockHitBox(player, partialTicks) {
         let hitResult = player.rayTrace(5, partialTicks);
-        let hitBoxVisible = !(hitResult === null);
+        let hitBoxVisible = !(hitResult === null)
+            && !this.isBallUnderCrosshair(player, partialTicks, hitResult);
         this.blockHitBox.visible = hitBoxVisible;
 
         if (hitBoxVisible) {
@@ -2141,6 +2209,10 @@ export default class WorldRenderer {
                         return (x, y, z, data) => { if (isTarget(x, y, z)) blockData = data; };
                     case 'setBlockAt':
                         return () => {  };
+                    // Blocks that react to being placed can check this to tell a
+                    // placement ghost apart from a real placement.
+                    case 'isPreview':
+                        return true;
                     case 'getChunkSectionAt':
                         return (cx, cy, cz) => {
                             const section = target.getChunkSectionAt(cx, cy, cz);

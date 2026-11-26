@@ -1,6 +1,7 @@
 import * as THREE from "../../../../../../libraries/three.module.js";
 import Block from "../world/block/Block.js";
 import BlockRenderType from "../../util/BlockRenderType.js";
+import EnumBlockFace from "../../util/EnumBlockFace.js";
 import { applyHeldItemDisplay } from './HeldItemModel.js';
 import Tessellator from "./Tessellator.js";
 
@@ -129,9 +130,15 @@ export default class FirstPersonItemRenderer {
         this.cameraGroup.rotateY((player.rotationYaw - yawArm) * Math.PI / 1800);
 
         const light = Math.max(0, Math.min(1, Number(brightness) || 0));
+        // Sprites are drawn white, so the held item also needs the block's own
+        // tint (the ball's concrete colour), the same one the item icons use.
+        const tint = block ? block.getColor(null, 0, 0, 0, EnumBlockFace.NORTH) : 0xffffff;
+        const tintRed = ((tint >> 16 & 255) / 255) * light;
+        const tintGreen = ((tint >> 8 & 255) / 255) * light;
+        const tintBlue = ((tint & 255) / 255) * light;
         this.armTransformGroup.traverse(node => {
             if (node.isMesh && node.material?.color) {
-                node.material.color.setRGB(light, light, light);
+                node.material.color.setRGB(tintRed, tintGreen, tintBlue);
             }
         });
 

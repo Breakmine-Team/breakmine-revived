@@ -1039,7 +1039,11 @@ function handleBlockPlacement(player, buffer, offset) {
 
         safeSaveWorld();
 
-        const blockStates = [[placeX, placeY, placeZ, (blockId << 4) | metadata]];
+        // A placed block may remove itself (the ball block releases a ball),
+        // so announce the state the server world actually ended up with.
+        const finalBlockState = (getBlockAt(placeX, placeY, placeZ) << 4)
+            | (getBlockMetadata(placeX, placeY, placeZ) & 0xF);
+        const blockStates = [[placeX, placeY, placeZ, finalBlockState]];
         if (doorTop) {
             blockStates.push([placeX, placeY + 1, placeZ, (doorTopId << 4) | metadata]);
         }

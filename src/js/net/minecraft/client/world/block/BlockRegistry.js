@@ -32,6 +32,8 @@ import BlockHellstone from "./type/BlockHellstone.js";
 import BlockGlowstone from "./type/BlockGlowstone.js";
 import BlockClock from "./type/BlockClock.js";
 import BlockMountableClock from "./type/BlockMountableClock.js";
+import BlockBall from "./type/BlockBall.js";
+import BlockRagdoll from "./type/BlockRagdoll.js";
 import BlockChest from "./type/BlockChest.js";
 import BlockMissing from "./type/BlockMissing.js";
 import BlockBrick from "./type/BlockBrick.js";
@@ -488,6 +490,8 @@ export class BlockRegistry {
         BlockRegistry.GLOWSTONE = new BlockGlowstone(355, 0);
         BlockRegistry.CLOCK = new BlockClock(352, 0);
         BlockRegistry.MOUNTABLE_CLOCK = new BlockMountableClock(503, 0);
+        BlockRegistry.BALL = new BlockBall(504, 0, "ball_icon", "Ball");
+        BlockRegistry.RAGDOLL = new BlockRagdoll(505, 0, "ragdoll_icon", "Ragdoll");
         BlockRegistry.CHEST = new BlockChest(32, 0);
         BlockRegistry.FURNACE = new BlockFurnace(34, 0);
         BlockRegistry.BUSH = new BlockBush(35, 0);

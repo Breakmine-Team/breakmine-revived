@@ -40,6 +40,7 @@ export default class OffGridBlockField {
         this.group.matrixAutoUpdate = false;
 
         this.rotation = { x: 0, y: 0, z: 0 };
+        this.previousRotation = { x: 0, y: 0, z: 0 };
         this.offset = { x: 0, y: 0, z: 0 };
 
         this.posedBoxCache = new Map();
@@ -264,6 +265,7 @@ export default class OffGridBlockField {
 
     
     applyNetworkSnapshot(cells, rotation, offset, pivot) {
+        const previousRotation = { x: this.rotation.x, y: this.rotation.y, z: this.rotation.z };
         this.clear();
 
         const list = Array.isArray(cells) ? cells : [];
@@ -286,6 +288,7 @@ export default class OffGridBlockField {
         }
 
         const numberOrZero = (value) => typeof value === 'number' && Number.isFinite(value) ? value : 0;
+        this.previousRotation = previousRotation;
         this.rotation = {
             x: numberOrZero(rotation && rotation.x),
             y: numberOrZero(rotation && rotation.y),
@@ -321,6 +324,7 @@ export default class OffGridBlockField {
         const numberOrZero = (value) => typeof value === 'number' && Number.isFinite(value) ? value : 0;
         const wasPosed = this.isPosed();
 
+        this.previousRotation = { x: this.rotation.x, y: this.rotation.y, z: this.rotation.z };
         this.rotation = {
             x: numberOrZero(rotation && rotation.x),
             y: numberOrZero(rotation && rotation.y),
@@ -344,6 +348,7 @@ export default class OffGridBlockField {
         const bounds = this.getBounds();
         const numberOrZero = (value) => typeof value === 'number' && Number.isFinite(value) ? value : 0;
 
+        this.previousRotation = { x: this.rotation.x, y: this.rotation.y, z: this.rotation.z };
         this.rotation = {
             x: numberOrZero(rotation && rotation.x),
             y: numberOrZero(rotation && rotation.y),
@@ -614,6 +619,7 @@ export default class OffGridBlockField {
         this._localWorldWorld = null;
 
         this.rotation = { x: 0, y: 0, z: 0 };
+        this.previousRotation = { x: 0, y: 0, z: 0 };
         this.offset = { x: 0, y: 0, z: 0 };
         this.group.position.set(0, 0, 0);
         this.group.rotation.set(0, 0, 0);
@@ -695,6 +701,7 @@ export default class OffGridBlockField {
     rotate(degrees, axis) {
         const wasPosed = this.isPosed();
 
+        this.previousRotation[axis] = this.rotation[axis] || 0;
         this.rotation[axis] = (this.rotation[axis] || 0) + degrees;
         this.applyTransform();
 
@@ -713,7 +720,7 @@ export default class OffGridBlockField {
     }
 
     
-    applyTransform() {
+    applyTransform(clearCaches = true) {
         const pose = this.computePose();
         this.group.rotation.set(pose.rotation.x, pose.rotation.y, pose.rotation.z);
         this.group.position.set(pose.position.x, pose.position.y, pose.position.z);
@@ -721,10 +728,44 @@ export default class OffGridBlockField {
         this.group.updateMatrix();
         this.group.updateMatrixWorld(true);
 
+        if (!clearCaches) {
+            return;
+        }
+
         this.posedBoxCache.clear();
         this._poseContext = null;
         this._localWorld = null;
         this._localWorldWorld = null;
+    }
+
+    static interpolateDegrees(from, to, blend) {
+        const delta = ((to - from) % 360 + 540) % 360 - 180;
+        return from + delta * blend;
+    }
+
+    // Frames land between ticks, so draw the contraption part way from the pose
+    // of the previous tick to the pose of the next one instead of letting it
+    // jump 20 times a second. The caller restores the exact tick pose with
+    // applyTransform(false) before anything reads the matrix for collisions.
+    interpolateRotation(partialTicks) {
+        if (!this.isPosed()) {
+            return;
+        }
+
+        const blend = Number.isFinite(partialTicks)
+            ? Math.max(0, Math.min(1, partialTicks))
+            : 1;
+
+        const pose = this.computePose({
+            x: OffGridBlockField.interpolateDegrees(this.previousRotation.x, this.rotation.x, blend),
+            y: OffGridBlockField.interpolateDegrees(this.previousRotation.y, this.rotation.y, blend),
+            z: OffGridBlockField.interpolateDegrees(this.previousRotation.z, this.rotation.z, blend)
+        });
+
+        this.group.rotation.set(pose.rotation.x, pose.rotation.y, pose.rotation.z);
+        this.group.position.set(pose.position.x, pose.position.y, pose.position.z);
+        this.group.updateMatrix();
+        this.group.updateMatrixWorld(true);
     }
 
     
@@ -741,7 +782,7 @@ export default class OffGridBlockField {
     }
 
     
-    computePose() {
+    computePose(rotation = this.rotation) {
         const pivot = this.getPivot();
         const pivotX = pivot.x;
         const pivotY = pivot.y;
@@ -749,9 +790,9 @@ export default class OffGridBlockField {
 
         const toRad = Math.PI / 180;
         const euler = new THREE.Euler(
-            this.rotation.x * toRad,
-            this.rotation.y * toRad,
-            this.rotation.z * toRad,
+            rotation.x * toRad,
+            rotation.y * toRad,
+            rotation.z * toRad,
             "XYZ"
         );
 

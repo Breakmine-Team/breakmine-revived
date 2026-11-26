@@ -6,6 +6,7 @@ import MissingPackets from "../../util/MissingPackets.js";
 import InventoryBasic from "../inventory/inventory/InventoryBasic.js";
 import IsomorphicWebSocket from "../../util/IsomorphicWebSocket.js";
 import CreeperEntity from "../entity/CreeperEntity.js";
+import RagdollEntity from "../entity/RagdollEntity.js";
 import JsonMultiplayer from "./JsonMultiplayer.js";
 
 export default class NetworkManager {
@@ -380,6 +381,9 @@ export default class NetworkManager {
                         entity.damageEntity(payload.damage, payload.attacker);
                     }
                 }
+            } else if (payload.type === 'ragdoll:state' || payload.type === 'ragdoll:remove'
+                || payload.type === 'ragdoll:owner') {
+                this._handleRagdollMessage(payload);
             } else if (payload.type === 'spawnEntity' && this.minecraft?.world) {
                 const world = this.minecraft.world;
                 const entityType = payload.entityType;
@@ -397,6 +401,84 @@ export default class NetworkManager {
         } catch (error) {
             console.error("Failed to parse JSON network message", error);
         }
+    }
+
+    // Ragdolls are simulated by exactly one client, which reports the pose five
+    // times a second. Every other client replays that snapshot.
+    _handleRagdollMessage(payload) {
+        const world = this.minecraft?.world;
+        if (!world || !Array.isArray(world.entities)) {
+            return;
+        }
+
+        const syncId = typeof payload.id === 'string'
+            ? payload.id
+            : (typeof payload.id === 'number' ? String(payload.id) : '');
+        if (syncId.length === 0 || syncId.length > 64) {
+            return;
+        }
+
+        let ragdoll = null;
+        for (const entity of world.entities) {
+            if (entity instanceof RagdollEntity && entity.syncId === syncId) {
+                ragdoll = entity;
+                break;
+            }
+        }
+
+        if (payload.type === 'ragdoll:remove') {
+            if (ragdoll !== null) {
+                world.removeEntityById(ragdoll.id);
+            }
+            return;
+        }
+
+        const localEid = this.minecraft?.serverEntityId;
+        const mine = typeof localEid === 'number' && payload.owner === localEid;
+
+        if (payload.type === 'ragdoll:owner') {
+            if (ragdoll === null) {
+                return;
+            }
+
+            ragdoll.ownerEid = payload.owner === null ? null : payload.owner;
+
+            // The server moved the simulation to or away from this client, so
+            // either start running the physics here or go back to replaying.
+            if (mine) {
+                ragdoll.adoptLocalSimulation();
+            } else {
+                ragdoll.releaseToReplay();
+            }
+            return;
+        }
+
+        if (ragdoll === null) {
+            ragdoll = RagdollEntity.fromNetworkState(this.minecraft, world, payload);
+            if (ragdoll === null) {
+                return;
+            }
+
+            ragdoll.ownerEid = typeof payload.owner === 'number' ? payload.owner : null;
+            world.addEntity(ragdoll);
+
+            // A restored ragdoll can already be assigned to this client; it
+            // keeps its saved pose and stays frozen until something touches it.
+            if (mine) {
+                ragdoll.adoptLocalSimulation();
+            }
+            return;
+        }
+
+        ragdoll.ownerEid = typeof payload.owner === 'number' ? payload.owner : ragdoll.ownerEid;
+
+        // The sender's own copy comes back through the server; its local
+        // simulation is always the authority, so ignore the echo.
+        if (!ragdoll.remote) {
+            return;
+        }
+
+        ragdoll.applyRemoteState(payload);
     }
 
     _applyPlayerState(player, state) {
