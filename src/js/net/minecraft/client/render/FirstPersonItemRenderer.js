@@ -9,6 +9,11 @@ export default class FirstPersonItemRenderer {
     constructor(worldRenderer) {
         this.worldRenderer = worldRenderer;
         this.scene = new THREE.Scene();
+        // With shadows enabled the tessellator hands out lambert materials, and
+        // this scene has no lights of its own, so the held item would shade to
+        // black. Light brightness is applied as the material colour each frame,
+        // which an ambient-only light reproduces exactly.
+        this.scene.add(new THREE.AmbientLight(0xffffff, 1.0));
         this.camera = new THREE.PerspectiveCamera(70, 1, 0.05, 100);
         this.cameraGroup = new THREE.Object3D();
         this.armTransformGroup = new THREE.Object3D();

@@ -72,6 +72,9 @@ export default class WeatherRenderer {
         });
 
         this.mesh = new THREE.Mesh(this.geometry, this.material);
+        // Rain quads are blended and depth-write free, so they must never be
+        // rendered into the shadow map.
+        this.mesh.userData.isTranslucent = true;
         this.mesh.frustumCulled = false;
         this.mesh.matrixAutoUpdate = false;
         this.mesh.renderOrder = 900;

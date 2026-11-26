@@ -4,6 +4,7 @@ const FACE_DY = [0, 0, 1, -1, 0, 0];
 const FACE_DZ = [0, 0, 0, 0, 1, -1];
 
 import EnumBlockFace from "../../util/EnumBlockFace.js";
+import EnumSkyBlock from "../../util/EnumSkyBlock.js";
 import BlockRenderType from "../../util/BlockRenderType.js";
 import Tessellator from "./Tessellator.js";
 import MathHelper from "../../util/MathHelper.js";
@@ -207,6 +208,7 @@ export default class BlockRenderer {
     }
 
     renderBlock(world, block, ambientOcclusion, x, y, z, knownRotation = undefined) {
+        this.tessellator.setBlockLight(this.getBlockLightLevel(world, x, y, z));
         this.aoCells.fill(undefined);
         this.aoBlockX = x;
         this.aoBlockY = y;
@@ -303,12 +305,26 @@ export default class BlockRenderer {
     }
 
     static DummyBlock = class extends Block {
-        constructor(id, texId, texName, texFaces = null, texRotations = null) {
+        constructor(id, texId, texName, texFaces = null, texRotations = null, visibleFaces = null) {
             super(id, texId);
             this.inventoryTab = EnumCreativeInventoryTab.NOTLISTED;
             this.texName = texName;
             this.texFaces = texFaces;
             this.texRotations = texRotations;
+            this.visibleFaces = visibleFaces;
+        }
+
+        // Parts may render only some of their faces; a part with a bbox that is
+        // there purely for the hitbox (a flat clock face, for instance) hides
+        // its back and sides this way.
+        shouldRenderPartFace(face) {
+            if (this.visibleFaces === null) {
+                return true;
+            }
+            if (!face || typeof face.getName !== 'function') {
+                return false;
+            }
+            return this.visibleFaces.includes(face.getName());
         }
         
         getTextureForFace(face) {
@@ -415,7 +431,7 @@ export default class BlockRenderer {
                 partBlock = parts[i][2]['block'];
                 bbox = parts[i][2]['bbox'];
             } else if (parts[i][0] === 'texture') {
-                partBlock = new this.constructor.DummyBlock(999, 0, parts[i][2]['texture'], parts[i][2]['faces'] ?? null, parts[i][2]['uvRotation'] ?? null);
+                partBlock = new this.constructor.DummyBlock(999, 0, parts[i][2]['texture'], parts[i][2]['faces'] ?? null, parts[i][2]['uvRotation'] ?? null, parts[i][2]['visibleFaces'] ?? null);
                 bbox = parts[i][2]['bbox'];
             }
             
@@ -514,6 +530,11 @@ export default class BlockRenderer {
             try {
                 for (let j = 0; j < FACES.length; j++) {
                     let face = FACES[j];
+
+                    if (typeof partBlock.shouldRenderPartFace === 'function'
+                        && partBlock.shouldRenderPartFace(face) === false) {
+                        continue;
+                    }
 
                     if (respectFaces && typeof partBlock.shouldRenderFace === 'function'
                         && partBlock.shouldRenderFace(world, x, y, z, face) === false) {
@@ -740,6 +761,20 @@ export default class BlockRenderer {
         minV = 1 - minV;
         maxV = 1 - maxV;
 
+        // Only water gets the rippling and reflective shading. It also needs the
+        // rect of its own atlas tile so the ripple cannot leak into a neighbour.
+        const isWater = block.liquidType !== 'lava';
+        if (isWater) {
+            this.tessellator.setWaterSurface(true);
+            this.tessellator.setTileWrap([
+                minU,
+                Math.min(minV, maxV),
+                maxU - minU,
+                Math.abs(maxV - minV),
+                0
+            ]);
+        }
+
         let color = block.getColor(world, x, y, z, EnumBlockFace.TOP);
         let red = (color >> 16 & 255) / 255.0;
         let green = (color >> 8 & 255) / 255.0;
@@ -788,6 +823,11 @@ export default class BlockRenderer {
             this.tessellator.setColor(red * shade, green * shade, blue * shade);
             this.tessellator.addLiquidFace(world, liquidId, side.face, chunkX, chunkY, chunkZ, x, y, z, minU, minV, maxU, maxV);
         }
+
+        if (isWater) {
+            this.tessellator.setWaterSurface(false);
+            this.tessellator.setTileWrap(null);
+        }
     }
 
     renderPath(world, block, ambientOcclusion, x, y, z) {
@@ -821,6 +861,14 @@ export default class BlockRenderer {
         let blockData = knownBlockData !== undefined
             ? knownBlockData
             : this.getBlockDataAt(world, x, y, z);
+
+        // Light the face with the brightest of its own cell and the cell it
+        // faces; a wall next to a torch stores the torch's light on the air
+        // side, and that is what should keep it bright inside a sun shadow.
+        this.tessellator.setBlockLight(Math.max(
+            this.getBlockLightLevel(world, x, y, z),
+            this.getBlockLightLevel(world, x + face.x, y + face.y, z + face.z)
+        ));
 
         let minX = x + boundingBox.minX;
         let minY = y + boundingBox.minY;
@@ -1257,6 +1305,17 @@ export default class BlockRenderer {
         let shading = brightness * face.getShading();
 
         this.tessellator.setColor(red * shading, green * shading, blue * shading);
+    }
+
+    getBlockLightLevel(world, x, y, z) {
+        if (!world || typeof world.getSavedLightValue !== 'function'
+            || typeof world.blockExists !== 'function'
+            || !world.blockExists(x, y, z)) {
+            return 0;
+        }
+
+        let level = world.getSavedLightValue(EnumSkyBlock.BLOCK, x, y, z) || 0;
+        return Math.max(0, Math.min(1, level / 15));
     }
 
     getEffectiveLightLevel(world, x, y, z) {

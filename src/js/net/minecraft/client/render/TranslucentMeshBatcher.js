@@ -9,6 +9,8 @@ export default class TranslucentMeshBatcher {
         this.colors = new Float32Array(this.maxVertices * 4);
         this.uvs = new Float32Array(this.maxVertices * 2);
         this.normals = new Float32Array(this.maxVertices * 3);
+        this.waters = new Float32Array(this.maxVertices);
+        this.tileRects = new Float32Array(this.maxVertices * 4);
         this.indices = new Uint32Array(this.maxIndices);
         this.sortedIndices = new Uint32Array(this.maxIndices);
 
@@ -22,6 +24,10 @@ export default class TranslucentMeshBatcher {
         this.geometry.setAttribute('color', new THREE.BufferAttribute(this.colors, 4).setUsage(THREE.DynamicDrawUsage));
         this.geometry.setAttribute('uv', new THREE.BufferAttribute(this.uvs, 2).setUsage(THREE.DynamicDrawUsage));
         this.geometry.setAttribute('normal', new THREE.BufferAttribute(this.normals, 3).setUsage(THREE.DynamicDrawUsage));
+        // Water shading is driven by these: a flag that opts a vertex into the
+        // ripple/reflection code and the atlas rect it has to stay inside.
+        this.geometry.setAttribute('aWater', new THREE.BufferAttribute(this.waters, 1).setUsage(THREE.DynamicDrawUsage));
+        this.geometry.setAttribute('aTileRect', new THREE.BufferAttribute(this.tileRects, 4).setUsage(THREE.DynamicDrawUsage));
 
         this.indexAttribute = new THREE.BufferAttribute(this.indices, 1).setUsage(THREE.DynamicDrawUsage);
         this.geometry.setIndex(this.indexAttribute);
@@ -30,8 +36,10 @@ export default class TranslucentMeshBatcher {
         this.mesh.frustumCulled = false;
         this.mesh.renderOrder = 9999;
         this.mesh.userData.isTranslucent = true;
+        // The merged translucent pass is blended and has no depth writes, so it
+        // must not cast into or sample the shadow map.
         this.mesh.castShadow = false;
-        this.mesh.receiveShadow = true;
+        this.mesh.receiveShadow = false;
         scene.add(this.mesh);
 
         this.currentVertex = 0;
@@ -196,6 +204,38 @@ export default class TranslucentMeshBatcher {
 
         let nrmAttr = geo.getAttribute('normal');
         const nrmArray = nrmAttr ? TranslucentMeshBatcher.rawArray(nrmAttr) : null;
+
+        let waterAttr = geo.getAttribute('aWater');
+        if (waterAttr) {
+            const waterArray = TranslucentMeshBatcher.rawArray(waterAttr);
+            for (let i = 0; i < vertexCount; i++) {
+                this.waters[vOffset + i] = waterArray ? waterArray[i] : waterAttr.getX(i);
+            }
+        } else {
+            this.waters.fill(0, vOffset, vOffset + vertexCount);
+        }
+
+        let rectAttr = geo.getAttribute('aTileRect');
+        if (rectAttr) {
+            const rectArray = TranslucentMeshBatcher.rawArray(rectAttr);
+            for (let i = 0; i < vertexCount; i++) {
+                const dst = (vOffset + i) * 4;
+                const src = i * 4;
+                if (rectArray) {
+                    this.tileRects[dst]     = rectArray[src];
+                    this.tileRects[dst + 1] = rectArray[src + 1];
+                    this.tileRects[dst + 2] = rectArray[src + 2];
+                    this.tileRects[dst + 3] = rectArray[src + 3];
+                } else {
+                    this.tileRects[dst]     = rectAttr.getX(i);
+                    this.tileRects[dst + 1] = rectAttr.getY(i);
+                    this.tileRects[dst + 2] = rectAttr.getZ(i);
+                    this.tileRects[dst + 3] = rectAttr.getW(i);
+                }
+            }
+        } else {
+            this.tileRects.fill(0, vOffset * 4, (vOffset + vertexCount) * 4);
+        }
 
         if (nrmAttr && pureTranslation) {
             for (let i = 0; i < vertexCount; i++) {
@@ -364,6 +404,25 @@ export default class TranslucentMeshBatcher {
         uvAttr.updateRange.offset = 0;
         uvAttr.updateRange.count = this.currentVertex * 2;
         uvAttr.needsUpdate = true;
+
+        // Normals have to be uploaded as well. While the batch used the unlit
+        // material they were unused, but with shadows on the mesh is shaded with
+        // a lambert material, and a stale (all zero) normal buffer normalizes to
+        // NaN in the shader, which renders the whole translucent pass black.
+        let nrmAttr = this.geometry.getAttribute('normal');
+        nrmAttr.updateRange.offset = 0;
+        nrmAttr.updateRange.count = this.currentVertex * 3;
+        nrmAttr.needsUpdate = true;
+
+        let waterAttr = this.geometry.getAttribute('aWater');
+        waterAttr.updateRange.offset = 0;
+        waterAttr.updateRange.count = this.currentVertex;
+        waterAttr.needsUpdate = true;
+
+        let rectAttr = this.geometry.getAttribute('aTileRect');
+        rectAttr.updateRange.offset = 0;
+        rectAttr.updateRange.count = this.currentVertex * 4;
+        rectAttr.needsUpdate = true;
 
         this.geometry.setDrawRange(0, this.currentIndex);
     }

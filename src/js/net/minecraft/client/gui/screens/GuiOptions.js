@@ -156,6 +156,41 @@ export default class GuiOptions extends GuiScreen {
                         tooltip: "This feature can cause lag and\nis still in development.",
                         onchange: (_v, mc) => mc.worldRenderer.setShadowsEnabled(_v)
                     },
+                    {
+                        name: "Shadow Resolution",
+                        settingKey: "shadowResolution",
+                        type: "list",
+                        options: [
+                            { key: "512", name: "512x512" },
+                            { key: "1024", name: "1024x1024" },
+                            { key: "2048", name: "2048x2048" },
+                            { key: "4096", name: "4096x4096" }
+                        ],
+                        tooltip: "Higher resolutions give sharper shadows\nbut cost more memory and performance.",
+                        onchange: (value, mc) => mc.worldRenderer.setShadowResolution(value)
+                    },
+                    {
+                        name: "Water Reflectivity",
+                        settingKey: "waterReflectivity",
+                        type: "slider",
+                        min: 0,
+                        max: 100,
+                        toSlider: (value) => Math.round((Number.isFinite(Number(value)) ? Math.min(1, Math.max(0, Number(value))) : 0.4) * 100),
+                        fromSlider: (value) => value / 100,
+                        display: (name, value) => `${name}: ${Math.round(value)}%`,
+                        tooltip: "How much of the sky water mirrors.\nGrazing angles reflect the most."
+                    },
+                    {
+                        name: "Water Waviness",
+                        settingKey: "waterWaviness",
+                        type: "slider",
+                        min: 0,
+                        max: 100,
+                        toSlider: (value) => Math.round((Number.isFinite(Number(value)) ? Math.min(1, Math.max(0, Number(value))) : 0.5) * 100),
+                        fromSlider: (value) => value / 100,
+                        display: (name, value) => `${name}: ${Math.round(value)}%`,
+                        tooltip: "How strongly water ripples and drifts."
+                    },
                 ]
             },
             {

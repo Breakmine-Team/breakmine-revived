@@ -183,6 +183,8 @@ export default class CraftingRegistry {
             B.ITEM_GOLD.id, B.ITEM_SAPPHIRE.id, B.ITEM_GOLD.id,
             0, B.ITEM_GOLD.id, 0
         ]);
+        // A clock backed with a plank, like the other counter variants.
+        this.registerShapelessRecipe(B.MOUNTABLE_CLOCK.id, 1, [B.CLOCK.id, P]);
         this.registerShapedRecipe(B.TNT.id, 1, 3, 3, [
             B.SAND.id, DUST, B.SAND.id,
             DUST, B.ITEM_COAL.id, DUST,

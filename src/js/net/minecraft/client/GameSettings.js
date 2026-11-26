@@ -45,6 +45,9 @@ export default class GameSettings {
         this.ambientOcclusion = true;
         this.fancyLeaves = false;
         this.shadows = false;
+        this.shadowResolution = '2048';
+        this.waterReflectivity = 0.4;
+        this.waterWaviness = 0.5;
         this.sensitivity = 100;
         this.viewDistance = 4;
         this.fogType = 'modern';
@@ -86,6 +89,29 @@ export default class GameSettings {
         const value = Number(this.resolution);
         if (!Number.isFinite(value)) return 1;
         return Math.min(1, Math.max(0.1, value));
+    }
+
+    
+    getShadowResolution() {
+        const value = Number(this.shadowResolution);
+        if (!Number.isFinite(value) || value <= 0) return 2048;
+        return Math.min(4096, Math.max(256, Math.round(value)));
+    }
+
+    getWaterReflectivity() {
+        return this._getUnitInterval('waterReflectivity', 0.4);
+    }
+
+    getWaterWaviness() {
+        return this._getUnitInterval('waterWaviness', 0.5);
+    }
+
+    _getUnitInterval(key, fallback) {
+        const value = Number(this[key]);
+        if (!Number.isFinite(value)) {
+            return fallback;
+        }
+        return Math.max(0, Math.min(1, value));
     }
 
     

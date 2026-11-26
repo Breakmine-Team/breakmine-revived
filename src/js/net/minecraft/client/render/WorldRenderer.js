@@ -4,7 +4,7 @@ import MathHelper from "../../util/MathHelper.js";
 import Block from "../world/block/Block.js";
 import ItemTool from "../world/block/type/ItemTool.js";
 import BoundingBox from "../../util/BoundingBox.js";
-import Tessellator from "./Tessellator.js";
+import Tessellator, { waterUniforms } from "./Tessellator.js";
 import ChunkSection from "../world/ChunkSection.js";
 import Random from "../../util/Random.js";
 import Vector3 from "../../util/Vector3.js";
@@ -191,10 +191,14 @@ export default class WorldRenderer {
         this.ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
         this.scene.add(this.ambientLight);
 
+        this.shadowSunHeight = 1;
+        this.shadowResolution = minecraft.settings.getShadowResolution
+            ? minecraft.settings.getShadowResolution()
+            : 2048;
+
         this.sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
         this.sunLight.castShadow = this.shadowsEnabled;
-        this.sunLight.shadow.mapSize.width = 2048;
-        this.sunLight.shadow.mapSize.height = 2048;
+        this.sunLight.shadow.mapSize.set(this.shadowResolution, this.shadowResolution);
 
         const shadowCamSize = 48;
         this.sunLight.shadow.camera.left = -shadowCamSize;
@@ -240,6 +244,10 @@ export default class WorldRenderer {
         this.webRenderer.sortObjects = false; 
         this.webRenderer.setClearColor(0x000000, 0);
         this.webRenderer.clear();
+
+        // The shadow map has to fit inside the device texture limit, otherwise
+        // the allocation fails and everything samples as fully shadowed.
+        this.applyShadowResolution();
 
         this.textureAtlas = new TextureAtlas(minecraft);
         
@@ -395,6 +403,11 @@ export default class WorldRenderer {
             side: THREE.FrontSide
         });
 
+        // The blended batch uses these materials directly, so they need the same
+        // tile-wrap/water patch the per-section tessellator materials get.
+        Tessellator.applyTileWrap(this.translucentMaterial);
+        Tessellator.applyTileWrap(this.translucentLitMaterial);
+
         this.translucentBatcher = new TranslucentMeshBatcher(this.scene, this.getTranslucentMaterial());
 
         if (this.shadowsEnabled) {
@@ -467,7 +480,9 @@ export default class WorldRenderer {
     render(partialTicks) {
         this.emitRenderHook('beforeRender', { partialTicks });
 
+        // Water needs this frame's camera transform, so place it first.
         this.orientCamera(partialTicks);
+        this.updateWaterUniforms();
 
         let player = this.minecraft.player;
         let cameraChunkX = Math.floor(player.x) >> 4;
@@ -1157,6 +1172,7 @@ export default class WorldRenderer {
             this.sun.getWorldPosition(sunWorldPos);
 
             let dir = new THREE.Vector3().subVectors(sunWorldPos, this.camera.position).normalize();
+            waterUniforms.uWaterSunDir.value.copy(dir);
 
             let dist = 100;
             this.sunLight.position.set(px + dir.x * dist, py + dir.y * dist, pz + dir.z * dist);
@@ -1457,6 +1473,11 @@ export default class WorldRenderer {
     updateTranslucentMaterial() {
         if (!this.translucentBatcher) return;
 
+        // The batched translucent pass is blended and never takes part in
+        // shadow mapping, whatever material it is currently using.
+        this.translucentBatcher.mesh.castShadow = false;
+        this.translucentBatcher.mesh.receiveShadow = false;
+
         let material = this.getTranslucentMaterial();
         if (this.translucentBatcher.mesh.material === material) return;
 
@@ -1465,8 +1486,31 @@ export default class WorldRenderer {
         this.translucentBatcher.mesh.material = material;
     }
 
+    updateWaterUniforms() {
+        let settings = this.minecraft.settings;
+        let reflectivity = settings.getWaterReflectivity
+            ? settings.getWaterReflectivity()
+            : Number(settings.waterReflectivity);
+        let waviness = settings.getWaterWaviness
+            ? settings.getWaterWaviness()
+            : Number(settings.waterWaviness);
+
+        waterUniforms.uWaterTime.value = performance.now() * 0.001;
+        waterUniforms.uWaterReflectivity.value = Number.isFinite(reflectivity) ? reflectivity : 0.4;
+        waterUniforms.uWaterWaviness.value = Number.isFinite(waviness) ? waviness : 0.5;
+        this.camera.getWorldPosition(waterUniforms.uWaterCameraPos.value);
+
+        // backgroundColor is the horizon colour the sky is cleared with, already
+        // blended for time of day and weather, which is what water should mirror.
+        if (this.backgroundColor) {
+            waterUniforms.uWaterSkyColor.value.copy(this.backgroundColor).multiplyScalar(1.3);
+        }
+    }
+
     
     updateShadowBias(sunHeight) {
+        this.shadowSunHeight = sunHeight;
+
         let shadow = this.sunLight.shadow;
         let camera = shadow.camera;
 
@@ -1478,6 +1522,55 @@ export default class WorldRenderer {
         shadow.bias = -biasBlocks / (camera.far - camera.near);
 
         shadow.normalBias = texelSize;
+    }
+
+    
+    getShadowResolution() {
+        let size = Number(this.shadowResolution);
+        if (!Number.isFinite(size) || size <= 0) {
+            size = 2048;
+        }
+
+        const maxSize = this.webRenderer?.capabilities?.maxTextureSize;
+        if (Number.isFinite(maxSize) && maxSize > 0) {
+            size = Math.min(size, maxSize);
+        }
+
+        return Math.max(256, size);
+    }
+
+    
+    applyShadowResolution() {
+        if (!this.sunLight) return;
+
+        let shadow = this.sunLight.shadow;
+        let size = this.getShadowResolution();
+        if (shadow.mapSize.width === size && shadow.mapSize.height === size) {
+            return;
+        }
+
+        shadow.mapSize.set(size, size);
+
+        // The render target keeps the old size until it is dropped, so release
+        // it and let three allocate a fresh map at the new resolution.
+        if (shadow.map) {
+            shadow.map.dispose();
+            shadow.map = null;
+        }
+
+        shadow.camera.updateProjectionMatrix();
+        this.updateShadowBias(this.shadowSunHeight);
+
+        if (this.webRenderer) {
+            this.webRenderer.shadowMap.needsUpdate = true;
+        }
+    }
+
+    
+    setShadowResolution(resolution) {
+        let size = Number(resolution);
+        this.shadowResolution = Number.isFinite(size) && size > 0 ? size : 2048;
+        this.applyShadowResolution();
     }
 
     
@@ -1528,9 +1621,11 @@ export default class WorldRenderer {
         root.traverse(child => {
             if (!child.isMesh) return;
 
-            const isTranslucent = child.userData && child.userData.isTranslucent;
             // Shadow sampling on blended meshes produces black transparent
-            // surfaces. Leave the translucent pass unlit by the shadow map.
+            // surfaces, and blended meshes cannot occlude anything properly in
+            // the shadow map (their cutout quads would cast solid shadows).
+            // Leave everything translucent out of the shadow pipeline.
+            const isTranslucent = this.isTranslucentObject(child);
             child.castShadow = this.shadowsEnabled && !isTranslucent;
             child.receiveShadow = this.shadowsEnabled && !isTranslucent;
 
@@ -1541,6 +1636,10 @@ export default class WorldRenderer {
                 }
             }
         });
+    }
+
+    isTranslucentObject(object) {
+        return !!(object.userData && object.userData.isTranslucent);
     }
 
     rebuildAll() {
