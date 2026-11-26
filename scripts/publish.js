@@ -2,7 +2,7 @@
 /**
  * Promotes the beta branch to stable.
  *
- * Beta builds show a prerelease number ("1.6.9b-p3") equal to the commits beta
+ * Beta builds show a prerelease number ("1.7.1b-fe11d7c-p3") equal to the commits beta
  * has that main does not, so merging beta into main here is what resets the
  * series: the next beta commit is p1 again.
  *

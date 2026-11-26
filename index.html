@@ -958,7 +958,11 @@ window.devtoolsWindow = WindowManager.create({
   const REQUEST_TIMEOUT_MS = 15000;
 
   function stripGitHash(version) {
-    return String(version || '').trim().replace(/-[0-9a-f]{7,40}$/i, '');
+    // Beta builds show "1.7.1b-fe11d7c-p1"; compare releases only.
+    return String(version || '').trim()
+      .replace(/-p\d+$/i, '')
+      .replace(/\s*\(beta\)$/i, '')
+      .replace(/-[0-9a-f]{7,40}$/i, '');
   }
 
   function versionParts(version) {

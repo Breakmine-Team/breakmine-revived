@@ -1,12 +1,13 @@
 /**
  * The version the game shows on the beta channel.
  *
- * src/resources/version.js keeps the release version plus build commit, and the
- * updater and version checker compare against it, so it is never rewritten.
- * Beta builds show a prerelease number on top of the release version instead -
- * "1.6.9b-p3" - counting the commits on beta that main does not have yet.
- * scripts/publish.js merges beta into main, so publishing stable is what starts
- * the next series back at p1; nothing has to store a counter.
+ * src/resources/version.js on disk keeps the release version plus build commit,
+ * and the updater and version checker compare against it, so it is never
+ * rewritten there. A build made from beta gets Version.VERSION itself rewritten
+ * by the Vite plugin in scripts/beta-version.js - "1.7.1b-fe11d7c-p1" - counting
+ * the commits on beta that main does not have yet. scripts/publish.js merges beta
+ * into main, so publishing stable is what starts the next series back at p1;
+ * nothing has to store a counter.
  *
  * A build is a beta build when Vite ran from the beta branch (the two values
  * below are injected by scripts/beta-version.js through `define`), or when the
@@ -30,11 +31,15 @@ export const IS_BETA_CHANNEL = BUILD_IS_BETA || isBetaHost();
 export const PRERELEASE = BUILD_PRERELEASE > 0 ? BUILD_PRERELEASE : 1;
 
 /**
- * "1.6.9b-2a0b993" -> "1.6.9b-p1" on the beta channel. The build commit is
- * dropped because the prerelease number identifies the build instead.
+ * "1.6.9b-2a0b993" -> "1.6.9b-2a0b993-p1" on the beta channel. A beta build
+ * already carries that in version.js (the Vite plugin rewrites it), so it is
+ * returned as-is; the suffix here covers a release build served from a beta host.
  */
 export function getDisplayVersion(version) {
-    if (!IS_BETA_CHANNEL) return version;
-    const release = String(version || "").replace(/-[0-9a-f]{7,40}$/i, "");
+    const current = String(version || "");
+    if (!IS_BETA_CHANNEL) return current;
+    if (/-p\d+$/i.test(current)) return current;
+
+    const release = current.replace(/\s*\(beta\)$/i, "");
     return `${release}-p${PRERELEASE}`;
 }

@@ -8,7 +8,13 @@ const REQUEST_TIMEOUT_MS = 10000;
 
 export function stripGitHash(version) {
     if (typeof version !== "string") return "";
-    return version.trim().replace(/-[0-9a-f]{7,40}$/i, "");
+    // Beta builds carry the prerelease and channel marker in VERSION itself
+    // ("1.7.1b-fe11d7c-p1"); compare releases, so beta does not report itself
+    // as older than the stable version it is ahead of.
+    return version.trim()
+        .replace(/-p\d+$/i, "")
+        .replace(/\s*\(beta\)$/i, "")
+        .replace(/-[0-9a-f]{7,40}$/i, "");
 }
 
 /**

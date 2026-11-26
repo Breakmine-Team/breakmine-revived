@@ -78,9 +78,13 @@ function readGameVersion() {
     if (!version) {
         fail('could not read static VERSION out of src/resources/version.js');
     }
-    // VERSION carries the build commit ("5.3.6a-bde33bd"); version.txt is the
+    // VERSION carries the build commit and, on beta, the prerelease and channel
+    // marker ("1.7.1b-fe11d7c-p1", "1.7.1b-fe11d7c (beta)"); version.txt is the
     // release version only.
-    return version.trim().replace(/-[0-9a-f]{7,40}$/i, '');
+    return version.trim()
+        .replace(/-p\d+$/i, '')
+        .replace(/\s*\(beta\)$/i, '')
+        .replace(/-[0-9a-f]{7,40}$/i, '');
 }
 
 function readVersionAtCommit(sha) {

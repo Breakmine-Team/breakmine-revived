@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import fs from "fs";
 import path from "path";
 import basicSsl from '@vitejs/plugin-basic-ssl';
-import { betaVersionDefines } from "./scripts/beta-version.js";
+import { betaVersionDefines, betaVersionPlugin } from "./scripts/beta-version.js";
 
 function copyResourcesPlugin() {
     return {
@@ -73,7 +73,7 @@ function pwaPlugin() {
 }
 
 export default defineConfig({
-    plugins: [copyResourcesPlugin(), pwaPlugin(), basicSsl()],
+    plugins: [betaVersionPlugin(__dirname), copyResourcesPlugin(), pwaPlugin(), basicSsl()],
     root: '.',
     publicDir: false,
     server: {
@@ -96,7 +96,7 @@ export default defineConfig({
         }
     },
     cacheDir: false,
-    // "1.6.9b-p3" in beta builds; see src/js/net/minecraft/client/BetaVersion.js.
+    // "1.7.1b-fe11d7c-p3" in beta builds; see src/js/net/minecraft/client/BetaVersion.js.
     define: betaVersionDefines(__dirname),
     // Relative asset URLs. The desktop app is packaged with electron-builder
     // and loaded with win.loadFile() (main.js), so the page origin is

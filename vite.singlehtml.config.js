@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import { viteSingleFile } from "vite-plugin-singlefile";
 import fs from "fs";
 import path from "path";
-import { betaVersionDefines } from "./scripts/beta-version.js";
+import { betaVersionDefines, betaVersionPlugin } from "./scripts/beta-version.js";
 
 function copyResourcesPlugin() {
     return {
@@ -331,6 +331,7 @@ function escapeInlineScriptPlugin() {
 
 export default defineConfig({
     plugins: [
+        betaVersionPlugin(__dirname),
         copyResourcesPlugin(),
         forceBrowserFsPlugin(),
         escapeInlineScriptPlugin(),
@@ -369,7 +370,7 @@ export default defineConfig({
     },
     define: {
         'process.env.SINGLEFILE_BUILD': 'true',
-        // Beta builds show "1.6.9b-p3" (vite.config.js applies the same).
+        // Beta builds show "1.7.1b-fe11d7c-p3" (vite.config.js applies the same).
         ...betaVersionDefines(__dirname),
     },
     optimizeDeps: {

@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 import fs from "fs";
 import path from "path";
-import { betaVersionDefines } from "./scripts/beta-version.js";
+import { betaVersionDefines, betaVersionPlugin } from "./scripts/beta-version.js";
 
 function copyResourcesPlugin() {
     return {
@@ -17,7 +17,7 @@ function copyResourcesPlugin() {
 }
 
 export default defineConfig({
-    plugins: [copyResourcesPlugin()],
+    plugins: [betaVersionPlugin(__dirname), copyResourcesPlugin()],
     server: {
         port: 8000,
         allowedHosts: ["breakmine.minetest.land", "breakmine.logicerror.dev"],

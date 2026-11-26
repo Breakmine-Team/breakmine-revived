@@ -70,8 +70,8 @@ import I18n from "./i18n/I18n.js";
 
 export default class Minecraft {
 
-    // Appends the beta prerelease ("1.6.9b-p3") on beta builds; Version.VERSION
-    // itself stays the release version the updater compares against.
+    // Beta builds already carry the prerelease in Version.VERSION ("1.7.1b-fe11d7c-p3",
+    // rewritten by Vite); on a beta host a release version gets it appended.
     static VERSION = getDisplayVersion(Version.VERSION);
     static TIMESTAMP = Version.TIMESTAMP;
     static PATCHWORK_VERSION = Version.PATCHWORK_VERSION;
