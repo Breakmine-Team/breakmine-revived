@@ -60,7 +60,6 @@ import GuiPrelaunch from "./gui/screens/GuiPrelaunch.js";
 import GuiFunctions from "./gui/screens/GuiFunctions.js";
 import ItemEntity from "./entity/ItemEntity.js";
 import PlayerEntity from "./entity/PlayerEntity.js";
-import BallEntity from "./entity/BallEntity.js";
 import RagdollEntity from "./entity/RagdollEntity.js";
 import { Version } from "../../../../resources/version.js";
 import { createErrorWindow } from './gui/WindowDraggable.js';
@@ -1893,10 +1892,6 @@ export default class Minecraft {
 
             if (button === 0) {
                 let entity = this.rayTraceEntity(5, this.timer.partialTicks);
-                if (entity instanceof BallEntity) {
-                    this.kickBall(entity, this.timer.partialTicks);
-                    return;
-                }
                 if (entity instanceof RagdollEntity) {
                     this.hitRagdoll(entity);
                     return;
@@ -1997,10 +1992,6 @@ export default class Minecraft {
 
             if (button === 1) {
                 let entity = this.rayTraceEntity(5, this.timer.partialTicks);
-                if (entity instanceof BallEntity) {
-                    this.kickBall(entity, this.timer.partialTicks);
-                    return;
-                }
                 if (entity instanceof RagdollEntity) {
                     if (entity.remote) {
                         entity.claim();
@@ -2339,13 +2330,6 @@ export default class Minecraft {
         context.imageSmoothingEnabled = false;
         context.drawImage(image, 0, 0, image.width, image.height);
         return new THREE.CanvasTexture(canvas);
-    }
-
-    kickBall(ball, partialTicks) {
-        // Kick where the player is looking, so aiming at the ball works.
-        let look = this.player.getLook(partialTicks);
-        ball.kick(look.x, look.z);
-        this.player.swingArm();
     }
 
     kickRagdoll(ragdoll, partialTicks) {

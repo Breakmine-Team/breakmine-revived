@@ -131,7 +131,7 @@ export default class FirstPersonItemRenderer {
 
         const light = Math.max(0, Math.min(1, Number(brightness) || 0));
         // Sprites are drawn white, so the held item also needs the block's own
-        // tint (the ball's concrete colour), the same one the item icons use.
+        // tint, the same one the item icons use.
         const tint = block ? block.getColor(null, 0, 0, 0, EnumBlockFace.NORTH) : 0xffffff;
         const tintRed = ((tint >> 16 & 255) / 255) * light;
         const tintGreen = ((tint >> 8 & 255) / 255) * light;
