@@ -1072,9 +1072,15 @@ export default class OffGridBlockField {
                     continue;
                 }
 
-                const centerX = entry.cell.x + 0.5 - rx;
-                const centerY = entry.cell.y + 0.5 - ry;
-                const centerZ = entry.cell.z + 0.5 - rz;
+                // The region group sits at the field origin and the static mesh
+                // adds its region origin back through its own position, so the
+                // rotating mesh has to be placed in that same field space: the
+                // block centre is absolute, not relative to the region. Using
+                // the region-relative centre here shifted every spinning part a
+                // whole region away (16 blocks in Y for most contraptions).
+                const centerX = entry.cell.x + 0.5;
+                const centerY = entry.cell.y + 0.5;
+                const centerZ = entry.cell.z + 0.5;
 
                 for (let i = 0; i < meshes.length; i++) {
                     const mesh = meshes[i];
