@@ -7,6 +7,7 @@ import InventoryBasic from "../inventory/inventory/InventoryBasic.js";
 import IsomorphicWebSocket from "../../util/IsomorphicWebSocket.js";
 import CreeperEntity from "../entity/CreeperEntity.js";
 import RagdollEntity from "../entity/RagdollEntity.js";
+import ContraptionEntity from "../entity/ContraptionEntity.js";
 import JsonMultiplayer from "./JsonMultiplayer.js";
 
 export default class NetworkManager {
@@ -384,6 +385,8 @@ export default class NetworkManager {
             } else if (payload.type === 'ragdoll:state' || payload.type === 'ragdoll:remove'
                 || payload.type === 'ragdoll:owner') {
                 this._handleRagdollMessage(payload);
+            } else if (payload.type === 'contraption:state' || payload.type === 'contraption:remove') {
+                this._handleContraptionMessage(payload);
             } else if (payload.type === 'spawnEntity' && this.minecraft?.world) {
                 const world = this.minecraft.world;
                 const entityType = payload.entityType;
@@ -479,6 +482,62 @@ export default class NetworkManager {
         }
 
         ragdoll.applyRemoteState(payload);
+    }
+
+    // Contraptions are simulated by one client, which reports their cells and
+    // pose. Everything else replays that report, so every client sees the same
+    // body and a saved world brings it back.
+    _handleContraptionMessage(payload) {
+        const world = this.minecraft?.world;
+        if (!world || !Array.isArray(world.entities)) {
+            return;
+        }
+
+        const syncId = typeof payload.id === 'string' ? payload.id : '';
+        if (syncId.length === 0 || syncId.length > 64) {
+            return;
+        }
+
+        let existing = null;
+        for (const entity of world.entities) {
+            if (entity instanceof ContraptionEntity && entity.syncId === syncId) {
+                existing = entity;
+                break;
+            }
+        }
+
+        if (payload.type === 'contraption:remove') {
+            if (existing !== null) {
+                world.removeEntityById(existing.id);
+            }
+            return;
+        }
+
+        // The client that simulates the body gets its own report echoed back;
+        // its local copy is the authority.
+        if (existing !== null && !existing.remote) {
+            return;
+        }
+
+        if (existing !== null && existing.hasSameCells(payload.cells)) {
+            existing.applyRemoteState(payload);
+            return;
+        }
+
+        // A body that came back from a world save is simulated here from now on;
+        // a live one from another player is only replayed.
+        const contraption = ContraptionEntity.fromNetworkState(
+            this.minecraft, world, payload, payload.restored !== true
+        );
+        if (contraption === null) {
+            return;
+        }
+
+        if (existing !== null) {
+            world.removeEntityById(existing.id);
+        }
+
+        world.addEntity(contraption);
     }
 
     _applyPlayerState(player, state) {

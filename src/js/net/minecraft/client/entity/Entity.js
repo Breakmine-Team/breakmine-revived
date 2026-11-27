@@ -302,6 +302,26 @@ export default class Entity {
                 for (let aABB of collisionBoxes) {
                     targetY = aABB.clipYCollide(movingBox, targetY);
                 }
+
+                // The box was raised by the whole step height instead of the
+                // height of the step itself. Drop it back down onto the surface
+                // it stepped onto, otherwise the entity is left floating and
+                // gravity pulls it down again on the following ticks, which
+                // made walking up slopes (and other small steps) look like a
+                // bounce.
+                let stepDown = -this.stepHeight;
+                for (let aABB of this.world.getCollisionBoxes(
+                    movingBox.expand(0.0, -this.stepHeight, 0.0),
+                    includeOffGrid,
+                    { downward: true }
+                )) {
+                    stepDown = aABB.clipYCollide(movingBox, stepDown);
+                }
+
+                if (stepDown < 0.0) {
+                    movingBox.move(0.0, stepDown, 0.0);
+                    targetY += stepDown;
+                }
             }
             else {
                 movingBox.move(0.0, -0.5, 0.0);

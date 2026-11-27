@@ -5,7 +5,7 @@ import ModelBase from "../ModelBase.js";
 export default class ModelPlayer extends ModelBase {
 
     
-    constructor() {
+    constructor(slim = false) {
         super();
 
         this.swingProgress = 0;
@@ -16,6 +16,8 @@ export default class ModelPlayer extends ModelBase {
         let height = 32;
 
 
+        this.slim = null;
+
         this.head = new ModelRenderer("head", width, height)
             .setTextureOffset(0, 0)
             .addBox(-4.0, -8.0, -4.0, 8, 8, 8);
@@ -25,14 +27,12 @@ export default class ModelPlayer extends ModelBase {
             .addBox(-4.0, 0.0, -2.0, 8, 12, 4);
 
         this.leftArm = new ModelRenderer("left_arm", width, height)
-            .setTextureOffset(40, 16)
-            .setRotationPoint(-5.0, 2.0, 0.0)
-            .addBox(-1.0, -2.0, -2.0, 4, 12, 4, 0, true);
+            .setRotationPoint(-5.0, 2.0, 0.0);
 
         this.rightArm = new ModelRenderer("right_arm", width, height)
-            .setTextureOffset(40, 16)
-            .setRotationPoint(-3.0, 2.0, -2.0)
-            .addBox(-3.0, -2.0, -2.0, 4, 12, 4);
+            .setRotationPoint(-3.0, 2.0, -2.0);
+
+        this.setSlim(slim);
 
         this.rightLeg = new ModelRenderer("right_leg", width, height)
             .setTextureOffset(0, 16)
@@ -43,6 +43,30 @@ export default class ModelPlayer extends ModelBase {
             .setTextureOffset(0, 16)
             .setRotationPoint(2.0, 12.0, 0.0)
             .addBox(-2.0, 0.0, -2.0, 4, 12, 4, 0, true);
+    }
+
+    
+    setSlim(slim) {
+        slim = Boolean(slim);
+        if (slim === this.slim) return this;
+        this.slim = slim;
+
+        // Slim skins store three pixel wide arms, so each box loses one column on
+        // the side facing away from the shoulder: the arms stay attached to the
+        // body and only their outer silhouette gets thinner.
+        const armWidth = slim ? 3 : 4;
+
+        this.leftArm.cubes = [];
+        this.leftArm
+            .setTextureOffset(40, 16)
+            .addBox(-1.0, -2.0, -2.0, armWidth, 12, 4, 0, true);
+
+        this.rightArm.cubes = [];
+        this.rightArm
+            .setTextureOffset(40, 16)
+            .addBox(1.0 - armWidth, -2.0, -2.0, armWidth, 12, 4);
+
+        return this;
     }
 
     rebuild(tessellator, group) {

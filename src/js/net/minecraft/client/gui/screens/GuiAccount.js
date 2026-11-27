@@ -46,6 +46,7 @@ export default class GuiAccount extends GuiScreen {
         this.playerPreview = null;
         this.animationButtons = [];
         this.uploadSkinButton = null;
+        this.slimSkinButton = null;
 
         this.friends = [];
         this.friendSlotContainer = null;
@@ -134,7 +135,12 @@ export default class GuiAccount extends GuiScreen {
         });
         this.buttonList.push(this.uploadSkinButton);
 
-        this.capesButton = new GuiButton(this.minecraft, "Capes", layout.rightX + size + gap, layout.controlsY, 44, size, () => {
+        this.slimSkinButton = new GuiButton(this.minecraft, "N", layout.rightX + size + gap, layout.controlsY, size, size, () => {
+            this.toggleSlimSkin();
+        });
+        this.buttonList.push(this.slimSkinButton);
+
+        this.capesButton = new GuiButton(this.minecraft, "Capes", layout.rightX + (size + gap) * 2, layout.controlsY, 44, size, () => {
             this.minecraft.displayScreen(new GuiCapesScreen(this.minecraft, this));
         }).setTooltip("Change your cape");
         this.buttonList.push(this.capesButton);
@@ -240,6 +246,15 @@ export default class GuiAccount extends GuiScreen {
         this.uploadSkinButton.enabled = loggedIn;
         this.uploadSkinButton.setTooltip(loggedIn ? "Upload skin" : "Sign in to upload a skin");
 
+        if (this.slimSkinButton) {
+            const slim = Boolean(this.minecraft?.settings?.slimSkin);
+            this.slimSkinButton.string = slim ? "S" : "N";
+            this.slimSkinButton.enabled = loggedIn;
+            this.slimSkinButton.setTooltip(loggedIn
+                ? (slim ? "Slim model" : "Normal model")
+                : "Sign in to use a slim skin");
+        }
+
         if (this.capesButton) {
             this.capesButton.enabled = loggedIn;
             this.capesButton.setTooltip(loggedIn ? "Change your cape" : "Sign in to use capes");
@@ -261,6 +276,18 @@ export default class GuiAccount extends GuiScreen {
     selectAnimationMode(mode) {
         this.animationMode = mode;
         this.updateAnimationButtons();
+    }
+
+    toggleSlimSkin() {
+        const settings = this.minecraft.settings;
+        settings.slimSkin = !settings.slimSkin;
+        settings.save();
+
+        if (this.playerPreview) {
+            this.playerPreview.setSlim(settings.isSlimSkin());
+        }
+
+        this.updateUploadButton();
     }
 
     getCurrentUsername() {

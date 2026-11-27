@@ -644,7 +644,16 @@ export default class World {
         }
 
         if (includeOffGrid) {
+            // A body asking for the world can leave out the field it owns, so it
+            // does not collide with its own cells.
+            const ignoreField = context !== null && context !== undefined
+                ? context.ignoreOffGridField
+                : undefined;
+
             for (const field of this.getOffGridFields()) {
+                if (field === ignoreField) {
+                    continue;
+                }
                 if (field.cells.size > 0) {
                     field.addCollisionBoxes(region, boundingBoxList);
                 }
@@ -1223,6 +1232,11 @@ export default class World {
 
     getOffGridFieldAt(x, y, z) {
         for (const field of this.getOffGridFields()) {
+            // A posed field has left the world grid, so its cells must not claim
+            // the block positions they were captured from. getBlockAt and the
+            // ray tracer skip posed fields for the same reason; otherwise a block
+            // change for where a contraption used to be would be swallowed by it.
+            if (field.isPosed()) continue;
             if (field.covers(x, y, z)) {
                 return field;
             }
@@ -1833,6 +1847,9 @@ export default class World {
             let index = this.entities.indexOf(entity);
             if (index !== -1) {
                 this.entities.splice(index, 1);
+            }
+            if (typeof entity.onEntityRemoved === "function") {
+                entity.onEntityRemoved();
             }
             if (entity.renderer && entity.renderer.group) {
                 this.group.remove(entity.renderer.group);

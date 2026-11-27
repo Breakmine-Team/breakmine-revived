@@ -26,6 +26,7 @@ export default class PlayerRenderer extends EntityRenderer {
 
         this.skinTextures = new Map();
         this.pendingSkinLoads = new Map();
+        this.slimSkins = new Map();
         this.lastEntity = null;
 
         this.capeMesh = null;
@@ -59,12 +60,52 @@ export default class PlayerRenderer extends EntityRenderer {
             if (renderer.pendingSkinLoads) {
                 renderer.pendingSkinLoads.delete(username);
             }
+            if (renderer.slimSkins) {
+                renderer.slimSkins.delete(username);
+            }
             if (renderer.lastEntity) {
                 renderer.rebuild(renderer.lastEntity);
             } else {
                 renderer.group.buildMeta = undefined;
             }
         }
+    }
+
+    // A slim skin keeps the classic layout but paints the arms three pixels
+    // wide, which leaves the fourth column of the arm texture transparent.
+    static isSlimSkinImage(image) {
+        if (!image || !image.width || !image.height) return false;
+
+        const scale = image.width / 64;
+        if (scale < 1 || !Number.isInteger(scale)) return false;
+
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = image.width;
+            canvas.height = image.height;
+
+            const context = canvas.getContext('2d', { willReadFrequently: true });
+            context.drawImage(image, 0, 0);
+
+            const column = context.getImageData(47 * scale, 16 * scale, scale, 16 * scale).data;
+            for (let i = 3; i < column.length; i += 4) {
+                if (column[i] !== 0) return false;
+            }
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    getSlimSkinState(entity) {
+        // Your own arms follow the account screen choice; other players are
+        // recognised from the skin that was loaded for them.
+        if (entity === this.worldRenderer.minecraft.player) {
+            return this.worldRenderer.minecraft.settings.isSlimSkin();
+        }
+
+        const username = entity && entity.username ? entity.username : null;
+        return username ? this.slimSkins.get(username) === true : false;
     }
 
     getTextureForEntity(entity) {
@@ -103,6 +144,7 @@ export default class PlayerRenderer extends EntityRenderer {
                 texture.generateMipmaps = false;
 
                 this.skinTextures.set(username, texture);
+                this.slimSkins.set(username, PlayerRenderer.isSlimSkinImage(image));
                 this.pendingSkinLoads.delete(username);
 
                 this.group.buildMeta = undefined;
@@ -116,11 +158,13 @@ export default class PlayerRenderer extends EntityRenderer {
                 }
 
                 this.pendingSkinLoads.delete(username);
+                this.slimSkins.delete(username);
                 this.skinTextures.set(username, this.defaultTexture);
             };
             image.src = await AuthLib.getSkinImageUrl(username);
         } catch (error) {
             this.pendingSkinLoads.delete(username);
+            this.slimSkins.delete(username);
             this.skinTextures.set(username, this.defaultTexture);
             console.warn(`Failed to load skin for ${username}:`, error);
         }
@@ -131,6 +175,8 @@ export default class PlayerRenderer extends EntityRenderer {
     rebuild(entity) {
         this.heldItemMesh = null;
         this.heldItemTextureName = null;
+
+        this.model.setSlim(this.getSlimSkinState(entity));
 
         let isSelf = entity === this.worldRenderer.minecraft.player;
         let firstPerson = this.worldRenderer.minecraft.settings.thirdPersonView === 0;
@@ -378,6 +424,7 @@ export default class PlayerRenderer extends EntityRenderer {
         let firstPerson = this.worldRenderer.minecraft.settings.thirdPersonView === 0;
 
         meta.firstPerson = firstPerson;
+        meta.slim = this.getSlimSkinState(entity);
         meta.itemInHand = firstPerson ? this.worldRenderer.itemToRender : entity.inventory.getItemInSelectedSlot();
 
         const capeService = this.worldRenderer.minecraft.modLoader?.getService('cape_plus');

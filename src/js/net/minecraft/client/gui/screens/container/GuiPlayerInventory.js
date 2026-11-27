@@ -54,6 +54,7 @@ export default class GuiPlayerInventory extends GuiContainerSurvival {
                 const t = new Tessellator();
                 t.setColor(1, 1, 1);
                 t.bindTexture(tex);
+                this.model.setSlim(this.minecraft.settings.isSlimSkin());
                 this.model.rebuild(t, this.modelGroup);
                 this.modelGroup.traverse(child => {
                     if (child.isMesh) {

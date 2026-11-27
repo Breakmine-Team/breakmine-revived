@@ -59,6 +59,11 @@ export default class OffGridBlockField {
 
         this._suppressCellSync = false;
 
+        // A field whose cells are simulated by an entity owns them; block changes
+        // for the positions they were taken from are stale copies of its own
+        // removal and must not delete the cells.
+        this.acceptsRemoteWrites = true;
+
         this.isolateNeighbors = false;
 
         this.onCellEdit = null;
@@ -220,6 +225,10 @@ export default class OffGridBlockField {
 
     
     applyRemoteWrite(x, y, z, typeId, data = 0) {
+        if (this.acceptsRemoteWrites === false) {
+            return false;
+        }
+
         const changed = this.applyWrite(x, y, z, typeId, data, true);
         if (changed) this.initializeBlockState(Math.floor(x), Math.floor(y), Math.floor(z));
         return changed;

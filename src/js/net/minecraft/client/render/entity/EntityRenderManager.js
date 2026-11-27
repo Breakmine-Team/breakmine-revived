@@ -7,6 +7,8 @@ import CreeperEntity from "../../entity/CreeperEntity.js";
 import CreeperRenderer from "./entity/CreeperRenderer.js";
 import RagdollEntity from "../../entity/RagdollEntity.js";
 import RagdollRenderer from "./entity/RagdollRenderer.js";
+import ContraptionEntity from "../../entity/ContraptionEntity.js";
+import ContraptionRenderer from "./entity/ContraptionRenderer.js";
 
 export default class EntityRenderManager {
 
@@ -19,6 +21,7 @@ export default class EntityRenderManager {
         this.push(ItemEntity, ItemRenderer);
         this.push(CreeperEntity, CreeperRenderer);
         this.push(RagdollEntity, RagdollRenderer);
+        this.push(ContraptionEntity, ContraptionRenderer);
     }
 
     // Renderers are matched on the class itself, never on constructor.name:

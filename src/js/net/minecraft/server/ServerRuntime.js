@@ -12,6 +12,7 @@ import Logger from './logger.js';
 import { BlockRegistry } from '../client/world/block/BlockRegistry.js';
 import { handleModMessage, loadServerSideMods } from './ServerModLoader.js';
 import { getRagdoll, listRagdolls, removeRagdoll, setRagdollOwner, storeRagdoll } from './ragdolls.js';
+import { listContraptions, removeContraption, storeContraption } from './contraptions.js';
 import { handleStructurePaste } from './structurePaste.js';
 import getServerWorld from './World.js';
 import config from './config.js';
@@ -117,6 +118,44 @@ function removeRagdollsFor(player) {
         setRagdollOwner(state.id, nextOwner);
         broadcastRagdoll({type: 'ragdoll:owner', id: state.id, owner: nextOwner});
     }
+}
+
+// Contraptions work like ragdolls: a client simulates the body and reports its
+// cells and pose, and the server keeps the latest report so it can be written
+// with the world and handed to players who join later.
+function sendContraptions(target) {
+    if (!target?.ws || target.ws.readyState !== 1) return;
+
+    for (const state of listContraptions()) {
+        target.ws.send(JSON.stringify(state));
+    }
+}
+
+function relayContraptions(player, state) {
+    const message = JSON.stringify(state);
+    for (const peer of getPlayers().values()) {
+        if (peer.eid === player.eid) continue;
+        if (peer.ws.readyState === 1) peer.ws.send(message);
+    }
+}
+
+function handleContraptionMessage(player, payload) {
+    if (!player || player.eid == null) return;
+
+    const id = typeof payload.id === 'string' ? payload.id.slice(0, 64) : '';
+    if (id.length === 0) return;
+
+    if (payload.type === 'contraption:remove') {
+        if (removeContraption(id)) {
+            relayContraptions(player, {type: 'contraption:remove', id: id});
+        }
+        return;
+    }
+
+    const state = storeContraption(id, payload);
+    if (state === null) return;
+
+    relayContraptions(player, state);
 }
 
 function isValidCapeDataUrl(value) {
@@ -369,6 +408,12 @@ export function onConnection(ws, req) {
                 handleRagdollClaim(player, payload);
             } else if (payload && payload.type === 'ragdoll:request') {
                 sendRagdolls(player);
+            } else if (payload && payload.type === 'contraption:state') {
+                handleContraptionMessage(player, payload);
+            } else if (payload && payload.type === 'contraption:remove') {
+                handleContraptionMessage(player, payload);
+            } else if (payload && payload.type === 'contraption:request') {
+                sendContraptions(player);
             } else if (payload && payload.type === 'cctv:request' && player) {
                 sendCctvState(player);
             } else if (payload && payload.type === 'cctv:pair' && player) {

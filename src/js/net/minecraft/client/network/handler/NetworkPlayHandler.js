@@ -40,11 +40,13 @@ export default class NetworkPlayHandler extends PacketHandler {
 
         this.networkManager.sendPacket(new ClientOffGridRequestPacket());
 
-        // The server keeps ragdoll poses and hands them out on request, so ask
-        // once the world exists and this client can build the bodies.
+        // The server keeps ragdoll and contraption poses and hands them out on
+        // request, so ask once the world exists and this client can build the
+        // bodies.
         Promise.resolve(this.minecraft.worldLoadPromise).then(() => {
             if (this.networkManager.isConnected()) {
                 this.networkManager.sendJson({type: 'ragdoll:request'});
+                this.networkManager.sendJson({type: 'contraption:request'});
             }
         });
 
@@ -417,6 +419,9 @@ export default class NetworkPlayHandler extends PacketHandler {
             ? world.getOffGridFieldAt(position.getX(), position.getY(), position.getZ())
             : null;
         if (field) {
+            // The field keeps the position either way: it is the owner of that
+            // cell. Fields that simulate their own cells (contraptions) ignore
+            // the server's stale copy instead of losing the cell.
             field.applyRemoteWrite(position.getX(), position.getY(), position.getZ(), typeId, blockData);
             return;
         }

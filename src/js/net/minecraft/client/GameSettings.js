@@ -88,6 +88,9 @@ export default class GameSettings {
 
         this.loggedIn = false;
 
+        // Normal (4 pixel wide) player arms unless the slim model is picked.
+        this.slimSkin = false;
+
         this.selectedTexturePack = null;
     }
 
@@ -103,6 +106,12 @@ export default class GameSettings {
         const value = Number(this.shadowResolution);
         if (!Number.isFinite(value) || value <= 0) return 2048;
         return Math.min(4096, Math.max(256, Math.round(value)));
+    }
+
+    // Slim arms only line up with a slim skin; the bundled Steve texture is
+    // classic, so the choice is ignored while signed out.
+    isSlimSkin() {
+        return Boolean(this.loggedIn && this.slimSkin);
     }
 
     getWaterReflectivity() {

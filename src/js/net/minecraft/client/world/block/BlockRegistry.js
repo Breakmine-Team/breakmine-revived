@@ -33,6 +33,7 @@ import BlockGlowstone from "./type/BlockGlowstone.js";
 import BlockClock from "./type/BlockClock.js";
 import BlockMountableClock from "./type/BlockMountableClock.js";
 import BlockRagdoll from "./type/BlockRagdoll.js";
+import BlockAssembler from "./type/BlockAssembler.js";
 import BlockChest from "./type/BlockChest.js";
 import BlockMissing from "./type/BlockMissing.js";
 import BlockBrick from "./type/BlockBrick.js";
@@ -814,6 +815,8 @@ export class BlockRegistry {
         BlockRegistry.ITEM_CCTV_VIEWER = new ItemCctvViewer(407, 'spyglass', 'CCTV Viewer');
         BlockRegistry.ITEM_COMPASS = new ItemCompass(499);
         BlockRegistry.PUSH_BLOCK = new BlockPushBlock(422, 0);
+
+        BlockRegistry.ASSEMBLER = new BlockAssembler(523, 0);
 
         for (const [key, val] of Object.entries(BlockRegistry)) {
             if (val && typeof val === "object" && val.id !== undefined) {
