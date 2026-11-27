@@ -27,6 +27,21 @@ export default class OffGridBlockField {
     
     static COLLISION_BOX_CAP = 1200;
 
+    // Rotating blocks are animated on the same clock the chunk sections use,
+    // so a shaft inside a contraption turns at the same speed as one in the
+    // world instead of stepping with the server tick.
+    static animationTick() {
+        const now = typeof performance !== "undefined" && performance.now
+            ? performance.now()
+            : Date.now();
+        return Math.floor(now / 50);
+    }
+
+    static interpolateAngle(from, to, blend) {
+        const delta = ((to - from) % 360 + 540) % 360 - 180;
+        return from + delta * blend;
+    }
+
     constructor(minecraft) {
         this.minecraft = minecraft;
         this.world = null;
@@ -927,14 +942,15 @@ export default class OffGridBlockField {
         this.attachToScene();
 
         if (region) {
-            for (const mesh of region.meshes) {
+            for (const mesh of [...region.meshes, ...(region.rotatingMeshes || [])]) {
                 region.group.remove(mesh);
                 mesh.geometry.dispose();
                 mesh.material.dispose();
             }
             region.meshes = [];
+            region.rotatingMeshes = [];
         } else {
-            region = { group: new THREE.Object3D(), meshes: [] };
+            region = { group: new THREE.Object3D(), meshes: [], rotatingMeshes: [] };
             this.regions.set(regionKey, region);
             this.group.add(region.group);
         }
@@ -943,6 +959,7 @@ export default class OffGridBlockField {
         const tessellator = blockRenderer.tessellator;
         const ambientOcclusion = !!world.minecraft.settings.ambientOcclusion;
         const localWorld = this.createLocalWorld() || world;
+        const animationTick = OffGridBlockField.animationTick();
 
         let cameraLocal = null;
         const player = world.minecraft.player;
@@ -962,9 +979,31 @@ export default class OffGridBlockField {
             blockRenderer.beginModelPass();
 
             const blocksToRender = [];
+            const rotatingBlocks = [];
             for (const cell of cellsInRegion) {
                 const block = Block.getById(cell.typeId) || BlockRegistry.get(cell.typeId);
                 if (!block || block.isTranslucent() !== translucentPass) continue;
+
+                // Shafts, gears, motors and bearing heads spin on their own, so
+                // baking them into the region mesh would freeze them. They get
+                // their own mesh and are turned every frame, the same way a
+                // chunk section animates its rotating blocks.
+                const rotation = blockRenderer.getBlockRotation(
+                    localWorld, block, cell.x, cell.y, cell.z, animationTick
+                );
+
+                if (rotation !== null) {
+                    rotatingBlocks.push({
+                        cell,
+                        block,
+                        staticParts: blockRenderer.getStaticParts(block, localWorld,
+                            cell.x, cell.y, cell.z),
+                        groups: blockRenderer.getRotatingGroups(block, localWorld,
+                            cell.x, cell.y, cell.z)
+                    });
+                    continue;
+                }
+
                 blocksToRender.push({ cell, block });
             }
 
@@ -980,6 +1019,16 @@ export default class OffGridBlockField {
                     const distBSq = bx * bx + by * by + bz * bz;
                     return distBSq - distASq;
                 });
+            }
+
+            // The casing of a rotating block stays put; only the moving parts
+            // are turned.
+            for (const entry of rotatingBlocks) {
+                if (entry.staticParts !== null) {
+                    blockRenderer.renderParts(localWorld, entry.staticParts,
+                        entry.cell.x, entry.cell.y, entry.cell.z,
+                        false, true, entry.block, ambientOcclusion);
+                }
             }
 
             for (const blockData of blocksToRender) {
@@ -1001,14 +1050,117 @@ export default class OffGridBlockField {
                 modelMesh.position.set(rx, ry, rz);
                 region.meshes.push(modelMesh);
             }
+
+            for (const entry of rotatingBlocks) {
+                const groups = entry.groups;
+                const partGroups = groups !== null ? groups.map((group) => group.parts) : [null];
+
+                const meshes = [];
+                for (const parts of partGroups) {
+                    const mesh = blockRenderer.buildRotatingMesh(
+                        localWorld, entry.block, ambientOcclusion,
+                        entry.cell.x, entry.cell.y, entry.cell.z, translucentPass, parts
+                    );
+                    if (mesh === null) {
+                        meshes.length = 0;
+                        break;
+                    }
+                    meshes.push(mesh);
+                }
+
+                if (meshes.length === 0) {
+                    continue;
+                }
+
+                const centerX = entry.cell.x + 0.5 - rx;
+                const centerY = entry.cell.y + 0.5 - ry;
+                const centerZ = entry.cell.z + 0.5 - rz;
+
+                for (let i = 0; i < meshes.length; i++) {
+                    const mesh = meshes[i];
+
+                    mesh.geometry.translate(-centerX, -centerY, -centerZ);
+                    mesh.geometry.computeBoundingSphere();
+                    mesh.position.set(centerX, centerY, centerZ);
+                    mesh.userData.rotatingBlock = {
+                        block: entry.block,
+                        world: localWorld,
+                        x: entry.cell.x,
+                        y: entry.cell.y,
+                        z: entry.cell.z,
+                        group: groups !== null ? i : -1,
+                        previous: null,
+                        current: null,
+                        tick: -1
+                    };
+
+                    if (translucentPass) {
+                        mesh.userData.isTranslucent = true;
+                        mesh.visible = false;
+                    }
+
+                    region.group.add(mesh);
+                    region.rotatingMeshes.push(mesh);
+                }
+            }
         }
 
-        if (region.meshes.length === 0) {
+        if (region.meshes.length === 0 && region.rotatingMeshes.length === 0) {
             this.disposeRegion(region);
             this.regions.delete(regionKey);
         }
 
         this.group.updateMatrixWorld(true);
+    }
+
+    // Turns the meshes made for rotating blocks. WorldRenderer runs this every
+    // frame before drawing the scene, exactly like
+    // ChunkSection.updateRotatingBlocks does for the world's own blocks.
+    updateRotatingBlocks(renderer, partialTicks) {
+        if (this.regions.size === 0) {
+            return;
+        }
+
+        const blockRenderer = renderer && renderer.blockRenderer ? renderer.blockRenderer : renderer;
+        if (!blockRenderer) {
+            return;
+        }
+
+        const tick = OffGridBlockField.animationTick();
+        const blend = Number.isFinite(partialTicks)
+            ? Math.max(0, Math.min(1, partialTicks))
+            : 1;
+        const radians = Math.PI / 180;
+
+        for (const region of this.regions.values()) {
+            for (const mesh of region.rotatingMeshes || []) {
+                const info = mesh.userData.rotatingBlock;
+                if (!info) continue;
+
+                const rotation = info.group >= 0
+                    ? blockRenderer.getGroupRotation(
+                        info.block, info.group, info.world, info.x, info.y, info.z, tick)
+                    : blockRenderer.getBlockRotation(
+                        info.world, info.block, info.x, info.y, info.z, tick);
+
+                if (rotation === null) {
+                    mesh.rotation.set(0, 0, 0);
+                    continue;
+                }
+
+                if (info.current === null || info.tick !== tick) {
+                    info.previous = info.current === null ? rotation : info.current;
+                    info.current = rotation;
+                    info.tick = tick;
+                }
+
+                mesh.rotation.set(
+                    OffGridBlockField.interpolateAngle(info.previous.x, info.current.x, blend) * radians,
+                    OffGridBlockField.interpolateAngle(info.previous.y, info.current.y, blend) * radians,
+                    OffGridBlockField.interpolateAngle(info.previous.z, info.current.z, blend) * radians
+                );
+            }
+        }
     }
 
 
@@ -1665,12 +1817,13 @@ export default class OffGridBlockField {
     }
 
     disposeRegion(region) {
-        for (const mesh of region.meshes) {
+        for (const mesh of [...region.meshes, ...(region.rotatingMeshes || [])]) {
             region.group.remove(mesh);
             mesh.geometry.dispose();
             mesh.material.dispose();
         }
         region.meshes = [];
+        region.rotatingMeshes = [];
         if (region.group.parent) {
             region.group.parent.remove(region.group);
         }

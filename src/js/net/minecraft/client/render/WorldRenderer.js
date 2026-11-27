@@ -926,6 +926,13 @@ export default class WorldRenderer {
             if (field && typeof field.interpolateRotation === "function") {
                 field.interpolateRotation(partialTicks);
             }
+
+            // Shafts, gears and motor rods inside a field are drawn from their
+            // own meshes, so they have to be turned once per frame just like
+            // the rotating blocks of a chunk section.
+            if (field && typeof field.updateRotatingBlocks === "function") {
+                field.updateRotatingBlocks(this.blockRenderer, partialTicks);
+            }
         }
 
         return [...fields];
