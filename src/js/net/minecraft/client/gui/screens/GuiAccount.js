@@ -11,6 +11,7 @@ import * as AuthLib from "../../network/AuthLib.js";
 import PlayerRenderer from "../../render/entity/entity/PlayerRenderer.js";
 import { ICON_UPLOAD } from "../../render/gui/FontIcons.js";
 import GuiAlert from "./GuiAlert.js";
+import { IS_BETA_CHANNEL } from "../../BetaVersion.js";
 
 const ANIMATION_MODES = [
     { key: "normal", label: "N", tooltip: "No animation" },
@@ -384,7 +385,7 @@ export default class GuiAccount extends GuiScreen {
         const centerX = layout.leftX + layout.leftWidth / 2;
 
         this.drawCenteredString(stack, "Sign In", centerX, form.top, 0xFFFFFFFF);
-        this.drawCenteredString(stack, "Use your Breakmine account.", centerX, form.top + 18, 0xFF9A9A9A);
+        this.drawCenteredString(stack, this.minecraft.settings.apiUrl === "apibeta.breakmine.com" ? "Use your Breakmine beta-testing account." : "Use your Breakmine account.", centerX, form.top + 18, 0xFF9A9A9A);
 
         this.drawString(stack, "Username", form.x, form.usernameLabelY, 0xFFAAAAAA);
         this.drawString(stack, "Password", form.x, form.passwordLabelY, 0xFFAAAAAA);

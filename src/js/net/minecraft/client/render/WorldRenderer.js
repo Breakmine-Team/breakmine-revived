@@ -595,6 +595,10 @@ export default class WorldRenderer {
             for (let y in chunk.sections) {
                 let section = chunk.sections[y];
                 if (!section.group.visible || section.isEmpty()) continue;
+
+                // Sections kept visible only so they keep casting shadows are
+                // off-screen; batching them would just draw hidden geometry.
+                if (this.shadowsEnabled && !this.frustum.intersectsBox(section.boundingBox)) continue;
                 
                 for (let child of section.group.children) {
                     if (child.isMesh && child.userData.isTranslucent) {
@@ -1339,6 +1343,13 @@ export default class WorldRenderer {
         let player = this.minecraft.player;
         let cameraChunkY = Math.floor(player.y) >> 4;
 
+        // With shadows enabled a section can sit outside the camera frustum and
+        // still be needed, because the sun's shadow camera covers a wider area
+        // and culled sections would stop casting shadows into the view. Keep
+        // them visible in that case and let three cull each mesh per pass: the
+        // main camera drops them, the shadow camera keeps what it can see.
+        const frustumCull = !this.shadowsEnabled;
+
         for (let [index, chunk] of world.getChunkProvider().getChunks()) {
             let distanceX = Math.abs(cameraChunkX - chunk.x);
             let distanceZ = Math.abs(cameraChunkZ - chunk.z);
@@ -1350,7 +1361,7 @@ export default class WorldRenderer {
                 for (let y in chunk.sections) {
                     let chunkSection = chunk.sections[y];
 
-                    if (this.frustum.intersectsBox(chunkSection.boundingBox) && !chunkSection.isEmpty()) {
+                    if ((!frustumCull || this.frustum.intersectsBox(chunkSection.boundingBox)) && !chunkSection.isEmpty()) {
                         chunkSection.group.visible = true;
 
                         if (!chunkSection.group.userData.shadowsInit) {
@@ -1393,6 +1404,10 @@ export default class WorldRenderer {
             for (let y in chunk.sections) {
                 let section = chunk.sections[y];
                 if (!section.group.visible || section.isEmpty()) continue;
+
+                // Sections kept visible only so they keep casting shadows are
+                // off-screen for the camera, so they need no sorting here.
+                if (this.shadowsEnabled && !this.frustum.intersectsBox(section.boundingBox)) continue;
                 
                 for (let child of section.group.children) {
                     if (child.isMesh && child.userData.isTranslucent) {
