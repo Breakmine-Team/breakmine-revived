@@ -155,6 +155,13 @@ function loadConfig(serverName = 'main') {
     }
 
     config.worldType = normalizeWorldType(config.worldType);
+
+    // The multiserver supervisor pins each child to the port it worked out for
+    // it, so this wins over whatever the server's own config file says.
+    if (requestedPort !== null) {
+        config.port = requestedPort;
+    }
+
     return applyEnvOverrides(config);
 }
 
@@ -173,7 +180,21 @@ function getRequestedServer() {
     return null;
 }
 
+// node server.js --server second --port 6009
+function getRequestedPort() {
+    if (typeof process === 'undefined' || !Array.isArray(process.argv)) {
+        return null;
+    }
+    const idx = process.argv.indexOf('--port');
+    if (idx === -1) {
+        return null;
+    }
+    const port = parseInt(process.argv[idx + 1], 10);
+    return Number.isInteger(port) && port > 0 && port < 65536 ? port : null;
+}
+
 const requestedServer = getRequestedServer();
+const requestedPort = getRequestedPort();
 
 
 
@@ -230,8 +251,12 @@ function listServers() {
 
 config.reload = reloadConfig;
 config.requestedServer = requestedServer;
+config.requestedPort = requestedPort;
 config.listServers = listServers;
 config.getServerDir = getServerDir;
+// Used by the multiserver supervisor to read every server's port without
+// touching the config this process is running on.
+config.loadConfig = loadConfig;
 
 
 let cachedIcon = null;
