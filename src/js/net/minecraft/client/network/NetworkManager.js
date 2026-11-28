@@ -9,6 +9,7 @@ import CreeperEntity from "../entity/CreeperEntity.js";
 import RagdollEntity from "../entity/RagdollEntity.js";
 import ContraptionEntity from "../entity/ContraptionEntity.js";
 import JsonMultiplayer from "./JsonMultiplayer.js";
+import { parseTerrainDescriptor, queueTerrain, clearQueuedTerrain } from "../world/generator/JsonTerrain.js";
 
 export default class NetworkManager {
 
@@ -125,6 +126,14 @@ export default class NetworkManager {
 
     _onOpen() {
         this.connected = true;
+
+        // Announce that this client can generate flat/normal terrain itself.
+        // The server only acts on it after login, so sending it first is enough.
+        // A proxied connection speaks the proxy's framing, so it keeps receiving
+        // chunks as usual.
+        if (!this.useProxy) {
+            this.sendJson({ type: 'clientCapabilities', clientWorldGen: true });
+        }
 
         if (this.useProxy) {
             this.sendProxyPacket(0, {
@@ -275,6 +284,13 @@ export default class NetworkManager {
                         finish();
                     });
                 }
+            } else if (payload.type === 'terrain') {
+                // The server lets this client generate the world; build terrain
+                // locally from the descriptor instead of waiting for chunks.
+                const descriptor = parseTerrainDescriptor(payload);
+                if (descriptor !== null) {
+                    queueTerrain(this.minecraft ? this.minecraft.world : null, descriptor);
+                }
             } else if (payload.type === 'cape:state') {
                 this.minecraft?.capeManager?.handleState(payload.username, payload.cape);
             } else if (payload.type === 'cctv:state') {
@@ -284,6 +300,13 @@ export default class NetworkManager {
                 const previousType = world ? world.worldType : null;
                 if (world) {
                     world.clearChunks();
+
+                    const provider = typeof world.getChunkProvider === 'function' ? world.getChunkProvider() : null;
+                    if (provider && typeof provider.clearTerrain === 'function') {
+                        provider.clearTerrain();
+                    }
+                    clearQueuedTerrain();
+
                     if (payload.worldType) {
                         world.setWorldType(payload.worldType);
                     }

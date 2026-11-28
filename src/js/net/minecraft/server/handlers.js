@@ -2,7 +2,7 @@ import { Buffer } from '../../../../../libraries/buffer.js';
 import { readLongBE } from './binary.js';
 import { readVarInt, readString, broadcast, ensureReadable, MalformedPacketError } from './protocol.js';
 import { addPlayer, removePlayer, getPlayers, updatePosition, loadPlayerData, findPlayerByUsername, normalizeInventoryState, savePlayerData, isSpectator, isSuperOp } from './players.js';
-import { addWorldChange, saveWorld, getBlockAt, getAllBlockInventoriesState, getSpawnPosition, deleteBlockInventory, getBlockInventories, getWorldTime, getBlockMetadata, setBlockInventory, setActiveDimension, getDimensionType, NETHER_DIMENSION, BOB_DIMENSION } from './world.js';
+import { addWorldChange, saveWorld, getBlockAt, getAllBlockInventoriesState, getSpawnPosition, deleteBlockInventory, getBlockInventories, getWorldTime, getBlockMetadata, setBlockInventory, setActiveDimension, getDimensionType, getSubChunkStore, NETHER_DIMENSION, BOB_DIMENSION } from './world.js';
 import { addItemEntity, removeItemEntity, getItemEntity, getAllItemEntities } from './entities.js';
 import { handleCommand } from './commands.js';
 import {
@@ -12,6 +12,7 @@ import {
     sendServerMods,
     sendSpawnPosition,
     sendChunks,
+    announceClientTerrain,
     sendPlayerPositionLook,
     sendSingleChunk,
     unloadChunk,
@@ -376,10 +377,14 @@ function handleLoginPacket(player, packetId, buffer, offset) {
             }));
         }
 
+        // Nothing has been sent yet when the client builds the world itself;
+        // pre-marking the spawn area would hide block changes inside it.
         const sentChunks = new Set();
-        for (let cx = -2; cx <= 2; cx++) {
-            for (let cz = -2; cz <= 2; cz++) {
-                sentChunks.add(`${cx},${cz}`);
+        if (announceClientTerrain(player) === null) {
+            for (let cx = -2; cx <= 2; cx++) {
+                for (let cz = -2; cz <= 2; cz++) {
+                    sentChunks.add(`${cx},${cz}`);
+                }
             }
         }
         playerChunks.set(player.eid, sentChunks);
@@ -1400,6 +1405,27 @@ function checkAndSendChunks(player) {
         }
     }
 
+    // With client-side generation the client builds the base terrain itself, so
+    // only chunks holding server-side block changes have to be transferred.
+    if (announceClientTerrain(player) !== null) {
+        const store = getSubChunkStore();
+
+        for (let cx = playerChunkX - renderDistance; cx <= playerChunkX + renderDistance; cx++) {
+            for (let cz = playerChunkZ - renderDistance; cz <= playerChunkZ + renderDistance; cz++) {
+                const chunkKey = `${cx},${cz}`;
+                if (sentChunks.has(chunkKey) || !store.hasChunk(cx, cz)) {
+                    continue;
+                }
+
+                sendSingleChunk(player, cx, cz);
+                sentChunks.add(chunkKey);
+            }
+        }
+
+        playerChunks.set(player.eid, sentChunks);
+        return;
+    }
+
     for (let cx = playerChunkX - renderDistance; cx <= playerChunkX + renderDistance; cx++) {
         for (let cz = playerChunkZ - renderDistance; cz <= playerChunkZ + renderDistance; cz++) {
             const chunkKey = `${cx},${cz}`;
@@ -1434,9 +1460,11 @@ function respawnPlayer(player) {
     savePlayerData(player);
 
     const sentChunks = new Set();
-    for (let cx = -2; cx <= 2; cx++) {
-        for (let cz = -2; cz <= 2; cz++) {
-            sentChunks.add(`${cx},${cz}`);
+    if (announceClientTerrain(player) === null) {
+        for (let cx = -2; cx <= 2; cx++) {
+            for (let cz = -2; cz <= 2; cz++) {
+                sentChunks.add(`${cx},${cz}`);
+            }
         }
     }
     playerChunks.set(player.eid, sentChunks);

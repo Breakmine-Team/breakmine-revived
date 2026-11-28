@@ -42,6 +42,27 @@ export function parseTerrainDescriptor(message) {
         return null;
     }
 
+    const viewDistance = clamp(
+        toInt(message.viewDistance) ?? DEFAULT_VIEW_DISTANCE,
+        MIN_VIEW_DISTANCE,
+        MAX_VIEW_DISTANCE
+    );
+
+    // Seeded generators: the client runs the same generator as the server, so
+    // only the world type and the seed have to travel over the wire.
+    if (message.generator === "normal") {
+        const seed = String(message.seed ?? "").trim();
+        if (seed.length === 0) {
+            return null;
+        }
+        return {
+            generator: "normal",
+            seed: seed,
+            viewDistance: viewDistance,
+            skyLight: message.skyLight !== false
+        };
+    }
+
     if (message.generator !== "flat") {
         return null;
     }
@@ -73,11 +94,9 @@ export function parseTerrainDescriptor(message) {
         }
     }
 
-    const viewDistance = toInt(message.viewDistance);
-
     return {
         generator: "flat",
-        viewDistance: clamp(viewDistance ?? DEFAULT_VIEW_DISTANCE, MIN_VIEW_DISTANCE, MAX_VIEW_DISTANCE),
+        viewDistance: viewDistance,
         skyLight: message.skyLight !== false,
         layers: layers
     };

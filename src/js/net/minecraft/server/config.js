@@ -32,6 +32,9 @@ const defaults = {
     serverMods: true,
     serverModsDir: 'servermods',
     worldType: 'flat',
+    // Let joining clients build flat/normal terrain from the world seed instead
+    // of streaming every chunk from here.
+    clientWorldGen: true,
     seed: 0,
     allowTNT: true,
     allowLiquidFlow: true,

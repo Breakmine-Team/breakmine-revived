@@ -512,6 +512,10 @@ export function onConnection(ws, req) {
                     }
                     player.pingSentAt = 0;
                 }
+            } else if (payload && payload.type === 'clientCapabilities') {
+                // Only clients that can build the world themselves get terrain
+                // descriptors instead of chunk packets.
+                player.clientWorldGen = payload.clientWorldGen === true;
             } else if (payload && payload.type === 'inventory') {
                 player.inventory = normalizeInventoryState(payload.inventory);
                 broadcastPlayerEquipment(player);

@@ -342,12 +342,17 @@ world-transfer traffic; afterwards only `blockChange` edits are sent.
            {"from":9,"to":9,"block":2}]}
 ```
 
+```json
+{"type":"terrain","generator":"normal","seed":"123","viewDistance":4}
+```
+
 ### 7.1 `terrain` (server → client)
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `generator` | string | yes | Only `"flat"` is supported. Unknown generators are ignored, so the server must then send `chunk` messages |
-| `layers` | array | yes | Block bands, applied in order so later layers override earlier ones |
+| `generator` | string | yes | `"flat"` (layer bands) or `"normal"` (seeded terrain). Unknown generators are ignored, so the server must then send `chunk` messages |
+| `layers` | array | required for `flat` | Block bands, applied in order so later layers override earlier ones |
+| `seed` | string or integer | required for `normal` | Seed the client generates from; numbers and words are accepted |
 | `viewDistance` | integer | no | Chunks the client keeps generated around the player, clamped to `2`–`8`; default `2` |
 | `skyLight` | boolean | no | `true` (default) fills every generated section's sky light with `0xFF`; `false` leaves it dark |
 
@@ -364,10 +369,17 @@ Behaviour:
 - The client turns the descriptor into the chunk payload of section 6 (sections
   up to the highest layer, fully lit by default) and feeds it through the normal
   chunk pipeline, so lighting and meshing are unchanged.
+- With `normal`, the client runs the same terrain generator as the server (base
+  pass plus neighbour population) in a worker, so its columns match the
+  server's base blocks exactly. Generation is throttled to a few chunks at a
+  time, nearest first.
 - It generates chunks within `viewDistance` of the player at join and keeps that
   area generated as the player moves; generated chunks stay loaded.
 - Send it after `joinGame`. If it arrives before the client world exists it is
   applied on the next tick.
+- Only send it to clients that announced the feature, e.g. right after the
+  socket opens with `{"type":"clientCapabilities","clientWorldGen":true}`;
+  clients that never announce it must still receive `chunk` messages.
 - Send it once per connection (or again to change the terrain). `blockChange`
   remains the only way to modify blocks afterwards.
 - The server still has to answer placement and breaking itself; because it
