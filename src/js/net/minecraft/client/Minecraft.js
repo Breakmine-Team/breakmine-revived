@@ -214,6 +214,10 @@ export default class Minecraft {
         // The contraption grabbed with the physics wand, or null.
         this.heldContraption = null;
 
+        // How far in front of the eyes that contraption floats. It keeps the
+        // distance it had when it was grabbed.
+        this.heldContraptionDistance = ContraptionEntity.HOLD_DISTANCE;
+
         // The body this player is limp as after pressing the ragdoll key.
         this.playerRagdoll = null;
 
@@ -2562,7 +2566,31 @@ export default class Minecraft {
         contraption.beginHold();
 
         this.heldContraption = contraption;
+        this.heldContraptionDistance = this.getContraptionHoldDistance(contraption);
         return true;
+    }
+
+    // A machine picked up across the room stays across the room instead of
+    // jumping to arm's length the moment it is grabbed. The distance is measured
+    // along the look direction, because that is the line the body is carried on.
+    getContraptionHoldDistance(contraption) {
+        const eye = this.player.getPositionEyes(1.0);
+        const look = this.player.getLook(0.0);
+        const body = contraption.body.pos;
+
+        let distance =
+            (body.x - eye.x) * look.x +
+            (body.y - eye.y) * look.y +
+            (body.z - eye.z) * look.z;
+
+        if (!Number.isFinite(distance)) {
+            distance = ContraptionEntity.HOLD_DISTANCE;
+        }
+
+        return Math.max(
+            ContraptionEntity.MIN_HOLD_DISTANCE,
+            Math.min(ContraptionEntity.MAX_HOLD_DISTANCE, distance)
+        );
     }
 
     // A carried contraption floats in front of the player while the wand is
@@ -2586,9 +2614,15 @@ export default class Minecraft {
             return;
         }
 
-        const eye = this.player.getPositionEyes(this.timer.partialTicks);
-        const look = this.player.getLook(this.timer.partialTicks);
-        const distance = ContraptionEntity.HOLD_DISTANCE;
+        // This runs before the player is ticked, so the player still stands
+        // where the frame interpolation starts. The hold point of this tick is
+        // therefore the camera pose at partialTicks 0, and next tick's is the
+        // pose at 1: the contraption is drawn blended between exactly the two
+        // camera poses it was placed against, so it travels with the view
+        // instead of stepping 20 times a second.
+        const eye = this.player.getPositionEyes(1.0);
+        const look = this.player.getLook(0.0);
+        const distance = this.heldContraptionDistance;
 
         contraption.holdAt(
             eye.x + look.x * distance,
@@ -2604,6 +2638,7 @@ export default class Minecraft {
         }
 
         this.heldContraption = null;
+        this.heldContraptionDistance = ContraptionEntity.HOLD_DISTANCE;
         contraption.release();
     }
 

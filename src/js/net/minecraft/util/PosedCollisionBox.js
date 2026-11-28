@@ -16,6 +16,14 @@ export default class PosedCollisionBox extends BoundingBox {
     static TOP = [2, 3, 7, 6];
     static BOTTOM = [0, 1, 5, 4];
 
+    // How far inside a face a mover may be and still be put back outside it.
+    // A hull that rocks up under a rider, or a solver that leaves the feet a
+    // hair under the surface, would otherwise be "already inside" and let the
+    // body fall the rest of the way through the boat. Kept under half a block
+    // so someone standing in a cabin half a block below its ceiling is not
+    // hoisted through the deck.
+    static SNAP = 0.4;
+
     constructor(corners) {
         let minX = Infinity;
         let minY = Infinity;
@@ -126,8 +134,14 @@ export default class PosedCollisionBox extends BoundingBox {
             const face = this.faceHeightOver(mover, false);
             const bottom = face === null ? this.minY : face;
 
-            // The head is not below this block, so nothing stops the rise.
             if (mover.maxY > bottom) {
+                // The head has just poked into the underside. Stop the rise
+                // rather than let the body slide up through the block.
+                if (mover.minY < bottom && mover.maxY - bottom <= PosedCollisionBox.SNAP) {
+                    return 0.0;
+                }
+
+                // Body well inside already: nothing here can help it.
                 return y;
             }
 
@@ -138,9 +152,14 @@ export default class PosedCollisionBox extends BoundingBox {
             const face = this.faceHeightOver(mover, true);
             const top = face === null ? this.maxY : face;
 
-            // Feet below the surface are already inside: only a fall onto the
-            // block from above is stopped, exactly like the axis aligned clip.
             if (mover.minY < top) {
+                // Feet slightly inside the surface: put them back on it. Deeper
+                // than a step and the mover is under the deck on purpose, so
+                // leave that to the axis aligned behaviour.
+                if (top - mover.minY <= PosedCollisionBox.SNAP) {
+                    return Math.max(y, top - mover.minY + this.epsilon);
+                }
+
                 return y;
             }
 

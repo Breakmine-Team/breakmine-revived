@@ -59,6 +59,11 @@ export default class OffGridBlockField {
         this.previousRotation = { x: 0, y: 0, z: 0 };
         this.offset = { x: 0, y: 0, z: 0 };
 
+        // Offset at the previous tick, for fields that move every tick (a
+        // contraption carried by the physics wand). null means the field was
+        // never moved and there is nothing to blend from.
+        this.previousOffset = null;
+
         this.posedBoxCache = new Map();
         this._poseContext = null;
 
@@ -650,6 +655,7 @@ export default class OffGridBlockField {
         this.rotation = { x: 0, y: 0, z: 0 };
         this.previousRotation = { x: 0, y: 0, z: 0 };
         this.offset = { x: 0, y: 0, z: 0 };
+        this.previousOffset = null;
         this.group.position.set(0, 0, 0);
         this.group.rotation.set(0, 0, 0);
         this.group.updateMatrix();
@@ -801,10 +807,16 @@ export default class OffGridBlockField {
             ? Math.max(0, Math.min(1, partialTicks))
             : 1;
 
+        const previous = this.previousOffset || this.offset;
+
         return this.computePose({
             x: OffGridBlockField.interpolateDegrees(this.previousRotation.x, this.rotation.x, blend),
             y: OffGridBlockField.interpolateDegrees(this.previousRotation.y, this.rotation.y, blend),
             z: OffGridBlockField.interpolateDegrees(this.previousRotation.z, this.rotation.z, blend)
+        }, {
+            x: previous.x + (this.offset.x - previous.x) * blend,
+            y: previous.y + (this.offset.y - previous.y) * blend,
+            z: previous.z + (this.offset.z - previous.z) * blend
         });
     }
 
@@ -822,7 +834,7 @@ export default class OffGridBlockField {
     }
 
     
-    computePose(rotation = this.rotation) {
+    computePose(rotation = this.rotation, offset = this.offset) {
         const pivot = this.getPivot();
         const pivotX = pivot.x;
         const pivotY = pivot.y;
@@ -839,9 +851,9 @@ export default class OffGridBlockField {
         const rotatedPivot = new THREE.Vector3(pivotX, pivotY, pivotZ).applyEuler(euler);
         return {
             position: {
-                x: pivotX + this.offset.x - rotatedPivot.x,
-                y: pivotY + this.offset.y - rotatedPivot.y,
-                z: pivotZ + this.offset.z - rotatedPivot.z
+                x: pivotX + offset.x - rotatedPivot.x,
+                y: pivotY + offset.y - rotatedPivot.y,
+                z: pivotZ + offset.z - rotatedPivot.z
             },
             rotation: { x: euler.x, y: euler.y, z: euler.z }
         };
@@ -1790,6 +1802,8 @@ export default class OffGridBlockField {
                         };
                     case "isFieldLocalWorld":
                         return true;
+                    case "cellField":
+                        return field;
                 }
                 return target[prop];
             }

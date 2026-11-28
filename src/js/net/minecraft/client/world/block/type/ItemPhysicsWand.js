@@ -6,13 +6,10 @@ import EnumCreativeInventoryTab from "../../../gui/EnumCreativeInventoryTab.js";
 // the same tool moves machines and picks them up.
 export default class ItemPhysicsWand extends Item {
 
-    // Placeholder until the wand gets real art.
-    static TEXTURE = 'missing';
+    static TEXTURE = 'physics_staff';
 
     constructor(id, textureSlotId, description = "Physics Wand") {
         super(id, 0);
-
-        this.tex = textureSlotId;
         this.description = description;
         this.shiftDescription = "RMB: grab a contraption\nRelease: drop it";
         this.inventoryTab = EnumCreativeInventoryTab.TOOLS;
@@ -21,7 +18,7 @@ export default class ItemPhysicsWand extends Item {
     }
 
     getTextureForFace(face) {
-        return this.tex;
+        return ItemPhysicsWand.TEXTURE;
     }
 
     onUse(world, x, y, z, itemstack, hitFace) {

@@ -3,6 +3,8 @@ import ContraptionBody from "../physics/ContraptionBody.js";
 import OffGridBlockField from "../render/OffGridBlockField.js";
 import Block from "../world/block/Block.js";
 import BlockBoatCore from "../world/block/type/BlockBoatCore.js";
+import BlockPosition from "../../util/BlockPosition.js";
+import { OFF_GRID_WORLD_HEIGHT } from "../../util/OffGridConstants.js";
 import * as THREE from "../../../../../../libraries/three.module.js";
 
 // A pile of blocks that an Assembler glued together. The whole thing is one
@@ -24,6 +26,23 @@ export default class ContraptionEntity extends Entity {
 
     static RAD_TO_DEG = 180.0 / Math.PI;
 
+    // How far a pose change turned about the world Y axis, in degrees, with the
+    // sign of the player's yaw (a positive turn is the pilot's right). Only the
+    // twist about Y is taken from the relative rotation, so a hull that pitches
+    // or rolls does not swivel a rider's view with it.
+    static yawTurn(fromQuat, toQuat) {
+        const relative = toQuat.clone().multiply(fromQuat.clone().invert());
+
+        // q and -q are the same rotation; keep w positive so the angle read off
+        // the quaternion stays on the short side of half a turn.
+        if (relative.w < 0.0) {
+            relative.set(-relative.x, -relative.y, -relative.z, -relative.w);
+        }
+
+        // A spin of +a about Y is the pilot's left, which is a yaw decrease.
+        return -2.0 * Math.atan2(relative.y, relative.w) * ContraptionEntity.RAD_TO_DEG;
+    }
+
     // How often a simulated body reports its pose to the server, so a world that
     // is saved and loaded again gets the contraption back where it was instead
     // of losing it.
@@ -35,8 +54,14 @@ export default class ContraptionEntity extends Entity {
     static POSE_SYNC_INTERVAL = 2;
 
     // How far in front of the eyes a contraption carried by the physics wand
-    // floats.
+    // floats, when its distance at the moment it was grabbed is unusable.
     static HOLD_DISTANCE = 3.0;
+
+    // A grabbed contraption keeps the distance it had when it was picked up,
+    // but never so close that the camera sits inside it or so far that it is
+    // out of reach.
+    static MIN_HOLD_DISTANCE = 1.0;
+    static MAX_HOLD_DISTANCE = 8.0;
 
     // Water is twice as heavy as a default block, so a contraption made of
     // ordinary blocks floats back up to the surface instead of sinking.
@@ -99,6 +124,7 @@ export default class ContraptionEntity extends Entity {
 
         // Keys relayed from a player steering this body from another client, or
         // null. That client only has a replay, so the keys have to come here.
+        // `strafe` in that payload is the A/D turn input, not a sideways push.
         this.remotePilot = null;
 
         // Whether any cell was in water on the last tick.
@@ -129,7 +155,9 @@ export default class ContraptionEntity extends Entity {
         this.lightingBrightness = this.brightness;
 
         this.field = this.createField(minecraft, world);
-        this.syncFieldPose();
+        // The first pose is where the body spawns, so it must not be blended
+        // into from an empty one.
+        this.syncFieldPose(false);
 
         this.setPositionAndRotation(x, y, z, 0.0, 0.0);
         this.updateBoundingBox();
@@ -307,28 +335,39 @@ export default class ContraptionEntity extends Entity {
         // Placing or breaking a cell changes what the body is made of.
         field.onCellEdit = () => this.rebuildFromField();
 
+        // So a block inside the body (the Assembler) can reach the machine it
+        // has become when it is clicked.
+        field.contraption = this;
+
         return field;
     }
 
     // World pose of the field: rotate around the centre of mass, then move that
-    // point to the body position.
-    syncFieldPose() {
+    // point to the body position. The renderer blends the previous pose into
+    // this one, so a carried contraption follows the camera every frame instead
+    // of stepping once per tick.
+    syncFieldPose(interpolate = true) {
         if (this.field === null) {
             return;
         }
 
         const euler = new THREE.Euler().setFromQuaternion(this.body.quat, "XYZ");
 
+        const offset = {
+            x: this.body.pos.x - this.center.x,
+            y: this.body.pos.y - this.center.y,
+            z: this.body.pos.z - this.center.z
+        };
+
         this.field.rotation = {
             x: euler.x * ContraptionEntity.RAD_TO_DEG,
             y: euler.y * ContraptionEntity.RAD_TO_DEG,
             z: euler.z * ContraptionEntity.RAD_TO_DEG
         };
-        this.field.offset = {
-            x: this.body.pos.x - this.center.x,
-            y: this.body.pos.y - this.center.y,
-            z: this.body.pos.z - this.center.z
-        };
+        this.field.previousOffset = interpolate
+            ? { ...this.field.offset }
+            : { ...offset };
+        this.field.offset = offset;
         this.field.pivot = { x: this.center.x, y: this.center.y, z: this.center.z };
 
         this.field.applyTransform();
@@ -590,56 +629,64 @@ export default class ContraptionEntity extends Entity {
         return Math.min(1.0, Math.max(0.0, surface - bottom));
     }
 
-    // The helm slowly pushes the body the way the pilot is walking. A body with
-    // nobody aboard does not drive itself, so an empty boat stays put. The keys
-    // are either pressed on this client or relayed from the client that owns the
-    // seat when this client is the one simulating the hull.
+    // The helm slowly pushes the body the way the pilot is looking and spins it
+    // with A and D, so the hull is turned like a boat instead of being stepped
+    // sideways. A body with nobody aboard does not drive itself, so an empty
+    // boat stays put. The keys are either pressed on this client or relayed from
+    // the client that owns the seat when this client simulates the hull.
     driveBoat() {
         let forward = 0.0;
-        let strafe = 0.0;
+        let turn = 0.0;
         let yaw = null;
 
         if (this.pilot !== null) {
             forward = this.pilot.steerForward;
-            strafe = this.pilot.steerStrafe;
+            turn = this.pilot.steerStrafe;
             yaw = this.pilot.rotationYaw;
         } else if (this.remotePilot !== null) {
             forward = this.remotePilot.forward;
-            strafe = this.remotePilot.strafe;
+            turn = this.remotePilot.strafe;
             yaw = this.remotePilot.yaw;
         } else {
             return;
         }
 
-        const input = Math.hypot(forward, strafe);
+        forward = Number.isFinite(forward) ? Math.max(-1.0, Math.min(1.0, forward)) : 0.0;
+        turn = Number.isFinite(turn) ? Math.max(-1.0, Math.min(1.0, turn)) : 0.0;
 
-        if (input < 1e-4 || !Number.isFinite(yaw)) {
+        if (!Number.isFinite(yaw)) {
             return;
         }
 
-        // Same axes the player's own walking builds, but pointing the other way:
-        // the player's motion is a vector that travel feeds to the world
-        // negated (it moves by -motionX and -motionZ), while the hull integrates
-        // its velocity as it stands. Thrusting with the walking formula itself
-        // sent the boat backwards, against the way the pilot was looking, so the
-        // axes are mirrored here. At yaw 0 the eyes look down +Z and forward
-        // thrust is +Z too.
-        const radians = (yaw + 180.0) * Math.PI / 180.0;
-        const sin = Math.sin(radians);
-        const cos = Math.cos(radians);
-        const scale = 1.0 / Math.max(1.0, input);
+        if (Math.abs(forward) > 1e-4) {
+            // Same axes the player's own walking builds, but pointing the other
+            // way: the player's motion is a vector that travel feeds to the
+            // world negated (it moves by -motionX and -motionZ), while the hull
+            // integrates its velocity as it stands. Thrusting with the walking
+            // formula itself sent the boat backwards, against the way the pilot
+            // was looking, so the axes are mirrored here. At yaw 0 the eyes look
+            // down +Z and forward thrust is +Z too.
+            const radians = (yaw + 180.0) * Math.PI / 180.0;
+            const sin = Math.sin(radians);
+            const cos = Math.cos(radians);
 
-        const thrustX = (forward * sin - strafe * cos) * scale;
-        const thrustZ = (-forward * cos - strafe * sin) * scale;
+            this.body.vel.x += forward * sin * BlockBoatCore.STEER_THRUST;
+            this.body.vel.z += -forward * cos * BlockBoatCore.STEER_THRUST;
 
-        this.body.vel.x += thrustX * BlockBoatCore.STEER_THRUST;
-        this.body.vel.z += thrustZ * BlockBoatCore.STEER_THRUST;
+            const speed = Math.hypot(this.body.vel.x, this.body.vel.z);
+            if (speed > BlockBoatCore.MAX_STEER_SPEED) {
+                const limit = BlockBoatCore.MAX_STEER_SPEED / speed;
+                this.body.vel.x *= limit;
+                this.body.vel.z *= limit;
+            }
+        }
 
-        const speed = Math.hypot(this.body.vel.x, this.body.vel.z);
-        if (speed > BlockBoatCore.MAX_STEER_SPEED) {
-            const limit = BlockBoatCore.MAX_STEER_SPEED / speed;
-            this.body.vel.x *= limit;
-            this.body.vel.z *= limit;
+        // A and D turn the hull. A positive spin about the world Y axis swings
+        // the nose towards +X, which is the pilot's left when they look down +Z
+        // - and A, the left key, reports a positive strafe. Water drag on the
+        // spin settles this at a steady turning rate instead of accelerating.
+        if (Math.abs(turn) > 1e-4) {
+            this.body.angVel.y += turn * BlockBoatCore.STEER_TURN;
         }
     }
 
@@ -693,6 +740,15 @@ export default class ContraptionEntity extends Entity {
         return player.isSneaking() !== true;
     }
 
+    // Height of a cell's top face in body space. Cells are stored the way they
+    // sat in the world, so the cell at y spans y..y+1 and its top is one block
+    // above its base. Reading the top as the cell centre (y + 0.5) put every
+    // rider half a block inside the deck, and from in there the collision could
+    // no longer catch them.
+    cellTopY(cell) {
+        return cell.y + 1.0 - this.center.y;
+    }
+
     // The cell the local player is standing on, or null when they are not on
     // this body. The cell is remembered between ticks: a rocking hull swings its
     // rider around in body space, so picking the nearest top afresh every tick
@@ -707,7 +763,7 @@ export default class ContraptionEntity extends Entity {
                 candidate.x === support.x && candidate.y === support.y && candidate.z === support.z);
 
             if (cell !== undefined) {
-                const top = cell.y + 0.5 - this.center.y;
+                const top = this.cellTopY(cell);
 
                 // Kept while the feet are still on that cell's top. The sideways
                 // reach is a little wider than the cell so the collision engine
@@ -737,7 +793,7 @@ export default class ContraptionEntity extends Entity {
                 continue;
             }
 
-            const top = cell.y + 0.5 - this.center.y;
+            const top = this.cellTopY(cell);
             const distance = Math.abs(local.y - top);
 
             if (local.y < top - 0.6 || local.y > top + 0.25 || distance >= bestDistance) {
@@ -781,7 +837,17 @@ export default class ContraptionEntity extends Entity {
             return;
         }
 
-        const deckTop = support.y + 0.5 - this.center.y;
+        // The rider faces with the hull. Their spot on the deck is followed
+        // through the pose below, but that alone left the deck spinning under
+        // them while they kept looking the old way, so the turn about Y is
+        // added to their view as well. This also turns the pilot, whose input
+        // steering built the spin in the first place.
+        const turned = ContraptionEntity.yawTurn(fromQuat, this.body.quat);
+        if (turned !== 0.0 && Number.isFinite(player.rotationYaw)) {
+            player.rotationYaw += turned;
+        }
+
+        const deckTop = this.cellTopY(support);
 
         // Stand on the deck instead of on the sinking offset. The lift is what
         // puts a rider back on the surface after the hull has swung out from
@@ -1004,6 +1070,162 @@ export default class ContraptionEntity extends Entity {
         // The body is made of different blocks now, so the server has to hear
         // about the new shape or a reload would bring the old one back.
         this.sendNetworkState();
+    }
+
+    // Puts the machine back on the block grid and removes the body. The cells
+    // keep the places they were assembled in, so the machine comes back exactly
+    // the shape it was, with the block data it was made of: the tilted pose is
+    // not baked into the blocks and no block is turned to face the player. Only
+    // the whole machine is moved, to the free patch of ground nearest to where
+    // it floats, so snapping never replaces anything in the world.
+    disassemble() {
+        if (this.field === null || this.isDead || this.heldByPlayer) {
+            return false;
+        }
+
+        const world = this.world;
+        if (!world || typeof world.setBlockAt !== "function") {
+            return false;
+        }
+
+        // The body stops answering block queries while it is put back, or its
+        // own cells would look like the blocks standing in the way.
+        this.field.unbindFromWorld();
+
+        // Where the assembled cells sit now, as a whole block offset from the
+        // coordinates they were collected at. A machine that never moved lands
+        // exactly where it was built.
+        const origin = {
+            x: Math.round(this.body.pos.x - this.center.x),
+            y: Math.round(this.body.pos.y - this.center.y),
+            z: Math.round(this.body.pos.z - this.center.z)
+        };
+
+        const shift = ContraptionEntity.findFreePlacement(world, this.cells, origin);
+        if (shift === null) {
+            // Nowhere to land: the machine stays in one piece.
+            this.field.bind(world, true);
+            return false;
+        }
+
+        const snapped = this.cells.map((cell) => {
+            const block = Block.getById(cell.id);
+            let data = (cell.data || 0) & 0xF;
+            if (block !== null && block.isAssembler === true) {
+                // Back in the world the machine is not running any more.
+                data &= ~8;
+            }
+
+            return {
+                x: cell.x + shift.x,
+                y: cell.y + shift.y,
+                z: cell.z + shift.z,
+                id: cell.id,
+                data: data
+            };
+        });
+
+        // Snapping a body this client was only replaying makes it this client's
+        // body, so the removal below actually reaches the other clients.
+        this.adoptLocalSimulation();
+
+        this.isDead = true;
+        this.sendNetworkState({type: "contraption:remove", id: this.syncId});
+
+        for (const block of snapped) {
+            world.setBlockAt(block.x, block.y, block.z, block.id, block.data);
+            // A rotatable block would face the player on the way in; keep the
+            // orientation it had inside the machine instead.
+            if (typeof world.setBlockDataAt === "function") {
+                world.setBlockDataAt(block.x, block.y, block.z, block.data);
+            }
+            this.sendBlockPlacement(block.x, block.y, block.z, block.id, block.data);
+        }
+
+        world.removeEntityById(this.id);
+
+        return true;
+    }
+
+    // Where the whole machine can stand: the offset it asked for when every one
+    // of its squares is free, otherwise the nearest offset where the machine
+    // fits. The search widens one shell at a time. A machine is only ever moved
+    // as a whole, so its shape is never broken up to dodge a block.
+    static findFreePlacement(world, cells, origin) {
+        for (let radius = 0; radius <= 2; radius++) {
+            for (let dx = -radius; dx <= radius; dx++) {
+                for (let dy = -radius; dy <= radius; dy++) {
+                    for (let dz = -radius; dz <= radius; dz++) {
+                        // Only the shell of the cube is new on this pass.
+                        if (Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz)) !== radius) {
+                            continue;
+                        }
+
+                        const shift = {
+                            x: origin.x + dx,
+                            y: origin.y + dy,
+                            z: origin.z + dz
+                        };
+
+                        if (ContraptionEntity.machineFits(world, cells, shift)) {
+                            return shift;
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    static machineFits(world, cells, shift) {
+        for (const cell of cells) {
+            const x = cell.x + shift.x;
+            const y = cell.y + shift.y;
+            const z = cell.z + shift.z;
+
+            if (y < 0 || y >= OFF_GRID_WORLD_HEIGHT) {
+                return false;
+            }
+
+            if (!ContraptionEntity.isBlockSpaceFree(world, x, y, z)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    static isBlockSpaceFree(world, x, y, z) {
+        const typeId = world.getBlockAt(x, y, z);
+        if (!typeId) {
+            return true;
+        }
+
+        const block = Block.getById(typeId);
+        if (block === null) {
+            return false;
+        }
+
+        return typeof block.isReplaceable === "function"
+            && block.isReplaceable(world, x, y, z) === true;
+    }
+
+    // A snapped block only exists on this client until the server hears about
+    // it, so the placement goes out the way a hand placed block would.
+    sendBlockPlacement(x, y, z, id, data) {
+        const controller = this.minecraft && this.minecraft.playerController;
+        if (!controller || typeof controller.sendBlockPlacementPacket !== "function") {
+            return;
+        }
+
+        try {
+            controller.sendBlockPlacementPacket(
+                new BlockPosition(x, y - 1, z), 1, { id: id }, data
+            );
+        } catch (error) {
+            // A network hiccup must not stop the snap.
+        }
     }
 
     // Removing the floor under a sleeping contraption has to make it fall again.
