@@ -6,8 +6,16 @@ const MODULE_DIR = path.moduleDir();
 
 
 const ENV = (typeof process !== 'undefined' && process.env) || {};
-const PROJECT_ROOT = ENV.DATA_DIR || path.join(MODULE_DIR, '..', '..', '..', '..', '..');
+// Where the server's code lives, which is also where the image ships the
+// default serverconfig.conf.
+const APP_ROOT = path.join(MODULE_DIR, '..', '..', '..', '..', '..');
+const PROJECT_ROOT = ENV.DATA_DIR || APP_ROOT;
 const WORLDS_DIR = path.join(PROJECT_ROOT, 'worlds');
+
+// The Docker image mounts the persistent data volume here. The main server's
+// config is read from the volume first so edits survive a redeploy, falling
+// back to the copy baked into the image when the volume has none.
+const VOLUME_CONFIG = '/data/serverconfig.conf';
 
 const defaults = {
     server: 'main',
@@ -24,6 +32,9 @@ const defaults = {
     serverMods: true,
     serverModsDir: 'servermods',
     worldType: 'flat',
+    // Let joining clients build flat/normal terrain from the world seed instead
+    // of streaming every chunk from here.
+    clientWorldGen: true,
     seed: 0,
     allowTNT: true,
     allowLiquidFlow: true,
@@ -86,7 +97,20 @@ function getServerDir(serverName) {
 }
 
 function getConfigPath(serverName) {
-    return path.join(getServerDir(serverName), 'serverconfig.conf');
+    const name = sanitizeServerName(serverName);
+
+    if (name === 'main') {
+        if (fs.existsSync(VOLUME_CONFIG)) {
+            return VOLUME_CONFIG;
+        }
+        const dataConfig = path.join(PROJECT_ROOT, 'serverconfig.conf');
+        if (fs.existsSync(dataConfig)) {
+            return dataConfig;
+        }
+        return path.join(APP_ROOT, 'serverconfig.conf');
+    }
+
+    return path.join(getServerDir(name), 'serverconfig.conf');
 }
 
 function parseValue(value) {
@@ -134,6 +158,13 @@ function loadConfig(serverName = 'main') {
     }
 
     config.worldType = normalizeWorldType(config.worldType);
+
+    // The multiserver supervisor pins each child to the port it worked out for
+    // it, so this wins over whatever the server's own config file says.
+    if (requestedPort !== null) {
+        config.port = requestedPort;
+    }
+
     return applyEnvOverrides(config);
 }
 
@@ -152,7 +183,21 @@ function getRequestedServer() {
     return null;
 }
 
+// node server.js --server second --port 6009
+function getRequestedPort() {
+    if (typeof process === 'undefined' || !Array.isArray(process.argv)) {
+        return null;
+    }
+    const idx = process.argv.indexOf('--port');
+    if (idx === -1) {
+        return null;
+    }
+    const port = parseInt(process.argv[idx + 1], 10);
+    return Number.isInteger(port) && port > 0 && port < 65536 ? port : null;
+}
+
 const requestedServer = getRequestedServer();
+const requestedPort = getRequestedPort();
 
 
 
@@ -209,8 +254,12 @@ function listServers() {
 
 config.reload = reloadConfig;
 config.requestedServer = requestedServer;
+config.requestedPort = requestedPort;
 config.listServers = listServers;
 config.getServerDir = getServerDir;
+// Used by the multiserver supervisor to read every server's port without
+// touching the config this process is running on.
+config.loadConfig = loadConfig;
 
 
 let cachedIcon = null;

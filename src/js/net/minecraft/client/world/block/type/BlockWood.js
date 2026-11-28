@@ -8,6 +8,8 @@ export default class BlockWood extends Block {
         this.description = displayName;
         this.woodType = woodType;
         this.hardness = 2.0;
+        // Planks are mostly air: a plank contraption floats high in the water.
+        this.mass = 0.3;
         
         this.inventoryTab = EnumCreativeInventoryTab.BUILDING_BLOCKS;
     }

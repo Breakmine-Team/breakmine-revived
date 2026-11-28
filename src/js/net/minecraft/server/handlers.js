@@ -2,7 +2,7 @@ import { Buffer } from '../../../../../libraries/buffer.js';
 import { readLongBE } from './binary.js';
 import { readVarInt, readString, broadcast, ensureReadable, MalformedPacketError } from './protocol.js';
 import { addPlayer, removePlayer, getPlayers, updatePosition, loadPlayerData, findPlayerByUsername, normalizeInventoryState, savePlayerData, isSpectator, isSuperOp } from './players.js';
-import { addWorldChange, saveWorld, getBlockAt, getAllBlockInventoriesState, getSpawnPosition, deleteBlockInventory, getBlockInventories, getWorldTime, getBlockMetadata, setBlockInventory, setActiveDimension, getDimensionType, NETHER_DIMENSION, BOB_DIMENSION } from './world.js';
+import { addWorldChange, saveWorld, getBlockAt, getAllBlockInventoriesState, getSpawnPosition, deleteBlockInventory, getBlockInventories, getWorldTime, getBlockMetadata, setBlockInventory, setActiveDimension, getDimensionType, getSubChunkStore, NETHER_DIMENSION, BOB_DIMENSION } from './world.js';
 import { addItemEntity, removeItemEntity, getItemEntity, getAllItemEntities } from './entities.js';
 import { handleCommand } from './commands.js';
 import {
@@ -12,6 +12,7 @@ import {
     sendServerMods,
     sendSpawnPosition,
     sendChunks,
+    announceClientTerrain,
     sendPlayerPositionLook,
     sendSingleChunk,
     unloadChunk,
@@ -22,6 +23,7 @@ import {
     createEntityTeleportPacket,
     createDestroyEntityPacket,
     createSpawnObjectPacket,
+    createEntityEquipmentPacket,
     sendPlayerListEntry,
     sendPlayerListData,
     createDisconnectPacket,
@@ -36,7 +38,7 @@ import {
 import config from './config.js';
 import Logger from './logger.js';
 import { isBanned, describeBan } from './bans.js';
-import getServerWorld from './World.js';
+import getServerWorld, { setBlockActionEmitter } from './World.js';
 import { getBlockAt as getServerBlockAt } from './world.js';
 import { getWeatherState } from './weather.js';
 import { emitBlockAction } from './ServerModLoader.js';
@@ -375,10 +377,14 @@ function handleLoginPacket(player, packetId, buffer, offset) {
             }));
         }
 
+        // Nothing has been sent yet when the client builds the world itself;
+        // pre-marking the spawn area would hide block changes inside it.
         const sentChunks = new Set();
-        for (let cx = -2; cx <= 2; cx++) {
-            for (let cz = -2; cz <= 2; cz++) {
-                sentChunks.add(`${cx},${cz}`);
+        if (announceClientTerrain(player) === null) {
+            for (let cx = -2; cx <= 2; cx++) {
+                for (let cz = -2; cz <= 2; cz++) {
+                    sentChunks.add(`${cx},${cz}`);
+                }
             }
         }
         playerChunks.set(player.eid, sentChunks);
@@ -419,9 +425,11 @@ function handleLoginPacket(player, packetId, buffer, offset) {
             if (eid === player.eid) continue;
             if (canSee(player, p)) {
                 player.ws.send(createSpawnPlayerPacket(p));
+                sendPlayerEquipment(player, p);
             }
             if (canSee(p, player)) {
                 p.ws.send(createSpawnPlayerPacket(player));
+                sendPlayerEquipment(p, player);
             }
             if (canSee(p, player)) {
                 p.ws.send(sendPlayerListEntry([player], 0));
@@ -466,6 +474,9 @@ function handlePlayPacket(player, packetId, buffer, offset) {
 
         case 0x04: { 
             ensureReadable(buffer, offset, 25);
+            if (Date.now() < (player.teleportGraceUntil || 0)) {
+                break;
+            }
             player.x = buffer.readDoubleBE(offset);
             player.y = buffer.readDoubleBE(offset + 8);
             player.z = buffer.readDoubleBE(offset + 16);
@@ -487,6 +498,9 @@ function handlePlayPacket(player, packetId, buffer, offset) {
 
         case 0x06: { 
             ensureReadable(buffer, offset, 33);
+            if (Date.now() < (player.teleportGraceUntil || 0)) {
+                break;
+            }
             player.x = buffer.readDoubleBE(offset);
             player.y = buffer.readDoubleBE(offset + 8);
             player.z = buffer.readDoubleBE(offset + 16);
@@ -698,11 +712,32 @@ function handleOffGridBearingCell(player, buffer, offset) {
     }
 }
 
+setBlockActionEmitter((action, data) => emitBlockAction(action, data));
+
 function getHeldItemId(player) {
     const inventory = player.inventory;
     if (!inventory) return 0;
     const slot = Number(inventory.selectedSlotIndex) || 0;
     return inventory.items?.[slot]?.typeId || 0;
+}
+
+// The hand item is not part of entity metadata, so every other client is told
+// which item a player is holding and where they hold it.
+function sendPlayerEquipment(target, player) {
+    if (!target || target === player) return;
+    if (!target.ws || target.ws.readyState !== 1) return;
+    if ((target.dimension ?? 0) !== (player.dimension ?? 0)) return;
+
+    target.ws.send(createEntityEquipmentPacket(player));
+}
+
+function broadcastPlayerEquipment(player) {
+    if (!player || player.eid === null || player.eid === undefined) return;
+
+    for (const other of getPlayers().values()) {
+        if (other === player) continue;
+        sendPlayerEquipment(other, player);
+    }
 }
 
 function revertBlockForPlayer(player, x, y, z) {
@@ -1031,7 +1066,11 @@ function handleBlockPlacement(player, buffer, offset) {
 
         safeSaveWorld();
 
-        const blockStates = [[placeX, placeY, placeZ, (blockId << 4) | metadata]];
+        // A placed block may remove itself (the ragdoll block drops a ragdoll),
+        // so announce the state the server world actually ended up with.
+        const finalBlockState = (getBlockAt(placeX, placeY, placeZ) << 4)
+            | (getBlockMetadata(placeX, placeY, placeZ) & 0xF);
+        const blockStates = [[placeX, placeY, placeZ, finalBlockState]];
         if (doorTop) {
             blockStates.push([placeX, placeY + 1, placeZ, (doorTopId << 4) | metadata]);
         }
@@ -1150,6 +1189,9 @@ const BOB_PORTAL_ID = 417;
 const OBSIDIAN_ID = 256;
 const BOB_FRAME_ID = 416;
 const PORTAL_COOLDOWN_MS = 3000;
+// Movement packets already in flight when a dimension change is sent must not
+// drag the player back onto the portal they just came out of.
+const PORTAL_GRACE_MS = 750;
 
 // Every portal frame block lights a portal that leads to its own dimension.
 const PORTAL_FRAMES = [
@@ -1243,12 +1285,23 @@ function checkPortalTravel(player) {
     const py = Math.floor(player.y);
     const pz = Math.floor(player.z);
 
-    if (getBlockAt(px, py, pz, dimension) !== PORTAL_ID && getBlockAt(px, py + 1, pz, dimension) !== PORTAL_ID
-        && getBlockAt(px, py, pz, dimension) !== BOB_PORTAL_ID && getBlockAt(px, py + 1, pz, dimension) !== BOB_PORTAL_ID) {
+    const feetId = getBlockAt(px, py, pz, dimension);
+    const headId = getBlockAt(px, py + 1, pz, dimension);
+    const inPortal = feetId === PORTAL_ID || headId === PORTAL_ID
+        || feetId === BOB_PORTAL_ID || headId === BOB_PORTAL_ID;
+
+    if (!inPortal) {
+        player.portalArmed = true;
         return;
     }
 
-    const portalId = getBlockAt(px, py, pz, dimension) === BOB_PORTAL_ID || getBlockAt(px, py + 1, pz, dimension) === BOB_PORTAL_ID
+    // A player who arrived standing on a portal (or saved inside one) has to
+    // step out before it can send them back, so arrival never bounces them.
+    if (player.portalArmed === false) {
+        return;
+    }
+
+    const portalId = feetId === BOB_PORTAL_ID || headId === BOB_PORTAL_ID
         ? BOB_PORTAL_ID
         : PORTAL_ID;
 
@@ -1270,29 +1323,50 @@ function travelToDimension(player, targetDimension) {
     const ty = Math.max(4, Math.min(Math.floor(player.y), targetDimension === NETHER_DIMENSION ? 100 : 200));
 
     const targetPortalId = targetDimension === BOB_DIMENSION ? BOB_PORTAL_ID : PORTAL_ID;
-    const targetFloorId = targetDimension === BOB_DIMENSION ? BOB_FRAME_ID : OBSIDIAN_ID;
+    const targetFrameId = targetDimension === BOB_DIMENSION ? BOB_FRAME_ID : OBSIDIAN_ID;
 
-    for (let dx = 0; dx < 4; dx++) {
-        for (let dz = 0; dz < 2; dz++) {
-            for (let dy = 0; dy < 5; dy++) {
-                addWorldChange(tx + dx, ty + dy, tz + dz, 0, 0, targetDimension);
+    // Build the same 4 wide x 5 tall frame a player would build by hand, with
+    // the 2x3 portal plane inside it, plus a landing platform in front. The
+    // old code only placed a floor and a floating 2x3 portal wall, which is
+    // why auto-generated portals had no frame and the wrong shape.
+    const left = tx - 1;
+    const right = tx + 2;
+    const bottom = ty - 1;
+    const top = ty + 3;
+
+    for (let x = left; x <= right; x++) {
+        for (let z = tz; z <= tz + 2; z++) {
+            for (let y = ty; y <= top; y++) {
+                addWorldChange(x, y, z, 0, 0, targetDimension);
             }
-            addWorldChange(tx + dx, ty - 1, tz + dz, targetFloorId, 0, targetDimension);
+            addWorldChange(x, bottom, z, targetFrameId, 0, targetDimension);
         }
     }
 
-    for (let dx = 0; dx < 2; dx++) {
-        for (let dy = 0; dy < 3; dy++) {
-            addWorldChange(tx + dx, ty + dy, tz, targetPortalId, 0, targetDimension);
+    for (let x = left; x <= right; x++) {
+        addWorldChange(x, top, tz, targetFrameId, 0, targetDimension);
+    }
+    for (let y = ty; y <= ty + 2; y++) {
+        addWorldChange(left, y, tz, targetFrameId, 0, targetDimension);
+        addWorldChange(right, y, tz, targetFrameId, 0, targetDimension);
+    }
+
+    for (let x = tx; x <= tx + 1; x++) {
+        for (let y = ty; y <= ty + 2; y++) {
+            addWorldChange(x, y, tz, targetPortalId, 0, targetDimension);
         }
     }
 
     player.dimension = targetDimension;
-    player.x = tx + 2.5;
+    // Stand two blocks clear of the portal plane, on the platform, so the
+    // arrival position cannot immediately drop the player back in a portal.
+    player.x = tx + 0.5;
     player.y = ty;
-    player.z = tz + 0.5;
+    player.z = tz + 2.5;
     player.onGround = false;
     player.portalCooldown = Date.now() + PORTAL_COOLDOWN_MS;
+    player.portalArmed = false;
+    player.teleportGraceUntil = Date.now() + PORTAL_GRACE_MS;
 
     playerChunks.set(player.eid, new Set());
     savePlayerData(player);
@@ -1331,6 +1405,27 @@ function checkAndSendChunks(player) {
         }
     }
 
+    // With client-side generation the client builds the base terrain itself, so
+    // only chunks holding server-side block changes have to be transferred.
+    if (announceClientTerrain(player) !== null) {
+        const store = getSubChunkStore();
+
+        for (let cx = playerChunkX - renderDistance; cx <= playerChunkX + renderDistance; cx++) {
+            for (let cz = playerChunkZ - renderDistance; cz <= playerChunkZ + renderDistance; cz++) {
+                const chunkKey = `${cx},${cz}`;
+                if (sentChunks.has(chunkKey) || !store.hasChunk(cx, cz)) {
+                    continue;
+                }
+
+                sendSingleChunk(player, cx, cz);
+                sentChunks.add(chunkKey);
+            }
+        }
+
+        playerChunks.set(player.eid, sentChunks);
+        return;
+    }
+
     for (let cx = playerChunkX - renderDistance; cx <= playerChunkX + renderDistance; cx++) {
         for (let cz = playerChunkZ - renderDistance; cz <= playerChunkZ + renderDistance; cz++) {
             const chunkKey = `${cx},${cz}`;
@@ -1365,9 +1460,11 @@ function respawnPlayer(player) {
     savePlayerData(player);
 
     const sentChunks = new Set();
-    for (let cx = -2; cx <= 2; cx++) {
-        for (let cz = -2; cz <= 2; cz++) {
-            sentChunks.add(`${cx},${cz}`);
+    if (announceClientTerrain(player) === null) {
+        for (let cx = -2; cx <= 2; cx++) {
+            for (let cz = -2; cz <= 2; cz++) {
+                sentChunks.add(`${cx},${cz}`);
+            }
         }
     }
     playerChunks.set(player.eid, sentChunks);
@@ -1433,5 +1530,6 @@ export {
     cleanupPlayerChunks,
     respawnPlayer,
     flushSaveWorld,
+    broadcastPlayerEquipment,
     lightPortal
 };

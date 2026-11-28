@@ -28,7 +28,6 @@ export default class Gui {
     }
 
     getStringWidth(stack, string, color = false) {
-        if (color) {string = string.replace(/§./g, "")};
         return this.minecraft.fontRenderer.getStringWidth(stack, string);
     }
 

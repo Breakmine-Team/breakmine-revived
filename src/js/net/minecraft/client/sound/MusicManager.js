@@ -12,6 +12,10 @@ const TRACK_FILES = [
     "sound/music/6.ogg",
     "sound/music/7.ogg",
     "sound/music/8.ogg",
+    "sound/music/9.mp3",
+    "sound/music/10.mp3",
+    "sound/music/11.mp3",
+    "sound/music/12.mp3",
 ];
 
 export default class MusicManager {

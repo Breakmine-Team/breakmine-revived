@@ -9,6 +9,10 @@ const SECTION_VOLUME = 16 * 16 * 16;
 
 export default class ChunkProviderClient extends ChunkProvider {
 
+    // Generation is expensive, so a few jobs are kept in flight at a time and
+    // worked outwards from the player.
+    static MAX_GENERATION_JOBS = 4;
+
     constructor(world) {
         super(world);
 
@@ -19,6 +23,10 @@ export default class ChunkProviderClient extends ChunkProvider {
         this.pendingChunks = new Map();
         this.pendingBlockChanges = new Map();
         this.terrain = null;
+        this.terrainWorker = null;
+        // Chunks the server sent itself (they hold block changes), which this
+        // client must not overwrite with locally generated terrain.
+        this.serverChunks = new Set();
         this.nextJobId = 1;
         this.blockTableSignature = null;
 
@@ -49,9 +57,44 @@ export default class ChunkProviderClient extends ChunkProvider {
         return this.terrain !== null;
     }
 
-    // Called for the QuickJSON "terrain" message: remember the descriptor and
-    // the (identical) payload every generated chunk is filled from.
+    // Called for the "terrain" message: remember how chunks are generated.
+    // Flat worlds share one payload; seeded worlds generate per column in a
+    // worker.
     setTerrain(descriptor) {
+        // Switching to a different descriptor (a /server switch) would otherwise
+        // keep the previous world's locally generated columns around.
+        if (this.terrain !== null && this.terrain.generated !== undefined) {
+            for (const key of Array.from(this.terrain.generated)) {
+                this.unloadChunk((key << 16) >> 16, key >> 16);
+            }
+        }
+        this.clearTerrain();
+
+        if (descriptor.generator === "normal") {
+            this.terrain = {
+                descriptor,
+                generator: descriptor.generator,
+                seed: descriptor.seed,
+                pending: new Set(),
+                generated: new Set()
+            };
+
+            try {
+                this.terrainWorker = new Worker(
+                    new URL("../worker/terraingen.worker.js", import.meta.url),
+                    { type: "module" }
+                );
+                this.terrainWorker.onmessage = (event) => this.onTerrainWorkerMessage(event.data);
+                this.terrainWorker.onerror = (event) => {
+                    console.error("Terrain generator worker failed:", event && event.message ? event.message : event);
+                };
+            } catch (error) {
+                console.error("Terrain generator worker could not be created:", error);
+                this.terrainWorker = null;
+            }
+            return;
+        }
+
         const payload = buildTerrainPayload(descriptor);
         this.terrain = {
             descriptor,
@@ -60,28 +103,117 @@ export default class ChunkProviderClient extends ChunkProvider {
         };
     }
 
+    clearTerrain() {
+        if (this.terrainWorker !== null) {
+            try {
+                this.terrainWorker.terminate();
+            } catch (error) {
+            }
+            this.terrainWorker = null;
+        }
+        this.terrain = null;
+    }
+
     // Generates any missing terrain chunks around a world position.
     updateTerrainChunks(x, z) {
-        if (this.terrain === null) {
+        const terrain = this.terrain;
+        if (terrain === null) {
             return;
         }
 
         const centerX = Math.floor(x) >> 4;
         const centerZ = Math.floor(z) >> 4;
-        const radius = this.terrain.descriptor.viewDistance;
+        const radius = terrain.descriptor.viewDistance;
 
+        if (terrain.generated !== undefined) {
+            this.unloadDistantTerrainChunks(centerX, centerZ, radius + 2);
+        }
+
+        const missing = [];
         for (let dx = -radius; dx <= radius; dx++) {
             for (let dz = -radius; dz <= radius; dz++) {
                 const chunkX = centerX + dx;
                 const chunkZ = centerZ + dz;
                 const key = chunkX + (chunkZ << 16);
 
-                if (this.chunks.has(key) || this.pendingChunks.has(key)) {
+                if (this.chunks.has(key) || this.pendingChunks.has(key) || this.serverChunks.has(key)) {
+                    continue;
+                }
+                if (terrain.pending !== undefined && terrain.pending.has(key)) {
                     continue;
                 }
 
-                this.fillChunkFromPacket(chunkX, chunkZ, this.terrain.data, this.terrain.mask);
+                missing.push([chunkX, chunkZ, dx * dx + dz * dz]);
             }
+        }
+
+        if (missing.length === 0) {
+            return;
+        }
+
+        if (terrain.pending === undefined) {
+            for (const [chunkX, chunkZ] of missing) {
+                this.fillChunkFromPacket(chunkX, chunkZ, terrain.data, terrain.mask);
+            }
+            return;
+        }
+
+        missing.sort((a, b) => a[2] - b[2]);
+        const room = ChunkProviderClient.MAX_GENERATION_JOBS - terrain.pending.size;
+        for (let i = 0; i < Math.min(room, missing.length); i++) {
+            this.requestTerrainChunk(missing[i][0], missing[i][1]);
+        }
+    }
+
+    requestTerrainChunk(chunkX, chunkZ) {
+        if (this.terrainWorker === null || this.terrain === null) {
+            return;
+        }
+
+        this.terrain.pending.add(chunkX + (chunkZ << 16));
+        this.terrainWorker.postMessage({
+            type: "generate",
+            chunkX: chunkX,
+            chunkZ: chunkZ,
+            worldType: this.terrain.generator,
+            seed: this.terrain.seed
+        });
+    }
+
+    onTerrainWorkerMessage(message) {
+        const terrain = this.terrain;
+        if (terrain === null || message === null || message === undefined || message.type !== "generated") {
+            return;
+        }
+
+        const key = message.x + (message.z << 16);
+        if (terrain.pending === undefined || !terrain.pending.delete(key)) {
+            return;
+        }
+        if (this.serverChunks.has(key)) {
+            return;
+        }
+
+        terrain.generated.add(key);
+        this.fillChunkFromPacket(message.x, message.z, new Uint8Array(message.data), message.mask, true);
+    }
+
+    // Locally generated chunks are dropped when the player walks away; chunks
+    // the server sent are unloaded by its own unload messages.
+    unloadDistantTerrainChunks(centerX, centerZ, keepDistance) {
+        for (const key of Array.from(this.terrain.generated)) {
+            const chunkX = (key << 16) >> 16;
+            const chunkZ = key >> 16;
+
+            if (Math.abs(chunkX - centerX) <= keepDistance && Math.abs(chunkZ - centerZ) <= keepDistance) {
+                continue;
+            }
+
+            this.terrain.generated.delete(key);
+            if (this.terrain.pending !== undefined) {
+                this.terrain.pending.delete(key);
+            }
+            this.unloadChunk(chunkX, chunkZ);
         }
     }
 
@@ -105,8 +237,17 @@ export default class ChunkProviderClient extends ChunkProvider {
     }
 
     
-    fillChunkFromPacket(x, z, data, mask) {
+    fillChunkFromPacket(x, z, data, mask, fromTerrain = false) {
         const key = x + (z << 16);
+        if (!fromTerrain) {
+            // The server's chunk holds block changes, so it wins over terrain
+            // this client would have generated for the same column.
+            this.serverChunks.add(key);
+            if (this.terrain !== null && this.terrain.pending !== undefined) {
+                this.terrain.pending.delete(key);
+            }
+        }
+
         const chunk = this.loadChunk(x, z);
         const jobId = this.nextJobId++;
 
@@ -345,10 +486,24 @@ export default class ChunkProviderClient extends ChunkProvider {
         }
     }
 
+    clearChunks() {
+        this.serverChunks.clear();
+        if (this.terrain !== null) {
+            if (this.terrain.generated !== undefined) this.terrain.generated.clear();
+            if (this.terrain.pending !== undefined) this.terrain.pending.clear();
+        }
+        super.clearChunks();
+    }
+
     unloadChunk(x, z) {
         const key = x + (z << 16);
         this.pendingChunks.delete(key);
         this.pendingBlockChanges.delete(key);
+        this.serverChunks.delete(key);
+        if (this.terrain !== null) {
+            if (this.terrain.generated !== undefined) this.terrain.generated.delete(key);
+            if (this.terrain.pending !== undefined) this.terrain.pending.delete(key);
+        }
         super.unloadChunk(x, z);
     }
 
@@ -357,6 +512,7 @@ export default class ChunkProviderClient extends ChunkProvider {
             this.worker.terminate();
             this.worker = null;
         }
+        this.clearTerrain();
         this.pendingChunks.clear();
         this.pendingBlockChanges.clear();
     }

@@ -1,6 +1,7 @@
 import * as THREE from "../../../../../../libraries/three.module.js";
 import Block from "../world/block/Block.js";
 import BlockRenderType from "../../util/BlockRenderType.js";
+import EnumBlockFace from "../../util/EnumBlockFace.js";
 import { applyHeldItemDisplay } from './HeldItemModel.js';
 import Tessellator from "./Tessellator.js";
 
@@ -9,6 +10,11 @@ export default class FirstPersonItemRenderer {
     constructor(worldRenderer) {
         this.worldRenderer = worldRenderer;
         this.scene = new THREE.Scene();
+        // With shadows enabled the tessellator hands out lambert materials, and
+        // this scene has no lights of its own, so the held item would shade to
+        // black. Light brightness is applied as the material colour each frame,
+        // which an ambient-only light reproduces exactly.
+        this.scene.add(new THREE.AmbientLight(0xffffff, 1.0));
         this.camera = new THREE.PerspectiveCamera(70, 1, 0.05, 100);
         this.cameraGroup = new THREE.Object3D();
         this.armTransformGroup = new THREE.Object3D();
@@ -124,9 +130,15 @@ export default class FirstPersonItemRenderer {
         this.cameraGroup.rotateY((player.rotationYaw - yawArm) * Math.PI / 1800);
 
         const light = Math.max(0, Math.min(1, Number(brightness) || 0));
+        // Sprites are drawn white, so the held item also needs the block's own
+        // tint, the same one the item icons use.
+        const tint = block ? block.getColor(null, 0, 0, 0, EnumBlockFace.NORTH) : 0xffffff;
+        const tintRed = ((tint >> 16 & 255) / 255) * light;
+        const tintGreen = ((tint >> 8 & 255) / 255) * light;
+        const tintBlue = ((tint & 255) / 255) * light;
         this.armTransformGroup.traverse(node => {
             if (node.isMesh && node.material?.color) {
-                node.material.color.setRGB(light, light, light);
+                node.material.color.setRGB(tintRed, tintGreen, tintBlue);
             }
         });
 

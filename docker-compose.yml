@@ -95,6 +95,10 @@ services:
       - server_data:/data
     ports:
       - "6008:6008"
+      # A second concurrent server, listed in `servers` in serverconfig.conf as
+      # servers = ["main", "second"] with port = 6009 in
+      # worlds/second/serverconfig.conf. Publish one entry per extra server.
+      - "6009:6009"
 
 networks:
   # Dokploy's Traefik only routes to ports on this network; without it the

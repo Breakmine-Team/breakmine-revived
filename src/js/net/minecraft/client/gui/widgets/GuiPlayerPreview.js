@@ -18,7 +18,8 @@ export default class GuiPlayerPreview {
     constructor(minecraft) {
         this.minecraft = minecraft;
 
-        this.model = new ModelPlayer();
+        this.slim = Boolean(minecraft?.settings?.isSlimSkin?.());
+        this.model = new ModelPlayer(this.slim);
         this.modelGroup = new THREE.Object3D();
         this.modelReady = false;
 
@@ -46,7 +47,7 @@ export default class GuiPlayerPreview {
         this.baseYaw = 0;
     }
 
-    init() {
+    init(skinImage = null) {
         this.dispose();
 
         const rs = GuiPlayerPreview.RENDER_SCALE;
@@ -58,7 +59,7 @@ export default class GuiPlayerPreview {
         this.renderCanvas.height = ch;
 
         try {
-            this.skinImage = this.minecraft.resources['char.png'] || null;
+            this.skinImage = skinImage || this.minecraft.resources['char.png'] || null;
             const texture = GuiPlayerTexture.createSharpTexture(this.minecraft.resources, this.skinImage);
             if (!texture) return;
             this.previewTexture = texture;
@@ -293,6 +294,23 @@ export default class GuiPlayerPreview {
         }
 
         this.capeUsername = null;
+    }
+
+    
+    setSlim(slim) {
+        slim = Boolean(slim);
+        if (slim === this.slim) return this;
+
+        this.slim = slim;
+        this.model.setSlim(slim);
+
+        if (this.modelReady) {
+            // The arm meshes are baked from the boxes, so the preview is built
+            // again around the skin it is already showing.
+            this.init(this.skinImage);
+        }
+
+        return this;
     }
 
     setAnimationMode(mode) {

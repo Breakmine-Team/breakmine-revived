@@ -2,22 +2,62 @@ import * as THREE from "../../../../../../libraries/three.module.js";
 import EnumBlockFace from "../../util/EnumBlockFace.js";
 import { getLiquidBlockCornerHeights } from "./LiquidMeshHelper.js";
 
+// Shared by every compiled material, so one write per frame updates all of the
+// water shaders (chunk batches, off-grid fields and item previews alike).
+export const waterUniforms = {
+    uWaterTime: { value: 0 },
+    uWaterReflectivity: { value: 0 },
+    uWaterWaviness: { value: 0 },
+    uWaterSkyColor: { value: new THREE.Color(0x000000) },
+    // Direction from the world towards the sun, written each frame while the
+    // sky is drawn. The sun glint needs it to know where to sparkle.
+    uWaterSunDir: { value: new THREE.Vector3(0, 1, 0) },
+    // three only uploads its own cameraPosition for phong/standard/shader
+    // materials, so Lambert water would otherwise read it as (0,0,0) and get a
+    // meaningless view direction.
+    uWaterCameraPos: { value: new THREE.Vector3() }
+};
+
 export function applyTileWrapToShader(shader) {
+    shader.uniforms.uWaterTime = waterUniforms.uWaterTime;
+    shader.uniforms.uWaterReflectivity = waterUniforms.uWaterReflectivity;
+    shader.uniforms.uWaterWaviness = waterUniforms.uWaterWaviness;
+    shader.uniforms.uWaterSkyColor = waterUniforms.uWaterSkyColor;
+    shader.uniforms.uWaterSunDir = waterUniforms.uWaterSunDir;
+    shader.uniforms.uWaterCameraPos = waterUniforms.uWaterCameraPos;
+
     shader.vertexShader = shader.vertexShader
         .replace(
             '#include <uv_pars_vertex>',
-            '#include <uv_pars_vertex>\nattribute vec4 aTileRect;\nattribute float aWrap;\nvarying vec4 vTileRect;\nvarying float vWrap;'
+            '#include <uv_pars_vertex>\nuniform vec3 uWaterCameraPos;\nattribute vec4 aTileRect;\nattribute float aWrap;\nattribute float aBlockLight;\nattribute float aWater;\nvarying vec4 vTileRect;\nvarying float vWrap;\nvarying float vBlockLight;\nvarying float vWater;\nvarying vec3 vWaterPos;\nvarying vec3 vWaterView;\nvarying vec3 vWaterNormal;'
         )
         .replace(
             '#include <uv_vertex>',
-            '#include <uv_vertex>\n\tvTileRect = aTileRect;\n\tvWrap = aWrap;'
+            '#include <uv_vertex>\n\tvTileRect = aTileRect;\n\tvWrap = aWrap;\n\tvBlockLight = aBlockLight;\n\tvWater = aWater;\n\tvWaterPos = ( modelMatrix * vec4( position, 1.0 ) ).xyz;\n\tvWaterView = normalize( uWaterCameraPos - vWaterPos );\n\tvec3 waterNormalWorld = mat3( modelMatrix ) * normal;\n\tfloat waterNormalLength = length( waterNormalWorld );\n\tvWaterNormal = waterNormalLength > 0.0001 ? waterNormalWorld / waterNormalLength : vec3( 0.0, 1.0, 0.0 );'
         );
 
+    shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <uv_pars_fragment>',
+        '#include <uv_pars_fragment>\nuniform float uWaterTime;\nuniform float uWaterReflectivity;\nuniform float uWaterWaviness;\nuniform vec3 uWaterSkyColor;\nuniform vec3 uWaterSunDir;\nvarying vec4 vTileRect;\nvarying float vWrap;\nvarying float vBlockLight;\nvarying float vWater;\nvarying vec3 vWaterPos;\nvarying vec3 vWaterView;\nvarying vec3 vWaterNormal;'
+    );
+
+    // Only shaded (lambert) materials have a direct light term to restore, so
+    // the emitter lift is skipped for the unlit material.
+    if (shader.fragmentShader.indexOf('vLightFront') !== -1) {
+        shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <output_fragment>',
+            `// Light from torches, glowstone and lava is already baked into the vertex
+	// colours, but the sun's shadow map only removes the direct sunlight, so a
+	// lit-up area in shade would fall back to ambient alone. vLightFront is
+	// exactly the direct term that getShadowMask() takes away, so adding the
+	// removed share back for emitters keeps torch-lit ground bright in shadow
+	// without making it brighter than it is in the sun.
+	outgoingLight += BRDF_Lambert( diffuseColor.rgb ) * vBlockLight * ( 1.0 - getShadowMask() ) * vLightFront;
+#include <output_fragment>`
+        );
+    }
+
     shader.fragmentShader = shader.fragmentShader
-        .replace(
-            '#include <uv_pars_fragment>',
-            '#include <uv_pars_fragment>\nvarying vec4 vTileRect;\nvarying float vWrap;'
-        )
         .replace(
             '#include <map_fragment>',
             `#ifdef USE_MAP
@@ -35,6 +75,18 @@ export function applyTileWrapToShader(shader) {
 		wrappedUv.y = vTileRect.y + fract( ( vUv.y - vTileRect.y ) / vTileRect.w ) * vTileRect.w;
 		wrappedUv.y = min( wrappedUv.y, vTileRect.y + vTileRect.w * ( 31.0 / 32.0 ) );
 	}
+	// Water drifts: slide the sampled spot around inside the block's own tile
+	// with a pair of travelling waves, so the surface ripples instead of sitting
+	// still. The offset is computed per fragment from the world position, which
+	// keeps neighbouring blocks in phase and hides the quad seams.
+	if ( vWater > 0.5 && uWaterWaviness > 0.0 && vTileRect.z > 0.0 && vTileRect.w > 0.0 ) {
+		vec2 ripple = vec2(
+			sin( vWaterPos.x * 0.9 + vWaterPos.z * 0.5 + uWaterTime * 1.7 ),
+			cos( vWaterPos.x * 0.7 - vWaterPos.z * 1.1 + uWaterTime * 1.3 )
+		);
+		vec2 shift = ripple * ( uWaterWaviness * vTileRect.zw * ( 1.0 / 16.0 ) );
+		wrappedUv = vTileRect.xy + fract( ( wrappedUv - vTileRect.xy + shift ) / vTileRect.zw ) * vTileRect.zw;
+	}
 	vec4 sampledDiffuseColor = texture2D( map, wrappedUv );
 	#ifdef DECODE_VIDEO_TEXTURE
 		sampledDiffuseColor = vec4( mix( pow( sampledDiffuseColor.rgb * 0.9478672986 + vec3( 0.0521327014 ), vec3( 2.4 ) ), sampledDiffuseColor.rgb * 0.0773993808, vec3( lessThanEqual( sampledDiffuseColor.rgb, vec3( 0.04045 ) ) ) ), sampledDiffuseColor.w );
@@ -42,6 +94,40 @@ export function applyTileWrapToShader(shader) {
 	diffuseColor *= sampledDiffuseColor;
 #endif`
         );
+
+    // Sky reflection. There is no reflection pass to sample, so water mirrors the
+    // current sky colour and fades between the plain shaded surface and that
+    // colour with a fresnel term: almost a mirror at grazing angles, barely
+    // reflective when looked at straight down.
+    shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <output_fragment>',
+        `if ( vWater > 0.5 && uWaterReflectivity > 0.0 ) {
+	float fresnel = pow( 1.0 - abs( vWaterView.y ), 5.0 );
+	float reflection = clamp( uWaterReflectivity, 0.0, 1.0 ) * ( 0.15 + 0.85 * fresnel );
+	outgoingLight = mix( outgoingLight, uWaterSkyColor, reflection );
+
+	// Sun glint: the water brightens where the mirrored view direction lines up
+	// with the sun, which is what puts the bright streak on the reflection.
+	// uWaterSunDir points from the world to the sun, so after sunset it faces
+	// down and the glint switches itself off.
+	if ( uWaterSunDir.y > 0.0 && vWaterNormal.y > 0.35 ) {
+		vec3 sunDir = normalize( uWaterSunDir );
+		vec3 viewDir = normalize( vWaterView );
+		// The ripples above are only a UV slide, so tilt the surface normal with
+		// the same waves and the highlight drifts and breaks up on the water.
+		vec3 waveNormal = normalize( vec3(
+			cos( vWaterPos.x * 0.9 + vWaterPos.z * 0.5 + uWaterTime * 1.7 ) * 0.9 * uWaterWaviness,
+			1.0,
+			-sin( vWaterPos.x * 0.7 - vWaterPos.z * 1.1 + uWaterTime * 1.3 ) * 1.1 * uWaterWaviness
+		) );
+		float sunDot = max( dot( reflect( -viewDir, waveNormal ), sunDir ), 0.0 );
+		float glint = pow( sunDot, 180.0 ) * 1.6 + pow( sunDot, 24.0 ) * 0.18;
+		glint *= smoothstep( 0.0, 0.15, uWaterSunDir.y ) * clamp( uWaterReflectivity, 0.0, 1.0 );
+		outgoingLight += vec3( 1.0, 0.97, 0.88 ) * glint;
+	}
+}
+#include <output_fragment>`
+    );
 }
 
 
@@ -134,6 +220,14 @@ export default class Tessellator {
         this.tileWrap = null;
         this.tileWrapFlags = 0;
         this.usesTileWrap = false;
+
+        this.isTranslucentPass = false;
+
+        this.blockLight = 0;
+        this.blockLights = [];
+
+        this.water = 0;
+        this.waters = [];
     }
 
     get material() {
@@ -183,6 +277,11 @@ export default class Tessellator {
         this.tileWrap = null;
         this.tileWrapFlags = 0;
         this.usesTileWrap = false;
+        this.isTranslucentPass = false;
+        this.blockLights.length = 0;
+        this.blockLight = 0;
+        this.waters.length = 0;
+        this.water = 0;
         this.clearRotation();
     }
 
@@ -203,7 +302,21 @@ export default class Tessellator {
     setDepthWrite(value) {
     }
 
+    // Normalised light emitted by nearby blocks (torches, glowstone, lava),
+    // stored per vertex so the shader can restore it inside sun shadows.
+    setBlockLight(light) {
+        let value = Number(light);
+        this.blockLight = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
+    }
+
+    // Marks the following vertices as a liquid surface, which opts them into the
+    // rippling and reflective water shading.
+    setWaterSurface(isWater) {
+        this.water = isWater ? 1 : 0;
+    }
+
     setRenderingPass(isTransparent) {
+        this.isTranslucentPass = isTransparent === true;
         this.material.transparent = isTransparent;
         this.material.depthWrite = !isTransparent;
         // Opaque leaves use a cutout texture, so the depth-writing pass still
@@ -271,6 +384,8 @@ export default class Tessellator {
         this.colors.push(this.green);
         this.colors.push(this.blue);
         this.colors.push(this.alpha);
+        this.blockLights.push(this.blockLight);
+        this.waters.push(this.water);
 
         if (this.usesTileWrap) {
             if (this.tileWrap !== null) {
@@ -438,6 +553,12 @@ export default class Tessellator {
             geometry.setAttribute('aTileRect', new THREE.BufferAttribute(new Float32Array(this.tileRects), 4));
             geometry.setAttribute('aWrap', new THREE.BufferAttribute(new Float32Array(this.wraps), 1));
         }
+        if (this.getShadows() && this.blockLights.length === this.addedVertices) {
+            geometry.setAttribute('aBlockLight', new THREE.BufferAttribute(new Float32Array(this.blockLights), 1));
+        }
+        if (this.waters.length === this.addedVertices) {
+            geometry.setAttribute('aWater', new THREE.BufferAttribute(new Float32Array(this.waters), 1));
+        }
 
         const faces = this.addedVertices / 4;
         const IndexArray = this.addedVertices <= 65535 ? Uint16Array : Uint32Array;
@@ -455,16 +576,25 @@ export default class Tessellator {
 
         geometry.computeBoundingSphere();
 
-        let shadows = this.getShadows();
-
         if (this.getLit()) {
             geometry.computeVertexNormals();
         }
 
         let material = Tessellator.applyTileWrap(this.material.clone());
+
+        // Blended geometry is drawn without depth writes, so it has to stay out
+        // of the shadow map entirely: cutout quads (flowers, doors, rails) would
+        // cast solid square shadows over everything, and sampling the shadow map
+        // on a transparent surface renders it black.
+        let translucent = this.isTranslucentPass;
+        let shadows = this.getShadows() && !translucent;
+
         let mesh = new THREE.Mesh(geometry, material);
         mesh.castShadow = shadows;
         mesh.receiveShadow = shadows;
+        if (translucent) {
+            mesh.userData.isTranslucent = true;
+        }
         if (!inThing) group.matrixAutoUpdate = false;
         group.add(mesh);
         return mesh;

@@ -1,6 +1,12 @@
 import Block from "../world/block/Block.js";
 
 export function getLiquidBlockHeight(world, x, y, z, liquidId) {
+    // Held items and GUI previews render blocks without a world; use a full
+    // height instead of touching the world.
+    if (!world) {
+        return 1.0;
+    }
+
     const typeId = world.getBlockAt(x, y, z);
     
     if (typeId !== liquidId) {
@@ -19,6 +25,10 @@ export function getLiquidBlockHeight(world, x, y, z, liquidId) {
 }
 
 export function getLiquidCornerHeight(world, x, y, z, cornerX, cornerZ, liquidId) {
+    if (!world) {
+        return 1.0;
+    }
+
     for (let dx = cornerX - 1; dx <= cornerX; dx++) {
         for (let dz = cornerZ - 1; dz <= cornerZ; dz++) {
             if (world.getBlockAt(x + dx, y + 1, z + dz) === liquidId) {

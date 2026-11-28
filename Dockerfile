@@ -89,6 +89,11 @@ COPY libraries/ ./libraries/
 COPY --from=assets /app/src/js/ ./src/js/
 COPY server.js ./
 COPY backup-server.js ./
+# Default server configuration. serverconfig.conf is gitignored because it can
+# hold deployment-specific op lists, so copy it whenever the checkout has one
+# and always ship the example. The server reads /data/serverconfig.conf first
+# and seeds it from this copy on the first boot of an empty volume.
+COPY serverconfig*.conf ./
 
 # Named volume target. secrets.json is generated here on first boot, so it is
 # never baked into the image; persisting /data keeps logins valid across rebuilds.

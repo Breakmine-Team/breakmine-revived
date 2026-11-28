@@ -36,11 +36,19 @@ export default class Block {
 
         this.hardness = 1.0;
 
+        // How heavy one block of this is, in kilograms. Contraption physics
+        // adds these up, so every block weighs 1 kg unless it says otherwise.
+        this.mass = 1.0;
+
         Block.blocks.set(id, this);
 
         this.path = false;
         this.noFaceCull = false;
         this.multipart = false;
+
+        // Natural world terrain. An Assembler leaves these behind so a machine
+        // parked on the ground does not take the ground with it.
+        this.isTerrain = false;
 
         // Blocks whose mesh must be animated even when their current rotation
         // is zero. Their section mesh would otherwise be built as static and
@@ -93,6 +101,12 @@ export default class Block {
 
     setHardness(hardness) {
         this.hardness = hardness;
+        return this;
+    }
+
+    // How heavy this block is for contraption physics, in kilograms.
+    setMass(mass) {
+        this.mass = Number.isFinite(mass) && mass > 0.0 ? mass : 1.0;
         return this;
     }
 
@@ -240,6 +254,13 @@ export default class Block {
 
     pickedItem() {
         return this.id;
+    }
+
+    // The block picked by creative middle-click. Defaults to this block and
+    // follows pickedItem() overrides (bed head -> bed item, pusher head, etc.).
+    getMiddleClick() {
+        const picked = this.pickedItem();
+        return picked === this.id ? this : Block.getById(picked);
     }
 
     getLightValue(world, x, y, z) {

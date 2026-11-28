@@ -5,6 +5,8 @@ import path from '../util/path.js';
 import Logger from './logger.js';
 import * as worldGen from './WorldGen.js';
 import { SubChunkStore, SECTION_DATA_BYTES } from './SubChunkStore.js';
+import { loadRagdolls, saveRagdolls } from './ragdolls.js';
+import { loadContraptions, saveContraptions } from './contraptions.js';
 
 const log = Logger;
 
@@ -427,6 +429,11 @@ function initWorld(worldName = 'main') {
         fs.mkdirSync(worldDir, { recursive: true });
     }
 
+    // Ragdoll and contraption poses live beside the world data rather than in
+    // the binary world file, so the format did not have to change.
+    loadRagdolls(worldDir);
+    loadContraptions(worldDir);
+
     const worldFile = getWorldFile(worldName);
 
     netherChunks.clear();
@@ -482,6 +489,9 @@ function saveWorld() {
         fs.mkdirSync(worldDir, { recursive: true });
     }
     const worldFile = getWorldFile(currentWorldName);
+
+    saveRagdolls(worldDir);
+    saveContraptions(worldDir);
 
     saveDimensionFile(netherChunks, path.join(worldDir, 'world_nether.bin'), netherTime);
     saveDimensionFile(bobChunks, path.join(worldDir, 'world_bob.bin'), bobTime);

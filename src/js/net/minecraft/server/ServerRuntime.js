@@ -1,7 +1,7 @@
 import { initWorld, saveWorld, getSubChunkStore, loadCurrentWorld, getWorldTime, tickWorldTime, setBlockInventory, getBlockInventories, getCurrentWorldName, setActiveDimension, getBlockAt } from './world.js';
 import { tickAllFurnaces, broadcastFurnaceChanges } from './Furnace.js';
 import { sendTimeUpdate, sendWeatherUpdate, sendChatMessage, sendPlayerListEntry } from './packets.js';
-import { handlePacket, handlePushBlock, cleanupPlayerChunks, respawnPlayer, flushSaveWorld } from './handlers.js';
+import { handlePacket, handlePushBlock, cleanupPlayerChunks, respawnPlayer, flushSaveWorld, broadcastPlayerEquipment } from './handlers.js';
 import { tickWeather, getWeatherVersion, getWeatherState } from './weather.js';
 import { createConnectionGate } from './security.js';
 import { verifyConnection } from './security.js';
@@ -11,6 +11,8 @@ import { addPlayer, removePlayer, getPlayerCount, getPlayers, savePlayerData, no
 import Logger from './logger.js';
 import { BlockRegistry } from '../client/world/block/BlockRegistry.js';
 import { handleModMessage, loadServerSideMods } from './ServerModLoader.js';
+import { getRagdoll, listRagdolls, removeRagdoll, setRagdollOwner, storeRagdoll } from './ragdolls.js';
+import { getContraption, listContraptions, removeContraption, setContraptionOwner, storeContraption, storeContraptionPose, updateContraptionPose, applyCellEdits as applyContraptionCellEdits } from './contraptions.js';
 import { handleStructurePaste } from './structurePaste.js';
 import getServerWorld from './World.js';
 import config from './config.js';
@@ -26,6 +28,271 @@ let started = false;
 let lastWeatherVersion = -1;
 
 const MAX_CAPE_DATA_URL_LENGTH = 512 * 1024;
+
+// Ragdolls are simulated by one client and reported to the server, which keeps
+// the latest pose, hands it to players who join later and stores it with the
+// world. Physics never runs on the server.
+function sendRagdolls(target) {
+    if (!target?.ws || target.ws.readyState !== 1) return;
+
+    for (const state of listRagdolls()) {
+        target.ws.send(JSON.stringify(state));
+    }
+}
+
+function relayRagdolls(player, state) {
+    const message = JSON.stringify(state);
+    for (const peer of getPlayers().values()) {
+        if (peer.eid === player.eid) continue;
+        if (peer.ws.readyState === 1) peer.ws.send(message);
+    }
+}
+
+function broadcastRagdoll(state) {
+    const message = JSON.stringify(state);
+    for (const peer of getPlayers().values()) {
+        if (peer.ws && peer.ws.readyState === 1) {
+            peer.ws.send(message);
+        }
+    }
+}
+
+function handleRagdollMessage(player, payload) {
+    if (!player || player.eid == null) return;
+
+    const id = typeof payload.id === 'string' ? payload.id.slice(0, 64) : '';
+    if (id.length === 0) return;
+
+    const existing = getRagdoll(id);
+
+    if (payload.type === 'ragdoll:remove') {
+        if (existing !== null && existing.owner != null && existing.owner !== player.eid) {
+            return;
+        }
+        if (removeRagdoll(id)) {
+            relayRagdolls(player, {type: 'ragdoll:remove', id: id});
+        }
+        return;
+    }
+
+    // Only the client that currently simulates a body may report its pose.
+    if (existing !== null && existing.owner != null && existing.owner !== player.eid) {
+        return;
+    }
+
+    const state = storeRagdoll(id, payload, player.eid);
+    if (state === null) return;
+
+    relayRagdolls(player, state);
+}
+
+// A client that wants to touch somebody else's ragdoll asks for it first; the
+// server moves the simulation there and tells everyone else to stop running it.
+function handleRagdollClaim(player, payload) {
+    if (!player || player.eid == null) return;
+
+    const id = typeof payload.id === 'string' ? payload.id.slice(0, 64) : '';
+    const state = setRagdollOwner(id, player.eid);
+    if (state === null) return;
+
+    broadcastRagdoll({type: 'ragdoll:owner', id: id, owner: player.eid});
+
+    if (player.ws && player.ws.readyState === 1) {
+        player.ws.send(JSON.stringify(state));
+    }
+}
+
+// When a client leaves, its bodies are handed to another client (round robin)
+// so their physics keeps running instead of freezing in mid air.
+function removeRagdollsFor(player) {
+    if (!player || player.eid == null) return;
+
+    const peers = [...getPlayers().values()].filter((peer) =>
+        peer.eid !== player.eid && peer.ws && peer.ws.readyState === 1);
+
+    let index = 0;
+    for (const state of listRagdolls()) {
+        if (state.owner !== player.eid) continue;
+
+        const nextOwner = peers.length === 0 ? null : peers[index++ % peers.length].eid;
+        setRagdollOwner(state.id, nextOwner);
+        broadcastRagdoll({type: 'ragdoll:owner', id: state.id, owner: nextOwner});
+    }
+}
+
+// Contraptions work like ragdolls: a client simulates the body and reports its
+// cells and pose, and the server keeps the latest report so it can be written
+// with the world and handed to players who join later.
+function sendContraptions(target) {
+    if (!target?.ws || target.ws.readyState !== 1) return;
+
+    for (const state of listContraptions()) {
+        // A restored body has nobody simulating it yet, so it goes to the client
+        // that asks first. That client runs its physics and reports the pose;
+        // everybody else replays it.
+        if (state.owner == null && target.eid != null) {
+            setContraptionOwner(state.id, target.eid);
+        }
+
+        target.ws.send(JSON.stringify(state));
+    }
+}
+
+// When the client that simulates a body leaves, hand it to another one, or its
+// physics would stop and every other client would keep replaying a frozen pose.
+function removeContraptionsFor(player) {
+    if (!player || player.eid == null) return;
+
+    const peers = [...getPlayers().values()].filter((peer) =>
+        peer.eid !== player.eid && peer.ws && peer.ws.readyState === 1);
+
+    let index = 0;
+    for (const state of listContraptions()) {
+        if (state.owner !== player.eid) continue;
+
+        const next = peers.length === 0 ? null : peers[index++ % peers.length];
+        setContraptionOwner(state.id, next === null ? null : next.eid);
+
+        // The new owner has to hear about it, or it would go on replaying a body
+        // that nobody simulates any more.
+        if (next !== null) {
+            try {
+                next.ws.send(JSON.stringify(state));
+            } catch (error) {
+                // The next owner dropped too; the following report fixes it up.
+            }
+        }
+    }
+}
+
+function relayContraptions(player, state) {
+    const message = JSON.stringify(state);
+    for (const peer of getPlayers().values()) {
+        if (peer.eid === player.eid) continue;
+        if (peer.ws.readyState === 1) peer.ws.send(message);
+    }
+}
+
+function handleContraptionMessage(player, payload) {
+    if (!player || player.eid == null) return;
+
+    const id = typeof payload.id === 'string' ? payload.id.slice(0, 64) : '';
+    if (id.length === 0) return;
+
+    if (payload.type === 'contraption:remove') {
+        if (removeContraption(id)) {
+            relayContraptions(player, {type: 'contraption:remove', id: id});
+        }
+        return;
+    }
+
+    const stored = getContraption(id);
+
+    // A body that already exists only moves on a full report. Who simulates it
+    // is settled when it is claimed or handed on, never by whoever reports last,
+    // and its cells change only through the cell edits below. Letting a report
+    // replace the cells and the owner is what made two players building on one
+    // hull revert each other's blocks, each report redrawing the other's copy.
+    if (stored !== null) {
+        if (stored.owner != null && stored.owner !== player.eid) return;
+
+        const state = updateContraptionPose(id, payload);
+        if (state === null) return;
+
+        relayContraptions(player, state);
+        return;
+    }
+
+    const state = storeContraption(id, payload, false, player.eid);
+    if (state === null) return;
+
+    relayContraptions(player, state);
+}
+
+// The physics wand picks a body up on the client that clicked it, so that client
+// becomes the one simulating it. The relayed state tells the previous owner to
+// go back to replaying the pose instead of running its own physics next to it.
+function handleContraptionClaim(player, payload) {
+    if (!player || player.eid == null) return;
+
+    const id = typeof payload.id === 'string' ? payload.id.slice(0, 64) : '';
+    if (id.length === 0) return;
+
+    const state = setContraptionOwner(id, player.eid);
+    if (state === null) return;
+
+    relayContraptions(player, state);
+}
+
+// A block placed on or broken out of a hull somebody else is driving. The edit
+// is added to the stored cells and relayed to every client, the one simulating
+// the body included, so the change shows up for everyone without anybody taking
+// the physics away from its owner.
+function handleContraptionCell(player, payload) {
+    if (!player || player.eid == null) return;
+
+    const id = typeof payload.id === 'string' ? payload.id.slice(0, 64) : '';
+    if (id.length === 0) return;
+
+    const message = applyContraptionCellEdits(id, payload.add, payload.remove);
+    if (message === null) return;
+
+    relayContraptions(player, message);
+}
+
+// A contraption is moved by the one client that simulates it. A player at the
+// helm on another client sends their keys here, and the server hands them to
+// that client, so WASD steering works between players instead of only for the
+// player whose game assembled the hull.
+function handleContraptionControl(player, payload) {
+    if (!player || player.eid == null) return;
+
+    const id = typeof payload.id === 'string' ? payload.id.slice(0, 64) : '';
+    if (id.length === 0) return;
+
+    const state = getContraption(id);
+    if (state === null || state.owner == null || state.owner === player.eid) return;
+
+    const forward = Number(payload.forward);
+    const strafe = Number(payload.strafe);
+    if (!Number.isFinite(forward) || !Number.isFinite(strafe)) return;
+
+    const owner = getPlayers().get(state.owner);
+    if (!owner || !owner.ws || owner.ws.readyState !== 1) return;
+
+    const yaw = Number(payload.yaw);
+
+    try {
+        owner.ws.send(JSON.stringify({
+            type: 'contraption:control',
+            id: id,
+            forward: Math.max(-1, Math.min(1, forward)),
+            strafe: Math.max(-1, Math.min(1, strafe)),
+            yaw: Number.isFinite(yaw) ? yaw : 0
+        }));
+    } catch (error) {
+        // The owner dropped mid-key; the next report puts the boat back intact.
+    }
+}
+
+// Pose only reports go out far more often than full ones, so a contraption
+// another player is driving moves smoothly on this client instead of jumping
+// once a second - and carries whoever stands on it.
+function handleContraptionPose(player, payload) {
+    if (!player || player.eid == null) return;
+
+    const id = typeof payload.id === 'string' ? payload.id.slice(0, 64) : '';
+    if (id.length === 0) return;
+
+    // Only the client that currently simulates a body may move it.
+    const stored = getContraption(id);
+    if (stored === null || (stored.owner != null && stored.owner !== player.eid)) return;
+
+    const pose = storeContraptionPose(id, payload);
+    if (pose === null) return;
+
+    relayContraptions(player, pose);
+}
 
 function isValidCapeDataUrl(value) {
     return value === null || (
@@ -245,8 +512,13 @@ export function onConnection(ws, req) {
                     }
                     player.pingSentAt = 0;
                 }
+            } else if (payload && payload.type === 'clientCapabilities') {
+                // Only clients that can build the world themselves get terrain
+                // descriptors instead of chunk packets.
+                player.clientWorldGen = payload.clientWorldGen === true;
             } else if (payload && payload.type === 'inventory') {
                 player.inventory = normalizeInventoryState(payload.inventory);
+                broadcastPlayerEquipment(player);
                 savePlayerData(player);
             } else if (payload && payload.type === 'structurePaste') {
                 handleStructurePaste(player, payload);
@@ -269,6 +541,28 @@ export function onConnection(ws, req) {
                 player.cape = payload.cape;
                 savePlayerData(player);
                 broadcastCapeState(player);
+            } else if (payload && payload.type === 'ragdoll:state') {
+                handleRagdollMessage(player, payload);
+            } else if (payload && payload.type === 'ragdoll:remove') {
+                handleRagdollMessage(player, payload);
+            } else if (payload && payload.type === 'ragdoll:claim') {
+                handleRagdollClaim(player, payload);
+            } else if (payload && payload.type === 'ragdoll:request') {
+                sendRagdolls(player);
+            } else if (payload && payload.type === 'contraption:state') {
+                handleContraptionMessage(player, payload);
+            } else if (payload && payload.type === 'contraption:pose') {
+                handleContraptionPose(player, payload);
+            } else if (payload && payload.type === 'contraption:control') {
+                handleContraptionControl(player, payload);
+            } else if (payload && payload.type === 'contraption:remove') {
+                handleContraptionMessage(player, payload);
+            } else if (payload && payload.type === 'contraption:cell') {
+                handleContraptionCell(player, payload);
+            } else if (payload && payload.type === 'contraption:claim') {
+                handleContraptionClaim(player, payload);
+            } else if (payload && payload.type === 'contraption:request') {
+                sendContraptions(player);
             } else if (payload && payload.type === 'cctv:request' && player) {
                 sendCctvState(player);
             } else if (payload && payload.type === 'cctv:pair' && player) {
@@ -355,6 +649,8 @@ export function onConnection(ws, req) {
             gate.onFlush = null;
         }
         if (player.eid !== null) {
+            removeRagdollsFor(player);
+            removeContraptionsFor(player);
             removePlayer(player);
             cleanupPlayerChunks(player.eid);
         }

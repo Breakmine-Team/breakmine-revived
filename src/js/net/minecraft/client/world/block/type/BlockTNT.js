@@ -114,12 +114,12 @@ export default class BlockTNT extends Block {
         }
 
         const neighbors = [
-            [1, 0, 0], [-1, 0, 0],
-            [0, 0, 1], [0, 0, -1],
-            [0, -1, 0], [0, 1, 0],
+            [1, 0, 0, EnumBlockFace.WEST], [-1, 0, 0, EnumBlockFace.EAST],
+            [0, 0, 1, EnumBlockFace.NORTH], [0, 0, -1, EnumBlockFace.SOUTH],
+            [0, -1, 0, EnumBlockFace.TOP], [0, 1, 0, EnumBlockFace.BOTTOM],
         ];
 
-        for (const [dx, dy, dz] of neighbors) {
+        for (const [dx, dy, dz, neighborFace] of neighbors) {
             const nx = x + dx;
             const ny = y + dy;
             const nz = z + dz;
@@ -129,7 +129,7 @@ export default class BlockTNT extends Block {
             }
 
             if (typeof block.getPower === "function") {
-                if (block.getPower(world, nx, ny, nz) > 0) {
+                if (block.getPower(world, nx, ny, nz, neighborFace) > 0) {
                     return true;
                 }
             } else if (block.isPowerSource) {

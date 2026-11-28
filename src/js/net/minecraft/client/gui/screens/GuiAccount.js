@@ -10,6 +10,8 @@ import GuiCapesScreen from "./GuiCapesScreen.js";
 import * as AuthLib from "../../network/AuthLib.js";
 import PlayerRenderer from "../../render/entity/entity/PlayerRenderer.js";
 import { ICON_UPLOAD } from "../../render/gui/FontIcons.js";
+import GuiAlert from "./GuiAlert.js";
+import { IS_BETA_CHANNEL } from "../../BetaVersion.js";
 
 const ANIMATION_MODES = [
     { key: "normal", label: "N", tooltip: "No animation" },
@@ -44,6 +46,7 @@ export default class GuiAccount extends GuiScreen {
         this.playerPreview = null;
         this.animationButtons = [];
         this.uploadSkinButton = null;
+        this.slimSkinButton = null;
 
         this.friends = [];
         this.friendSlotContainer = null;
@@ -132,7 +135,12 @@ export default class GuiAccount extends GuiScreen {
         });
         this.buttonList.push(this.uploadSkinButton);
 
-        this.capesButton = new GuiButton(this.minecraft, "Capes", layout.rightX + size + gap, layout.controlsY, 44, size, () => {
+        this.slimSkinButton = new GuiButton(this.minecraft, "N", layout.rightX + size + gap, layout.controlsY, size, size, () => {
+            this.toggleSlimSkin();
+        });
+        this.buttonList.push(this.slimSkinButton);
+
+        this.capesButton = new GuiButton(this.minecraft, "Capes", layout.rightX + (size + gap) * 2, layout.controlsY, 44, size, () => {
             this.minecraft.displayScreen(new GuiCapesScreen(this.minecraft, this));
         }).setTooltip("Change your cape");
         this.buttonList.push(this.capesButton);
@@ -238,6 +246,15 @@ export default class GuiAccount extends GuiScreen {
         this.uploadSkinButton.enabled = loggedIn;
         this.uploadSkinButton.setTooltip(loggedIn ? "Upload skin" : "Sign in to upload a skin");
 
+        if (this.slimSkinButton) {
+            const slim = Boolean(this.minecraft?.settings?.slimSkin);
+            this.slimSkinButton.string = slim ? "S" : "N";
+            this.slimSkinButton.enabled = loggedIn;
+            this.slimSkinButton.setTooltip(loggedIn
+                ? (slim ? "Slim model" : "Normal model")
+                : "Sign in to use a slim skin");
+        }
+
         if (this.capesButton) {
             this.capesButton.enabled = loggedIn;
             this.capesButton.setTooltip(loggedIn ? "Change your cape" : "Sign in to use capes");
@@ -261,6 +278,18 @@ export default class GuiAccount extends GuiScreen {
         this.updateAnimationButtons();
     }
 
+    toggleSlimSkin() {
+        const settings = this.minecraft.settings;
+        settings.slimSkin = !settings.slimSkin;
+        settings.save();
+
+        if (this.playerPreview) {
+            this.playerPreview.setSlim(settings.isSlimSkin());
+        }
+
+        this.updateUploadButton();
+    }
+
     getCurrentUsername() {
         const session = this.minecraft && this.minecraft.getSession ? this.minecraft.getSession() : null;
         const profile = session && session.getProfile ? session.getProfile() : null;
@@ -275,7 +304,8 @@ export default class GuiAccount extends GuiScreen {
 
         const username = this.getCurrentUsername();
         if (!username || !AuthLib.getAuthToken()) {
-            this.errorMessage = "Your session expired. Please sign in again.";
+            this.errorMessage = "Your session has expired, please sign in again.";
+            this.minecraft.displayScreen(new GuiAlert(this, "Error", this.errorMessage, "OK"));
             return;
         }
 
@@ -284,9 +314,11 @@ export default class GuiAccount extends GuiScreen {
                 await AuthLib.uploadSkinForUser(username);
                 PlayerRenderer.invalidateSkinCache(username);
                 this.errorMessage = "Skin uploaded";
+                this.minecraft.displayScreen(new GuiAlert(this, "Notice", this.errorMessage, "OK"));
             } catch (error) {
                 if (!String(error.message).includes("cancelled by user")) {
                     this.errorMessage = this.formatError(error);
+                    this.minecraft.displayScreen(new GuiAlert(this, "Error", this.errorMessage, "OK"));
                 }
             }
         }));
@@ -299,11 +331,13 @@ export default class GuiAccount extends GuiScreen {
 
         if (!username || !password) {
             this.errorMessage = "Username and password cannot be empty.";
+            this.minecraft.displayScreen(new GuiAlert(this, "Error", this.errorMessage, "OK"));
             return;
         }
 
         if (username.includes(" ")) {
             this.errorMessage = "Username cannot have spaces";
+            this.minecraft.displayScreen(new GuiAlert(this, "Error", this.errorMessage, "OK"));
             return;
         }
 
@@ -325,15 +359,17 @@ export default class GuiAccount extends GuiScreen {
 
                 this.setFriendStatus("");
                 this.errorMessage = `Signed in as ${username}`;
+                this.minecraft.displayScreen(new GuiAlert(this, "Notice", this.errorMessage, "OK"));
             } catch (error) {
                 this.errorMessage = `Authentication failed: ${this.formatError(error)}`;
+                this.minecraft.displayScreen(new GuiAlert(this, "Error", this.errorMessage, "OK"));
                 console.error("Authentication Error:", error);
             }
         }));
     }
 
     handleLogout() {
-        this.errorMessage = "Signed out";
+        this.errorMessage = "";
         this.loginUsernameValue = "";
         this.animationMode = "normal";
         this.setFriendStatus("");
@@ -351,6 +387,7 @@ export default class GuiAccount extends GuiScreen {
 
         this.minecraft.capeManager?.clearOwnCape();
         this.minecraft.launcherApi?.onAccountChanged?.();
+        this.minecraft.displayScreen(new GuiAlert(this, "Notice", "Signed out", "OK"));
     }
 
     formatError(error) {
@@ -375,7 +412,7 @@ export default class GuiAccount extends GuiScreen {
         const centerX = layout.leftX + layout.leftWidth / 2;
 
         this.drawCenteredString(stack, "Sign In", centerX, form.top, 0xFFFFFFFF);
-        this.drawCenteredString(stack, "Use your Breakmine account.", centerX, form.top + 18, 0xFF9A9A9A);
+        this.drawCenteredString(stack, this.minecraft.settings.apiUrl === "apibeta.breakmine.com" ? "Use your Breakmine beta-testing account." : "Use your Breakmine account.", centerX, form.top + 18, 0xFF9A9A9A);
 
         this.drawString(stack, "Username", form.x, form.usernameLabelY, 0xFFAAAAAA);
         this.drawString(stack, "Password", form.x, form.passwordLabelY, 0xFFAAAAAA);
@@ -520,7 +557,6 @@ export default class GuiAccount extends GuiScreen {
             () => {
                 this.minecraft.friendsManager.remove(friend.username);
                 this.refreshFriends();
-                this.setFriendStatus(`${friend.username} removed`, true);
             }
         ));
     }
@@ -610,30 +646,7 @@ export default class GuiAccount extends GuiScreen {
     }
 
     drawStatus(stack) {
-        if (!this.errorMessage) return;
-
-        let color = 0xFFFF5555;
-        if (this.errorMessage.includes("uploaded") || this.errorMessage.includes("Signed in") || this.errorMessage.includes("Signed out")) {
-            color = 0xFF55FF55;
-        } else if (this.errorMessage.includes("Uploading") || this.errorMessage.includes("Signing in")) {
-            color = 0xFFFFFF55;
-        }
-
-        const maxWidth = Math.max(100, this.layout.leftWidth - 36);
-        const lines = this.minecraft.fontRenderer.listFormattedStringToWidth(this.errorMessage, maxWidth);
-        const lineHeight = 10;
-        const centerX = this.layout.leftX + this.layout.leftWidth / 2;
-
-        let y;
-        if (this.minecraft.settings.loggedIn) {
-            y = this.layout.leftBottom - 12 - lines.length * lineHeight;
-        } else {
-            y = Math.min(this.loginLayout.statusY, this.layout.leftBottom - 12 - lines.length * lineHeight);
-        }
-
-        for (let i = 0; i < lines.length; i++) {
-            this.drawCenteredString(stack, lines[i], centerX, y + i * lineHeight, color);
-        }
+        // no!
     }
 
     drawScreen(stack, mouseX, mouseY, partialTicks) {

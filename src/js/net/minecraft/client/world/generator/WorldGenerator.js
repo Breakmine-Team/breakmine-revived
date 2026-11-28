@@ -8,6 +8,7 @@ import TreeGenerator from "./structure/TreeGenerator.js";
 import BigTreeGenerator from "./structure/BigTreeGenerator.js";
 import Generator from "./Generator.js";
 import UndergroundHouseGenerator from "./structure/UndergroundHouseGenerator.js";
+import DockGenerator from "./structure/DockGenerator.js";
 import {BiomeRegistry} from "../biome/BiomeRegistry.js";
 
 const AIR_ID = 0;
@@ -310,6 +311,9 @@ export default class WorldGenerator extends Generator {
                 }
             }
         }
+
+        let dockGenerator = new DockGenerator(this.world, this.random.seed, this.seaLevel);
+        dockGenerator.generateAtChunk(chunkX, chunkZ);
 
         let clayPatches = 1 + this.random.nextInt(2);
         for (let i = 0; i < clayPatches; i++) {

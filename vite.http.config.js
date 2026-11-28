@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import fs from "fs";
 import path from "path";
+import { betaVersionDefines, betaVersionPlugin } from "./scripts/beta-version.js";
 
 function copyResourcesPlugin() {
     return {
@@ -16,7 +17,7 @@ function copyResourcesPlugin() {
 }
 
 export default defineConfig({
-    plugins: [copyResourcesPlugin()],
+    plugins: [betaVersionPlugin(__dirname), copyResourcesPlugin()],
     server: {
         port: 8000,
         allowedHosts: ["breakmine.minetest.land", "breakmine.logicerror.dev"],
@@ -25,6 +26,8 @@ export default defineConfig({
     // packaged app is loaded over file://, where a base of "/" would resolve
     // asset URLs against the filesystem root.
     base: "./",
+    // Must match vite.config.js: beta builds show a prerelease version.
+    define: betaVersionDefines(__dirname),
     // Do not let the generated public/ snapshot shadow src/ during development.
     publicDir: false,
     build: {

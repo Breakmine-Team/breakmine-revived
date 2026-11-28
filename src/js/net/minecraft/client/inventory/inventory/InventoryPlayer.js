@@ -60,6 +60,20 @@ export default class InventoryPlayer extends Inventory {
         this.notifyInventoryChanged();
     }
 
+    // Used when the player dies: their things move into the corpse, so the
+    // inventory itself must not keep a copy.
+    clear() {
+        this.items = new Array(36).fill(null).map(() => new ItemStack(0, 0));
+        this.itemInCursor = new ItemStack(0, 0);
+
+        if (this.itemRenderer) {
+            this.itemRenderer.rebuildAllItems();
+            this.itemRenderer.scheduleDirty("hotbar");
+        }
+
+        this.notifyInventoryChanged();
+    }
+
     setItemInSelectedSlot(itemStack) {
         if (typeof itemStack === 'number') {
             this.items[this.selectedSlotIndex] = new ItemStack(itemStack, 1);

@@ -1,3 +1,4 @@
+import EnumBlockFace from "../../../../util/EnumBlockFace.js";
 import Block from "../Block.js";
 import BlockTorch from "./BlockTorch.js";
 import EnumCreativeInventoryTab from "../../../gui/EnumCreativeInventoryTab.js";
@@ -88,8 +89,15 @@ export default class BlockBluestoneTorch extends BlockTorch {
                 continue;
             }
 
+            const neighborFace = dx === 1 ? EnumBlockFace.WEST
+                : dx === -1 ? EnumBlockFace.EAST
+                : dy === 1 ? EnumBlockFace.BOTTOM
+                : dy === -1 ? EnumBlockFace.TOP
+                : dz === 1 ? EnumBlockFace.NORTH
+                : EnumBlockFace.SOUTH;
+
             if (typeof block.getPower === 'function') {
-                if (block.getPower(world, nx, ny, nz) > 0) {
+                if (block.getPower(world, nx, ny, nz, neighborFace) > 0) {
                     return true;
                 }
             } else if (block.isPowerSource === true) {

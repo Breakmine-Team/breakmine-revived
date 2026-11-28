@@ -7,13 +7,14 @@ export default class ItemEntity extends Entity {
     static GRAVITY = 0.04;
     static DRAG = 0.98;
 
-    constructor(minecraft, world, blockId, x, y, z) {
+    constructor(minecraft, world, blockId, x, y, z, count = 1) {
         super(minecraft, world, -2); 
 
         this.width = 0.5;
         this.height = 0.5;
 
         this.blockId = blockId;
+        this.count = Math.max(1, Math.floor(Number(count) || 1));
         this.block = Block.getById(blockId);
 
         this.x = x;
@@ -55,7 +56,7 @@ export default class ItemEntity extends Entity {
                 this.motionZ += (dz / distance) * speed;
 
                 if (distance < 0.6) {
-                    if (player.inventory.addItem(this.blockId, 1)) {
+                    if (player.inventory.addItem(this.blockId, this.count)) {
                         this.minecraft.soundManager.playSound('random.pop', this.x, this.y, this.z, 1.0, 1.0);
 
                         if (!this.minecraft.isSingleplayer()) {

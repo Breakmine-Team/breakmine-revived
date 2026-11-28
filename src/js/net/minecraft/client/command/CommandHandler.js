@@ -8,6 +8,7 @@ import PlaceCommand from "./command/PlaceCommand.js"
 import HealCommand from "./command/HealCommand.js"
 import GiveCommand from "./command/GiveCommand.js"
 import SummonCommand from "./command/SummonCommand.js"
+import RagdollCommand from "./command/RagdollCommand.js"
 import VoiceChatStatusCommand from "./command/VoiceChatStatusCommand.js"
 import OffGridBlockRendererCommand from "./command/OffGridBlockRendererCommand.js";
 import StructureCommand from "./command/StructureCommand.js";
@@ -30,6 +31,7 @@ export default class CommandHandler {
         this.commands.push(new HealCommand());
         this.commands.push(new GiveCommand());
         this.commands.push(new SummonCommand());
+        this.commands.push(new RagdollCommand());
         this.commands.push(new VoiceChatStatusCommand());
         this.commands.push(new OffGridBlockRendererCommand());
         this.commands.push(new StructureCommand());

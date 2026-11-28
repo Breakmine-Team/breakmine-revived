@@ -22,6 +22,13 @@ export default class BlockStair extends Block {
         if (options.hardness !== undefined) this.hardness = options.hardness;
         if (options.sound) this.sound = options.sound;
         if (options.tool !== undefined) this.tool = options.tool;
+
+        // A stair is cut from its source block, so it weighs the same as one
+        // block of that material (planks, wool, concrete, stone...) unless the
+        // caller overrides it.
+        const source = Block.getById(woodId);
+        if (source) this.mass = source.mass;
+        if (options.mass !== undefined) this.setMass(options.mass);
         this.inventoryTab = EnumCreativeInventoryTab.BUILDING_BLOCKS;
     }
 

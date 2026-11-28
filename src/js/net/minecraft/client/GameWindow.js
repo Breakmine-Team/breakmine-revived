@@ -103,8 +103,16 @@ export default class GameWindow {
             this.mouseX = event.clientX / this.scaleFactor;
             this.mouseY = event.clientY / this.scaleFactor;
 
-            this.mouseMotionX += event.movementX;
-            this.mouseMotionY += -event.movementY;
+            // Captured movement is look input. Deltas gathered while the
+            // cursor is free (menus, alt-tab, before the pointer lock is
+            // granted) used to be replayed on the first frame after focus came
+            // back, which snapped the camera to a random direction. With the
+            // Pointerlock Delay option off the free movement is look input on
+            // purpose, so the camera follows the mouse without a lock.
+            if (this.isCursorLockedToCanvas() || this.minecraft.settings.tvmode || this.canLookWithoutPointerLock()) {
+                this.mouseMotionX += GameWindow.clampMouseDelta(event.movementX);
+                this.mouseMotionY += GameWindow.clampMouseDelta(-event.movementY);
+            }
 
             let currentScreen = this.minecraft.currentScreen;
             if (currentScreen !== null) {
@@ -133,6 +141,10 @@ export default class GameWindow {
             if (this.minecraft.settings.tvmode || this.mobileDevice) {
                 return;
             }
+
+            // Whatever was collected before the capture state changed belongs
+            // to the old focus and must not turn the camera on the next frame.
+            this.resetMouseMotion();
 
             let intentState = this.focusState.getIntent();
             let isCursorLocked = this.isCursorLockedToCanvas();
@@ -970,6 +982,19 @@ export default class GameWindow {
         return document.pointerLockElement === this.canvas;
     }
 
+    // True while the game is playing but the cursor is not captured and the
+    // Pointerlock Delay option is off: plain mouse movement then turns the
+    // camera instead of waiting for the lock.
+    canLookWithoutPointerLock() {
+        if (this.minecraft.settings.pointerLockDelay || this.minecraft.settings.tvmode) {
+            return false;
+        }
+        if (this.mobileDevice || !this.mouseInsideWindow) {
+            return false;
+        }
+        return this.focusState.isLock() && this.minecraft.currentScreen === null;
+    }
+
     isLocked() {
         return this.focusState.isLock() && this.minecraft.currentScreen === null;
     }
@@ -996,6 +1021,10 @@ export default class GameWindow {
 
         this.focusState = state;
         document.body.style.cursor = (nextLock && !this.mobileDevice) ? 'none' : 'default';
+
+        if (prevLock !== nextLock) {
+            this.resetMouseMotion();
+        }
 
         this.requestCursorUpdate();
 
@@ -1080,6 +1109,24 @@ export default class GameWindow {
 
     isMobileDevice() {
         return this.mobileDevice;
+    }
+
+    // Drop look input that was collected while the game did not own the mouse.
+    resetMouseMotion() {
+        this.mouseMotionX = 0;
+        this.mouseMotionY = 0;
+        this.remoteMotionX = 0;
+        this.remoteMotionY = 0;
+    }
+
+    // A single mousemove can carry the distance the pointer travelled while the
+    // lock was being acquired or released; applying that would whip the view.
+    static clampMouseDelta(value) {
+        if (!Number.isFinite(value)) {
+            return 0;
+        }
+        const limit = 250;
+        return Math.max(-limit, Math.min(limit, value));
     }
 
     pullMouseMotionX() {

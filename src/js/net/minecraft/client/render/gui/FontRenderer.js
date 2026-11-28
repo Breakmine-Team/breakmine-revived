@@ -61,6 +61,7 @@ export default class FontRenderer {
         this.textureAlt = minecraft.resources["gui/font-alt.png"];
 
         this.accentedTexture = minecraft.resources["gui/accented.png"];
+        this.sectionTexture = minecraft.resources["gui/section.png"];
 
         let bitMap = this.createBitMap(this.texture);
 
@@ -97,12 +98,22 @@ export default class FontRenderer {
         for (const code in FONT_ICONS) {
             this.italicLeftInk[code] = this.italicLeftInk[FONT_ICONS[code]];
         }
+
+        const sectionCode = FontRenderer.COLOR_PREFIX.charCodeAt(0);
+        const sectionBitMap = this.createBitMap(this.sectionTexture);
+        this.charWidths[sectionCode] = this.calculateCharacterWidthAt(
+            sectionBitMap,
+            0,
+            0,
+            this.sectionTexture.width
+        ) + 2;
+        this.italicLeftInk[sectionCode] = 0;
     }
 
-    calculateCharacterWidthAt(bitMap, indexX, indexY) {
+    calculateCharacterWidthAt(bitMap, indexX, indexY, textureWidth = this.texture.width) {
         for (let x = indexX * FontRenderer.FIELD_SIZE + FontRenderer.FIELD_SIZE - 1; x >= indexX * FontRenderer.FIELD_SIZE; x--) {
             for (let y = indexY * FontRenderer.FIELD_SIZE; y < indexY * FontRenderer.FIELD_SIZE + FontRenderer.FIELD_SIZE; y++) {
-                let i = (x + y * this.texture.width) * 4;
+                let i = (x + y * textureWidth) * 4;
 
                 let red = bitMap[i];
                 let green = bitMap[i + 1];
@@ -383,6 +394,25 @@ export default class FontRenderer {
 
                 if (bold) {
                     drawGlyphAt(1);
+                }
+
+                drewGlyph = true;
+            } else if (character === FontRenderer.COLOR_PREFIX) {
+                const drawSectionAt = (offsetX) => {
+                    Gui.drawSpriteRGB(
+                        stack, this.sectionTexture,
+                        0, 0,
+                        FontRenderer.FIELD_SIZE, FontRenderer.FIELD_SIZE,
+                        localX + offsetX, y,
+                        FontRenderer.FIELD_SIZE, FontRenderer.FIELD_SIZE,
+                        this.r, this.g, this.b, 1.0
+                    );
+                };
+
+                drawSectionAt(0);
+
+                if (bold) {
+                    drawSectionAt(1);
                 }
 
                 drewGlyph = true;

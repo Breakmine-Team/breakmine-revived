@@ -11,6 +11,7 @@ import ClientConfirmTransactionPacket from "../packet/play/client/ClientConfirmT
 import ClientOffGridRequestPacket from "../packet/play/client/ClientOffGridRequestPacket.js";
 import { applyOffGridState, applyOffGridUpdate } from "../../render/OffGridClientSync.js";
 import ItemEntity from "../../entity/ItemEntity.js";
+import ItemStack from "../../item/ItemStack.js";
 import Block from "../../world/block/Block.js";
 
 export default class NetworkPlayHandler extends PacketHandler {
@@ -32,12 +33,23 @@ export default class NetworkPlayHandler extends PacketHandler {
 
     handleJoinGame(packet) {
         this.minecraft.playerController = new PlayerControllerMultiplayer(this.minecraft, this, packet.entityId);
+        this.minecraft.serverEntityId = packet.entityId;
         let world = new WorldClient(this.minecraft);
         world.setWorldType(packet.worldType);
         this.minecraft.worldLoadPromise = this.minecraft.loadWorld(world);
         this.minecraft.ingameOverlay.chatOverlay.clearChat();
 
         this.networkManager.sendPacket(new ClientOffGridRequestPacket());
+
+        // The server keeps ragdoll and contraption poses and hands them out on
+        // request, so ask once the world exists and this client can build the
+        // bodies.
+        Promise.resolve(this.minecraft.worldLoadPromise).then(() => {
+            if (this.networkManager.isConnected()) {
+                this.networkManager.sendJson({type: 'ragdoll:request'});
+                this.networkManager.sendJson({type: 'contraption:request'});
+            }
+        });
 
         this.minecraft.capeManager?.onJoin(this.networkManager);
         this.minecraft.cctvManager?.onJoin(this.networkManager);
@@ -62,7 +74,15 @@ export default class NetworkPlayHandler extends PacketHandler {
         }
 
         if (this.minecraft.player) {
-            this.minecraft.player.setPosition(world.spawnX, world.spawnY, world.spawnZ);
+            // Snap the previous position with it: ticks do not run while the
+            // loading screen is up, so a plain setPosition would leave the
+            // camera sweeping between the old spot and spawn until the first
+            // tick after joining.
+            const player = this.minecraft.player;
+            player.setPositionAndRotation(
+                world.spawnX, world.spawnY, world.spawnZ,
+                player.rotationYaw, player.rotationPitch
+            );
         }
     }
 
@@ -276,6 +296,21 @@ export default class NetworkPlayHandler extends PacketHandler {
         }
     }
 
+    // Another player's held stack. Their remote entity keeps it in the slot it
+    // is held in, so PlayerRenderer draws it like a local player's item.
+    handleEntityEquipment(packet) {
+        const entity = this.minecraft.world.getEntityById(packet.getEntityId());
+        if (!entity || !entity.inventory || entity === this.minecraft.player) {
+            return;
+        }
+
+        const slot = Math.max(0, Math.min(8, Math.floor(packet.getSlot())));
+        const typeId = packet.getItemId() > 0 ? packet.getItemId() : 0;
+
+        entity.inventory.selectedSlotIndex = slot;
+        entity.inventory.items[slot] = new ItemStack(typeId, typeId ? Math.max(1, packet.getCount()) : 0);
+    }
+
     handleEntityHeadLook(packet) {
         let entity = this.minecraft.world.getEntityById(packet.getEntityId());
         if (entity !== null) {
@@ -400,6 +435,9 @@ export default class NetworkPlayHandler extends PacketHandler {
             ? world.getOffGridFieldAt(position.getX(), position.getY(), position.getZ())
             : null;
         if (field) {
+            // The field keeps the position either way: it is the owner of that
+            // cell. Fields that simulate their own cells (contraptions) ignore
+            // the server's stale copy instead of losing the cell.
             field.applyRemoteWrite(position.getX(), position.getY(), position.getZ(), typeId, blockData);
             return;
         }

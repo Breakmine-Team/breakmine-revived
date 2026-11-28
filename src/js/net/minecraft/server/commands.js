@@ -414,10 +414,18 @@ function handleServer(player, args) {
 
     if (subCommand === 'list') {
         const servers = config.listServers();
+        // Only a multiserver process knows every server's port; elsewhere the
+        // names are worlds one process switches between, not addresses.
+        const ports = new Map((process.env.MULTISERVER_PORTS || '')
+            .split(',')
+            .filter(entry => entry.includes(':'))
+            .map(entry => [entry.slice(0, entry.lastIndexOf(':')), entry.slice(entry.lastIndexOf(':') + 1)]));
+
         sendChatMessageToPlayer(player, 'Available servers:');
         servers.forEach(server => {
             const isCurrent = server === getCurrentWorldName() ? ' (current)' : '';
-            sendChatMessageToPlayer(player, `- ${server}${isCurrent}`);
+            const port = ports.has(server) ? ` (port ${ports.get(server)})` : '';
+            sendChatMessageToPlayer(player, `- ${server}${port}${isCurrent}`);
         });
         return;
     }
@@ -425,6 +433,14 @@ function handleServer(player, args) {
     const serverName = subCommand;
 
     if (!requireOp(player)) {
+        return;
+    }
+
+    // A multiserver process runs one server per port and every one of them owns
+    // its world files, so switching this process to a sibling's world would put
+    // two processes on the same save. Players connect to the port they want.
+    if (process.env.MULTISERVER_CHILD === '1' && serverName !== getCurrentWorldName()) {
+        sendChatMessageToPlayer(player, 'This server runs multiserver; connect to that server\'s own port to play it.');
         return;
     }
 

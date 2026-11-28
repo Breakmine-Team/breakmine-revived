@@ -4,7 +4,7 @@ import MathHelper from "../../util/MathHelper.js";
 import Block from "../world/block/Block.js";
 import ItemTool from "../world/block/type/ItemTool.js";
 import BoundingBox from "../../util/BoundingBox.js";
-import Tessellator from "./Tessellator.js";
+import Tessellator, { waterUniforms } from "./Tessellator.js";
 import ChunkSection from "../world/ChunkSection.js";
 import Random from "../../util/Random.js";
 import Vector3 from "../../util/Vector3.js";
@@ -191,10 +191,14 @@ export default class WorldRenderer {
         this.ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
         this.scene.add(this.ambientLight);
 
+        this.shadowSunHeight = 1;
+        this.shadowResolution = minecraft.settings.getShadowResolution
+            ? minecraft.settings.getShadowResolution()
+            : 2048;
+
         this.sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
         this.sunLight.castShadow = this.shadowsEnabled;
-        this.sunLight.shadow.mapSize.width = 2048;
-        this.sunLight.shadow.mapSize.height = 2048;
+        this.sunLight.shadow.mapSize.set(this.shadowResolution, this.shadowResolution);
 
         const shadowCamSize = 48;
         this.sunLight.shadow.camera.left = -shadowCamSize;
@@ -240,6 +244,10 @@ export default class WorldRenderer {
         this.webRenderer.sortObjects = false; 
         this.webRenderer.setClearColor(0x000000, 0);
         this.webRenderer.clear();
+
+        // The shadow map has to fit inside the device texture limit, otherwise
+        // the allocation fails and everything samples as fully shadowed.
+        this.applyShadowResolution();
 
         this.textureAtlas = new TextureAtlas(minecraft);
         
@@ -395,6 +403,11 @@ export default class WorldRenderer {
             side: THREE.FrontSide
         });
 
+        // The blended batch uses these materials directly, so they need the same
+        // tile-wrap/water patch the per-section tessellator materials get.
+        Tessellator.applyTileWrap(this.translucentMaterial);
+        Tessellator.applyTileWrap(this.translucentLitMaterial);
+
         this.translucentBatcher = new TranslucentMeshBatcher(this.scene, this.getTranslucentMaterial());
 
         if (this.shadowsEnabled) {
@@ -467,7 +480,9 @@ export default class WorldRenderer {
     render(partialTicks) {
         this.emitRenderHook('beforeRender', { partialTicks });
 
+        // Water needs this frame's camera transform, so place it first.
         this.orientCamera(partialTicks);
+        this.updateWaterUniforms();
 
         let player = this.minecraft.player;
         let cameraChunkX = Math.floor(player.x) >> 4;
@@ -475,6 +490,7 @@ export default class WorldRenderer {
         this.emitRenderHook('renderChunks', { partialTicks, cameraChunkX, cameraChunkZ, player });
 
         this.updateChunkMeshing();
+        const offGridFields = this.interpolateOffGridFields(partialTicks);
         this.renderChunks(cameraChunkX, cameraChunkZ);
         this.updateChunkBoundaryLines(cameraChunkX, cameraChunkZ);
 
@@ -517,7 +533,10 @@ export default class WorldRenderer {
         for (let entity of this.minecraft.world.entities) {
             if (!entity || !entity.renderer) continue;
 
-            if (entity === player && (viewingCamera || this.minecraft.settings.thirdPersonView === 0)) {
+            // A limp player is drawn by the ragdoll renderer, not as a standing
+            // player model.
+            if (entity === player && (viewingCamera || player.ragdollBody
+                || this.minecraft.settings.thirdPersonView === 0)) {
                 continue;
             }
 
@@ -576,6 +595,10 @@ export default class WorldRenderer {
             for (let y in chunk.sections) {
                 let section = chunk.sections[y];
                 if (!section.group.visible || section.isEmpty()) continue;
+
+                // Sections kept visible only so they keep casting shadows are
+                // off-screen; batching them would just draw hidden geometry.
+                if (this.shadowsEnabled && !this.frustum.intersectsBox(section.boundingBox)) continue;
                 
                 for (let child of section.group.children) {
                     if (child.isMesh && child.userData.isTranslucent) {
@@ -617,6 +640,7 @@ export default class WorldRenderer {
         this.weatherRenderer.update();
 
         this.webRenderer.render(this.scene, this.camera);
+        this.restoreOffGridFields(offGridFields);
 
         this.overlay.updateMatrixWorld(true);
         this.webRenderer.render(this.overlay, this.camera);
@@ -880,6 +904,46 @@ export default class WorldRenderer {
             if (!light.userData.updated) {
                 light.visible = false;
                 light.userData.blockKey = null;
+            }
+        }
+    }
+
+    // Bearings turn their contraptions once per tick; interpolate that pose for
+    // the frame so a spinning machine does not visibly step at 20 Hz.
+    interpolateOffGridFields(partialTicks) {
+        const world = this.minecraft.world;
+        if (!world) {
+            return [];
+        }
+
+        const fields = new Set();
+        if (world.offGridField) fields.add(world.offGridField);
+        if (Array.isArray(world.extraOffGridFields)) {
+            for (const field of world.extraOffGridFields) fields.add(field);
+        }
+
+        for (const field of fields) {
+            if (field && typeof field.interpolateRotation === "function") {
+                field.interpolateRotation(partialTicks);
+            }
+
+            // Shafts, gears and motor rods inside a field are drawn from their
+            // own meshes, so they have to be turned once per frame just like
+            // the rotating blocks of a chunk section.
+            if (field && typeof field.updateRotatingBlocks === "function") {
+                field.updateRotatingBlocks(this.blockRenderer, partialTicks);
+            }
+        }
+
+        return [...fields];
+    }
+
+    // Collision, ray tracing and block picking read the field matrix between
+    // frames, so put back the exact tick pose once the frame is drawn.
+    restoreOffGridFields(fields) {
+        for (const field of fields) {
+            if (field && typeof field.applyTransform === "function") {
+                field.applyTransform(false);
             }
         }
     }
@@ -1157,6 +1221,7 @@ export default class WorldRenderer {
             this.sun.getWorldPosition(sunWorldPos);
 
             let dir = new THREE.Vector3().subVectors(sunWorldPos, this.camera.position).normalize();
+            waterUniforms.uWaterSunDir.value.copy(dir);
 
             let dist = 100;
             this.sunLight.position.set(px + dir.x * dist, py + dir.y * dist, pz + dir.z * dist);
@@ -1285,6 +1350,13 @@ export default class WorldRenderer {
         let player = this.minecraft.player;
         let cameraChunkY = Math.floor(player.y) >> 4;
 
+        // With shadows enabled a section can sit outside the camera frustum and
+        // still be needed, because the sun's shadow camera covers a wider area
+        // and culled sections would stop casting shadows into the view. Keep
+        // them visible in that case and let three cull each mesh per pass: the
+        // main camera drops them, the shadow camera keeps what it can see.
+        const frustumCull = !this.shadowsEnabled;
+
         for (let [index, chunk] of world.getChunkProvider().getChunks()) {
             let distanceX = Math.abs(cameraChunkX - chunk.x);
             let distanceZ = Math.abs(cameraChunkZ - chunk.z);
@@ -1296,7 +1368,7 @@ export default class WorldRenderer {
                 for (let y in chunk.sections) {
                     let chunkSection = chunk.sections[y];
 
-                    if (this.frustum.intersectsBox(chunkSection.boundingBox) && !chunkSection.isEmpty()) {
+                    if ((!frustumCull || this.frustum.intersectsBox(chunkSection.boundingBox)) && !chunkSection.isEmpty()) {
                         chunkSection.group.visible = true;
 
                         if (!chunkSection.group.userData.shadowsInit) {
@@ -1339,6 +1411,10 @@ export default class WorldRenderer {
             for (let y in chunk.sections) {
                 let section = chunk.sections[y];
                 if (!section.group.visible || section.isEmpty()) continue;
+
+                // Sections kept visible only so they keep casting shadows are
+                // off-screen for the camera, so they need no sorting here.
+                if (this.shadowsEnabled && !this.frustum.intersectsBox(section.boundingBox)) continue;
                 
                 for (let child of section.group.children) {
                     if (child.isMesh && child.userData.isTranslucent) {
@@ -1457,6 +1533,11 @@ export default class WorldRenderer {
     updateTranslucentMaterial() {
         if (!this.translucentBatcher) return;
 
+        // The batched translucent pass is blended and never takes part in
+        // shadow mapping, whatever material it is currently using.
+        this.translucentBatcher.mesh.castShadow = false;
+        this.translucentBatcher.mesh.receiveShadow = false;
+
         let material = this.getTranslucentMaterial();
         if (this.translucentBatcher.mesh.material === material) return;
 
@@ -1465,8 +1546,31 @@ export default class WorldRenderer {
         this.translucentBatcher.mesh.material = material;
     }
 
+    updateWaterUniforms() {
+        let settings = this.minecraft.settings;
+        let reflectivity = settings.getWaterReflectivity
+            ? settings.getWaterReflectivity()
+            : Number(settings.waterReflectivity);
+        let waviness = settings.getWaterWaviness
+            ? settings.getWaterWaviness()
+            : Number(settings.waterWaviness);
+
+        waterUniforms.uWaterTime.value = performance.now() * 0.001;
+        waterUniforms.uWaterReflectivity.value = Number.isFinite(reflectivity) ? reflectivity : 0.4;
+        waterUniforms.uWaterWaviness.value = Number.isFinite(waviness) ? waviness : 0.5;
+        this.camera.getWorldPosition(waterUniforms.uWaterCameraPos.value);
+
+        // backgroundColor is the horizon colour the sky is cleared with, already
+        // blended for time of day and weather, which is what water should mirror.
+        if (this.backgroundColor) {
+            waterUniforms.uWaterSkyColor.value.copy(this.backgroundColor).multiplyScalar(1.3);
+        }
+    }
+
     
     updateShadowBias(sunHeight) {
+        this.shadowSunHeight = sunHeight;
+
         let shadow = this.sunLight.shadow;
         let camera = shadow.camera;
 
@@ -1478,6 +1582,55 @@ export default class WorldRenderer {
         shadow.bias = -biasBlocks / (camera.far - camera.near);
 
         shadow.normalBias = texelSize;
+    }
+
+    
+    getShadowResolution() {
+        let size = Number(this.shadowResolution);
+        if (!Number.isFinite(size) || size <= 0) {
+            size = 2048;
+        }
+
+        const maxSize = this.webRenderer?.capabilities?.maxTextureSize;
+        if (Number.isFinite(maxSize) && maxSize > 0) {
+            size = Math.min(size, maxSize);
+        }
+
+        return Math.max(256, size);
+    }
+
+    
+    applyShadowResolution() {
+        if (!this.sunLight) return;
+
+        let shadow = this.sunLight.shadow;
+        let size = this.getShadowResolution();
+        if (shadow.mapSize.width === size && shadow.mapSize.height === size) {
+            return;
+        }
+
+        shadow.mapSize.set(size, size);
+
+        // The render target keeps the old size until it is dropped, so release
+        // it and let three allocate a fresh map at the new resolution.
+        if (shadow.map) {
+            shadow.map.dispose();
+            shadow.map = null;
+        }
+
+        shadow.camera.updateProjectionMatrix();
+        this.updateShadowBias(this.shadowSunHeight);
+
+        if (this.webRenderer) {
+            this.webRenderer.shadowMap.needsUpdate = true;
+        }
+    }
+
+    
+    setShadowResolution(resolution) {
+        let size = Number(resolution);
+        this.shadowResolution = Number.isFinite(size) && size > 0 ? size : 2048;
+        this.applyShadowResolution();
     }
 
     
@@ -1528,9 +1681,11 @@ export default class WorldRenderer {
         root.traverse(child => {
             if (!child.isMesh) return;
 
-            const isTranslucent = child.userData && child.userData.isTranslucent;
             // Shadow sampling on blended meshes produces black transparent
-            // surfaces. Leave the translucent pass unlit by the shadow map.
+            // surfaces, and blended meshes cannot occlude anything properly in
+            // the shadow map (their cutout quads would cast solid shadows).
+            // Leave everything translucent out of the shadow pipeline.
+            const isTranslucent = this.isTranslucentObject(child);
             child.castShadow = this.shadowsEnabled && !isTranslucent;
             child.receiveShadow = this.shadowsEnabled && !isTranslucent;
 
@@ -1543,6 +1698,10 @@ export default class WorldRenderer {
         });
     }
 
+    isTranslucentObject(object) {
+        return !!(object.userData && object.userData.isTranslucent);
+    }
+
     rebuildAll() {
         let world = this.minecraft.world;
         if (!world) return;
@@ -1552,6 +1711,18 @@ export default class WorldRenderer {
                 this.queueChunkSection(section);
             }
         }
+
+        // Off grid fields bake sky light into their meshes too, so contraptions
+        // have to be rebuilt when the time of day changes, not only when their
+        // cells do. This is also what keeps them lit correctly when the
+        // lighting settings change.
+        if (typeof world.getOffGridFields === "function") {
+            for (const field of world.getOffGridFields()) {
+                if (typeof field.rebuildAll === "function") {
+                    field.rebuildAll();
+                }
+            }
+        }
     }
 
     renderHand(partialTicks) {
@@ -1559,6 +1730,9 @@ export default class WorldRenderer {
         let stack = player.renderer.firstPersonGroup;
         stack.visible = false;
         this.firstPersonItemRenderer.cameraGroup.visible = false;
+
+        // A limp player holds no arm or item up in front of the camera.
+        if (player.ragdollBody) return;
 
         if (this.minecraft.cctvManager?.isViewing()) return;
 
@@ -1742,7 +1916,7 @@ export default class WorldRenderer {
                 this.updateBlockHitBoxOutline(segments);
 
                 if (hitResult.fieldCell && field) {
-                    let pose = field.getPoseTransform();
+                    let pose = field.getInterpolatedPoseTransform(partialTicks);
                     this.blockHitBox.position.set(pose.position.x, pose.position.y, pose.position.z);
                     this.blockHitBox.rotation.set(pose.rotation.x, pose.rotation.y, pose.rotation.z);
                 } else {
@@ -1859,8 +2033,14 @@ export default class WorldRenderer {
 
         const blockData = this.getBlockPlacementData(block, hitResult);
 
+        // Rotatable blocks take their facing from the player's yaw inside
+        // onBlockPlaced, which getBlockPlacementData does not cover. Without
+        // it in the key, turning on the spot while the target block and face
+        // stay the same left the ghost in its old orientation.
+        const rotationIndex = Math.floor((player.rotationYaw * 4 / 360) + 0.5) & 3;
+
         if (!field && this.blockPreviewMeshes.length > 0
-            && this.isPreviewCurrent(world, typeId, x, y, z, hitResult.face, blockData)) {
+            && this.isPreviewCurrent(world, typeId, x, y, z, hitResult.face, blockData, rotationIndex)) {
             this.updateBlockPreviewPulse();
             this.blockPreviewGroup.visible = true;
             return;
@@ -1873,7 +2053,7 @@ export default class WorldRenderer {
         this.previewKeyValid = false;
 
         if (field) {
-            let pose = field.getPoseTransform();
+            let pose = field.getInterpolatedPoseTransform(partialTicks);
             this.blockPreviewGroup.position.set(pose.position.x, pose.position.y, pose.position.z);
             this.blockPreviewGroup.rotation.set(pose.rotation.x, pose.rotation.y, pose.rotation.z);
         } else {
@@ -1919,7 +2099,7 @@ export default class WorldRenderer {
 
         this.blockPreviewMeshes = previewMeshes;
         if (!field) {
-            this.rememberPreview(world, typeId, x, y, z, hitResult.face, blockData);
+            this.rememberPreview(world, typeId, x, y, z, hitResult.face, blockData, rotationIndex);
         }
 
         this.updateBlockPreviewPulse();
@@ -1927,7 +2107,7 @@ export default class WorldRenderer {
     }
 
     
-    isPreviewCurrent(world, typeId, x, y, z, face, blockData) {
+    isPreviewCurrent(world, typeId, x, y, z, face, blockData, rotationIndex) {
         const key = this.previewKey;
         if (this.previewKeyValid !== true || this.previewWorld !== world || key === null) {
             return false;
@@ -1936,13 +2116,14 @@ export default class WorldRenderer {
         if (key[0] !== typeId || key[1] !== x || key[2] !== y || key[3] !== z) {
             return false;
         }
-        if (key[4] !== face.x || key[5] !== face.y || key[6] !== face.z || key[7] !== blockData) {
+        if (key[4] !== face.x || key[5] !== face.y || key[6] !== face.z || key[7] !== blockData
+            || key[8] !== rotationIndex) {
             return false;
         }
 
         for (let i = 0; i < PREVIEW_NEIGHBOUR_OFFSETS.length; i++) {
             const offset = PREVIEW_NEIGHBOUR_OFFSETS[i];
-            if (key[8 + i] !== world.getBlockAt(x + offset[0], y + offset[1], z + offset[2])) {
+            if (key[9 + i] !== world.getBlockAt(x + offset[0], y + offset[1], z + offset[2])) {
                 return false;
             }
         }
@@ -1950,9 +2131,9 @@ export default class WorldRenderer {
         return true;
     }
 
-    rememberPreview(world, typeId, x, y, z, face, blockData) {
+    rememberPreview(world, typeId, x, y, z, face, blockData, rotationIndex) {
         if (this.previewKey === null) {
-            this.previewKey = new Float64Array(8 + PREVIEW_NEIGHBOUR_OFFSETS.length);
+            this.previewKey = new Float64Array(9 + PREVIEW_NEIGHBOUR_OFFSETS.length);
         }
 
         const key = this.previewKey;
@@ -1964,10 +2145,11 @@ export default class WorldRenderer {
         key[5] = face.y;
         key[6] = face.z;
         key[7] = blockData;
+        key[8] = rotationIndex;
 
         for (let i = 0; i < PREVIEW_NEIGHBOUR_OFFSETS.length; i++) {
             const offset = PREVIEW_NEIGHBOUR_OFFSETS[i];
-            key[8 + i] = world.getBlockAt(x + offset[0], y + offset[1], z + offset[2]);
+            key[9 + i] = world.getBlockAt(x + offset[0], y + offset[1], z + offset[2]);
         }
 
         this.previewWorld = world;
@@ -2042,6 +2224,10 @@ export default class WorldRenderer {
                         return (x, y, z, data) => { if (isTarget(x, y, z)) blockData = data; };
                     case 'setBlockAt':
                         return () => {  };
+                    // Blocks that react to being placed can check this to tell a
+                    // placement ghost apart from a real placement.
+                    case 'isPreview':
+                        return true;
                     case 'getChunkSectionAt':
                         return (cx, cy, cz) => {
                             const section = target.getChunkSectionAt(cx, cy, cz);
@@ -2116,7 +2302,8 @@ export default class WorldRenderer {
         for (let entity of entities) {
             if (!entity) continue;
 
-            if (entity === player && (viewingCamera || this.minecraft.settings.thirdPersonView === 0)) {
+            if (entity === player && (viewingCamera || player.ragdollBody
+                || this.minecraft.settings.thirdPersonView === 0)) {
                 continue;
             }
 

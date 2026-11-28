@@ -6,7 +6,10 @@ import MissingPackets from "../../util/MissingPackets.js";
 import InventoryBasic from "../inventory/inventory/InventoryBasic.js";
 import IsomorphicWebSocket from "../../util/IsomorphicWebSocket.js";
 import CreeperEntity from "../entity/CreeperEntity.js";
+import RagdollEntity from "../entity/RagdollEntity.js";
+import ContraptionEntity from "../entity/ContraptionEntity.js";
 import JsonMultiplayer from "./JsonMultiplayer.js";
+import { parseTerrainDescriptor, queueTerrain, clearQueuedTerrain } from "../world/generator/JsonTerrain.js";
 
 export default class NetworkManager {
 
@@ -123,6 +126,14 @@ export default class NetworkManager {
 
     _onOpen() {
         this.connected = true;
+
+        // Announce that this client can generate flat/normal terrain itself.
+        // The server only acts on it after login, so sending it first is enough.
+        // A proxied connection speaks the proxy's framing, so it keeps receiving
+        // chunks as usual.
+        if (!this.useProxy) {
+            this.sendJson({ type: 'clientCapabilities', clientWorldGen: true });
+        }
 
         if (this.useProxy) {
             this.sendProxyPacket(0, {
@@ -273,6 +284,13 @@ export default class NetworkManager {
                         finish();
                     });
                 }
+            } else if (payload.type === 'terrain') {
+                // The server lets this client generate the world; build terrain
+                // locally from the descriptor instead of waiting for chunks.
+                const descriptor = parseTerrainDescriptor(payload);
+                if (descriptor !== null) {
+                    queueTerrain(this.minecraft ? this.minecraft.world : null, descriptor);
+                }
             } else if (payload.type === 'cape:state') {
                 this.minecraft?.capeManager?.handleState(payload.username, payload.cape);
             } else if (payload.type === 'cctv:state') {
@@ -282,6 +300,13 @@ export default class NetworkManager {
                 const previousType = world ? world.worldType : null;
                 if (world) {
                     world.clearChunks();
+
+                    const provider = typeof world.getChunkProvider === 'function' ? world.getChunkProvider() : null;
+                    if (provider && typeof provider.clearTerrain === 'function') {
+                        provider.clearTerrain();
+                    }
+                    clearQueuedTerrain();
+
                     if (payload.worldType) {
                         world.setWorldType(payload.worldType);
                     }
@@ -380,6 +405,13 @@ export default class NetworkManager {
                         entity.damageEntity(payload.damage, payload.attacker);
                     }
                 }
+            } else if (payload.type === 'ragdoll:state' || payload.type === 'ragdoll:remove'
+                || payload.type === 'ragdoll:owner') {
+                this._handleRagdollMessage(payload);
+            } else if (payload.type === 'contraption:state' || payload.type === 'contraption:pose'
+                || payload.type === 'contraption:remove' || payload.type === 'contraption:control'
+                || payload.type === 'contraption:cell') {
+                this._handleContraptionMessage(payload);
             } else if (payload.type === 'spawnEntity' && this.minecraft?.world) {
                 const world = this.minecraft.world;
                 const entityType = payload.entityType;
@@ -397,6 +429,206 @@ export default class NetworkManager {
         } catch (error) {
             console.error("Failed to parse JSON network message", error);
         }
+    }
+
+    // Ragdolls are simulated by exactly one client, which reports the pose five
+    // times a second. Every other client replays that snapshot.
+    _handleRagdollMessage(payload) {
+        const world = this.minecraft?.world;
+        if (!world || !Array.isArray(world.entities)) {
+            return;
+        }
+
+        const syncId = typeof payload.id === 'string'
+            ? payload.id
+            : (typeof payload.id === 'number' ? String(payload.id) : '');
+        if (syncId.length === 0 || syncId.length > 64) {
+            return;
+        }
+
+        let ragdoll = null;
+        for (const entity of world.entities) {
+            if (entity instanceof RagdollEntity && entity.syncId === syncId) {
+                ragdoll = entity;
+                break;
+            }
+        }
+
+        if (payload.type === 'ragdoll:remove') {
+            if (ragdoll !== null) {
+                world.removeEntityById(ragdoll.id);
+            }
+            return;
+        }
+
+        const localEid = this.minecraft?.serverEntityId;
+        const mine = typeof localEid === 'number' && payload.owner === localEid;
+
+        if (payload.type === 'ragdoll:owner') {
+            if (ragdoll === null) {
+                return;
+            }
+
+            ragdoll.ownerEid = payload.owner === null ? null : payload.owner;
+
+            // The server moved the simulation to or away from this client, so
+            // either start running the physics here or go back to replaying.
+            if (mine) {
+                ragdoll.adoptLocalSimulation();
+            } else {
+                ragdoll.releaseToReplay();
+            }
+            return;
+        }
+
+        if (ragdoll === null) {
+            ragdoll = RagdollEntity.fromNetworkState(this.minecraft, world, payload);
+            if (ragdoll === null) {
+                return;
+            }
+
+            ragdoll.ownerEid = typeof payload.owner === 'number' ? payload.owner : null;
+            world.addEntity(ragdoll);
+
+            // A restored ragdoll can already be assigned to this client; it
+            // keeps its saved pose and stays frozen until something touches it.
+            if (mine) {
+                ragdoll.adoptLocalSimulation();
+            }
+            return;
+        }
+
+        ragdoll.ownerEid = typeof payload.owner === 'number' ? payload.owner : ragdoll.ownerEid;
+
+        // The sender's own copy comes back through the server; its local
+        // simulation is always the authority, so ignore the echo.
+        if (!ragdoll.remote) {
+            return;
+        }
+
+        ragdoll.applyRemoteState(payload);
+    }
+
+    // Contraptions are simulated by one client, which reports their cells and
+    // pose. Everything else replays that report, so every client sees the same
+    // body and a saved world brings it back.
+    _handleContraptionMessage(payload) {
+        const world = this.minecraft?.world;
+        if (!world || !Array.isArray(world.entities)) {
+            return;
+        }
+
+        const syncId = typeof payload.id === 'string' ? payload.id : '';
+        if (syncId.length === 0 || syncId.length > 64) {
+            return;
+        }
+
+        let existing = null;
+        for (const entity of world.entities) {
+            if (entity instanceof ContraptionEntity && entity.syncId === syncId) {
+                existing = entity;
+                break;
+            }
+        }
+
+        if (payload.type === 'contraption:remove') {
+            if (existing !== null) {
+                world.removeEntityById(existing.id);
+            }
+            return;
+        }
+
+        // Only the client that simulates the body can move it. Keys from a
+        // player at the helm on another client arrive here and are applied to
+        // the local body, which then reports the new pose as usual.
+        if (payload.type === 'contraption:control') {
+            if (existing !== null && !existing.remote) {
+                existing.applyRemoteControl(payload);
+            }
+            return;
+        }
+
+        // A cell edit changes only the blocks, never who simulates the body, so
+        // it is applied straight to the hull and leaves its pose alone.
+        if (payload.type === 'contraption:cell') {
+            if (existing !== null) {
+                existing.applyCellEdits(payload.add, payload.remove);
+            }
+            return;
+        }
+
+        // The server names the client that simulates the body, so exactly one
+        // client runs the physics and everybody else replays its reports.
+        // Deciding that per client (the old way, from whether the body came out
+        // of a save) let several clients simulate the same boat, and each of
+        // them then ignored the others' reports: the boat stood still on every
+        // screen but the driver's.
+        const localEid = this.minecraft?.serverEntityId;
+        const mine = typeof localEid === 'number'
+            && typeof payload.owner === 'number'
+            && payload.owner === localEid;
+
+        // A moving body sends pose only reports between full ones; they move the
+        // replay and carry anyone standing on it.
+        if (payload.type === 'contraption:pose') {
+            if (existing !== null && existing.remote) {
+                existing.applyRemoteState(payload);
+            }
+            return;
+        }
+
+        // The client that simulates the body gets its own report echoed back;
+        // its local copy is the authority. A block another player placed can
+        // still arrive inside that report before its cell edit does, so those
+        // cells are applied to the hull instead of rebuilding it.
+        if (existing !== null && !existing.remote) {
+            if (mine) {
+                this._applyReportedCells(existing, payload);
+                return;
+            }
+
+            // The simulation moved to another client. This copy would keep
+            // running its own physics next to theirs, so drop it and follow the
+            // report instead.
+            world.removeEntityById(existing.id);
+            existing = null;
+        }
+
+        if (existing !== null) {
+            if (!mine) {
+                // A replay follows the reported shape and pose in place, so the
+                // hull (and whoever stands on it) never blinks out and back.
+                this._applyReportedCells(existing, payload);
+                existing.applyRemoteState(payload);
+                return;
+            }
+
+            // Ownership moved to this client: the body has to start simulating
+            // here, so it is built again as a local body instead of a replay.
+            world.removeEntityById(existing.id);
+            existing = null;
+        }
+
+        // A body this client has not seen yet.
+        const contraption = ContraptionEntity.fromNetworkState(
+            this.minecraft, world, payload, !mine
+        );
+        if (contraption === null) {
+            return;
+        }
+
+        world.addEntity(contraption);
+    }
+
+    // The blocks a full report carries that this hull does not have yet (or has
+    // in another state), written into it without reporting them back.
+    _applyReportedCells(existing, payload) {
+        if (!Array.isArray(existing.cells) || !Array.isArray(payload.cells)) {
+            return;
+        }
+
+        const {add, remove} = ContraptionEntity.diffCells(existing.cells, payload.cells);
+        existing.applyCellEdits(add, remove);
     }
 
     _applyPlayerState(player, state) {

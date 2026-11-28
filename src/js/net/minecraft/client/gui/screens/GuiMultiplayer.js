@@ -8,6 +8,7 @@ import GuiYesNo from "./GuiYesNo.js";
 import Minecraft from "../../Minecraft.js";
 import { SplashTexts } from "../../../../../../resources/splashes.js";
 import { ICON_SERVER } from "../../render/gui/FontIcons.js";
+import { IS_BETA_CHANNEL } from "../../BetaVersion.js";
 
 export default class GuiMultiplayer extends GuiScreen {
 
@@ -64,13 +65,22 @@ export default class GuiMultiplayer extends GuiScreen {
         const defaultServerFileName = "Nino_Creative.json";
 
         this.saveList = [];
-        if (this.minecraft.settings.showNino) {
+        if (this.minecraft.settings.showNino && !IS_BETA_CHANNEL) {
             this.saveList.push(
                 {
                     name: ICON_SERVER + " Nino Creative",
                     date: "",
                     details: "play.breakmine.com",
                     motd: "Create epic things at Nino Creative!"
+                }
+            );
+        } else if (this.minecraft.settings.showNino && IS_BETA_CHANNEL) {
+            this.saveList.push(
+                {
+                    name: ICON_SERVER + " Beta testing server",
+                    date: "",
+                    details: "playbeta.breakmine.com",
+                    motd: "Beta testing server for Breakmine."
                 }
             );
         }

@@ -25,7 +25,6 @@ export default class ScreenRenderer {
         let mouseX = this.minecraft.window.mouseX;
         let mouseY = this.minecraft.window.mouseY;
 
-        const actualScale = this.window.scaleFactor;
         const screen = this.minecraft.currentScreen;
 
         const itemsAboveScreen = screen !== null && screen.usesGuiItems?.() === true;
@@ -46,7 +45,7 @@ export default class ScreenRenderer {
             }
 
             if (!itemsAboveScreen) {
-                this.drawItemLayers(actualScale);
+                this.drawItemLayers();
                 this.renderHudLabels(mouseX, mouseY, partialTicks);
             }
 
@@ -59,7 +58,7 @@ export default class ScreenRenderer {
         }
 
         if (itemsAboveScreen) {
-            this.drawItemLayers(actualScale);
+            this.drawItemLayers();
             this.renderHudLabels(mouseX, mouseY, partialTicks);
         }
 
@@ -77,20 +76,34 @@ export default class ScreenRenderer {
     }
 
     
-    drawItemLayers(actualScale) {
+    drawItemLayers() {
         const itemRenderer = this.minecraft.itemRenderer;
         if (!itemRenderer) return;
 
-        this.stack2d.scale(1 / actualScale, 1 / actualScale, 1 / actualScale);
+        const width = this.window.canvas.width;
+        const height = this.window.canvas.height;
+        if (!width || !height) {
+            return;
+        }
+
+        // The item layers cover the whole screen in GUI space, but each one
+        // stores its pixels at its own density: the block item canvas uses the
+        // raw window size while the sprite canvas uses the capped GUI scale.
+        // Stretching both onto the screen canvas' backing store keeps a GUI
+        // unit the same size in every layer, whatever the GUI scale is. Doing
+        // this with the raw scale factor instead shifted and shrank the icons
+        // on large windows where the GUI scale is capped at 4.
+        this.stack2d.save();
+        this.stack2d.setTransform(1, 0, 0, 1, 0, 0);
 
         if (itemRenderer.hasBlockItems()) {
-            this.stack2d.drawImage(this.window.canvasItems, 0, 0);
+            this.stack2d.drawImage(this.window.canvasItems, 0, 0, width, height);
         }
         if (itemRenderer.canvas2d && itemRenderer.hasSprites()) {
-            this.stack2d.drawImage(itemRenderer.canvas2d, 0, 0);
+            this.stack2d.drawImage(itemRenderer.canvas2d, 0, 0, width, height);
         }
 
-        this.stack2d.scale(actualScale, actualScale, actualScale);
+        this.stack2d.restore();
     }
 
     

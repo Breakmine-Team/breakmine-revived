@@ -7,5 +7,5 @@ Before running the game, *make sure* you type: `node scripts/build-assets.js`!!!
 
 ## Documentation
 
-- [Launcher API](LAUNCHER_API.md) — `?launcher=1` mode for the Electron launcher: auto sign-in, accounts, mods and game state.
-- [QuickJSON protocol](QUICKJSON_PROTOCOL.md) — the JSON-only multiplayer protocol.
+- [Launcher API](LAUNCHER_API.md) : `?launcher=1` mode for the Electron launcher: auto sign-in, accounts, mods and game state.
+- [QuickJSON protocol](QUICKJSON_PROTOCOL.md): the JSON-only multiplayer protocol. (I made it for ESP32 servers)

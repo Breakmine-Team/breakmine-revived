@@ -146,7 +146,7 @@ export default class BlockLiquid extends Block {
 
         const targetY = y - 1;
         if (this.canFlowInto(world, x, targetY, z)) {
-            this.flowInto(world, x, targetY, z, BlockLiquid.FALLING_FLAG);
+            this.flowInto(world, x, targetY, z, BlockLiquid.FALLING_FLAG, { x, y, z });
             
             return;
         }
@@ -165,7 +165,7 @@ export default class BlockLiquid extends Block {
                     const existingLevel = existingData & 7;
 
                     if (existingTypeId !== this.id || existingLevel > nextLevel) {
-                        this.flowInto(world, nx, y, nz, nextLevel);
+                        this.flowInto(world, nx, y, nz, nextLevel, { x, y, z });
                     }
                 }
             }
@@ -195,9 +195,50 @@ export default class BlockLiquid extends Block {
         return block.isReplaceable(world, x, y, z);
     }
 
-    flowInto(world, x, y, z, levelData) {
+    flowInto(world, x, y, z, levelData, source = null) {
+        // Contraption cells live in an off-grid field, not in the chunk, and
+        // everything written there is handed back to the world as a real block
+        // when the contraption stops. A single source would otherwise pour a
+        // waterfall out of a rotating bearing, so liquids stay put on them.
+        if (world && world.isFieldLocalWorld === true) {
+            return;
+        }
+
+        if (!this.canSpreadTo(world, x, y, z, source)) {
+            return;
+        }
+
         world.setBlockAt(x, y, z, this.id, levelData);
         world.scheduleBlockTick(x, y, z, this.tickRate);
+    }
+
+    // Spreading cells must pass the same block-action guards as player
+    // placement, otherwise liquid can flow straight through plot protection.
+    canSpreadTo(world, x, y, z, source = null) {
+        if (!world) {
+            return true;
+        }
+
+        const options = {
+            world,
+            currentBlockId: this.id,
+            face: null,
+            offGrid: world.isFieldLocalWorld === true,
+            liquidFlow: true,
+            sourcePos: source
+        };
+
+        if (typeof world.canChangeBlockAt === 'function') {
+            return world.canChangeBlockAt(x, y, z, this.id, options);
+        }
+
+        const minecraft = world.minecraft;
+        if (!minecraft || typeof minecraft.emitBlockAction !== 'function') {
+            return true;
+        }
+
+        const action = minecraft.emitBlockAction('place', x, y, z, options);
+        return !action || !action.canceled;
     }
 
     

@@ -38,6 +38,14 @@ class SubChunkStore {
         return this.sections.has(`${cx},${cz},${sy}`);
     }
 
+    // True once any section of this chunk holds server-side block changes.
+    hasChunk(cx, cz) {
+        for (let sy = 0; sy <= MAX_SECTION_INDEX; sy++) {
+            if (this.sections.has(`${cx},${cz},${sy}`)) return true;
+        }
+        return false;
+    }
+
     
     getOrCreate(cx, cz, sy) {
         const key = `${cx},${cz},${sy}`;

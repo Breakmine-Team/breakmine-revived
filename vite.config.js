@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import fs from "fs";
 import path from "path";
 import basicSsl from '@vitejs/plugin-basic-ssl';
+import { betaVersionDefines, betaVersionPlugin } from "./scripts/beta-version.js";
 
 function copyResourcesPlugin() {
     return {
@@ -25,6 +26,15 @@ function copyResourcesPlugin() {
 // index.html: Vite processes <link href> as an asset, which moved the manifest
 // to assets/manifest-<hash>.webmanifest and left its relative URLs pointing one
 // directory too deep (start_url became /assets/ and every icon 404'd).
+function buildInputs() {
+    const inputs = { main: path.resolve(__dirname, "index.html") };
+    const launcher = path.resolve(__dirname, "launcher.html");
+    if (fs.existsSync(launcher)) {
+        inputs.launcher = launcher;
+    }
+    return inputs;
+}
+
 function pwaPlugin() {
     const files = ["manifest.webmanifest", "sw.js"];
     const manifestTag = '<link rel="manifest" href="./manifest.webmanifest">';
@@ -63,7 +73,7 @@ function pwaPlugin() {
 }
 
 export default defineConfig({
-    plugins: [copyResourcesPlugin(), pwaPlugin(), basicSsl()],
+    plugins: [betaVersionPlugin(__dirname), copyResourcesPlugin(), pwaPlugin(), basicSsl()],
     root: '.',
     publicDir: false,
     server: {
@@ -86,6 +96,8 @@ export default defineConfig({
         }
     },
     cacheDir: false,
+    // "1.7.1b-fe11d7c-p3" in beta builds; see src/js/net/minecraft/client/BetaVersion.js.
+    define: betaVersionDefines(__dirname),
     // Relative asset URLs. The desktop app is packaged with electron-builder
     // and loaded with win.loadFile() (main.js), so the page origin is
     // file:///.../app.asar/dist/index.html. With the default base of "/" the
@@ -95,6 +107,14 @@ export default defineConfig({
     build: {
         outDir: "dist",
         assetsInlineLimit: 0,
+        rollupOptions: {
+            // launcher.html is a standalone page for browsing older builds. It is
+            // a second entry so it lands in dist/ next to the game, and it stays
+            // out of the single-file build (which has its own config). It is only
+            // an entry while the page exists, so removing it cannot break the
+            // normal build.
+            input: buildInputs(),
+        },
     },
     optimizeDeps: {
         exclude: [

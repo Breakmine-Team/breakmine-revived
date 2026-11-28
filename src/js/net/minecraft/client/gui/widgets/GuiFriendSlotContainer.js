@@ -16,6 +16,50 @@ export default class GuiFriendSlotContainer extends GuiWorldSlotContainer {
 
         this.setFriends(friends);
     }
+    
+    drawScreen(stack, mouseX, mouseY, partialTicks) {
+        this.clampScroll();
+
+        const listTop = this.top;
+        const listBottom = this.bottom;
+        const slotWidth = this.slotWidth;
+
+        stack.save();
+        stack.beginPath();
+        stack.rect(this.viewLeft, listTop, this.viewRight - this.viewLeft, listBottom - listTop);
+        stack.clip();
+
+        let currentY = listTop + 7 - this.amountScrolled;
+
+        for (let i = 0; i < this.slotList.length; i++) {
+            const slot = this.slotList[i];
+            const slotHeight = this.slotHeight;
+            const slotTop = currentY + (i * (slotHeight + this.slotSpacing));
+            const slotBottom = slotTop + slotHeight;
+            const slotLeft = this.slotX;
+            const slotRight = slotLeft + slotWidth;
+
+            if (slotBottom >= listTop && slotTop <= listBottom) {
+                if (i === this.selectedWorld) {
+                    this.parentGui.drawRect(stack, slotLeft - 1, slotTop - 3, slotRight + 1, slotBottom - 1, "rgb(153, 153, 153)");
+                    this.parentGui.drawRect(stack, slotLeft, slotTop - 2, slotRight, slotBottom - 2, "rgba(0, 0, 0)");
+                }
+
+                slot.x = slotLeft;
+                slot.y = slotTop;
+                slot.width = slotWidth;
+                slot.height = slotHeight;
+                if (!slot.minecraft && this.parentGui.minecraft) {
+                    slot.minecraft = this.parentGui.minecraft;
+                }
+                slot.render(stack, mouseX, mouseY, partialTicks);
+            }
+        }
+
+        stack.restore();
+
+        this.drawScrollBar(stack, mouseX, mouseY);
+    }
 
     setFriends(friends) {
         this.selectedWorld = -1;

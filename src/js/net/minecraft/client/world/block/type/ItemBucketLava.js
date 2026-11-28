@@ -25,6 +25,21 @@ export default class ItemBucketLava extends ItemGeneric {
             return;
         }
 
+        const minecraft = world.minecraft;
+        if (minecraft && typeof minecraft.emitBlockAction === 'function') {
+            const placeAction = minecraft.emitBlockAction('place', x, y, z, {
+                world,
+                currentBlockId: BlockRegistry.LAVA.getId(),
+                face: hitFace && typeof minecraft.getFaceValue === 'function'
+                    ? minecraft.getFaceValue(hitFace)
+                    : null,
+                offGrid: world.isFieldLocalWorld === true
+            });
+            if (placeAction && placeAction.canceled) {
+                return;
+            }
+        }
+
         world.setBlockAt(x, y, z, BlockRegistry.LAVA.getId(), 0);
         if (!world.minecraft.player.creative) itemstack.typeId = BlockRegistry.ITEM_BUCKET_EMPTY.getId();
         if (!world.minecraft.player.creative) itemstack.count = Math.max(1, itemstack.count || 1);

@@ -14,6 +14,8 @@ export default class BlockBluestoneStickyPusherHead extends BlockBluestonePusher
         this.multipart = true;
     }
 
+    pickedItem() { return BlockRegistry.BLUESTONE_STICKY_PUSHER.id; }
+
     getMultipart(world, x, y, z) {
         return [
             ["texture", null, { texture: 'oak_planks_sticky', bbox: new BoundingBox(0, 0.75, 0, 1, 1, 1) }],

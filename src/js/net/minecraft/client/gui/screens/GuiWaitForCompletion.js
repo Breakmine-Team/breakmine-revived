@@ -34,7 +34,9 @@ export default class GuiWaitForCompletion extends GuiScreen {
                     await this.callback();
                 } finally {
                     this.done = true;
-                    this.minecraft.displayScreen(this.previousScreen);
+                    if (!this.minecraft.currentScreen || this.minecraft.currentScreen === this) {
+                        this.minecraft.displayScreen(this.previousScreen);
+                    }
                 }
             })();
         }

@@ -4,6 +4,11 @@ import WorldGenerator from '../client/world/generator/WorldGenerator.js';
 import HellWorldGenerator from '../client/world/generator/HellWorldGenerator.js';
 import BobWorldGenerator from '../client/world/generator/BobWorldGenerator.js';
 import IslandsWorldGenerator from '../client/world/generator/IslandsWorldGenerator.js';
+import {
+    generateBaseBlocks as generateSharedBaseBlocks,
+    generateColumnBlocks as generateSharedColumnBlocks,
+    flatBlockId
+} from '../client/world/generator/ColumnGenerator.js';
 import Primer from '../client/world/generator/Primer.js';
 import Random from '../util/Random.js';
 import Long from '../../../../../libraries/long.js';
@@ -46,6 +51,21 @@ function seedToLong(seedText) {
     return Long.fromString(seed);
 }
 
+let resolvedSeedText = null;
+
+// An empty seed means "random", but it has to stay the same for every chunk
+// and for the clients that generate the world themselves, so resolve it once.
+function getWorldSeedText() {
+    const raw = String(config.seed ?? '');
+    if (raw.length > 0) {
+        return raw;
+    }
+    if (resolvedSeedText === null) {
+        resolvedSeedText = new RandomClass().nextLong().toString();
+    }
+    return resolvedSeedText;
+}
+
 function createGenerator(world, seedLong, worldType) {
     if (worldType === 'hellish' && HellWorldGeneratorClass) {
         return new HellWorldGeneratorClass(world, seedLong);
@@ -63,13 +83,13 @@ let cachedGenerator = null;
 let cachedGeneratorKey = null;
 
 function getGeneratorKey(worldType = getWorldType()) {
-    return worldType + ':' + seedToLong(config.seed).toString();
+    return worldType + ':' + seedToLong(getWorldSeedText()).toString();
 }
 
 function getGenerator(worldType = getWorldType()) {
     if (!WorldGeneratorClass) return null;
 
-    const seedLong = seedToLong(config.seed);
+    const seedLong = seedToLong(getWorldSeedText());
     const key = worldType + ':' + seedLong.toString();
 
     if (cachedGenerator && cachedGeneratorKey === key) {
@@ -99,20 +119,6 @@ class ServerChunk {
     }
 }
 
-function generateBaseBlocks(chunkX, chunkZ, worldType = getWorldType()) {
-    const generator = getGenerator(worldType);
-    if (!generator || !PrimerClass) return null;
-
-    const chunk = new ServerChunk();
-    const primer = new PrimerClass(chunk);
-
-    generator.random.setSeed(chunkX * 0x4f9939f508 + chunkZ * 0x1ef1565bd5);
-    generator.generateInChunk(chunkX, chunkZ, primer);
-
-    return chunk.blocks;
-}
-
-
 
 
 const baseCache = new Map();
@@ -123,7 +129,7 @@ function getBaseBlocks(chunkX, chunkZ, worldType = getWorldType()) {
     let blocks = baseCache.get(key);
     if (blocks) return blocks;
 
-    blocks = generateBaseBlocks(chunkX, chunkZ, worldType);
+    blocks = generateSharedBaseBlocks(worldType, getWorldSeedText(), chunkX, chunkZ);
     if (!blocks) return null;
 
     baseCache.set(key, blocks);
@@ -131,86 +137,6 @@ function getBaseBlocks(chunkX, chunkZ, worldType = getWorldType()) {
         const oldestKey = baseCache.keys().next().value;
         baseCache.delete(oldestKey);
     }
-    return blocks;
-}
-
-class PopulateWorldStub {
-    constructor() {
-        this.blocks = null;  
-        this.targetX = 0;    
-        this.targetZ = 0;
-    }
-
-    getBlockAt(x, y, z) {
-        if (y < 0 || y >= 256) return 0;
-        const blocks = getBaseBlocks(x >> 4, z >> 4);
-        if (!blocks) return 0;
-        return blocks[(y << 8) | ((z & 15) << 4) | (x & 15)];
-    }
-
-    setBlockAt(x, y, z, typeId) {
-        if (y < 0 || y >= 256) return;
-        if ((x >> 4) !== this.targetX || (z >> 4) !== this.targetZ) return;
-        this.blocks[(y << 8) | ((z & 15) << 4) | (x & 15)] = typeId;
-    }
-
-    getHeightAt(x, z) {
-        const blocks = getBaseBlocks(x >> 4, z >> 4);
-        if (!blocks) return 0;
-        const lx = x & 15;
-        const lz = z & 15;
-        for (let y = 255; y >= 0; y--) {
-            if (blocks[(y << 8) | (lz << 4) | lx] !== 0) return y + 1;
-        }
-        return 0;
-    }
-
-    getHighestBlockAt(x, z) {
-        return this.getHeightAt(x, z) - 1;
-    }
-}
-
-let cachedPopulateGenerator = null;
-let cachedPopulateGeneratorKey = null;
-
-function getPopulateGenerator(worldType = getWorldType()) {
-    if (!WorldGeneratorClass) return null;
-
-    const seedLong = seedToLong(config.seed);
-    const key = worldType + ':' + seedLong.toString();
-
-    if (cachedPopulateGenerator && cachedPopulateGeneratorKey === key) {
-        return cachedPopulateGenerator;
-    }
-
-    const world = { seed: seedLong, getBlockAt: () => 0 };
-    cachedPopulateGenerator = createGenerator(world, seedLong, worldType);
-    cachedPopulateGeneratorKey = key;
-    return cachedPopulateGenerator;
-}
-
-const populateStub = new PopulateWorldStub();
-
-function generateBlocks(chunkX, chunkZ, worldType = getWorldType()) {
-    const base = getBaseBlocks(chunkX, chunkZ, worldType);
-    if (!base) return null;
-
-    const blocks = new Uint16Array(base);
-
-    const populateGenerator = getPopulateGenerator(worldType);
-    if (!populateGenerator) return blocks;
-
-    populateStub.blocks = blocks;
-    populateStub.targetX = chunkX;
-    populateStub.targetZ = chunkZ;
-    populateGenerator.world = populateStub;
-
-    for (let dz = -1; dz <= 1; dz++) {
-        for (let dx = -1; dx <= 1; dx++) {
-            populateGenerator.populateChunk(chunkX + dx, chunkZ + dz);
-        }
-    }
-
     return blocks;
 }
 
@@ -224,7 +150,7 @@ function getColumnBlocks(chunkX, chunkZ, worldType = getWorldType()) {
     let blocks = blockCache.get(key);
     if (blocks) return blocks;
 
-    blocks = generateBlocks(chunkX, chunkZ, worldType);
+    blocks = generateSharedColumnBlocks(worldType, getWorldSeedText(), chunkX, chunkZ);
     if (!blocks) return null;
 
     blockCache.set(key, blocks);
@@ -237,13 +163,7 @@ function getColumnBlocks(chunkX, chunkZ, worldType = getWorldType()) {
 
 
 
-function flatBlockId(worldY) {
-    if (worldY === 0) return 7;              
-    if (worldY >= 1 && worldY <= 7) return 1; 
-    if (worldY === 8) return 3;              
-    if (worldY === 9) return 2;              
-    return 0;                                
-}
+
 
 
 
@@ -346,7 +266,6 @@ function getColumnBlock(blocks, x, y, z) {
 }
 
 
-
 function getSpawnTop(blocks, x, z, requireDry = true, worldType = getWorldType()) {
     const top = getSurfaceTop(x, z, blocks, worldType);
     if (top <= 1 || top + 2 >= 256) return -1;
@@ -359,6 +278,7 @@ function getSpawnTop(blocks, x, z, requireDry = true, worldType = getWorldType()
 
     return top;
 }
+
 
 
 
@@ -523,6 +443,7 @@ function getSpawnPosition(worldType = getWorldType()) {
 export {
     normalizeWorldType,
     getWorldType,
+    getWorldSeedText,
     generateChunkColumn,
     getBaseBlockAt,
     getSpawnPosition,

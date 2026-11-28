@@ -20,12 +20,20 @@ export default class World {
     static TOTAL_HEIGHT = ChunkSection.SIZE * 16; 
 
     static COLLISION_EPSILON = 0.001;
+    // Locally created entities (dropped items, ragdolls) are numbered from a
+    // range the server never uses for player entity ids.
+    static LOCAL_ENTITY_ID_START = 0x40000000;
 
     constructor(minecraft) {
         this.minecraft = minecraft;
 
         this.entities = [];
-        this.nextEntityId = 3;
+        // Server entity ids start at 1 and increment on every join. Numbering
+        // local entities from 3 as well made a ragdoll restored on join reuse
+        // the joining player's id, and addEntity removes the old holder of an
+        // id - which silently deleted the local player from the world and left
+        // the camera interpolating towards a stale previous position.
+        this.nextEntityId = World.LOCAL_ENTITY_ID_START;
 
         this.ticks = 0;
 
@@ -636,7 +644,16 @@ export default class World {
         }
 
         if (includeOffGrid) {
+            // A body asking for the world can leave out the field it owns, so it
+            // does not collide with its own cells.
+            const ignoreField = context !== null && context !== undefined
+                ? context.ignoreOffGridField
+                : undefined;
+
             for (const field of this.getOffGridFields()) {
+                if (field === ignoreField) {
+                    continue;
+                }
                 if (field.cells.size > 0) {
                     field.addCollisionBoxes(region, boundingBoxList);
                 }
@@ -1215,6 +1232,11 @@ export default class World {
 
     getOffGridFieldAt(x, y, z) {
         for (const field of this.getOffGridFields()) {
+            // A posed field has left the world grid, so its cells must not claim
+            // the block positions they were captured from. getBlockAt and the
+            // ray tracer skip posed fields for the same reason; otherwise a block
+            // change for where a contraption used to be would be swallowed by it.
+            if (field.isPosed()) continue;
             if (field.covers(x, y, z)) {
                 return field;
             }
@@ -1261,6 +1283,18 @@ export default class World {
 
     onBlockChanged(x, y, z) {
         this.setModified(x - 1, y - 1, z - 1, x + 1, y + 1, z + 1);
+
+        // Bodies that settled to sleep still have to notice a block being placed
+        // into them or the floor being dug out from under them.
+        if (!this.entities || this.entities.length === 0) {
+            return;
+        }
+
+        for (const entity of this.entities) {
+            if (entity && typeof entity.onBlockChanged === "function") {
+                entity.onBlockChanged(x, y, z);
+            }
+        }
     }
 
     setModified(minX, minY, minZ, maxX, maxY, maxZ) {
@@ -1813,6 +1847,9 @@ export default class World {
             let index = this.entities.indexOf(entity);
             if (index !== -1) {
                 this.entities.splice(index, 1);
+            }
+            if (typeof entity.onEntityRemoved === "function") {
+                entity.onEntityRemoved();
             }
             if (entity.renderer && entity.renderer.group) {
                 this.group.remove(entity.renderer.group);

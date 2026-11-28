@@ -11,6 +11,7 @@ import { initServer, onConnection, stopServer } from '../../server/ServerRuntime
 import * as serverWorld from '../../server/world.js';
 import * as serverPlayers from '../../server/players.js';
 import * as serverEntities from '../../server/entities.js';
+import * as serverRagdolls from '../../server/ragdolls.js';
 import config from '../../server/config.js';
 import { setInjectedServerMods, clearInjectedServerMods } from '../../server/serverMods.js';
 import path from '../../util/path.js';
@@ -290,6 +291,14 @@ function migrateLegacySave(saveData, username) {
                 item.motionZ || 0,
                 0
             );
+        }
+    }
+
+    // Ragdoll poses from a legacy save bench the server-side ragdoll store, so
+    // they are written next to the new world and handed to clients on request.
+    if (Array.isArray(saveData.ragdolls)) {
+        for (const state of saveData.ragdolls) {
+            serverRagdolls.storeSavedState(state);
         }
     }
 

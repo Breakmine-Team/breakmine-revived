@@ -16,6 +16,9 @@ export default class BlockBluestonePusherHead extends Block {
         this.multipart = true;
     }
 
+    // Heads are not placeable, so middle-click hands out the pusher itself.
+    pickedItem() { return BlockRegistry.BLUESTONE_PUSHER.id; }
+
     isSolid() { return true; }
 
     hasBlockEntity() { return true; }

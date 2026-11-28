@@ -60,7 +60,10 @@ import GuiPrelaunch from "./gui/screens/GuiPrelaunch.js";
 import GuiFunctions from "./gui/screens/GuiFunctions.js";
 import ItemEntity from "./entity/ItemEntity.js";
 import PlayerEntity from "./entity/PlayerEntity.js";
+import RagdollEntity from "./entity/RagdollEntity.js";
+import ContraptionEntity from "./entity/ContraptionEntity.js";
 import { Version } from "../../../../resources/version.js";
+import { getDisplayVersion } from "./BetaVersion.js";
 import { createErrorWindow } from './gui/WindowDraggable.js';
 import * as AuthLib from "./network/AuthLib.js";
 import { TunnelLib } from "../util/TunnelLib.js";
@@ -68,14 +71,16 @@ import I18n from "./i18n/I18n.js";
 
 export default class Minecraft {
 
-    static VERSION = Version.VERSION;
+    // Beta builds already carry the prerelease in Version.VERSION ("1.7.1b-fe11d7c-p3",
+    // rewritten by Vite); on a beta host a release version gets it appended.
+    static VERSION = getDisplayVersion(Version.VERSION);
     static TIMESTAMP = Version.TIMESTAMP;
     static PATCHWORK_VERSION = Version.PATCHWORK_VERSION;
-    static URL_GITHUB = "https://codeberg.org/BreakmineDevelopers/breakmine_revived";
+    static URL_GITHUB = "https://codeberg.org/BreakmineDevelopers/breakmine_revived"; // deprecated!
     static PROTOCOL_VERSION = 47; 
 
     static PROXY = {
-        "url": "ws://127.0.0.1:25565"
+        "url": "ws://127.0.0.1:25565" // deprecated!
     };
 
     
@@ -202,6 +207,25 @@ export default class Minecraft {
         this.lastBlockPos = null;
         this.isMining = false;
         this.miningProgress = 0;
+
+        // The ragdoll carried with the right mouse button, or null.
+        this.heldRagdoll = null;
+
+        // The contraption grabbed with the physics wand, or null.
+        this.heldContraption = null;
+
+        // How far in front of the eyes that contraption floats. It keeps the
+        // distance it had when it was grabbed.
+        this.heldContraptionDistance = ContraptionEntity.HOLD_DISTANCE;
+
+        // The body this player is limp as after pressing the ragdoll key.
+        this.playerRagdoll = null;
+
+        // Held keys repeat while pressed; the ragdoll toggle is edge triggered.
+        this.ragdollKeyDown = false;
+
+        // Perspective to restore when a ragdoll session ends, or null.
+        this.ragdollPreviousView = null;
 
         this.lastChunkCount = 0;
         this.lastChunkArrivalTime = 0;
@@ -925,6 +949,21 @@ export default class Minecraft {
                 saveData.itemEntities = itemEntities;
             }
 
+            const ragdolls = [];
+            if (this.world.entities) {
+                for (const entity of this.world.entities) {
+                    // A player's own limp body is not part of the world: it goes
+                    // away when they stand up and must not be saved as a corpse.
+                    if (entity instanceof RagdollEntity && !entity.isDead
+                        && !entity.isPlayerRagdoll) {
+                        ragdolls.push(entity.serializeState());
+                    }
+                }
+            }
+            if (ragdolls.length > 0) {
+                saveData.ragdolls = ragdolls;
+            }
+
             if (!isServerBacked) {
                 await this._saveWorldToDB(this.currentWorldKey, saveData);
             }
@@ -994,6 +1033,15 @@ export default class Minecraft {
 
             if (saveData.playerInventory && this.player && this.player.inventory) {
                 this.player.inventory.applyNetworkState(saveData.playerInventory);
+            }
+
+            if (Array.isArray(saveData.ragdolls)) {
+                for (const state of saveData.ragdolls) {
+                    const ragdoll = RagdollEntity.fromNetworkState(this, world, state);
+                    if (ragdoll !== null) {
+                        world.addEntity(ragdoll);
+                    }
+                }
             }
         } catch (err) {
             console.error('Failed to load world save:', err);
@@ -1095,6 +1143,20 @@ export default class Minecraft {
             return this.currentScreen === null && this.isInGame();
         }
         return this.window.isLocked() && this.currentScreen === null;
+    }
+
+    // True while the game is waiting for the browser to capture the cursor.
+    // Only meaningful with the Pointerlock Delay option on: the player clicked
+    // back into the game (so it wants the cursor captured) but the pointer lock
+    // has not been granted yet, and mouse movement must not turn the camera.
+    isWaitingForPointerLock() {
+        if (!this.settings.pointerLockDelay || this.settings.tvmode) {
+            return false;
+        }
+        if (this.window.mobileDevice || !this.isInGame() || this.currentScreen !== null) {
+            return false;
+        }
+        return this.window.isLocked() && !this.window.isCursorLockedToCanvas();
     }
 
     isInGame() {
@@ -1251,19 +1313,40 @@ export default class Minecraft {
         this.updateGameState();
     }
 
+    // Mouse movement arrives once per frame, but the camera interpolates the
+    // angles captured at the previous and current tick. Turning only the current
+    // angle made the view advance in bursts on every tick instead of following
+    // the mouse, and made it snap when a large delta was replayed. Moving the
+    // previous angles by the same amount keeps the interpolation span and lets
+    // the camera turn immediately at frame rate.
+    applyLookInput(deltaX, deltaY, sensitivity) {
+        const player = this.player;
+        if (!player) {
+            return;
+        }
+
+        const yawBefore = player.rotationYaw;
+        const pitchBefore = player.rotationPitch;
+
+        player.turn(deltaX, deltaY, sensitivity);
+
+        player.prevRotationYaw += player.rotationYaw - yawBefore;
+        player.prevRotationPitch += player.rotationPitch - pitchBefore;
+    }
+
     onRender(partialTicks) {
         if (this.isInGame()) {
-            if (this.hasInGameFocus()) {
+            if (this.hasInGameFocus() && !this.isWaitingForPointerLock()) {
                 let deltaX = this.window.pullMouseMotionX();
                 let deltaY = this.window.pullMouseMotionY();
                 if (deltaX !== 0 || deltaY !== 0) {
-                    this.player.turn(deltaX, deltaY);
+                    this.applyLookInput(deltaX, deltaY);
                 }
 
                 let remoteX = this.window.pullRemoteMotionX();
                 let remoteY = this.window.pullRemoteMotionY();
                 if (remoteX !== 0 || remoteY !== 0) {
-                    this.player.turn(remoteX, remoteY, this.settings.getRemoteSensitivity());
+                    this.applyLookInput(remoteX, remoteY, this.settings.getRemoteSensitivity());
                 }
             }
 
@@ -1317,7 +1400,7 @@ export default class Minecraft {
             return;
         }
 
-        document.title = `Breakmine ${Minecraft.VERSION.split('-')[0]}`;
+        document.title = `Breakmine ${Minecraft.VERSION.replace(/-[0-9a-f]{7,40}$/i, '')}`;
 
         if (Boolean(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname === '[::1]' )) {
             document.title = document.title + " (Dev)";
@@ -1378,11 +1461,17 @@ export default class Minecraft {
         if (this.isInGame() && !this.isPaused()) {
             this.handleMiningTicks();
 
+            this.updateHeldRagdoll();
+
+            this.updateHeldContraption();
+
             this.ingameOverlay.onTick();
 
             this.cctvManager.onTick();
 
             this.world.onTick();
+
+            this.updatePlayerRagdoll();
 
             this.worldRenderer.onTick();
 
@@ -1660,6 +1749,8 @@ export default class Minecraft {
             face: options.face ?? null,
             metadata: options.metadata ?? targetMetadata,
             offGrid: !!options.offGrid,
+            liquidFlow: options.liquidFlow === true,
+            sourcePos: options.sourcePos ?? null,
             world,
             minecraft: this
         }) || { action, canceled: false };
@@ -1768,6 +1859,11 @@ export default class Minecraft {
             }
         }
 
+        if (button === this.settings.keyRagdoll && !this.ragdollKeyDown) {
+            this.ragdollKeyDown = true;
+            this.togglePlayerRagdoll();
+        }
+
         if (button === this.settings.keyTogglePerspective) {
             this.settings.thirdPersonView = (this.settings.thirdPersonView + 1) % 3;
             this.settings.save();
@@ -1855,6 +1951,10 @@ export default class Minecraft {
     onKeyReleased(button) {
         this.modLoader?.handleKeyReleased(button);
 
+        if (button === this.settings.keyRagdoll) {
+            this.ragdollKeyDown = false;
+        }
+
         if (this.voiceChat && button === this.settings.keyVoiceChat) {
             this.voiceChat.onKeyReleased();
         }
@@ -1868,6 +1968,10 @@ export default class Minecraft {
 
             if (button === 0) {
                 let entity = this.rayTraceEntity(5, this.timer.partialTicks);
+                if (entity instanceof RagdollEntity) {
+                    this.hitRagdoll(entity);
+                    return;
+                }
                 if (entity && entity !== this.player && entity instanceof PlayerEntity && !entity.creative && !entity.spectator) {
                     if (this.player.attackCooldown > 0) {
                         return;
@@ -1877,7 +1981,7 @@ export default class Minecraft {
                     }
                     let damage = this.getAttackDamage();
                     entity.damageEntity(damage, this.player.username);
-                    this.player.attackCooldown = 30;
+                    this.player.attackCooldown = 8; // 400ms at 20 ticks per second
                     if (!this.isSingleplayer()) {
                         const nm = this.playerController.getNetworkHandler().getNetworkManager();
                         if (nm) nm.sendJson({ type: 'attack', target: entity.id, damage: damage, attacker: this.player.username });
@@ -1962,6 +2066,17 @@ export default class Minecraft {
                 this.player.swingArm();
             }
 
+            if (button === 1) {
+                let entity = this.rayTraceEntity(5, this.timer.partialTicks);
+                if (entity instanceof RagdollEntity) {
+                    if (entity.remote) {
+                        entity.claim();
+                    }
+                    this.kickRagdoll(entity, this.timer.partialTicks);
+                    return;
+                }
+            }
+
             if (button === 1 && this.player.creative) {
                 if (hitResult != null) {
                     let field = this.getHitField(hitResult);
@@ -1971,8 +2086,9 @@ export default class Minecraft {
                     if (typeId > 0) {
                         let block = Block.getById(typeId);
                         if (block === null) return;
-                        let pickedItemId = block.pickedItem();
-                        if (pickedItemId === null) return;
+                        let picked = block.getMiddleClick();
+                        if (!picked) return;
+                        let pickedItemId = typeof picked === 'number' ? picked : picked.getId();
                         for (let i = 0; i < 9; i++) {
                             let itemStack = this.player.inventory.getItemInSlot(i);
                             if (!itemStack.isEmpty() && itemStack.getType() === pickedItemId) {
@@ -1984,12 +2100,31 @@ export default class Minecraft {
                             }
                         }
 
-                        this.player.inventory.setItemInSelectedSlot(typeId);
+                        this.player.inventory.setItemInSelectedSlot(pickedItemId);
                     }
                 }
             }
 
             if (button === 2) {
+                // Right clicking a ragdoll picks it up and drags it along; it is
+                // never put in the inventory. This also swallows the repeating
+                // right click while the body is already in your hands.
+                if (this.heldRagdoll !== null) {
+                    return;
+                }
+
+                let grabTarget = this.rayTraceEntity(5, this.timer.partialTicks);
+                if (grabTarget instanceof RagdollEntity && !grabTarget.isDead
+                    && this.grabRagdoll(grabTarget)) {
+                    return;
+                }
+
+                // A Boat Core is the helm of its contraption: right clicking it
+                // takes over the steering, clicking it again steps off.
+                if (hitResult != null && this.useBoatCore(hitResult)) {
+                    return;
+                }
+
                 let heldItem = this.player.inventory.getItemInSelectedSlot();
 
                 if (heldItem && !heldItem.isEmpty() && Block.getById(heldItem.getType())?.isItem()) {
@@ -2292,6 +2427,391 @@ export default class Minecraft {
         return new THREE.CanvasTexture(canvas);
     }
 
+    kickRagdoll(ragdoll, partialTicks) {
+        let look = this.player.getLook(partialTicks);
+        ragdoll.kick(look.x, look.z);
+        this.player.swingArm();
+    }
+
+    grabRagdoll(ragdoll) {
+        if (!ragdoll || ragdoll.isDead || ragdoll.isPlayerRagdoll || !this.player) {
+            return false;
+        }
+
+        if (!ragdoll.grab()) {
+            return false;
+        }
+
+        this.heldRagdoll = ragdoll;
+        return true;
+    }
+
+    // Where a carried body hangs: at arm's length, a little below eye level.
+    getRagdollHoldPoint() {
+        let eye = this.player.getPositionEyes(this.timer.partialTicks);
+        let look = this.player.getLook(this.timer.partialTicks);
+        let distance = RagdollEntity.HOLD_DISTANCE;
+
+        return {
+            x: eye.x + look.x * distance,
+            y: eye.y + look.y * distance - RagdollEntity.HOLD_SAG,
+            z: eye.z + look.z * distance
+        };
+    }
+
+    // Called every tick: a body only stays in your hands while the right mouse
+    // button is held, and letting go drops it where it is.
+    updateHeldRagdoll() {
+        const ragdoll = this.heldRagdoll;
+        if (ragdoll === null) {
+            return;
+        }
+
+        const holding = !!(this.window.mouseButtons && this.window.mouseButtons[2]);
+
+        // A body that was broken, removed by the server or belongs to another
+        // world cannot stay in your hands.
+        const inWorld = Array.isArray(this.world.entities)
+            && this.world.entities.includes(ragdoll);
+
+        if (!holding || !ragdoll.held || ragdoll.remote || ragdoll.isDead || !inWorld
+            || ragdoll.world !== this.world || !this.player || this.player.isDead
+            || this.currentScreen !== null) {
+            this.releaseHeldRagdoll();
+            return;
+        }
+
+        let hold = this.getRagdollHoldPoint();
+        ragdoll.holdAt(hold.x, hold.y, hold.z);
+    }
+
+    releaseHeldRagdoll() {
+        const ragdoll = this.heldRagdoll;
+        if (ragdoll === null) {
+            return;
+        }
+
+        this.heldRagdoll = null;
+        ragdoll.release();
+    }
+
+    // The physics wand: a contraption under the crosshair is grabbed, and a
+    // grabbed one is put down again.
+    usePhysicsWand() {
+        if (this.heldContraption !== null) {
+            this.releaseHeldContraption();
+            return;
+        }
+
+        const target = this.rayTraceEntity(5, this.timer.partialTicks);
+        if (target instanceof ContraptionEntity) {
+            this.grabContraption(target);
+        }
+    }
+
+    // Right clicking the Boat Core cell of a contraption takes its helm, so the
+    // movement keys drive it from wherever the player is standing. Clicking it
+    // again lets go.
+    useBoatCore(hitResult) {
+        if (!this.player || !this.world) {
+            return false;
+        }
+
+        const field = this.getHitField(hitResult);
+        if (!field) {
+            return false;
+        }
+
+        const core = Block.getById(field.getBlockAt(
+            hitResult.x, hitResult.y, hitResult.z
+        ));
+
+        if (core === null || core.isBoatCore !== true) {
+            return false;
+        }
+
+        const contraption = this.findContraptionByField(field);
+        if (contraption === null) {
+            return false;
+        }
+
+        if (this.player.boatContraption === contraption) {
+            this.player.leaveBoat();
+            return true;
+        }
+
+        return this.player.boardBoat(contraption);
+    }
+
+    findContraptionByField(field) {
+        const entities = Array.isArray(this.world.entities) ? this.world.entities : [];
+
+        for (const entity of entities) {
+            if (entity instanceof ContraptionEntity && entity.field === field) {
+                return entity;
+            }
+        }
+
+        return null;
+    }
+
+    grabContraption(contraption) {
+        if (!contraption || contraption.isDead || !this.player) {
+            return false;
+        }
+
+        // Grabbing a body this client was only replaying makes it this client's
+        // body to move, and the server is told so the other clients stop
+        // simulating it instead of ignoring the carry.
+        contraption.adoptLocalSimulation();
+        contraption.claimSimulation();
+        contraption.beginHold();
+
+        this.heldContraption = contraption;
+        this.heldContraptionDistance = this.getContraptionHoldDistance(contraption);
+        return true;
+    }
+
+    // A machine picked up across the room stays across the room instead of
+    // jumping to arm's length the moment it is grabbed. The distance is measured
+    // along the look direction, because that is the line the body is carried on.
+    getContraptionHoldDistance(contraption) {
+        const eye = this.player.getPositionEyes(1.0);
+        const look = this.player.getLook(0.0);
+        const body = contraption.body.pos;
+
+        let distance =
+            (body.x - eye.x) * look.x +
+            (body.y - eye.y) * look.y +
+            (body.z - eye.z) * look.z;
+
+        if (!Number.isFinite(distance)) {
+            distance = ContraptionEntity.HOLD_DISTANCE;
+        }
+
+        return Math.max(
+            ContraptionEntity.MIN_HOLD_DISTANCE,
+            Math.min(ContraptionEntity.MAX_HOLD_DISTANCE, distance)
+        );
+    }
+
+    // A carried contraption floats in front of the player while the wand is
+    // held and the right mouse button is down. Letting go drops it.
+    updateHeldContraption() {
+        const contraption = this.heldContraption;
+        if (contraption === null) {
+            return;
+        }
+
+        const holding = !!(this.window.mouseButtons && this.window.mouseButtons[2]);
+        const stack = this.player ? this.player.inventory.getItemInSelectedSlot() : null;
+        const wand = stack && !stack.isEmpty() ? Block.getById(stack.getType()) : null;
+        const inWorld = Array.isArray(this.world.entities)
+            && this.world.entities.includes(contraption);
+
+        if (!holding || !wand || wand.isPhysicsWand !== true
+            || !inWorld || contraption.isDead || contraption.world !== this.world
+            || !this.player || this.player.isDead || this.currentScreen !== null) {
+            this.releaseHeldContraption();
+            return;
+        }
+
+        // This runs before the player is ticked, so the player still stands
+        // where the frame interpolation starts. The hold point of this tick is
+        // therefore the camera pose at partialTicks 0, and next tick's is the
+        // pose at 1: the contraption is drawn blended between exactly the two
+        // camera poses it was placed against, so it travels with the view
+        // instead of stepping 20 times a second.
+        const eye = this.player.getPositionEyes(1.0);
+        const look = this.player.getLook(0.0);
+        const distance = this.heldContraptionDistance;
+
+        contraption.holdAt(
+            eye.x + look.x * distance,
+            eye.y + look.y * distance,
+            eye.z + look.z * distance
+        );
+    }
+
+    releaseHeldContraption() {
+        const contraption = this.heldContraption;
+        if (contraption === null) {
+            return;
+        }
+
+        this.heldContraption = null;
+        this.heldContraptionDistance = ContraptionEntity.HOLD_DISTANCE;
+        contraption.release();
+    }
+
+    // The ragdoll key: drop your own body and let the camera follow it. Pressing
+    // it again stands you back up where the body came to rest.
+    togglePlayerRagdoll() {
+        if (this.playerRagdoll !== null) {
+            this.endPlayerRagdoll();
+            return;
+        }
+
+        if (!this.player || !this.world || !this.isInGame() || this.currentScreen !== null
+            || this.player.isDead || this.player.spectator) {
+            return;
+        }
+
+        // Whatever was in your hands is let go before you go limp.
+        this.releaseHeldRagdoll();
+
+        // Ragdoll mode is watched from outside, so switch to third person and
+        // remember the view the player actually chose.
+        this.ragdollPreviousView = this.settings.thirdPersonView;
+        this.settings.thirdPersonView = 1;
+
+        // The body wears the player's own skin and name, and starts upright so
+        // the camera begins at standing height before it topples over.
+        const ragdoll = new RagdollEntity(
+            this, this.world, this.player.x, this.player.y, this.player.z,
+            {displayName: this.player.username, standing: true}
+        );
+        ragdoll.isPlayerRagdoll = true;
+        this.world.addEntity(ragdoll);
+
+        this.playerRagdoll = ragdoll;
+        this.player.ragdollBody = ragdoll;
+    }
+
+    endPlayerRagdoll() {
+        const ragdoll = this.playerRagdoll;
+        if (ragdoll === null) {
+            return;
+        }
+
+        this.playerRagdoll = null;
+        if (this.player) {
+            this.player.ragdollBody = null;
+        }
+
+        // Put the camera back the way the player had it before ragdolling.
+        if (this.ragdollPreviousView !== null) {
+            this.settings.thirdPersonView = this.ragdollPreviousView;
+            this.ragdollPreviousView = null;
+        }
+
+        const box = ragdoll.boundingBox;
+
+        // Tell other clients the body is gone instead of leaving a corpse that
+        // nobody simulates behind.
+        if (!ragdoll.isDead) {
+            ragdoll.sendNetworkState({type: "ragdoll:remove", id: ragdoll.syncId});
+            this.world.removeEntityById(ragdoll.id);
+        }
+
+        if (this.player && box && !this.player.isDead) {
+            // Stand up where the body lay.
+            this.player.setPosition(
+                (box.minX + box.maxX) * 0.5,
+                box.minY,
+                (box.minZ + box.maxZ) * 0.5
+            );
+            this.player.motionX = 0;
+            this.player.motionY = 0;
+            this.player.motionZ = 0;
+            this.player.fallDistance = 0;
+            this.player.onGround = false;
+        }
+    }
+
+    // A body that was broken or removed cannot stay the player's own body.
+    updatePlayerRagdoll() {
+        const ragdoll = this.playerRagdoll;
+        if (ragdoll === null) {
+            return;
+        }
+
+        const inWorld = Array.isArray(this.world.entities)
+            && this.world.entities.includes(ragdoll);
+
+        if (!this.player || this.player.isDead || ragdoll.isDead
+            || ragdoll.world !== this.world || !inWorld) {
+            this.endPlayerRagdoll();
+        }
+    }
+
+    hitRagdoll(ragdoll) {
+        if (!ragdoll || ragdoll.isDead || ragdoll.isPlayerRagdoll
+            || this.player.attackCooldown > 0) {
+            return;
+        }
+
+        this.player.attackCooldown = 8; // 400ms at 20 ticks per second
+
+        // Only one client simulates a body; take it over before damaging it so
+        // the health change and the break happen on the copy that reports it.
+        if (ragdoll.remote) {
+            ragdoll.claim();
+        }
+
+        ragdoll.damage(this.getAttackDamage());
+        this.player.swingArm();
+    }
+
+    // Called when a ragdoll runs out of health: it breaks apart and drops what
+    // it was carrying, or its own item when it is just a dummy body.
+    onRagdollBroken(ragdoll) {
+        if (!this.world || !ragdoll) {
+            return;
+        }
+
+        if (Array.isArray(ragdoll.loot) && ragdoll.loot.length > 0) {
+            for (const entry of ragdoll.loot) {
+                this.world.addEntity(new ItemEntity(
+                    this, this.world, entry.id,
+                    ragdoll.x, ragdoll.y + 0.4, ragdoll.z, entry.count
+                ));
+            }
+            return;
+        }
+
+        const item = BlockRegistry.RAGDOLL;
+        if (!item) {
+            return;
+        }
+
+        this.world.addEntity(new ItemEntity(
+            this, this.world, item.id,
+            ragdoll.x, ragdoll.y + 0.2, ragdoll.z
+        ));
+    }
+
+    // A dead player leaves a ragdoll behind that holds their whole inventory;
+    // break it and the items spill out on the floor.
+    spawnPlayerCorpse(player) {
+        if (!this.world || !player || !player.inventory) {
+            return;
+        }
+
+        const loot = [];
+        if (typeof player.inventory.toNetworkState === "function") {
+            const state = player.inventory.toNetworkState();
+            for (const item of Array.isArray(state.items) ? state.items : []) {
+                if (!item || !item.typeId || !item.count) {
+                    continue;
+                }
+
+                loot.push({id: item.typeId, count: item.count});
+            }
+        }
+
+        const ragdoll = new RagdollEntity(this, this.world, player.x, player.y, player.z, {
+            displayName: player.username,
+            loot: loot
+        });
+        this.world.addEntity(ragdoll);
+
+        // The items now live in the corpse, not in a second copy on respawn.
+        if (typeof player.inventory.clear === "function") {
+            player.inventory.clear();
+        }
+    }
+
     rayTraceEntity(reach, partialTicks) {
         let from = this.player.getPositionEyes(partialTicks);
         let look = this.player.getLook(partialTicks);
@@ -2305,7 +2825,8 @@ export default class Minecraft {
         let closestDist = reach;
 
         for (let entity of this.world.entities) {
-            if (entity === this.player || !entity.boundingBox) continue;
+            // Your own limp body fills the camera, so it must not swallow clicks.
+            if (entity === this.player || entity === this.playerRagdoll || !entity.boundingBox) continue;
 
             let bb = entity.boundingBox.grow(0.1, 0.1, 0.1);
             let hit = this.intersectRayAABB(from, to, bb);

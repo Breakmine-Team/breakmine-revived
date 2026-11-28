@@ -3,6 +3,7 @@ import Block from "../world/block/Block.js";
 import World from "../world/World.js";
 import { BlockRegistry } from "../world/block/BlockRegistry.js";
 import BoundingBox from "../../util/BoundingBox.js";
+import PosedCollisionBox from "../../util/PosedCollisionBox.js";
 import EnumBlockFace from "../../util/EnumBlockFace.js";
 import MovingObjectPosition from "../../util/MovingObjectPosition.js";
 import Vector3 from "../../util/Vector3.js";
@@ -27,6 +28,21 @@ export default class OffGridBlockField {
     
     static COLLISION_BOX_CAP = 1200;
 
+    // Rotating blocks are animated on the same clock the chunk sections use,
+    // so a shaft inside a contraption turns at the same speed as one in the
+    // world instead of stepping with the server tick.
+    static animationTick() {
+        const now = typeof performance !== "undefined" && performance.now
+            ? performance.now()
+            : Date.now();
+        return Math.floor(now / 50);
+    }
+
+    static interpolateAngle(from, to, blend) {
+        const delta = ((to - from) % 360 + 540) % 360 - 180;
+        return from + delta * blend;
+    }
+
     constructor(minecraft) {
         this.minecraft = minecraft;
         this.world = null;
@@ -40,12 +56,22 @@ export default class OffGridBlockField {
         this.group.matrixAutoUpdate = false;
 
         this.rotation = { x: 0, y: 0, z: 0 };
+        this.previousRotation = { x: 0, y: 0, z: 0 };
         this.offset = { x: 0, y: 0, z: 0 };
+
+        // Offset at the previous tick, for fields that move every tick (a
+        // contraption carried by the physics wand). null means the field was
+        // never moved and there is nothing to blend from.
+        this.previousOffset = null;
 
         this.posedBoxCache = new Map();
         this._poseContext = null;
 
         this.pivot = null;
+
+        // A body the player can stand on hands its cells over as real tilted
+        // boxes instead of the axis aligned lattice used elsewhere.
+        this.exactCollision = false;
 
         this.regionCells = new Map();
 
@@ -57,6 +83,11 @@ export default class OffGridBlockField {
         this._localWorldWorld = null;
 
         this._suppressCellSync = false;
+
+        // A field whose cells are simulated by an entity owns them; block changes
+        // for the positions they were taken from are stale copies of its own
+        // removal and must not delete the cells.
+        this.acceptsRemoteWrites = true;
 
         this.isolateNeighbors = false;
 
@@ -219,6 +250,10 @@ export default class OffGridBlockField {
 
     
     applyRemoteWrite(x, y, z, typeId, data = 0) {
+        if (this.acceptsRemoteWrites === false) {
+            return false;
+        }
+
         const changed = this.applyWrite(x, y, z, typeId, data, true);
         if (changed) this.initializeBlockState(Math.floor(x), Math.floor(y), Math.floor(z));
         return changed;
@@ -264,6 +299,7 @@ export default class OffGridBlockField {
 
     
     applyNetworkSnapshot(cells, rotation, offset, pivot) {
+        const previousRotation = { x: this.rotation.x, y: this.rotation.y, z: this.rotation.z };
         this.clear();
 
         const list = Array.isArray(cells) ? cells : [];
@@ -286,6 +322,7 @@ export default class OffGridBlockField {
         }
 
         const numberOrZero = (value) => typeof value === 'number' && Number.isFinite(value) ? value : 0;
+        this.previousRotation = previousRotation;
         this.rotation = {
             x: numberOrZero(rotation && rotation.x),
             y: numberOrZero(rotation && rotation.y),
@@ -321,6 +358,7 @@ export default class OffGridBlockField {
         const numberOrZero = (value) => typeof value === 'number' && Number.isFinite(value) ? value : 0;
         const wasPosed = this.isPosed();
 
+        this.previousRotation = { x: this.rotation.x, y: this.rotation.y, z: this.rotation.z };
         this.rotation = {
             x: numberOrZero(rotation && rotation.x),
             y: numberOrZero(rotation && rotation.y),
@@ -344,6 +382,7 @@ export default class OffGridBlockField {
         const bounds = this.getBounds();
         const numberOrZero = (value) => typeof value === 'number' && Number.isFinite(value) ? value : 0;
 
+        this.previousRotation = { x: this.rotation.x, y: this.rotation.y, z: this.rotation.z };
         this.rotation = {
             x: numberOrZero(rotation && rotation.x),
             y: numberOrZero(rotation && rotation.y),
@@ -614,7 +653,9 @@ export default class OffGridBlockField {
         this._localWorldWorld = null;
 
         this.rotation = { x: 0, y: 0, z: 0 };
+        this.previousRotation = { x: 0, y: 0, z: 0 };
         this.offset = { x: 0, y: 0, z: 0 };
+        this.previousOffset = null;
         this.group.position.set(0, 0, 0);
         this.group.rotation.set(0, 0, 0);
         this.group.updateMatrix();
@@ -695,6 +736,7 @@ export default class OffGridBlockField {
     rotate(degrees, axis) {
         const wasPosed = this.isPosed();
 
+        this.previousRotation[axis] = this.rotation[axis] || 0;
         this.rotation[axis] = (this.rotation[axis] || 0) + degrees;
         this.applyTransform();
 
@@ -713,7 +755,7 @@ export default class OffGridBlockField {
     }
 
     
-    applyTransform() {
+    applyTransform(clearCaches = true) {
         const pose = this.computePose();
         this.group.rotation.set(pose.rotation.x, pose.rotation.y, pose.rotation.z);
         this.group.position.set(pose.position.x, pose.position.y, pose.position.z);
@@ -721,10 +763,61 @@ export default class OffGridBlockField {
         this.group.updateMatrix();
         this.group.updateMatrixWorld(true);
 
+        if (!clearCaches) {
+            return;
+        }
+
         this.posedBoxCache.clear();
         this._poseContext = null;
         this._localWorld = null;
         this._localWorldWorld = null;
+    }
+
+    static interpolateDegrees(from, to, blend) {
+        const delta = ((to - from) % 360 + 540) % 360 - 180;
+        return from + delta * blend;
+    }
+
+    // Frames land between ticks, so draw the contraption part way from the pose
+    // of the previous tick to the pose of the next one instead of letting it
+    // jump 20 times a second. The caller restores the exact tick pose with
+    // applyTransform(false) before anything reads the matrix for collisions.
+    interpolateRotation(partialTicks) {
+        if (!this.isPosed()) {
+            return;
+        }
+
+        const pose = this.getInterpolatedPoseTransform(partialTicks);
+
+        this.group.rotation.set(pose.rotation.x, pose.rotation.y, pose.rotation.z);
+        this.group.position.set(pose.position.x, pose.position.y, pose.position.z);
+        this.group.updateMatrix();
+        this.group.updateMatrixWorld(true);
+    }
+
+    // The block outline and the placement preview are not children of the field
+    // group, so they cannot inherit the interpolated transform above; they ask
+    // for the same in-between pose instead of snapping to the tick pose.
+    getInterpolatedPoseTransform(partialTicks) {
+        if (!this.isPosed()) {
+            return this.computePose();
+        }
+
+        const blend = Number.isFinite(partialTicks)
+            ? Math.max(0, Math.min(1, partialTicks))
+            : 1;
+
+        const previous = this.previousOffset || this.offset;
+
+        return this.computePose({
+            x: OffGridBlockField.interpolateDegrees(this.previousRotation.x, this.rotation.x, blend),
+            y: OffGridBlockField.interpolateDegrees(this.previousRotation.y, this.rotation.y, blend),
+            z: OffGridBlockField.interpolateDegrees(this.previousRotation.z, this.rotation.z, blend)
+        }, {
+            x: previous.x + (this.offset.x - previous.x) * blend,
+            y: previous.y + (this.offset.y - previous.y) * blend,
+            z: previous.z + (this.offset.z - previous.z) * blend
+        });
     }
 
     
@@ -741,7 +834,7 @@ export default class OffGridBlockField {
     }
 
     
-    computePose() {
+    computePose(rotation = this.rotation, offset = this.offset) {
         const pivot = this.getPivot();
         const pivotX = pivot.x;
         const pivotY = pivot.y;
@@ -749,18 +842,18 @@ export default class OffGridBlockField {
 
         const toRad = Math.PI / 180;
         const euler = new THREE.Euler(
-            this.rotation.x * toRad,
-            this.rotation.y * toRad,
-            this.rotation.z * toRad,
+            rotation.x * toRad,
+            rotation.y * toRad,
+            rotation.z * toRad,
             "XYZ"
         );
 
         const rotatedPivot = new THREE.Vector3(pivotX, pivotY, pivotZ).applyEuler(euler);
         return {
             position: {
-                x: pivotX + this.offset.x - rotatedPivot.x,
-                y: pivotY + this.offset.y - rotatedPivot.y,
-                z: pivotZ + this.offset.z - rotatedPivot.z
+                x: pivotX + offset.x - rotatedPivot.x,
+                y: pivotY + offset.y - rotatedPivot.y,
+                z: pivotZ + offset.z - rotatedPivot.z
             },
             rotation: { x: euler.x, y: euler.y, z: euler.z }
         };
@@ -866,14 +959,15 @@ export default class OffGridBlockField {
         this.attachToScene();
 
         if (region) {
-            for (const mesh of region.meshes) {
+            for (const mesh of [...region.meshes, ...(region.rotatingMeshes || [])]) {
                 region.group.remove(mesh);
                 mesh.geometry.dispose();
                 mesh.material.dispose();
             }
             region.meshes = [];
+            region.rotatingMeshes = [];
         } else {
-            region = { group: new THREE.Object3D(), meshes: [] };
+            region = { group: new THREE.Object3D(), meshes: [], rotatingMeshes: [] };
             this.regions.set(regionKey, region);
             this.group.add(region.group);
         }
@@ -882,6 +976,7 @@ export default class OffGridBlockField {
         const tessellator = blockRenderer.tessellator;
         const ambientOcclusion = !!world.minecraft.settings.ambientOcclusion;
         const localWorld = this.createLocalWorld() || world;
+        const animationTick = OffGridBlockField.animationTick();
 
         let cameraLocal = null;
         const player = world.minecraft.player;
@@ -901,9 +996,31 @@ export default class OffGridBlockField {
             blockRenderer.beginModelPass();
 
             const blocksToRender = [];
+            const rotatingBlocks = [];
             for (const cell of cellsInRegion) {
                 const block = Block.getById(cell.typeId) || BlockRegistry.get(cell.typeId);
                 if (!block || block.isTranslucent() !== translucentPass) continue;
+
+                // Shafts, gears, motors and bearing heads spin on their own, so
+                // baking them into the region mesh would freeze them. They get
+                // their own mesh and are turned every frame, the same way a
+                // chunk section animates its rotating blocks.
+                const rotation = blockRenderer.getBlockRotation(
+                    localWorld, block, cell.x, cell.y, cell.z, animationTick
+                );
+
+                if (rotation !== null) {
+                    rotatingBlocks.push({
+                        cell,
+                        block,
+                        staticParts: blockRenderer.getStaticParts(block, localWorld,
+                            cell.x, cell.y, cell.z),
+                        groups: blockRenderer.getRotatingGroups(block, localWorld,
+                            cell.x, cell.y, cell.z)
+                    });
+                    continue;
+                }
+
                 blocksToRender.push({ cell, block });
             }
 
@@ -919,6 +1036,16 @@ export default class OffGridBlockField {
                     const distBSq = bx * bx + by * by + bz * bz;
                     return distBSq - distASq;
                 });
+            }
+
+            // The casing of a rotating block stays put; only the moving parts
+            // are turned.
+            for (const entry of rotatingBlocks) {
+                if (entry.staticParts !== null) {
+                    blockRenderer.renderParts(localWorld, entry.staticParts,
+                        entry.cell.x, entry.cell.y, entry.cell.z,
+                        false, true, entry.block, ambientOcclusion);
+                }
             }
 
             for (const blockData of blocksToRender) {
@@ -940,14 +1067,137 @@ export default class OffGridBlockField {
                 modelMesh.position.set(rx, ry, rz);
                 region.meshes.push(modelMesh);
             }
+
+            for (const entry of rotatingBlocks) {
+                const groups = entry.groups;
+                const partGroups = groups !== null ? groups.map((group) => group.parts) : [null];
+
+                const meshes = [];
+                for (const parts of partGroups) {
+                    const mesh = blockRenderer.buildRotatingMesh(
+                        localWorld, entry.block, ambientOcclusion,
+                        entry.cell.x, entry.cell.y, entry.cell.z, translucentPass, parts
+                    );
+                    if (mesh === null) {
+                        meshes.length = 0;
+                        break;
+                    }
+                    meshes.push(mesh);
+                }
+
+                if (meshes.length === 0) {
+                    continue;
+                }
+
+                // The region group sits at the field origin and the static mesh
+                // adds its region origin back through its own position, so the
+                // rotating mesh has to be placed in that same field space: the
+                // block centre is absolute, not relative to the region. Using
+                // the region-relative centre here shifted every spinning part a
+                // whole region away (16 blocks in Y for most contraptions).
+                const centerX = entry.cell.x + 0.5;
+                const centerY = entry.cell.y + 0.5;
+                const centerZ = entry.cell.z + 0.5;
+
+                for (let i = 0; i < meshes.length; i++) {
+                    const mesh = meshes[i];
+
+                    mesh.geometry.translate(-centerX, -centerY, -centerZ);
+                    mesh.geometry.computeBoundingSphere();
+                    mesh.position.set(centerX, centerY, centerZ);
+                    mesh.userData.rotatingBlock = {
+                        block: entry.block,
+                        world: localWorld,
+                        x: entry.cell.x,
+                        y: entry.cell.y,
+                        z: entry.cell.z,
+                        group: groups !== null ? i : -1,
+                        previous: null,
+                        current: null,
+                        tick: -1
+                    };
+
+                    if (translucentPass) {
+                        mesh.userData.isTranslucent = true;
+                        mesh.visible = false;
+                    }
+
+                    region.group.add(mesh);
+                    region.rotatingMeshes.push(mesh);
+                }
+            }
         }
 
-        if (region.meshes.length === 0) {
+        if (region.meshes.length === 0 && region.rotatingMeshes.length === 0) {
             this.disposeRegion(region);
             this.regions.delete(regionKey);
         }
 
         this.group.updateMatrixWorld(true);
+    }
+
+    // Re-bake every region from its cells. Sky light is baked into the vertex
+    // colours, so a field whose blocks stand out in the world has to be rebuilt
+    // like a chunk section when the time of day changes the light.
+    rebuildAll() {
+        for (const key of [...this.regionCells.keys()]) {
+            const parts = key.split(",");
+            this.rebuildRegion(
+                parseInt(parts[0], 10),
+                parseInt(parts[1], 10),
+                parseInt(parts[2], 10)
+            );
+        }
+    }
+
+    // Turns the meshes made for rotating blocks. WorldRenderer runs this every
+    // frame before drawing the scene, exactly like
+    // ChunkSection.updateRotatingBlocks does for the world's own blocks.
+    updateRotatingBlocks(renderer, partialTicks) {
+        if (this.regions.size === 0) {
+            return;
+        }
+
+        const blockRenderer = renderer && renderer.blockRenderer ? renderer.blockRenderer : renderer;
+        if (!blockRenderer) {
+            return;
+        }
+
+        const tick = OffGridBlockField.animationTick();
+        const blend = Number.isFinite(partialTicks)
+            ? Math.max(0, Math.min(1, partialTicks))
+            : 1;
+        const radians = Math.PI / 180;
+
+        for (const region of this.regions.values()) {
+            for (const mesh of region.rotatingMeshes || []) {
+                const info = mesh.userData.rotatingBlock;
+                if (!info) continue;
+
+                const rotation = info.group >= 0
+                    ? blockRenderer.getGroupRotation(
+                        info.block, info.group, info.world, info.x, info.y, info.z, tick)
+                    : blockRenderer.getBlockRotation(
+                        info.world, info.block, info.x, info.y, info.z, tick);
+
+                if (rotation === null) {
+                    mesh.rotation.set(0, 0, 0);
+                    continue;
+                }
+
+                if (info.current === null || info.tick !== tick) {
+                    info.previous = info.current === null ? rotation : info.current;
+                    info.current = rotation;
+                    info.tick = tick;
+                }
+
+                mesh.rotation.set(
+                    OffGridBlockField.interpolateAngle(info.previous.x, info.current.x, blend) * radians,
+                    OffGridBlockField.interpolateAngle(info.previous.y, info.current.y, blend) * radians,
+                    OffGridBlockField.interpolateAngle(info.previous.z, info.current.z, blend) * radians
+                );
+            }
+        }
     }
 
 
@@ -1110,42 +1360,66 @@ export default class OffGridBlockField {
     
     pushPosedBox(box, out, region) {
         const rotated = this.rotation.x !== 0 || this.rotation.y !== 0 || this.rotation.z !== 0;
-        let posed;
 
         if (!this.isPosed()) {
-            posed = [box];
-        } else if (!rotated) {
-            posed = [new BoundingBox(
-                box.minX + this.offset.x,
-                box.minY + this.offset.y,
-                box.minZ + this.offset.z,
-                box.maxX + this.offset.x,
-                box.maxY + this.offset.y,
-                box.maxZ + this.offset.z
-            )];
-        } else {
-            posed = this.posedRotatedBoxes(box);
+            this.emitCollisionBox(box, out, region, false);
+            return;
         }
 
-        for (const b of posed) {
-            const emit = rotated
-                ? new BoundingBox(
-                    b.minX + this.offset.x,
-                    b.minY + this.offset.y,
-                    b.minZ + this.offset.z,
-                    b.maxX + this.offset.x,
-                    b.maxY + this.offset.y,
-                    b.maxZ + this.offset.z)
-                : b;
+        if (!rotated) {
+            this.emitCollisionBox(box, out, region, true);
+            return;
+        }
 
-            if (emit.minX > region.maxX + 1e-6 || emit.maxX < region.minX - 1e-6 ||
-                emit.minY > region.maxY + 1e-6 || emit.maxY < region.minY - 1e-6 ||
-                emit.minZ > region.maxZ + 1e-6 || emit.maxZ < region.minZ - 1e-6) {
-                continue;
+        // A body the player stands on hands over its cells as the real tilted
+        // boxes, so the player's collision is against the block itself instead
+        // of a lattice standing in for it. Everything else keeps the lattice,
+        // which is cheaper and only has to stop you walking through.
+        if (this.exactCollision) {
+            const corners = [];
+
+            for (let i = 0; i < 8; i++) {
+                corners.push(this.posePointNoOffset({
+                    x: (i & 1) ? box.maxX : box.minX,
+                    y: (i & 2) ? box.maxY : box.minY,
+                    z: (i & 4) ? box.maxZ : box.minZ
+                }));
             }
-            emit.epsilon = World.COLLISION_EPSILON;
-            out.push(emit);
+
+            this.emitCollisionBox(new PosedCollisionBox(corners), out, region, true);
+            return;
         }
+
+        for (const posed of this.posedRotatedBoxes(box)) {
+            this.emitCollisionBox(posed, out, region, true);
+        }
+    }
+
+    
+    emitCollisionBox(box, out, region, shifted) {
+        let emit = box;
+
+        if (shifted) {
+            emit = box instanceof PosedCollisionBox
+                ? box.offsetBox(this.offset.x, this.offset.y, this.offset.z)
+                : new BoundingBox(
+                    box.minX + this.offset.x,
+                    box.minY + this.offset.y,
+                    box.minZ + this.offset.z,
+                    box.maxX + this.offset.x,
+                    box.maxY + this.offset.y,
+                    box.maxZ + this.offset.z
+                );
+        }
+
+        if (emit.minX > region.maxX + 1e-6 || emit.maxX < region.minX - 1e-6 ||
+            emit.minY > region.maxY + 1e-6 || emit.maxY < region.minY - 1e-6 ||
+            emit.minZ > region.maxZ + 1e-6 || emit.maxZ < region.minZ - 1e-6) {
+            return;
+        }
+
+        emit.epsilon = World.COLLISION_EPSILON;
+        out.push(emit);
     }
 
     
@@ -1399,11 +1673,29 @@ export default class OffGridBlockField {
             const w = toWorldInt(x, y, z);
             return outOfWorld(w) ? 0 : realWorld.getBlockDataAt(w.x, w.y, w.z);
         };
+        // Light is read where the block currently stands in the world instead
+        // of being fixed at full bright. A contraption's cells sit in pockets of
+        // air, so the sky light there darkens at dusk and brightens at dawn just
+        // like the ground around it. A block that glows still lights its own
+        // cell, so lamps inside a contraption keep shining at night.
         const readLocalLight = (x, y, z) => {
-            const cell = cellAt(x, y, z);
-            if (cell) return 15;
             const w = toWorldInt(x, y, z);
-            return outOfWorld(w) ? 15 : realWorld.getTotalLightAt(w.x, w.y, w.z);
+            if (outOfWorld(w)) return 15;
+
+            let light = realWorld.getTotalLightAt(w.x, w.y, w.z);
+
+            const cell = cellAt(x, y, z);
+            if (cell) {
+                const cellBlock = Block.getById(cell.typeId) || BlockRegistry.get(cell.typeId);
+                if (cellBlock && typeof cellBlock.getLightValue === "function") {
+                    const emitted = cellBlock.getLightValue(realWorld, w.x, w.y, w.z);
+                    if (Number.isFinite(emitted) && emitted > light) {
+                        light = emitted;
+                    }
+                }
+            }
+
+            return light;
         };
         const isSolidLocal = (x, y, z) => {
             const cell = cellAt(x, y, z);
@@ -1510,6 +1802,8 @@ export default class OffGridBlockField {
                         };
                     case "isFieldLocalWorld":
                         return true;
+                    case "cellField":
+                        return field;
                 }
                 return target[prop];
             }
@@ -1604,12 +1898,13 @@ export default class OffGridBlockField {
     }
 
     disposeRegion(region) {
-        for (const mesh of region.meshes) {
+        for (const mesh of [...region.meshes, ...(region.rotatingMeshes || [])]) {
             region.group.remove(mesh);
             mesh.geometry.dispose();
             mesh.material.dispose();
         }
         region.meshes = [];
+        region.rotatingMeshes = [];
         if (region.group.parent) {
             region.group.parent.remove(region.group);
         }

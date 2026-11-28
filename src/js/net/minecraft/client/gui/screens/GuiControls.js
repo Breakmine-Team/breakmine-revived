@@ -24,6 +24,7 @@ const KEY_BINDING_GROUPS = [
         category: "Gameplay",
         bindings: [
             { name: "Drop Item", setting: "keyDrop" },
+            { name: "Toggle Ragdoll", setting: "keyRagdoll" },
             { name: "Toggle Perspective", setting: "keyTogglePerspective" },
             { name: "Toggle HUD", setting: "keyToggleGui" },
             { name: "Screenshot", setting: "keyScreenshot" },

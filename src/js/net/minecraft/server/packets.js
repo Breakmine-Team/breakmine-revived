@@ -3,6 +3,7 @@ import { writeLongBE } from './binary.js';
 import { makePacket, writeVarInt, writeString, broadcast, varIntSize } from './protocol.js';
 import { getPlayers, getPlayerCount } from './players.js';
 import { generateFlatChunkColumn, getWorldType, getSpawnPosition, getDimensionType } from './world.js';
+import { getWorldSeedText, getFlatBlockId } from './WorldGen.js';
 import config from './config.js';
 import { readServerMods } from './serverMods.js';
 import {
@@ -107,8 +108,99 @@ function sendSpawnPosition(player) {
     player.ws.send(makePacket(0x05, data));
 }
 
+// Client-side world generation
+// ---------------------------
+// Flat and normal worlds are reproducible from their type and seed, so a
+// joining client can build the terrain itself instead of receiving every
+// chunk. The server still generates the few columns it needs for physics, and
+// still sends chunks that hold block changes (see checkAndSendChunks).
+const CLIENT_TERRAIN_VIEW_DISTANCE = 4;
+
+let flatTerrainLayers = null;
+
+function buildFlatTerrainLayers() {
+    if (flatTerrainLayers !== null) {
+        return flatTerrainLayers;
+    }
+
+    const layers = [];
+    let start = 0;
+    let current = getFlatBlockId(0);
+
+    for (let y = 1; y <= 255; y++) {
+        const id = getFlatBlockId(y);
+        if (id === current) continue;
+
+        if (current !== 0) {
+            layers.push({ from: start, to: y - 1, block: current });
+        }
+        current = id;
+        start = y;
+    }
+
+    if (current !== 0) {
+        layers.push({ from: start, to: 255, block: current });
+    }
+
+    flatTerrainLayers = layers;
+    return layers;
+}
+
+function getClientTerrain(player) {
+    if (config.clientWorldGen === false || player?.clientWorldGen !== true) {
+        return null;
+    }
+
+    const dimension = player?.dimension ?? 0;
+    if (dimension !== 0) {
+        return null;
+    }
+
+    const worldType = getDimensionType(0);
+    if (worldType !== 'flat' && worldType !== 'normal') {
+        return null;
+    }
+
+    const descriptor = {
+        type: 'terrain',
+        generator: worldType,
+        viewDistance: CLIENT_TERRAIN_VIEW_DISTANCE
+    };
+
+    if (worldType === 'flat') {
+        descriptor.layers = buildFlatTerrainLayers();
+    } else {
+        descriptor.seed = getWorldSeedText();
+    }
+
+    return descriptor;
+}
+
+// Sends the descriptor when the player first joins (or when it changes) and
+// returns it when this player generates the world locally.
+function announceClientTerrain(player) {
+    const descriptor = getClientTerrain(player);
+    if (descriptor === null) {
+        player.clientTerrainKey = null;
+        return null;
+    }
+
+    const key = `${descriptor.generator}:${descriptor.seed ?? ''}:${descriptor.viewDistance}`;
+    if (player.clientTerrainKey !== key && player.ws && player.ws.readyState === 1) {
+        player.clientTerrainKey = key;
+        player.ws.send(JSON.stringify(descriptor));
+    }
+
+    return descriptor;
+}
+
 function sendChunks(player) {
     const dimension = player.dimension ?? 0;
+    if (announceClientTerrain(player) !== null) {
+        sendPlayerPositionLook(player);
+        return;
+    }
+
     for (let cx = -2; cx <= 2; cx++) {
         for (let cz = -2; cz <= 2; cz++) {
             sendSingleChunk(player, cx, cz, dimension);
@@ -300,6 +392,32 @@ function createDestroyEntityPacket(eid) {
     offset += writeVarInt(data, 1, offset);
     offset += writeVarInt(data, eid, offset);
     return makePacket(0x13, data.subarray(0, offset));
+}
+
+const ENTITY_EQUIPMENT_PACKET_ID = 0x04;
+
+// The item a player holds is not entity metadata, so other clients get it in
+// its own packet whenever the held stack or the selected hotbar slot changes.
+function createEntityEquipmentPacket(player) {
+    const data = Buffer.alloc(32);
+    const inventory = player.inventory;
+    const slot = Number(inventory?.selectedSlotIndex) || 0;
+    const item = inventory?.items?.[slot];
+    const typeId = item?.typeId || 0;
+
+    let offset = 0;
+    offset += writeVarInt(data, player.eid, offset);
+    data.writeInt16BE(slot, offset); offset += 2;
+
+    if (typeId > 0) {
+        data.writeInt16BE(typeId, offset); offset += 2;
+        data.writeUInt8(Math.max(1, Math.min(64, item.count || 1)), offset); offset += 1;
+        data.writeInt16BE(0, offset); offset += 2;   // damage
+    } else {
+        data.writeInt16BE(-1, offset); offset += 2;
+    }
+
+    return makePacket(ENTITY_EQUIPMENT_PACKET_ID, data.subarray(0, offset));
 }
 
 function createEntityMetadataPacket(player) {
@@ -574,6 +692,7 @@ export {
     sendRespawn,
     sendSpawnPosition,
     sendChunks,
+    announceClientTerrain,
     sendSingleChunk,
     unloadChunk,
     sendResetWorldPacket,
@@ -589,6 +708,7 @@ export {
     createSpawnPlayerPacket,
     createEntityTeleportPacket,
     createDestroyEntityPacket,
+    createEntityEquipmentPacket,
     createEntityMetadataPacket,
     createAnimationPacket,
     createSpawnObjectPacket,
