@@ -386,7 +386,8 @@ export default class NetworkManager {
                 || payload.type === 'ragdoll:owner') {
                 this._handleRagdollMessage(payload);
             } else if (payload.type === 'contraption:state' || payload.type === 'contraption:pose'
-                || payload.type === 'contraption:remove' || payload.type === 'contraption:control') {
+                || payload.type === 'contraption:remove' || payload.type === 'contraption:control'
+                || payload.type === 'contraption:cell') {
                 this._handleContraptionMessage(payload);
             } else if (payload.type === 'spawnEntity' && this.minecraft?.world) {
                 const world = this.minecraft.world;
@@ -524,6 +525,15 @@ export default class NetworkManager {
             return;
         }
 
+        // A cell edit changes only the blocks, never who simulates the body, so
+        // it is applied straight to the hull and leaves its pose alone.
+        if (payload.type === 'contraption:cell') {
+            if (existing !== null) {
+                existing.applyCellEdits(payload.add, payload.remove);
+            }
+            return;
+        }
+
         // The server names the client that simulates the body, so exactly one
         // client runs the physics and everybody else replays its reports.
         // Deciding that per client (the old way, from whether the body came out
@@ -545,9 +555,12 @@ export default class NetworkManager {
         }
 
         // The client that simulates the body gets its own report echoed back;
-        // its local copy is the authority.
+        // its local copy is the authority. A block another player placed can
+        // still arrive inside that report before its cell edit does, so those
+        // cells are applied to the hull instead of rebuilding it.
         if (existing !== null && !existing.remote) {
             if (mine) {
+                this._applyReportedCells(existing, payload);
                 return;
             }
 
@@ -558,14 +571,22 @@ export default class NetworkManager {
             existing = null;
         }
 
-        if (existing !== null && !mine && existing.hasSameCells(payload.cells)) {
-            existing.applyRemoteState(payload);
-            return;
+        if (existing !== null) {
+            if (!mine) {
+                // A replay follows the reported shape and pose in place, so the
+                // hull (and whoever stands on it) never blinks out and back.
+                this._applyReportedCells(existing, payload);
+                existing.applyRemoteState(payload);
+                return;
+            }
+
+            // Ownership moved to this client: the body has to start simulating
+            // here, so it is built again as a local body instead of a replay.
+            world.removeEntityById(existing.id);
+            existing = null;
         }
 
-        // Ownership moved to this client, or the body changed shape: build the
-        // entity again from the report and simulate it only if it was named as
-        // this client's.
+        // A body this client has not seen yet.
         const contraption = ContraptionEntity.fromNetworkState(
             this.minecraft, world, payload, !mine
         );
@@ -573,11 +594,18 @@ export default class NetworkManager {
             return;
         }
 
-        if (existing !== null) {
-            world.removeEntityById(existing.id);
+        world.addEntity(contraption);
+    }
+
+    // The blocks a full report carries that this hull does not have yet (or has
+    // in another state), written into it without reporting them back.
+    _applyReportedCells(existing, payload) {
+        if (!Array.isArray(existing.cells) || !Array.isArray(payload.cells)) {
+            return;
         }
 
-        world.addEntity(contraption);
+        const {add, remove} = ContraptionEntity.diffCells(existing.cells, payload.cells);
+        existing.applyCellEdits(add, remove);
     }
 
     _applyPlayerState(player, state) {

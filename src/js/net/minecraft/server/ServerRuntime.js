@@ -12,7 +12,7 @@ import Logger from './logger.js';
 import { BlockRegistry } from '../client/world/block/BlockRegistry.js';
 import { handleModMessage, loadServerSideMods } from './ServerModLoader.js';
 import { getRagdoll, listRagdolls, removeRagdoll, setRagdollOwner, storeRagdoll } from './ragdolls.js';
-import { getContraption, listContraptions, removeContraption, setContraptionOwner, storeContraption, storeContraptionPose } from './contraptions.js';
+import { getContraption, listContraptions, removeContraption, setContraptionOwner, storeContraption, storeContraptionPose, updateContraptionPose, applyCellEdits as applyContraptionCellEdits } from './contraptions.js';
 import { handleStructurePaste } from './structurePaste.js';
 import getServerWorld from './World.js';
 import config from './config.js';
@@ -186,10 +186,58 @@ function handleContraptionMessage(player, payload) {
         return;
     }
 
+    const stored = getContraption(id);
+
+    // A body that already exists only moves on a full report. Who simulates it
+    // is settled when it is claimed or handed on, never by whoever reports last,
+    // and its cells change only through the cell edits below. Letting a report
+    // replace the cells and the owner is what made two players building on one
+    // hull revert each other's blocks, each report redrawing the other's copy.
+    if (stored !== null) {
+        if (stored.owner != null && stored.owner !== player.eid) return;
+
+        const state = updateContraptionPose(id, payload);
+        if (state === null) return;
+
+        relayContraptions(player, state);
+        return;
+    }
+
     const state = storeContraption(id, payload, false, player.eid);
     if (state === null) return;
 
     relayContraptions(player, state);
+}
+
+// The physics wand picks a body up on the client that clicked it, so that client
+// becomes the one simulating it. The relayed state tells the previous owner to
+// go back to replaying the pose instead of running its own physics next to it.
+function handleContraptionClaim(player, payload) {
+    if (!player || player.eid == null) return;
+
+    const id = typeof payload.id === 'string' ? payload.id.slice(0, 64) : '';
+    if (id.length === 0) return;
+
+    const state = setContraptionOwner(id, player.eid);
+    if (state === null) return;
+
+    relayContraptions(player, state);
+}
+
+// A block placed on or broken out of a hull somebody else is driving. The edit
+// is added to the stored cells and relayed to every client, the one simulating
+// the body included, so the change shows up for everyone without anybody taking
+// the physics away from its owner.
+function handleContraptionCell(player, payload) {
+    if (!player || player.eid == null) return;
+
+    const id = typeof payload.id === 'string' ? payload.id.slice(0, 64) : '';
+    if (id.length === 0) return;
+
+    const message = applyContraptionCellEdits(id, payload.add, payload.remove);
+    if (message === null) return;
+
+    relayContraptions(player, message);
 }
 
 // A contraption is moved by the one client that simulates it. A player at the
@@ -504,6 +552,10 @@ export function onConnection(ws, req) {
                 handleContraptionControl(player, payload);
             } else if (payload && payload.type === 'contraption:remove') {
                 handleContraptionMessage(player, payload);
+            } else if (payload && payload.type === 'contraption:cell') {
+                handleContraptionCell(player, payload);
+            } else if (payload && payload.type === 'contraption:claim') {
+                handleContraptionClaim(player, payload);
             } else if (payload && payload.type === 'contraption:request') {
                 sendContraptions(player);
             } else if (payload && payload.type === 'cctv:request' && player) {

@@ -2561,8 +2561,10 @@ export default class Minecraft {
         }
 
         // Grabbing a body this client was only replaying makes it this client's
-        // body to move.
+        // body to move, and the server is told so the other clients stop
+        // simulating it instead of ignoring the carry.
         contraption.adoptLocalSimulation();
+        contraption.claimSimulation();
         contraption.beginHold();
 
         this.heldContraption = contraption;

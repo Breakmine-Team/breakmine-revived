@@ -94,7 +94,7 @@ export const atlasBlockTextures = [
     "furnace_front_on.png", "furnace_side.png", "furnace_top.png", "bush.png",
     "assembler_top.png", "assembler_bottom.png", "assembler_side.png",
     "assembler_back.png", "assembler_front_off.png", "assembler_front_on.png",
-    "core_side.png", "core_front.png",
+    "core_side.png", "core_front.png", "balancer.png",
     "bush2.png", "bush3.png", "destroy_stage_0.png", "destroy_stage_1.png",
     "destroy_stage_2.png", "destroy_stage_3.png", "destroy_stage_4.png",
     "destroy_stage_5.png", "destroy_stage_6.png", "destroy_stage_7.png",

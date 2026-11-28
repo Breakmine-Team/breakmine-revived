@@ -157,6 +157,107 @@ function storeContraptionPose(id, payload) {
     return {type: 'contraption:pose', id: id, pos: pos, quat: quat};
 }
 
+// The pose of a body, reported by the client that simulates it. The cells are
+// shared between everybody building on the hull, so a full report only moves the
+// body: rewriting the cells from one client's copy is what made a block another
+// player placed disappear as soon as the owner moved the boat.
+function updateContraptionPose(id, payload) {
+    const state = typeof id === 'string' ? contraptions.get(id) : undefined;
+    if (!state || !payload || typeof payload !== 'object') {
+        return null;
+    }
+
+    const pos = sanitizeVector(payload.pos);
+    const quat = sanitizeQuaternion(payload.quat);
+    if (pos === null || quat === null) {
+        return null;
+    }
+
+    const center = sanitizeVector(payload.center);
+    if (center !== null) {
+        state.center = center;
+    }
+
+    state.pos = pos;
+    state.quat = quat;
+    state.asleep = payload.asleep !== false;
+
+    const vel = sanitizeVector(payload.vel);
+    if (vel !== null) {
+        state.vel = vel;
+    }
+
+    const angVel = sanitizeVector(payload.angVel);
+    if (angVel !== null) {
+        state.angVel = angVel;
+    }
+
+    return state;
+}
+
+// A block placed on or broken out of a hull. The edit is the only thing that
+// changes the cells, so edits from several players add up instead of the last
+// whole-group report wiping the others out. Returns the message to relay, which
+// is the removal once the last cell is gone.
+function applyCellEdits(id, add, remove) {
+    const state = typeof id === 'string' ? contraptions.get(id) : undefined;
+    if (!state) {
+        return null;
+    }
+
+    const removed = [];
+    if (Array.isArray(remove)) {
+        for (const cell of remove.slice(0, MAX_CELLS)) {
+            const x = Math.trunc(Number(cell && cell.x));
+            const y = Math.trunc(Number(cell && cell.y));
+            const z = Math.trunc(Number(cell && cell.z));
+            if (![x, y, z].every((value) => Number.isInteger(value))) continue;
+
+            const index = state.cells.findIndex((existing) =>
+                existing.x === x && existing.y === y && existing.z === z);
+            if (index === -1) continue;
+
+            state.cells.splice(index, 1);
+            removed.push({x: x, y: y, z: z});
+        }
+    }
+
+    const cells = Array.isArray(add) && add.length > 0 ? sanitizeCells(add) : [];
+    if (cells === null) {
+        return null;
+    }
+
+    const added = [];
+    for (const cell of cells) {
+        const index = state.cells.findIndex((existing) =>
+            existing.x === cell.x && existing.y === cell.y && existing.z === cell.z);
+
+        if (index === -1) {
+            if (state.cells.length >= MAX_CELLS) continue;
+
+            state.cells.push(cell);
+            added.push(cell);
+            continue;
+        }
+
+        if (state.cells[index].id !== cell.id || state.cells[index].data !== cell.data) {
+            state.cells[index] = cell;
+            added.push(cell);
+        }
+    }
+
+    if (added.length === 0 && removed.length === 0) {
+        return null;
+    }
+
+    if (state.cells.length === 0) {
+        contraptions.delete(id);
+        return {type: 'contraption:remove', id: id};
+    }
+
+    return {type: 'contraption:cell', id: id, add: added, remove: removed};
+}
+
 // Restore a contraption from a world save so it can be handed to a client.
 function storeSavedState(value) {
     if (!value || typeof value !== 'object') {
@@ -249,6 +350,8 @@ function saveContraptions(worldDir) {
 export {
     storeContraption,
     storeContraptionPose,
+    updateContraptionPose,
+    applyCellEdits,
     storeSavedState,
     getContraption,
     setContraptionOwner,

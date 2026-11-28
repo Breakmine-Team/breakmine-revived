@@ -3,6 +3,7 @@ import ContraptionBody from "../physics/ContraptionBody.js";
 import OffGridBlockField from "../render/OffGridBlockField.js";
 import Block from "../world/block/Block.js";
 import BlockBoatCore from "../world/block/type/BlockBoatCore.js";
+import BlockBalancer from "../world/block/type/BlockBalancer.js";
 import BlockPosition from "../../util/BlockPosition.js";
 import { OFF_GRID_WORLD_HEIGHT } from "../../util/OffGridConstants.js";
 import * as THREE from "../../../../../../libraries/three.module.js";
@@ -103,6 +104,7 @@ export default class ContraptionEntity extends Entity {
             data: block.data || 0
         }));
         this.boatCores = this.findBoatCores(this.cells);
+        this.balancers = this.findBalancers(this.cells);
 
         // Centre of gravity in field local block coordinates. Heavy blocks pull
         // it towards themselves, which is what makes a lopsided contraption tip
@@ -257,6 +259,15 @@ export default class ContraptionEntity extends Entity {
         });
     }
 
+    // Cells that keep the body level. One anywhere on the hull is enough, so
+    // the list only says whether this contraption has one.
+    findBalancers(cells) {
+        return cells.filter((cell) => {
+            const block = Block.getById(cell.id);
+            return block !== null && block.isBalancer === true;
+        });
+    }
+
     createBodyCells(cells, center) {
         return cells.map((cell) => ({
             x: cell.x,
@@ -332,8 +343,11 @@ export default class ContraptionEntity extends Entity {
             };
         };
 
-        // Placing or breaking a cell changes what the body is made of.
-        field.onCellEdit = () => this.rebuildFromField();
+        // Placing or breaking a cell changes what the body is made of. A write
+        // that came from the network is already shared state and is not
+        // reported back.
+        field.onCellEdit = (x, y, z, typeId, data, fromNetwork) =>
+            this.rebuildFromField(fromNetwork === true);
 
         // So a block inside the body (the Assembler) can reach the machine it
         // has become when it is clicked.
@@ -596,7 +610,43 @@ export default class ContraptionEntity extends Entity {
             this.driveBoat();
         }
 
+        // A Balancer keeps the wet hull level, after the water has slowed the
+        // spin and the helm has added its turn.
+        this.applyBalancer();
+
         return true;
+    }
+
+    // A Balancer cell rights the hull: it pushes the deck back towards level and
+    // bleeds off the rocking that is left, so a boat with one aboard does not
+    // capsize when a wave, a lopsided load or a rider tips it. Only the two
+    // horizontal axes are corrected; the heading is the helm's to change.
+    applyBalancer() {
+        if (this.balancers.length === 0) {
+            return;
+        }
+
+        const up = new THREE.Vector3(0.0, 1.0, 0.0).applyQuaternion(this.body.quat);
+
+        // The turn that brings the body's up back onto the world's up. Its
+        // length is the sine of the tilt, so the push is strongest on a hull
+        // lying on its side and gentlest when the deck is nearly level.
+        const axis = new THREE.Vector3().crossVectors(up, new THREE.Vector3(0.0, 1.0, 0.0));
+        const tilt = axis.length();
+
+        if (tilt > 1e-4) {
+            this.body.angVel.addScaledVector(axis.normalize(), tilt * BlockBalancer.RIGHTING);
+        } else if (up.y < 0.0) {
+            // Upside down: there is no tilt direction of its own, so the hull is
+            // rolled back over about its side instead of staying capsized.
+            axis.set(1.0, 0.0, 0.0).applyQuaternion(this.body.quat).normalize();
+            this.body.angVel.addScaledVector(axis, BlockBalancer.RIGHTING);
+        }
+
+        // Rocking dies out, but the yaw spin is left alone: that is the boat
+        // turning, not the boat tipping.
+        this.body.angVel.x *= BlockBalancer.TILT_DAMPING;
+        this.body.angVel.z *= BlockBalancer.TILT_DAMPING;
     }
 
     // How much of one cell is under water, from 0 (dry) to 1 (fully under).
@@ -1012,14 +1062,16 @@ export default class ContraptionEntity extends Entity {
     // A placed or broken cell changes the mass, the inertia and where the centre
     // of mass sits, so the body is rebuilt around the new cells. The pose is
     // kept, including the world position of the old centre of mass.
-    rebuildFromField() {
+    //
+    // The edit goes out as the blocks that changed, never as the whole group and
+    // never by taking the body over: several players can build on one hull, and
+    // each of their blocks has to survive the others' edits.
+    rebuildFromField(fromNetwork = false) {
         if (this.field === null) {
             return;
         }
 
-        // Editing the cells of a body this client was only replaying makes it
-        // this client's body to simulate.
-        this.adoptLocalSimulation();
+        const before = this.cells;
 
         const cells = [...this.field.cells.values()].map((cell) => ({
             x: cell.x,
@@ -1031,7 +1083,9 @@ export default class ContraptionEntity extends Entity {
 
         if (cells.length === 0) {
             this.isDead = true;
-            this.sendNetworkState({type: "contraption:remove", id: this.syncId});
+            // Breaking the last block out of somebody else's hull has to reach
+            // the server too, so the removal goes out even for a replay.
+            this.sendToServer({type: "contraption:remove", id: this.syncId});
             this.world.removeEntityById(this.id);
             return;
         }
@@ -1059,6 +1113,7 @@ export default class ContraptionEntity extends Entity {
         this.center = center;
         this.cells = cells;
         this.boatCores = this.findBoatCores(cells);
+        this.balancers = this.findBalancers(cells);
         this.body = body;
         this.width = Math.max(0.5, body.size.x);
         this.height = Math.max(0.5, body.size.y);
@@ -1069,7 +1124,90 @@ export default class ContraptionEntity extends Entity {
 
         // The body is made of different blocks now, so the server has to hear
         // about the new shape or a reload would bring the old one back.
-        this.sendNetworkState();
+        if (!fromNetwork) {
+            this.sendCellEdits(before, cells);
+        }
+    }
+
+    // Cells that appeared or disappeared between two versions of the group, as
+    // the add/remove lists the server and every other client apply. A block
+    // swapped at the same place counts as an addition there.
+    static diffCells(before, after) {
+        const keyOf = (cell) => cell.x + "," + cell.y + "," + cell.z;
+        const beforeAt = new Map(before.map((cell) => [keyOf(cell), cell]));
+        const afterKeys = new Set(after.map(keyOf));
+
+        const add = [];
+        for (const cell of after) {
+            const old = beforeAt.get(keyOf(cell));
+            if (old === undefined || old.id !== cell.id || (old.data || 0) !== (cell.data || 0)) {
+                add.push({x: cell.x, y: cell.y, z: cell.z, id: cell.id, data: cell.data || 0});
+            }
+        }
+
+        const remove = [];
+        for (const cell of before) {
+            if (!afterKeys.has(keyOf(cell))) {
+                remove.push({x: cell.x, y: cell.y, z: cell.z});
+            }
+        }
+
+        return {add: add, remove: remove};
+    }
+
+    // A cell edit is reported as the blocks that changed instead of the whole
+    // group. Sending the whole group meant a stale list from one builder wiped
+    // the blocks another builder had just placed.
+    sendCellEdits(before, after) {
+        const {add, remove} = ContraptionEntity.diffCells(before, after);
+        if (add.length === 0 && remove.length === 0) {
+            return;
+        }
+
+        this.sendToServer({
+            type: "contraption:cell",
+            id: this.syncId,
+            add: add,
+            remove: remove
+        });
+    }
+
+    // Cells another player added to or broke out of this hull. The field is
+    // written directly, because a contraption owns its cells and ignores world
+    // block changes; the writes rebuild the body around the new shape without
+    // reporting the change back.
+    applyCellEdits(add, remove) {
+        if (this.field === null) {
+            return;
+        }
+
+        if (Array.isArray(remove)) {
+            for (const cell of remove) {
+                if (!cell) continue;
+
+                const x = Math.trunc(Number(cell.x));
+                const y = Math.trunc(Number(cell.y));
+                const z = Math.trunc(Number(cell.z));
+                if (![x, y, z].every((value) => Number.isInteger(value))) continue;
+
+                this.field.applyWrite(x, y, z, 0, 0, true);
+            }
+        }
+
+        if (Array.isArray(add)) {
+            for (const cell of add) {
+                if (!cell) continue;
+
+                const x = Math.trunc(Number(cell.x));
+                const y = Math.trunc(Number(cell.y));
+                const z = Math.trunc(Number(cell.z));
+                const id = Math.trunc(Number(cell.id));
+                if (![x, y, z, id].every((value) => Number.isInteger(value)) || id <= 0) continue;
+
+                const data = Math.max(0, Math.min(15, Math.trunc(Number(cell.data) || 0)));
+                this.field.applyWrite(x, y, z, id, data, true);
+            }
+        }
     }
 
     // Puts the machine back on the block grid and removes the body. The cells
@@ -1125,12 +1263,10 @@ export default class ContraptionEntity extends Entity {
             };
         });
 
-        // Snapping a body this client was only replaying makes it this client's
-        // body, so the removal below actually reaches the other clients.
-        this.adoptLocalSimulation();
-
         this.isDead = true;
-        this.sendNetworkState({type: "contraption:remove", id: this.syncId});
+        // The blocks belong to everybody on the hull, so the removal goes out
+        // even when this client was only replaying the body.
+        this.sendToServer({type: "contraption:remove", id: this.syncId});
 
         for (const block of snapped) {
             world.setBlockAt(block.x, block.y, block.z, block.id, block.data);
@@ -1241,9 +1377,9 @@ export default class ContraptionEntity extends Entity {
             return;
         }
 
-        // Losing the floor under a body this client was only replaying wakes it
-        // here too, so it falls instead of hanging in the air.
-        this.adoptLocalSimulation();
+        // The client that simulates the body gets the same world change and
+        // reports the fall. A replay must not start simulating here: two
+        // clients running the same hull pulled the blocks back and forth.
         this.wake();
     }
 
@@ -1317,18 +1453,26 @@ export default class ContraptionEntity extends Entity {
         return state;
     }
 
+    // Cells are kept in the order the edits arrived in, which is not the same
+    // order on every client, so the two copies are compared by where the blocks
+    // sit rather than by list position.
     hasSameCells(cells) {
         if (!Array.isArray(cells) || cells.length !== this.cells.length) {
             return false;
         }
 
-        for (let i = 0; i < cells.length; i++) {
-            const mine = this.cells[i];
-            const other = cells[i];
+        const keyOf = (cell) => cell.x + "," + cell.y + "," + cell.z;
+        const mine = new Map(this.cells.map((cell) => [keyOf(cell), cell]));
 
-            if (!other
-                || mine.x !== other.x || mine.y !== other.y || mine.z !== other.z
-                || mine.id !== other.id || (mine.data || 0) !== (other.data || 0)) {
+        for (const other of cells) {
+            if (!other) {
+                return false;
+            }
+
+            const cell = mine.get(keyOf(other));
+
+            if (cell === undefined
+                || cell.id !== other.id || (cell.data || 0) !== (other.data || 0)) {
                 return false;
             }
         }
@@ -1400,6 +1544,13 @@ export default class ContraptionEntity extends Entity {
         this.body.wake();
     }
 
+    // The physics wand takes a body over on the client that grabbed it. The
+    // server names one client as the simulator, so the claim goes there; the
+    // previous owner is sent back to replaying by the state that follows.
+    claimSimulation() {
+        this.sendToServer({type: "contraption:claim", id: this.syncId});
+    }
+
     getNetworkManager() {
         const controller = this.minecraft && this.minecraft.playerController;
         const handler = controller && typeof controller.getNetworkHandler === "function"
@@ -1412,11 +1563,10 @@ export default class ContraptionEntity extends Entity {
         return manager && typeof manager.sendJson === "function" ? manager : null;
     }
 
-    sendNetworkState(payload = null) {
-        if (this.remote) {
-            return;
-        }
-
+    // Anything this client has to tell the server about the body. A replayed
+    // hull cannot report its own pose, but a player standing on it can still
+    // break a cell out of it or snap it back onto the grid.
+    sendToServer(payload) {
         const manager = this.getNetworkManager();
         if (manager === null) {
             return;
@@ -1426,15 +1576,20 @@ export default class ContraptionEntity extends Entity {
         }
 
         try {
-            if (payload !== null) {
-                manager.sendJson(payload);
-                return;
-            }
-
-            manager.sendJson({type: "contraption:state", ...this.serializeState()});
+            manager.sendJson(payload);
         } catch (error) {
             // A network hiccup must never stop the physics loop.
         }
+    }
+
+    sendNetworkState(payload = null) {
+        if (this.remote) {
+            return;
+        }
+
+        this.sendToServer(payload === null
+            ? {type: "contraption:state", ...this.serializeState()}
+            : payload);
     }
 
     onEntityRemoved() {

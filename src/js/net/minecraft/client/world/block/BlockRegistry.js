@@ -35,6 +35,7 @@ import BlockMountableClock from "./type/BlockMountableClock.js";
 import BlockRagdoll from "./type/BlockRagdoll.js";
 import BlockAssembler from "./type/BlockAssembler.js";
 import BlockBoatCore from "./type/BlockBoatCore.js";
+import BlockBalancer from "./type/BlockBalancer.js";
 import ItemPhysicsWand from "./type/ItemPhysicsWand.js";
 import BlockChest from "./type/BlockChest.js";
 import BlockMissing from "./type/BlockMissing.js";
@@ -821,6 +822,7 @@ export class BlockRegistry {
 
         BlockRegistry.ASSEMBLER = new BlockAssembler(523, 0);
         BlockRegistry.BOAT_CORE = new BlockBoatCore(524, 0);
+        BlockRegistry.BALANCER = new BlockBalancer(526, 0);
         BlockRegistry.ITEM_PHYSICS_WAND = new ItemPhysicsWand(525, 'missing', 'Physics Wand');
 
         // Natural world terrain stays in the world when an Assembler frees a
