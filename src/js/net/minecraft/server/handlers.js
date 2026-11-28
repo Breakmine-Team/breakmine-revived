@@ -22,6 +22,7 @@ import {
     createEntityTeleportPacket,
     createDestroyEntityPacket,
     createSpawnObjectPacket,
+    createEntityEquipmentPacket,
     sendPlayerListEntry,
     sendPlayerListData,
     createDisconnectPacket,
@@ -419,9 +420,11 @@ function handleLoginPacket(player, packetId, buffer, offset) {
             if (eid === player.eid) continue;
             if (canSee(player, p)) {
                 player.ws.send(createSpawnPlayerPacket(p));
+                sendPlayerEquipment(player, p);
             }
             if (canSee(p, player)) {
                 p.ws.send(createSpawnPlayerPacket(player));
+                sendPlayerEquipment(p, player);
             }
             if (canSee(p, player)) {
                 p.ws.send(sendPlayerListEntry([player], 0));
@@ -711,6 +714,25 @@ function getHeldItemId(player) {
     if (!inventory) return 0;
     const slot = Number(inventory.selectedSlotIndex) || 0;
     return inventory.items?.[slot]?.typeId || 0;
+}
+
+// The hand item is not part of entity metadata, so every other client is told
+// which item a player is holding and where they hold it.
+function sendPlayerEquipment(target, player) {
+    if (!target || target === player) return;
+    if (!target.ws || target.ws.readyState !== 1) return;
+    if ((target.dimension ?? 0) !== (player.dimension ?? 0)) return;
+
+    target.ws.send(createEntityEquipmentPacket(player));
+}
+
+function broadcastPlayerEquipment(player) {
+    if (!player || player.eid === null || player.eid === undefined) return;
+
+    for (const other of getPlayers().values()) {
+        if (other === player) continue;
+        sendPlayerEquipment(other, player);
+    }
 }
 
 function revertBlockForPlayer(player, x, y, z) {
@@ -1480,5 +1502,6 @@ export {
     cleanupPlayerChunks,
     respawnPlayer,
     flushSaveWorld,
+    broadcastPlayerEquipment,
     lightPortal
 };

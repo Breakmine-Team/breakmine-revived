@@ -302,6 +302,32 @@ function createDestroyEntityPacket(eid) {
     return makePacket(0x13, data.subarray(0, offset));
 }
 
+const ENTITY_EQUIPMENT_PACKET_ID = 0x04;
+
+// The item a player holds is not entity metadata, so other clients get it in
+// its own packet whenever the held stack or the selected hotbar slot changes.
+function createEntityEquipmentPacket(player) {
+    const data = Buffer.alloc(32);
+    const inventory = player.inventory;
+    const slot = Number(inventory?.selectedSlotIndex) || 0;
+    const item = inventory?.items?.[slot];
+    const typeId = item?.typeId || 0;
+
+    let offset = 0;
+    offset += writeVarInt(data, player.eid, offset);
+    data.writeInt16BE(slot, offset); offset += 2;
+
+    if (typeId > 0) {
+        data.writeInt16BE(typeId, offset); offset += 2;
+        data.writeUInt8(Math.max(1, Math.min(64, item.count || 1)), offset); offset += 1;
+        data.writeInt16BE(0, offset); offset += 2;   // damage
+    } else {
+        data.writeInt16BE(-1, offset); offset += 2;
+    }
+
+    return makePacket(ENTITY_EQUIPMENT_PACKET_ID, data.subarray(0, offset));
+}
+
 function createEntityMetadataPacket(player) {
     const data = Buffer.alloc(10);
     let offset = 0;
@@ -589,6 +615,7 @@ export {
     createSpawnPlayerPacket,
     createEntityTeleportPacket,
     createDestroyEntityPacket,
+    createEntityEquipmentPacket,
     createEntityMetadataPacket,
     createAnimationPacket,
     createSpawnObjectPacket,

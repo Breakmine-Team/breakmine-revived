@@ -4,6 +4,7 @@ import {
     createEntityTeleportPacket,
     sendPlayerListEntry,
     createSpawnPlayerPacket,
+    createEntityEquipmentPacket,
     createDestroyEntityPacket,
     sendBlockChange,
     sendTimeUpdate
@@ -298,6 +299,7 @@ function applyGamemodeChange(player, oldGamemode, gamemode) {
         } else if (newVisible && !oldVisible) {
             p.ws.send(sendPlayerListEntry([player], 0));
             p.ws.send(createSpawnPlayerPacket(player));
+            p.ws.send(createEntityEquipmentPacket(player));
         } else if (!newVisible && oldVisible) {
             p.ws.send(createDestroyEntityPacket(player.eid));
             p.ws.send(sendPlayerListEntry([player], 4));

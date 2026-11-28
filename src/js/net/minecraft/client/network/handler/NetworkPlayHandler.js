@@ -11,6 +11,7 @@ import ClientConfirmTransactionPacket from "../packet/play/client/ClientConfirmT
 import ClientOffGridRequestPacket from "../packet/play/client/ClientOffGridRequestPacket.js";
 import { applyOffGridState, applyOffGridUpdate } from "../../render/OffGridClientSync.js";
 import ItemEntity from "../../entity/ItemEntity.js";
+import ItemStack from "../../item/ItemStack.js";
 import Block from "../../world/block/Block.js";
 
 export default class NetworkPlayHandler extends PacketHandler {
@@ -293,6 +294,21 @@ export default class NetworkPlayHandler extends PacketHandler {
                 entity.username = metaData[2].value;
             }
         }
+    }
+
+    // Another player's held stack. Their remote entity keeps it in the slot it
+    // is held in, so PlayerRenderer draws it like a local player's item.
+    handleEntityEquipment(packet) {
+        const entity = this.minecraft.world.getEntityById(packet.getEntityId());
+        if (!entity || !entity.inventory || entity === this.minecraft.player) {
+            return;
+        }
+
+        const slot = Math.max(0, Math.min(8, Math.floor(packet.getSlot())));
+        const typeId = packet.getItemId() > 0 ? packet.getItemId() : 0;
+
+        entity.inventory.selectedSlotIndex = slot;
+        entity.inventory.items[slot] = new ItemStack(typeId, typeId ? Math.max(1, packet.getCount()) : 0);
     }
 
     handleEntityHeadLook(packet) {
