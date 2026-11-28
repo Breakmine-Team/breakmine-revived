@@ -21,9 +21,11 @@ const DIRECTIONS = [
  *   L P P L
  *   L P P L   <- last row carries the tall corner posts
  *
- * The deck sits directly on the water line. Oak log posts drop from the deck
- * to the sea floor, and on the last row they continue one block above the
- * deck so the end of the dock is marked by two posts sticking up.
+ * The deck is laid into the top water layer, so its surface is exactly at the
+ * water line instead of floating one block above it. The oak logs along the
+ * sides are rotated to run lengthwise along the walkway. Oak log posts drop
+ * from the deck to the sea floor, and on the last row they continue one block
+ * above the deck so the end of the dock is marked by two posts sticking up.
  */
 export default class DockGenerator extends Generator {
 
@@ -71,8 +73,14 @@ export default class DockGenerator extends Generator {
         const px = -dz;
         const pz = dx;
 
+        // The deck replaces the top water layer, so it sits at the water line.
+        const deckY = sea - 1;
+
+        // Log metadata: 1 runs the log along X, 2 runs it along Z.
+        const logData = dx !== 0 ? 1 : 2;
+
         // The anchor must be dry, flat land with its surface at the waterline.
-        const anchorId = this.getBlock(x, sea - 1, z);
+        const anchorId = this.getBlock(x, deckY, z);
         if (anchorId === AIR_ID || anchorId === this.WATER_ID) {
             return false;
         }
@@ -86,7 +94,7 @@ export default class DockGenerator extends Generator {
             const wx = x + dx * t;
             const wz = z + dz * t;
 
-            if (this.getBlock(wx, sea - 1, wz) !== this.WATER_ID) {
+            if (this.getBlock(wx, deckY, wz) !== this.WATER_ID) {
                 return false;
             }
             if (this.getBlock(wx, sea, wz) !== AIR_ID) {
@@ -94,17 +102,28 @@ export default class DockGenerator extends Generator {
             }
 
             const floorY = this.getFloorY(wx, wz);
-            if (floorY < sea - 1 - DockGenerator.MAX_WATER_DEPTH) {
+            if (floorY < deckY - DockGenerator.MAX_WATER_DEPTH) {
                 return false;
             }
             floors.push(floorY);
         }
 
-        // Never cut into terrain: the whole footprint has to be clear first.
+        // Never cut into terrain: the rows past the shore must be the top
+        // water layer or open air, and nothing anywhere may sit above the deck.
+        // The shore row itself lies on the beach, so it only replaces the top
+        // ground layer there.
         for (let t = 0; t < length; t++) {
             for (let p = -1; p <= 2; p++) {
-                const id = this.getBlock(x + dx * t + px * p, sea, z + dz * t + pz * p);
-                if (id !== AIR_ID && id !== this.WATER_ID) {
+                const colX = x + dx * t + px * p;
+                const colZ = z + dz * t + pz * p;
+
+                if (t !== 0) {
+                    const id = this.getBlock(colX, deckY, colZ);
+                    if (id !== AIR_ID && id !== this.WATER_ID) {
+                        return false;
+                    }
+                }
+                if (this.getBlock(colX, sea, colZ) !== AIR_ID) {
                     return false;
                 }
             }
@@ -116,10 +135,10 @@ export default class DockGenerator extends Generator {
             const rowZ = z + dz * t;
 
             for (let p = 0; p <= 1; p++) {
-                this.place(rowX + px * p, sea, rowZ + pz * p, this.PLANK_ID);
+                this.place(rowX + px * p, deckY, rowZ + pz * p, this.PLANK_ID);
             }
             for (const p of [-1, 2]) {
-                this.place(rowX + px * p, sea, rowZ + pz * p, this.LOG_ID);
+                this.place(rowX + px * p, deckY, rowZ + pz * p, this.LOG_ID, logData);
             }
         }
 
@@ -129,7 +148,7 @@ export default class DockGenerator extends Generator {
         for (let t = 1; t < length; t++) {
             const rowX = x + dx * t;
             const rowZ = z + dz * t;
-            const topY = t === length - 1 ? sea + 1 : sea - 1;
+            const topY = t === length - 1 ? sea : deckY - 1;
 
             for (const p of [-1, 2]) {
                 const colX = rowX + px * p;
@@ -162,7 +181,7 @@ export default class DockGenerator extends Generator {
         return this.world.getBlockAt(x, y, z);
     }
 
-    place(x, y, z, typeId) {
-        this.world.setBlockAt(x, y, z, typeId);
+    place(x, y, z, typeId, data = 0) {
+        this.world.setBlockAt(x, y, z, typeId, data);
     }
 }
