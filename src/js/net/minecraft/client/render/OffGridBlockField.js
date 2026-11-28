@@ -3,6 +3,7 @@ import Block from "../world/block/Block.js";
 import World from "../world/World.js";
 import { BlockRegistry } from "../world/block/BlockRegistry.js";
 import BoundingBox from "../../util/BoundingBox.js";
+import PosedCollisionBox from "../../util/PosedCollisionBox.js";
 import EnumBlockFace from "../../util/EnumBlockFace.js";
 import MovingObjectPosition from "../../util/MovingObjectPosition.js";
 import Vector3 from "../../util/Vector3.js";
@@ -62,6 +63,10 @@ export default class OffGridBlockField {
         this._poseContext = null;
 
         this.pivot = null;
+
+        // A body the player can stand on hands its cells over as real tilted
+        // boxes instead of the axis aligned lattice used elsewhere.
+        this.exactCollision = false;
 
         this.regionCells = new Map();
 
@@ -1119,6 +1124,20 @@ export default class OffGridBlockField {
         this.group.updateMatrixWorld(true);
     }
 
+    // Re-bake every region from its cells. Sky light is baked into the vertex
+    // colours, so a field whose blocks stand out in the world has to be rebuilt
+    // like a chunk section when the time of day changes the light.
+    rebuildAll() {
+        for (const key of [...this.regionCells.keys()]) {
+            const parts = key.split(",");
+            this.rebuildRegion(
+                parseInt(parts[0], 10),
+                parseInt(parts[1], 10),
+                parseInt(parts[2], 10)
+            );
+        }
+    }
+
     // Turns the meshes made for rotating blocks. WorldRenderer runs this every
     // frame before drawing the scene, exactly like
     // ChunkSection.updateRotatingBlocks does for the world's own blocks.
@@ -1329,42 +1348,66 @@ export default class OffGridBlockField {
     
     pushPosedBox(box, out, region) {
         const rotated = this.rotation.x !== 0 || this.rotation.y !== 0 || this.rotation.z !== 0;
-        let posed;
 
         if (!this.isPosed()) {
-            posed = [box];
-        } else if (!rotated) {
-            posed = [new BoundingBox(
-                box.minX + this.offset.x,
-                box.minY + this.offset.y,
-                box.minZ + this.offset.z,
-                box.maxX + this.offset.x,
-                box.maxY + this.offset.y,
-                box.maxZ + this.offset.z
-            )];
-        } else {
-            posed = this.posedRotatedBoxes(box);
+            this.emitCollisionBox(box, out, region, false);
+            return;
         }
 
-        for (const b of posed) {
-            const emit = rotated
-                ? new BoundingBox(
-                    b.minX + this.offset.x,
-                    b.minY + this.offset.y,
-                    b.minZ + this.offset.z,
-                    b.maxX + this.offset.x,
-                    b.maxY + this.offset.y,
-                    b.maxZ + this.offset.z)
-                : b;
+        if (!rotated) {
+            this.emitCollisionBox(box, out, region, true);
+            return;
+        }
 
-            if (emit.minX > region.maxX + 1e-6 || emit.maxX < region.minX - 1e-6 ||
-                emit.minY > region.maxY + 1e-6 || emit.maxY < region.minY - 1e-6 ||
-                emit.minZ > region.maxZ + 1e-6 || emit.maxZ < region.minZ - 1e-6) {
-                continue;
+        // A body the player stands on hands over its cells as the real tilted
+        // boxes, so the player's collision is against the block itself instead
+        // of a lattice standing in for it. Everything else keeps the lattice,
+        // which is cheaper and only has to stop you walking through.
+        if (this.exactCollision) {
+            const corners = [];
+
+            for (let i = 0; i < 8; i++) {
+                corners.push(this.posePointNoOffset({
+                    x: (i & 1) ? box.maxX : box.minX,
+                    y: (i & 2) ? box.maxY : box.minY,
+                    z: (i & 4) ? box.maxZ : box.minZ
+                }));
             }
-            emit.epsilon = World.COLLISION_EPSILON;
-            out.push(emit);
+
+            this.emitCollisionBox(new PosedCollisionBox(corners), out, region, true);
+            return;
         }
+
+        for (const posed of this.posedRotatedBoxes(box)) {
+            this.emitCollisionBox(posed, out, region, true);
+        }
+    }
+
+    
+    emitCollisionBox(box, out, region, shifted) {
+        let emit = box;
+
+        if (shifted) {
+            emit = box instanceof PosedCollisionBox
+                ? box.offsetBox(this.offset.x, this.offset.y, this.offset.z)
+                : new BoundingBox(
+                    box.minX + this.offset.x,
+                    box.minY + this.offset.y,
+                    box.minZ + this.offset.z,
+                    box.maxX + this.offset.x,
+                    box.maxY + this.offset.y,
+                    box.maxZ + this.offset.z
+                );
+        }
+
+        if (emit.minX > region.maxX + 1e-6 || emit.maxX < region.minX - 1e-6 ||
+            emit.minY > region.maxY + 1e-6 || emit.maxY < region.minY - 1e-6 ||
+            emit.minZ > region.maxZ + 1e-6 || emit.maxZ < region.minZ - 1e-6) {
+            return;
+        }
+
+        emit.epsilon = World.COLLISION_EPSILON;
+        out.push(emit);
     }
 
     
@@ -1618,11 +1661,29 @@ export default class OffGridBlockField {
             const w = toWorldInt(x, y, z);
             return outOfWorld(w) ? 0 : realWorld.getBlockDataAt(w.x, w.y, w.z);
         };
+        // Light is read where the block currently stands in the world instead
+        // of being fixed at full bright. A contraption's cells sit in pockets of
+        // air, so the sky light there darkens at dusk and brightens at dawn just
+        // like the ground around it. A block that glows still lights its own
+        // cell, so lamps inside a contraption keep shining at night.
         const readLocalLight = (x, y, z) => {
-            const cell = cellAt(x, y, z);
-            if (cell) return 15;
             const w = toWorldInt(x, y, z);
-            return outOfWorld(w) ? 15 : realWorld.getTotalLightAt(w.x, w.y, w.z);
+            if (outOfWorld(w)) return 15;
+
+            let light = realWorld.getTotalLightAt(w.x, w.y, w.z);
+
+            const cell = cellAt(x, y, z);
+            if (cell) {
+                const cellBlock = Block.getById(cell.typeId) || BlockRegistry.get(cell.typeId);
+                if (cellBlock && typeof cellBlock.getLightValue === "function") {
+                    const emitted = cellBlock.getLightValue(realWorld, w.x, w.y, w.z);
+                    if (Number.isFinite(emitted) && emitted > light) {
+                        light = emitted;
+                    }
+                }
+            }
+
+            return light;
         };
         const isSolidLocal = (x, y, z) => {
             const cell = cellAt(x, y, z);

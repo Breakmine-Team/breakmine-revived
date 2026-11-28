@@ -61,6 +61,7 @@ import GuiFunctions from "./gui/screens/GuiFunctions.js";
 import ItemEntity from "./entity/ItemEntity.js";
 import PlayerEntity from "./entity/PlayerEntity.js";
 import RagdollEntity from "./entity/RagdollEntity.js";
+import ContraptionEntity from "./entity/ContraptionEntity.js";
 import { Version } from "../../../../resources/version.js";
 import { getDisplayVersion } from "./BetaVersion.js";
 import { createErrorWindow } from './gui/WindowDraggable.js';
@@ -209,6 +210,9 @@ export default class Minecraft {
 
         // The ragdoll carried with the right mouse button, or null.
         this.heldRagdoll = null;
+
+        // The contraption grabbed with the physics wand, or null.
+        this.heldContraption = null;
 
         // The body this player is limp as after pressing the ragdoll key.
         this.playerRagdoll = null;
@@ -1455,6 +1459,8 @@ export default class Minecraft {
 
             this.updateHeldRagdoll();
 
+            this.updateHeldContraption();
+
             this.ingameOverlay.onTick();
 
             this.cctvManager.onTick();
@@ -2109,6 +2115,12 @@ export default class Minecraft {
                     return;
                 }
 
+                // A Boat Core is the helm of its contraption: right clicking it
+                // takes over the steering, clicking it again steps off.
+                if (hitResult != null && this.useBoatCore(hitResult)) {
+                    return;
+                }
+
                 let heldItem = this.player.inventory.getItemInSelectedSlot();
 
                 if (heldItem && !heldItem.isEmpty() && Block.getById(heldItem.getType())?.isItem()) {
@@ -2477,6 +2489,122 @@ export default class Minecraft {
 
         this.heldRagdoll = null;
         ragdoll.release();
+    }
+
+    // The physics wand: a contraption under the crosshair is grabbed, and a
+    // grabbed one is put down again.
+    usePhysicsWand() {
+        if (this.heldContraption !== null) {
+            this.releaseHeldContraption();
+            return;
+        }
+
+        const target = this.rayTraceEntity(5, this.timer.partialTicks);
+        if (target instanceof ContraptionEntity) {
+            this.grabContraption(target);
+        }
+    }
+
+    // Right clicking the Boat Core cell of a contraption takes its helm, so the
+    // movement keys drive it from wherever the player is standing. Clicking it
+    // again lets go.
+    useBoatCore(hitResult) {
+        if (!this.player || !this.world) {
+            return false;
+        }
+
+        const field = this.getHitField(hitResult);
+        if (!field) {
+            return false;
+        }
+
+        const core = Block.getById(field.getBlockAt(
+            hitResult.x, hitResult.y, hitResult.z
+        ));
+
+        if (core === null || core.isBoatCore !== true) {
+            return false;
+        }
+
+        const contraption = this.findContraptionByField(field);
+        if (contraption === null) {
+            return false;
+        }
+
+        if (this.player.boatContraption === contraption) {
+            this.player.leaveBoat();
+            return true;
+        }
+
+        return this.player.boardBoat(contraption);
+    }
+
+    findContraptionByField(field) {
+        const entities = Array.isArray(this.world.entities) ? this.world.entities : [];
+
+        for (const entity of entities) {
+            if (entity instanceof ContraptionEntity && entity.field === field) {
+                return entity;
+            }
+        }
+
+        return null;
+    }
+
+    grabContraption(contraption) {
+        if (!contraption || contraption.isDead || !this.player) {
+            return false;
+        }
+
+        // Grabbing a body this client was only replaying makes it this client's
+        // body to move.
+        contraption.adoptLocalSimulation();
+        contraption.beginHold();
+
+        this.heldContraption = contraption;
+        return true;
+    }
+
+    // A carried contraption floats in front of the player while the wand is
+    // held and the right mouse button is down. Letting go drops it.
+    updateHeldContraption() {
+        const contraption = this.heldContraption;
+        if (contraption === null) {
+            return;
+        }
+
+        const holding = !!(this.window.mouseButtons && this.window.mouseButtons[2]);
+        const stack = this.player ? this.player.inventory.getItemInSelectedSlot() : null;
+        const wand = stack && !stack.isEmpty() ? Block.getById(stack.getType()) : null;
+        const inWorld = Array.isArray(this.world.entities)
+            && this.world.entities.includes(contraption);
+
+        if (!holding || !wand || wand.isPhysicsWand !== true
+            || !inWorld || contraption.isDead || contraption.world !== this.world
+            || !this.player || this.player.isDead || this.currentScreen !== null) {
+            this.releaseHeldContraption();
+            return;
+        }
+
+        const eye = this.player.getPositionEyes(this.timer.partialTicks);
+        const look = this.player.getLook(this.timer.partialTicks);
+        const distance = ContraptionEntity.HOLD_DISTANCE;
+
+        contraption.holdAt(
+            eye.x + look.x * distance,
+            eye.y + look.y * distance,
+            eye.z + look.z * distance
+        );
+    }
+
+    releaseHeldContraption() {
+        const contraption = this.heldContraption;
+        if (contraption === null) {
+            return;
+        }
+
+        this.heldContraption = null;
+        contraption.release();
     }
 
     // The ragdoll key: drop your own body and let the camera follow it. Pressing

@@ -71,7 +71,7 @@ function sanitizeQuaternion(value) {
     };
 }
 
-function storeContraption(id, payload, restored = false) {
+function storeContraption(id, payload, restored = false, owner = null) {
     if (typeof id !== 'string' || id.length === 0 || id.length > 64) {
         return null;
     }
@@ -104,6 +104,12 @@ function storeContraption(id, payload, restored = false) {
         state.restored = true;
     }
 
+    // Which client currently simulates the body. Only that client can move it,
+    // so a helm on another client has its keys relayed there.
+    if (owner !== null && owner !== undefined) {
+        state.owner = owner;
+    }
+
     const vel = sanitizeVector(payload.vel);
     if (vel !== null) {
         state.vel = vel;
@@ -116,6 +122,39 @@ function storeContraption(id, payload, restored = false) {
 
     contraptions.set(id, state);
     return state;
+}
+
+// A moving contraption reports only its pose between full updates. The stored
+// state follows along so a player joining mid-drive finds it where it is, and
+// the pose is relayed so every other client moves the body smoothly and can
+// carry a player standing on it.
+function storeContraptionPose(id, payload) {
+    const state = typeof id === 'string' ? contraptions.get(id) : undefined;
+    if (!state || !payload || typeof payload !== 'object') {
+        return null;
+    }
+
+    const pos = sanitizeVector(payload.pos);
+    const quat = sanitizeQuaternion(payload.quat);
+    if (pos === null || quat === null) {
+        return null;
+    }
+
+    state.pos = pos;
+    state.quat = quat;
+    state.asleep = false;
+
+    const vel = sanitizeVector(payload.vel);
+    if (vel !== null) {
+        state.vel = vel;
+    }
+
+    const angVel = sanitizeVector(payload.angVel);
+    if (angVel !== null) {
+        state.angVel = angVel;
+    }
+
+    return {type: 'contraption:pose', id: id, pos: pos, quat: quat};
 }
 
 // Restore a contraption from a world save so it can be handed to a client.
@@ -178,6 +217,9 @@ function saveContraptions(worldDir) {
         const saved = listContraptions().map((state) => {
             const entry = {...state};
             delete entry.restored;
+            // Session ids mean nothing after a restart; the next client to
+            // report the body becomes its owner again.
+            delete entry.owner;
             return entry;
         });
 
@@ -189,6 +231,7 @@ function saveContraptions(worldDir) {
 
 export {
     storeContraption,
+    storeContraptionPose,
     storeSavedState,
     getContraption,
     listContraptions,

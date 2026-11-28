@@ -8,6 +8,8 @@ export default class BlockConcrete extends Block {
         this.description = name;
         this.textureName = textureName;
         this.hardness = 0.8;
+        // Wet stone in a mould: concrete is dense and drags a hull under.
+        this.mass = 3.0;
         this.inventoryTab = EnumCreativeInventoryTab.BUILDING_BLOCKS;
     }
 

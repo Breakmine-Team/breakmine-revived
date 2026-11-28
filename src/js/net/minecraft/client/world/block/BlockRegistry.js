@@ -34,6 +34,8 @@ import BlockClock from "./type/BlockClock.js";
 import BlockMountableClock from "./type/BlockMountableClock.js";
 import BlockRagdoll from "./type/BlockRagdoll.js";
 import BlockAssembler from "./type/BlockAssembler.js";
+import BlockBoatCore from "./type/BlockBoatCore.js";
+import ItemPhysicsWand from "./type/ItemPhysicsWand.js";
 import BlockChest from "./type/BlockChest.js";
 import BlockMissing from "./type/BlockMissing.js";
 import BlockBrick from "./type/BlockBrick.js";
@@ -394,7 +396,7 @@ export class BlockRegistry {
         BlockRegistry.LOG_BARK = new BlockLogBark(238, 4, "oak", "Oak Bark");
         BlockRegistry.WOOD = new BlockWood(5, 10, "oak", "Oak Planks");
         BlockRegistry.OAK_STAIRS = new BlockStair(150, 0, 5, "Oak");
-        BlockRegistry.WOOD_SLAB = new BlockSlab(71, 0, "oak_planks", "Oak Slab", Block.sounds.wood);
+        BlockRegistry.WOOD_SLAB = new BlockSlab(71, 0, "oak_planks", "Oak Slab", Block.sounds.wood, { mass: BlockRegistry.WOOD.mass });
         BlockRegistry.WOOD_VERTICAL_SLAB = new BlockVerticalSlab(nextVerticalSlabId(), 0, "oak_planks", "Oak Vertical Slab", Block.sounds.wood);
         BlockRegistry.FENCE = new BlockFence(36, 0, "oak", 5);
         BlockRegistry.OAK_TABLE = new BlockTable(357, 0, "oak", BlockRegistry.WOOD.id, "Oak");
@@ -424,7 +426,7 @@ export class BlockRegistry {
         BlockRegistry.SPRUCE_LOG_BARK = new BlockLogBark(239, 0, "spruce", "Spruce Bark");
         BlockRegistry.SPRUCE_PLANKS = new BlockWood(58, 0, "spruce", "Spruce Planks");
         BlockRegistry.SPRUCE_STAIRS = new BlockStair(151, 0, 58, "Spruce");
-        BlockRegistry.SPRUCE_SLAB = new BlockSlab(72, 0, "spruce_planks", "Spruce Slab", Block.sounds.wood);
+        BlockRegistry.SPRUCE_SLAB = new BlockSlab(72, 0, "spruce_planks", "Spruce Slab", Block.sounds.wood, { mass: BlockRegistry.SPRUCE_PLANKS.mass });
         BlockRegistry.SPRUCE_VERTICAL_SLAB = new BlockVerticalSlab(nextVerticalSlabId(), 0, "spruce_planks", "Spruce Vertical Slab", Block.sounds.wood);
         BlockRegistry.SPRUCE_FENCE = new BlockFence(60, 0, "spruce", 58);
         BlockRegistry.SPRUCE_TABLE = new BlockTable(358, 0, "spruce", BlockRegistry.SPRUCE_PLANKS.id, "Spruce");
@@ -435,7 +437,7 @@ export class BlockRegistry {
         BlockRegistry.BIRCH_LOG_BARK = new BlockLogBark(240, 0, "birch", "Birch Bark");
         BlockRegistry.BIRCH_PLANKS = new BlockWood(61, 0, "birch", "Birch Planks");
         BlockRegistry.BIRCH_STAIRS = new BlockStair(152, 0, 61, "Birch");
-        BlockRegistry.BIRCH_SLAB = new BlockSlab(73, 0, "birch_planks", "Birch Slab", Block.sounds.wood);
+        BlockRegistry.BIRCH_SLAB = new BlockSlab(73, 0, "birch_planks", "Birch Slab", Block.sounds.wood, { mass: BlockRegistry.BIRCH_PLANKS.mass });
         BlockRegistry.BIRCH_VERTICAL_SLAB = new BlockVerticalSlab(nextVerticalSlabId(), 0, "birch_planks", "Birch Vertical Slab", Block.sounds.wood);
         BlockRegistry.BIRCH_FENCE = new BlockFence(63, 0, "birch", 61);
         BlockRegistry.BIRCH_TABLE = new BlockTable(359, 0, "birch", BlockRegistry.BIRCH_PLANKS.id, "Birch");
@@ -446,7 +448,7 @@ export class BlockRegistry {
         BlockRegistry.JUNGLE_LOG_BARK = new BlockLogBark(241, 0, "jungle", "Jungle Bark");
         BlockRegistry.JUNGLE_PLANKS = new BlockWood(64, 0, "jungle", "Jungle Planks");
         BlockRegistry.JUNGLE_STAIRS = new BlockStair(153, 0, 64, "Jungle");
-        BlockRegistry.JUNGLE_SLAB = new BlockSlab(74, 0, "jungle_planks", "Jungle Slab", Block.sounds.wood);
+        BlockRegistry.JUNGLE_SLAB = new BlockSlab(74, 0, "jungle_planks", "Jungle Slab", Block.sounds.wood, { mass: BlockRegistry.JUNGLE_PLANKS.mass });
         BlockRegistry.JUNGLE_VERTICAL_SLAB = new BlockVerticalSlab(nextVerticalSlabId(), 0, "jungle_planks", "Jungle Vertical Slab", Block.sounds.wood);
         BlockRegistry.JUNGLE_FENCE = new BlockFence(66, 0, "jungle", 64);
         BlockRegistry.JUNGLE_TABLE = new BlockTable(360, 0, "jungle", BlockRegistry.JUNGLE_PLANKS.id, "Jungle");
@@ -457,7 +459,7 @@ export class BlockRegistry {
         BlockRegistry.ACACIA_LOG_BARK = new BlockLogBark(242, 0, "acacia", "Acacia Bark");
         BlockRegistry.ACACIA_PLANKS = new BlockWood(67, 0, "acacia", "Acacia Planks");
         BlockRegistry.ACACIA_STAIRS = new BlockStair(154, 0, 67, "Acacia");
-        BlockRegistry.ACACIA_SLAB = new BlockSlab(75, 0, "acacia_planks", "Acacia Slab", Block.sounds.wood);
+        BlockRegistry.ACACIA_SLAB = new BlockSlab(75, 0, "acacia_planks", "Acacia Slab", Block.sounds.wood, { mass: BlockRegistry.ACACIA_PLANKS.mass });
         BlockRegistry.ACACIA_VERTICAL_SLAB = new BlockVerticalSlab(nextVerticalSlabId(), 0, "acacia_planks", "Acacia Vertical Slab", Block.sounds.wood);
         BlockRegistry.ACACIA_FENCE = new BlockFence(69, 0, "acacia", 67);
         BlockRegistry.ACACIA_TABLE = new BlockTable(361, 0, "acacia", BlockRegistry.ACACIA_PLANKS.id, "Acacia");
@@ -485,9 +487,10 @@ export class BlockRegistry {
         BlockRegistry.DIAMOND_ORE = new BlockStoneLike(22, 0, "diamond_ore", "Diamond Ore", 3.0, [88, 1], 'iron');
         BlockRegistry.COAL_ORE = new BlockStoneLike(23, 0, "coal_ore", "Coal Ore", 3.0, [87, 2], 'wood');
         BlockRegistry.IRON_ORE = new BlockStoneLike(24, 0, "iron_ore", "Iron Ore", 3.0, [24, 1], 'stone');
-        BlockRegistry.IRON_BLOCK = new BlockStoneLike(25, 0, "iron_block", "Iron Block", 3.0, [25, 0], 'stone');
-        BlockRegistry.GOLD_BLOCK = new BlockStoneLike(26, 0, "gold_block", "Gold Block", 3.0, [26, 0], 'iron');
-        BlockRegistry.DIAMOND_BLOCK = new BlockStoneLike(27, 0, "diamond_block", "Diamond Block", 3.0, [27, 0], 'iron');
+        // Metal blocks are heavy: enough of one and a contraption sinks.
+        BlockRegistry.IRON_BLOCK = new BlockStoneLike(25, 0, "iron_block", "Iron Block", 3.0, [25, 0], 'stone').setMass(7.0);
+        BlockRegistry.GOLD_BLOCK = new BlockStoneLike(26, 0, "gold_block", "Gold Block", 3.0, [26, 0], 'iron').setMass(12.0);
+        BlockRegistry.DIAMOND_BLOCK = new BlockStoneLike(27, 0, "diamond_block", "Diamond Block", 3.0, [27, 0], 'iron').setMass(6.0);
         BlockRegistry.EMERALD_BLOCK = new BlockStoneLike(28, 0, "emerald_block", "Emerald Block", 3.0, [28, 0], 'iron');
         BlockRegistry.COAL_BLOCK = new BlockStoneLike(29, 0, "coal_block", "Coal Block", 3.0, [29, 0], 'wood');
         BlockRegistry.EMERALD_ORE = new BlockStoneLike(30, 0, "emerald_ore", "Emerald Ore", 3.0, [89, 1], 'iron');
@@ -647,8 +650,8 @@ export class BlockRegistry {
             const upperKey = key.toUpperCase();
             const concrete = BlockRegistry[`${upperKey}_CONCRETE`];
             const wool = BlockRegistry[`${upperKey}_WOOL`];
-            const concreteOptions = { hardness: 0.8, tool: 'pickaxe', sound: Block.sounds.stone };
-            const woolOptions = { hardness: 0.8, tool: null, sound: Block.sounds.cloth };
+            const concreteOptions = { hardness: 0.8, tool: 'pickaxe', sound: Block.sounds.stone, mass: concrete.mass };
+            const woolOptions = { hardness: 0.8, tool: null, sound: Block.sounds.cloth, mass: wool.mass };
 
             BlockRegistry[`${upperKey}_CONCRETE_STAIRS`] = new BlockStair(concreteStairId++, 0, concrete.id, `${label} Concrete`, concreteOptions);
             BlockRegistry[`${upperKey}_CONCRETE_SLAB`] = new BlockSlab(concreteSlabId++, 0, `${key}_concrete`, `${label} Concrete Slab`, Block.sounds.stone, concreteOptions);
@@ -662,7 +665,7 @@ export class BlockRegistry {
         }
 
         BlockRegistry.TAN_WOOL_STAIRS = new BlockStair(496, 0, BlockRegistry.TAN_WOOL.id, "Tan Wool", { hardness: 0.8, tool: null, sound: Block.sounds.cloth });
-        BlockRegistry.TAN_WOOL_SLAB = new BlockSlab(497, 0, "tan_wool", "Tan Wool Slab", Block.sounds.cloth, { hardness: 0.8, tool: null });
+        BlockRegistry.TAN_WOOL_SLAB = new BlockSlab(497, 0, "tan_wool", "Tan Wool Slab", Block.sounds.cloth, { hardness: 0.8, tool: null, mass: BlockRegistry.TAN_WOOL.mass });
         BlockRegistry.TAN_WOOL_VERTICAL_SLAB = new BlockVerticalSlab(nextVerticalSlabId(), 0, "tan_wool", "Tan Wool Vertical Slab", Block.sounds.cloth, { hardness: 0.8, tool: null });
         BlockRegistry.TAN_WOOL_WALL = new BlockWall(522, 0, "tan_wool", "Tan Wool Wall", Block.sounds.cloth, { hardness: 0.8, tool: null });
 
@@ -817,6 +820,23 @@ export class BlockRegistry {
         BlockRegistry.PUSH_BLOCK = new BlockPushBlock(422, 0);
 
         BlockRegistry.ASSEMBLER = new BlockAssembler(523, 0);
+        BlockRegistry.BOAT_CORE = new BlockBoatCore(524, 0);
+        BlockRegistry.ITEM_PHYSICS_WAND = new ItemPhysicsWand(525, 'missing', 'Physics Wand');
+
+        // Natural world terrain stays in the world when an Assembler frees a
+        // machine, so a contraption standing on the ground cannot be assembled
+        // with the ground still attached to it.
+        const terrainKeys = [
+            'STONE', 'DIRT', 'GRASS', 'GRASS_PATH', 'SAND', 'GRAVEL', 'CLAY',
+            'BEDROCK', 'SNOW', 'ICE', 'FARMLAND', 'HELLSTONE', 'END_STONE',
+            'GOLD_ORE', 'DIAMOND_ORE', 'COAL_ORE', 'IRON_ORE', 'EMERALD_ORE',
+            'SAPPHIRE_ORE', 'BLUESTONE_ORE', 'URANIUM_ORE', 'RAW_URANIUM'
+        ];
+        for (const key of terrainKeys) {
+            if (BlockRegistry[key]) {
+                BlockRegistry[key].isTerrain = true;
+            }
+        }
 
         for (const [key, val] of Object.entries(BlockRegistry)) {
             if (val && typeof val === "object" && val.id !== undefined) {

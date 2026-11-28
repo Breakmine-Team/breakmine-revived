@@ -64,21 +64,27 @@ export default class BlockAssembler extends Block {
             return false;
         }
 
-        // Assemble around the centre of mass, so the body rotates about the point
-        // that actually balances it instead of about the clicked block.
+        // Assemble around the centre of gravity, so the body rotates about the
+        // point that actually balances it instead of about the clicked block.
+        // Heavy blocks count for more than light ones.
+        let mass = 0.0;
         let sumX = 0.0;
         let sumY = 0.0;
         let sumZ = 0.0;
 
         for (const block of blocks) {
-            sumX += block.x + 0.5;
-            sumY += block.y + 0.5;
-            sumZ += block.z + 0.5;
+            const blockMass = ContraptionEntity.getBlockMass(block.id);
+
+            mass += blockMass;
+            sumX += (block.x + 0.5) * blockMass;
+            sumY += (block.y + 0.5) * blockMass;
+            sumZ += (block.z + 0.5) * blockMass;
         }
 
-        const centerX = sumX / blocks.length;
-        const centerY = sumY / blocks.length;
-        const centerZ = sumZ / blocks.length;
+        const weight = mass > 0.0 ? mass : blocks.length;
+        const centerX = sumX / weight;
+        const centerY = sumY / weight;
+        const centerZ = sumZ / weight;
 
         const cells = blocks.map((block) => ({
             x: block.x,
@@ -147,6 +153,12 @@ export default class BlockAssembler extends Block {
 
                 const block = Block.getById(typeId);
                 if (block === null || block.isLiquid()) {
+                    continue;
+                }
+
+                // Terrain is not cargo. The fill stops at the ground so a cart
+                // built on the grass keeps the ground under it.
+                if (block.isTerrain === true) {
                     continue;
                 }
 

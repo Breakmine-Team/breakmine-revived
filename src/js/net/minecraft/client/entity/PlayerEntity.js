@@ -63,6 +63,20 @@ export default class PlayerEntity extends EntityLiving {
 
         // The ragdoll this player is currently limp as, or null.
         this.ragdollBody = null;
+
+        // The Boat Core contraption this player is steering, or null.
+        this.boatContraption = null;
+
+        // Shown above the hotbar while the helm is held, like the CCTV overlay.
+        this.boatStatusText = "Controlling Boat, shift to exit";
+
+        // Walking input while steering: the keys drive the boat, not the player.
+        this.steerForward = 0.0;
+        this.steerStrafe = 0.0;
+
+        // Last input relayed to the client that simulates the boat, so only
+        // changes and a heartbeat go over the network.
+        this.lastBoatInput = null;
     }
 
     handleInventoryChanged() {
@@ -182,6 +196,22 @@ export default class PlayerEntity extends EntityLiving {
 
         if (this === this.minecraft.player) {
             this.updateKeyboardInput();
+            this.updateBoatControl();
+
+            if (this.boatContraption !== null) {
+                // At the helm the keys steer the contraption, so the player
+                // stays put on deck and the input is passed on instead.
+                this.steerForward = this.moveForward;
+                this.steerStrafe = this.moveStrafing;
+                this.moveForward = 0;
+                this.moveStrafing = 0;
+                this.jumping = false;
+                this.sendBoatInput();
+            } else {
+                this.steerForward = 0;
+                this.steerStrafe = 0;
+                this.lastBoatInput = null;
+            }
         }
 
         if (!prevJumping && this.jumping) {
@@ -242,6 +272,126 @@ export default class PlayerEntity extends EntityLiving {
         }
         this.cameraYaw += (speedXZ - this.cameraYaw) * 0.4;
         this.cameraPitch += (speedY - this.cameraPitch) * 0.8;
+    }
+
+    // A helm lasts until the pilot lets go: right clicking the core again,
+    // sneaking, dying, or the boat going away. Standing on the hull is not
+    // required, so the core can be worked from the dock or the shore.
+    updateBoatControl() {
+        const boat = this.boatContraption;
+
+        if (boat === null) {
+            this.setBoatStatusText(false);
+            return;
+        }
+
+        if (this.isDead || boat.pilot !== this || !boat.isSteerableAt(this)) {
+            this.leaveBoat();
+            return;
+        }
+
+        this.setBoatStatusText(true);
+    }
+
+    // The helm hint sits where the CCTV one does, just above the hotbar. It is
+    // only cleared if it is still ours, so an unrelated status stays put.
+    setBoatStatusText(visible) {
+        const overlay = this.minecraft ? this.minecraft.ingameOverlay : null;
+
+        if (!overlay || typeof overlay.setStatusText !== "function") {
+            return;
+        }
+
+        if (visible) {
+            overlay.setStatusText(this.boatStatusText);
+        } else if (typeof overlay.getStatusText === "function"
+            && overlay.getStatusText() === this.boatStatusText) {
+            overlay.clearStatusText();
+        }
+    }
+
+    // Take the helm of a boat contraption: from then on the movement keys steer
+    // it instead of the player.
+    boardBoat(contraption) {
+        if (!contraption || typeof contraption.isSteerableAt !== "function"
+            || !contraption.isSteerableAt(this)) {
+            return false;
+        }
+
+        this.leaveBoat();
+
+        this.boatContraption = contraption;
+        contraption.pilot = this;
+
+        this.setBoatStatusText(true);
+
+        return true;
+    }
+
+    leaveBoat() {
+        const boat = this.boatContraption;
+
+        if (boat !== null) {
+            if (boat.pilot === this) {
+                boat.pilot = null;
+            }
+
+            // The client that simulates the boat stops it when the keys stop
+            // arriving, but say so at once instead of letting it coast.
+            if (boat.remote) {
+                this.sendBoatControl(boat, 0.0, 0.0, this.rotationYaw);
+            }
+
+            this.boatContraption = null;
+        }
+
+        this.lastBoatInput = null;
+        this.setBoatStatusText(false);
+    }
+
+    // A body another client simulates cannot be pushed from here, so the keys
+    // are relayed to the client that owns the simulation. Sent on change and as
+    // a heartbeat, since the owner forgets input it stops hearing.
+    sendBoatInput() {
+        const boat = this.boatContraption;
+
+        if (boat === null || !boat.remote) {
+            return;
+        }
+
+        const forward = this.steerForward || 0.0;
+        const strafe = this.steerStrafe || 0.0;
+        const yaw = Math.round(this.rotationYaw * 10) / 10;
+        const signature = forward + "|" + strafe + "|" + yaw;
+
+        if (signature === this.lastBoatInput && this.ticksExisted % 4 !== 0) {
+            return;
+        }
+
+        this.lastBoatInput = signature;
+        this.sendBoatControl(boat, forward, strafe, yaw);
+    }
+
+    sendBoatControl(boat, forward, strafe, yaw) {
+        const manager = typeof boat.getNetworkManager === "function"
+            ? boat.getNetworkManager()
+            : null;
+
+        if (manager === null) {
+            return;
+        }
+
+        try {
+            manager.sendJson({
+                type: "contraption:control",
+                id: boat.syncId,
+                forward: forward,
+                strafe: strafe,
+                yaw: yaw
+            });
+        } catch (error) {
+            // A dropped packet only means the boat coasts for a moment.
+        }
     }
 
     isInWater() {

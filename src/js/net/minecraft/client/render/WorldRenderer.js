@@ -1711,6 +1711,18 @@ export default class WorldRenderer {
                 this.queueChunkSection(section);
             }
         }
+
+        // Off grid fields bake sky light into their meshes too, so contraptions
+        // have to be rebuilt when the time of day changes, not only when their
+        // cells do. This is also what keeps them lit correctly when the
+        // lighting settings change.
+        if (typeof world.getOffGridFields === "function") {
+            for (const field of world.getOffGridFields()) {
+                if (typeof field.rebuildAll === "function") {
+                    field.rebuildAll();
+                }
+            }
+        }
     }
 
     renderHand(partialTicks) {

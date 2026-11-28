@@ -8,6 +8,7 @@ export default class BlockLogBark extends Block {
         this.description = displayName;
         this.woodType = woodType;
         this.hardness = 2.0;
+        this.mass = 1.6;
 
         this.sound = Block.sounds.wood;
         this.inventoryTab = EnumCreativeInventoryTab.BUILDING_BLOCKS;

@@ -16,6 +16,8 @@ export default class BlockSlab extends Block {
         }
         if (options.hardness !== undefined) this.hardness = options.hardness;
         if (options.tool !== undefined) this.tool = options.tool;
+        // A slab weighs what its material weighs; the registry passes that in.
+        if (options.mass !== undefined) this.setMass(options.mass);
         this.inventoryTab = EnumCreativeInventoryTab.BUILDING_BLOCKS;
     }
 

@@ -5,6 +5,8 @@ import BoundingBox from "../../util/BoundingBox.js";
 // in block units and ticks, so gravity matches the rest of the game.
 const CELL_HALF = 0.5;
 
+// Fallback mass of one cell, in kilograms. Cells carry the mass of the block
+// they are made of; blocks default to 1 kg.
 const CELL_MASS = 1.0;
 
 // A cube is 0.5 * sqrt(3) away from its corners, so this sphere covers the cell
@@ -44,10 +46,22 @@ export default class ContraptionBody {
     static MAX_LINEAR_SPEED = 1.5;
     static MAX_ANGULAR_SPEED = 0.5;
 
+    // Mass of one cell, so a heavy block makes the whole contraption heavier.
+    static cellMass(cell) {
+        const mass = cell.mass;
+        return Number.isFinite(mass) && mass > 0.0 ? mass : CELL_MASS;
+    }
+
     constructor(cells) {
         this.cells = cells;
 
-        this.mass = cells.length * CELL_MASS;
+        let mass = 0.0;
+        for (const cell of cells) {
+            mass += ContraptionBody.cellMass(cell);
+        }
+
+        // An empty body would divide by zero; nothing simulated is ever empty.
+        this.mass = Math.max(mass, CELL_MASS);
         this.invMass = 1.0 / this.mass;
 
         this.pos = new THREE.Vector3();
@@ -80,17 +94,18 @@ export default class ContraptionBody {
 
         for (const cell of this.cells) {
             const r = cell.offset;
+            const mass = ContraptionBody.cellMass(cell);
 
             // (1/12) * m * (height^2 + depth^2) of a 1x1x1 cube.
-            const own = CELL_MASS / 6.0;
+            const own = mass / 6.0;
 
-            xx += own + CELL_MASS * (r.y * r.y + r.z * r.z);
-            yy += own + CELL_MASS * (r.x * r.x + r.z * r.z);
-            zz += own + CELL_MASS * (r.x * r.x + r.y * r.y);
+            xx += own + mass * (r.y * r.y + r.z * r.z);
+            yy += own + mass * (r.x * r.x + r.z * r.z);
+            zz += own + mass * (r.x * r.x + r.y * r.y);
 
-            xy -= CELL_MASS * r.x * r.y;
-            xz -= CELL_MASS * r.x * r.z;
-            yz -= CELL_MASS * r.y * r.z;
+            xy -= mass * r.x * r.y;
+            xz -= mass * r.x * r.z;
+            yz -= mass * r.y * r.z;
         }
 
         return new THREE.Matrix3().set(

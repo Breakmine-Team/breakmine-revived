@@ -385,7 +385,8 @@ export default class NetworkManager {
             } else if (payload.type === 'ragdoll:state' || payload.type === 'ragdoll:remove'
                 || payload.type === 'ragdoll:owner') {
                 this._handleRagdollMessage(payload);
-            } else if (payload.type === 'contraption:state' || payload.type === 'contraption:remove') {
+            } else if (payload.type === 'contraption:state' || payload.type === 'contraption:pose'
+                || payload.type === 'contraption:remove' || payload.type === 'contraption:control') {
                 this._handleContraptionMessage(payload);
             } else if (payload.type === 'spawnEntity' && this.minecraft?.world) {
                 const world = this.minecraft.world;
@@ -509,6 +510,25 @@ export default class NetworkManager {
         if (payload.type === 'contraption:remove') {
             if (existing !== null) {
                 world.removeEntityById(existing.id);
+            }
+            return;
+        }
+
+        // Only the client that simulates the body can move it. Keys from a
+        // player at the helm on another client arrive here and are applied to
+        // the local body, which then reports the new pose as usual.
+        if (payload.type === 'contraption:control') {
+            if (existing !== null && !existing.remote) {
+                existing.applyRemoteControl(payload);
+            }
+            return;
+        }
+
+        // A moving body sends pose only reports between full ones; they move the
+        // replay and carry anyone standing on it.
+        if (payload.type === 'contraption:pose') {
+            if (existing !== null && existing.remote) {
+                existing.applyRemoteState(payload);
             }
             return;
         }

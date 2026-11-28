@@ -12,7 +12,7 @@ import Logger from './logger.js';
 import { BlockRegistry } from '../client/world/block/BlockRegistry.js';
 import { handleModMessage, loadServerSideMods } from './ServerModLoader.js';
 import { getRagdoll, listRagdolls, removeRagdoll, setRagdollOwner, storeRagdoll } from './ragdolls.js';
-import { listContraptions, removeContraption, storeContraption } from './contraptions.js';
+import { getContraption, listContraptions, removeContraption, storeContraption, storeContraptionPose } from './contraptions.js';
 import { handleStructurePaste } from './structurePaste.js';
 import getServerWorld from './World.js';
 import config from './config.js';
@@ -152,10 +152,60 @@ function handleContraptionMessage(player, payload) {
         return;
     }
 
-    const state = storeContraption(id, payload);
+    const state = storeContraption(id, payload, false, player.eid);
     if (state === null) return;
 
     relayContraptions(player, state);
+}
+
+// A contraption is moved by the one client that simulates it. A player at the
+// helm on another client sends their keys here, and the server hands them to
+// that client, so WASD steering works between players instead of only for the
+// player whose game assembled the hull.
+function handleContraptionControl(player, payload) {
+    if (!player || player.eid == null) return;
+
+    const id = typeof payload.id === 'string' ? payload.id.slice(0, 64) : '';
+    if (id.length === 0) return;
+
+    const state = getContraption(id);
+    if (state === null || state.owner == null || state.owner === player.eid) return;
+
+    const forward = Number(payload.forward);
+    const strafe = Number(payload.strafe);
+    if (!Number.isFinite(forward) || !Number.isFinite(strafe)) return;
+
+    const owner = getPlayers().get(state.owner);
+    if (!owner || !owner.ws || owner.ws.readyState !== 1) return;
+
+    const yaw = Number(payload.yaw);
+
+    try {
+        owner.ws.send(JSON.stringify({
+            type: 'contraption:control',
+            id: id,
+            forward: Math.max(-1, Math.min(1, forward)),
+            strafe: Math.max(-1, Math.min(1, strafe)),
+            yaw: Number.isFinite(yaw) ? yaw : 0
+        }));
+    } catch (error) {
+        // The owner dropped mid-key; the next report puts the boat back intact.
+    }
+}
+
+// Pose only reports go out far more often than full ones, so a contraption
+// another player is driving moves smoothly on this client instead of jumping
+// once a second - and carries whoever stands on it.
+function handleContraptionPose(player, payload) {
+    if (!player || player.eid == null) return;
+
+    const id = typeof payload.id === 'string' ? payload.id.slice(0, 64) : '';
+    if (id.length === 0) return;
+
+    const pose = storeContraptionPose(id, payload);
+    if (pose === null) return;
+
+    relayContraptions(player, pose);
 }
 
 function isValidCapeDataUrl(value) {
@@ -410,6 +460,10 @@ export function onConnection(ws, req) {
                 sendRagdolls(player);
             } else if (payload && payload.type === 'contraption:state') {
                 handleContraptionMessage(player, payload);
+            } else if (payload && payload.type === 'contraption:pose') {
+                handleContraptionPose(player, payload);
+            } else if (payload && payload.type === 'contraption:control') {
+                handleContraptionControl(player, payload);
             } else if (payload && payload.type === 'contraption:remove') {
                 handleContraptionMessage(player, payload);
             } else if (payload && payload.type === 'contraption:request') {
