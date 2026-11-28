@@ -14,9 +14,26 @@ const fs = new IsomorphicFilesystem();
 
 if (process.env.DATA_DIR) {
     const nodeFs = require('fs');
+    const nodePath = require('path');
     if (!nodeFs.existsSync(process.env.DATA_DIR)) {
         nodeFs.mkdirSync(process.env.DATA_DIR, { recursive: true });
     }
+
+    // The image ships a default serverconfig.conf next to the code, but only
+    // the data volume survives a redeploy. Seed the volume once so the main
+    // server reads (and /op writes) /data/serverconfig.conf rather than the
+    // copy baked into the image.
+    const shippedConfig = nodePath.join(__dirname, '..', '..', '..', '..', '..', 'serverconfig.conf');
+    const volumeConfig = nodePath.join(process.env.DATA_DIR, 'serverconfig.conf');
+    try {
+        if (!nodeFs.existsSync(volumeConfig) && nodeFs.existsSync(shippedConfig)) {
+            nodeFs.copyFileSync(shippedConfig, volumeConfig);
+            log.info('Server', `Seeded ${volumeConfig} from the default server config`);
+        }
+    } catch (e) {
+        log.warn('Server', `Could not seed serverconfig.conf: ${e.message}`);
+    }
+
     process.chdir(process.env.DATA_DIR);
     log.info('Server', `Working directory set to ${process.env.DATA_DIR}`);
 }
