@@ -524,6 +524,17 @@ export default class NetworkManager {
             return;
         }
 
+        // The server names the client that simulates the body, so exactly one
+        // client runs the physics and everybody else replays its reports.
+        // Deciding that per client (the old way, from whether the body came out
+        // of a save) let several clients simulate the same boat, and each of
+        // them then ignored the others' reports: the boat stood still on every
+        // screen but the driver's.
+        const localEid = this.minecraft?.serverEntityId;
+        const mine = typeof localEid === 'number'
+            && typeof payload.owner === 'number'
+            && payload.owner === localEid;
+
         // A moving body sends pose only reports between full ones; they move the
         // replay and carry anyone standing on it.
         if (payload.type === 'contraption:pose') {
@@ -536,18 +547,27 @@ export default class NetworkManager {
         // The client that simulates the body gets its own report echoed back;
         // its local copy is the authority.
         if (existing !== null && !existing.remote) {
-            return;
+            if (mine) {
+                return;
+            }
+
+            // The simulation moved to another client. This copy would keep
+            // running its own physics next to theirs, so drop it and follow the
+            // report instead.
+            world.removeEntityById(existing.id);
+            existing = null;
         }
 
-        if (existing !== null && existing.hasSameCells(payload.cells)) {
+        if (existing !== null && !mine && existing.hasSameCells(payload.cells)) {
             existing.applyRemoteState(payload);
             return;
         }
 
-        // A body that came back from a world save is simulated here from now on;
-        // a live one from another player is only replayed.
+        // Ownership moved to this client, or the body changed shape: build the
+        // entity again from the report and simulate it only if it was named as
+        // this client's.
         const contraption = ContraptionEntity.fromNetworkState(
-            this.minecraft, world, payload, payload.restored !== true
+            this.minecraft, world, payload, !mine
         );
         if (contraption === null) {
             return;

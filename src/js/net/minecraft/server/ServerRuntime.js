@@ -12,7 +12,7 @@ import Logger from './logger.js';
 import { BlockRegistry } from '../client/world/block/BlockRegistry.js';
 import { handleModMessage, loadServerSideMods } from './ServerModLoader.js';
 import { getRagdoll, listRagdolls, removeRagdoll, setRagdollOwner, storeRagdoll } from './ragdolls.js';
-import { getContraption, listContraptions, removeContraption, storeContraption, storeContraptionPose } from './contraptions.js';
+import { getContraption, listContraptions, removeContraption, setContraptionOwner, storeContraption, storeContraptionPose } from './contraptions.js';
 import { handleStructurePaste } from './structurePaste.js';
 import getServerWorld from './World.js';
 import config from './config.js';
@@ -127,7 +127,41 @@ function sendContraptions(target) {
     if (!target?.ws || target.ws.readyState !== 1) return;
 
     for (const state of listContraptions()) {
+        // A restored body has nobody simulating it yet, so it goes to the client
+        // that asks first. That client runs its physics and reports the pose;
+        // everybody else replays it.
+        if (state.owner == null && target.eid != null) {
+            setContraptionOwner(state.id, target.eid);
+        }
+
         target.ws.send(JSON.stringify(state));
+    }
+}
+
+// When the client that simulates a body leaves, hand it to another one, or its
+// physics would stop and every other client would keep replaying a frozen pose.
+function removeContraptionsFor(player) {
+    if (!player || player.eid == null) return;
+
+    const peers = [...getPlayers().values()].filter((peer) =>
+        peer.eid !== player.eid && peer.ws && peer.ws.readyState === 1);
+
+    let index = 0;
+    for (const state of listContraptions()) {
+        if (state.owner !== player.eid) continue;
+
+        const next = peers.length === 0 ? null : peers[index++ % peers.length];
+        setContraptionOwner(state.id, next === null ? null : next.eid);
+
+        // The new owner has to hear about it, or it would go on replaying a body
+        // that nobody simulates any more.
+        if (next !== null) {
+            try {
+                next.ws.send(JSON.stringify(state));
+            } catch (error) {
+                // The next owner dropped too; the following report fixes it up.
+            }
+        }
     }
 }
 
@@ -201,6 +235,10 @@ function handleContraptionPose(player, payload) {
 
     const id = typeof payload.id === 'string' ? payload.id.slice(0, 64) : '';
     if (id.length === 0) return;
+
+    // Only the client that currently simulates a body may move it.
+    const stored = getContraption(id);
+    if (stored === null || (stored.owner != null && stored.owner !== player.eid)) return;
 
     const pose = storeContraptionPose(id, payload);
     if (pose === null) return;
@@ -555,6 +593,7 @@ export function onConnection(ws, req) {
         }
         if (player.eid !== null) {
             removeRagdollsFor(player);
+            removeContraptionsFor(player);
             removePlayer(player);
             cleanupPlayerChunks(player.eid);
         }

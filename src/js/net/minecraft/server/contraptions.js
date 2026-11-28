@@ -170,6 +170,23 @@ function getContraption(id) {
     return contraptions.get(id) || null;
 }
 
+// Which client simulates the body. A restored contraption has no owner yet; the
+// first client to ask for it gets it, so exactly one client runs its physics.
+function setContraptionOwner(id, owner) {
+    const state = typeof id === 'string' ? contraptions.get(id) : undefined;
+    if (!state) {
+        return null;
+    }
+
+    if (owner === null || owner === undefined) {
+        delete state.owner;
+    } else {
+        state.owner = owner;
+    }
+
+    return state;
+}
+
 function listContraptions() {
     return [...contraptions.values()];
 }
@@ -234,6 +251,7 @@ export {
     storeContraptionPose,
     storeSavedState,
     getContraption,
+    setContraptionOwner,
     listContraptions,
     removeContraption,
     clearContraptions,
